@@ -26,6 +26,15 @@ export function canHarvest(state: number, tool: ItemStack | null): boolean {
   return t.tier >= (def.harvestLevel ?? 0);
 }
 
+/**
+ * Adventure mode: a block may only be broken with the proper tool for it
+ * (one that is faster than bare hands and can harvest its drops).
+ */
+export function adventureMayBreak(state: number, tool: ItemStack | null): boolean {
+  if (!tool) return false;
+  return toolSpeed(state, tool) > 1 && canHarvest(state, tool);
+}
+
 /** Tool speed multiplier against a block (1 if not the right tool). */
 export function toolSpeed(state: number, tool: ItemStack | null): number {
   const def = blocks[STATE_BLOCK[state]!]!.def;

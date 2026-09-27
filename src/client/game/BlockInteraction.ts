@@ -4,7 +4,7 @@
  * updates from the server.
  */
 import { raycastBlocks, type RayHit } from '../../common/physics/raycast';
-import { breakTicks } from '../../common/game/mining';
+import { breakTicks, adventureMayBreak } from '../../common/game/mining';
 import { REACH_CREATIVE, REACH_SURVIVAL, FACE_DX, FACE_DY, FACE_DZ } from '../../common/world/constants';
 import type { ClientWorld } from '../world/ClientWorld';
 import type { LocalPlayer } from './LocalPlayer';
@@ -55,7 +55,8 @@ export class BlockInteraction {
   tickMining(held: ItemStack | null, attacking: boolean, underwater: boolean, haste: number, fatigue: number, aquaAffinity: boolean): void {
     if (this.breakCooldown > 0) this.breakCooldown--;
     const t = this.target;
-    if (!attacking || !t || !this.player.abilities.mayBuild) {
+    const mayBreak = !!t && (this.player.abilities.mayBuild || (this.player.gamemode === 'adventure' && adventureMayBreak(t.state, held)));
+    if (!attacking || !t || !mayBreak) {
       if (this.dig) {
         this.send({ t: 'dig', action: 'abort', x: this.dig.x, y: this.dig.y, z: this.dig.z, face: this.dig.face });
         this.dig = null;

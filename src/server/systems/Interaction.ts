@@ -72,9 +72,12 @@ export class Interaction {
 
   // ------------------------------------------------------------------ permissions
 
-  /** Whether the player may modify blocks at this position. */
-  canModify(p: ServerPlayer, dim: Dimension, x: number, y: number, z: number): boolean {
-    if (!p.abilities.mayBuild) return false;
+  /**
+   * Whether the player may modify blocks at this position. Adventure players
+   * may break (the tool rule is checked by the caller) but never place.
+   */
+  canModify(p: ServerPlayer, dim: Dimension, x: number, y: number, z: number, breaking = false): boolean {
+    if (!p.abilities.mayBuild && !(breaking && p.gamemode === 'adventure')) return false;
     if (y < 0 || y > 255) return false;
     void dim;
     void x;
@@ -987,6 +990,14 @@ export class Interaction {
     p.spawnProtection = 60;
     p.hurtCooldown = 0;
     p.statsDirty = true;
+    this.sendToSpawn(p);
+    p.send({ t: 'respawned' });
+    this.containers.syncInventory(p);
+  }
+
+  /** Moves a player to their respawn point (bed/anchor) or the world spawn. */
+  sendToSpawn(p: ServerPlayer): void {
+    const level = this.server.level;
     let dimId = p.spawnPoint?.dim ?? 'overworld';
     let pos: [number, number, number] | null = null;
     if (p.spawnPoint) {
@@ -1004,8 +1015,6 @@ export class Interaction {
     if (p.dim.id !== dimId) this.server.changeDimension(p, dimId, pos[0], pos[1], pos[2]);
     else this.server.teleport(p, pos[0], pos[1], pos[2]);
     if (p.spawnPoint) (p as { needsSafeSpawn?: boolean }).needsSafeSpawn = true;
-    p.send({ t: 'respawned' });
-    this.containers.syncInventory(p);
   }
 
   onDimensionEntered(p: ServerPlayer, dim: string): void {

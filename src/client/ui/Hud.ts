@@ -159,10 +159,13 @@ export class Hud {
     this.hearts.style.bottom = 'calc(var(--s) * 30)';
     this.heartLabel.classList.toggle('hidden', !label);
     this.heartLabel.textContent = label;
-    this.heartLabel.style.left = `calc(var(--s) * ${infinite ? 11 : 83})`;
-    this.heartLabel.style.bottom = 'calc(var(--s) * 30)';
+    let heartRowsHeight = infinite ? 10 : 10 + (rows - 1) * rowGap;
+    // '∞' sits beside the single heart; large counts go above the compact row
+    // (there is no room between the hearts and the hunger bar).
+    this.heartLabel.style.left = `calc(var(--s) * ${infinite ? 11 : 0})`;
+    this.heartLabel.style.bottom = `calc(var(--s) * ${infinite ? 30 : 30 + heartRowsHeight})`;
     this.heartLabel.style.color = infinite ? '#ff80ff' : '#ff5555';
-    const heartRowsHeight = infinite ? 10 : 10 + (rows - 1) * rowGap;
+    if (label && !infinite) heartRowsHeight += 9;
     // food
     const hunger = st.effects.some((e) => e.id === 'hunger');
     const foodIcons: string[] = [];

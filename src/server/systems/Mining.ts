@@ -5,7 +5,7 @@
 import type { GameServer } from '../GameServer';
 import type { ServerPlayer } from '../player/ServerPlayer';
 import type { C2S } from '../../common/net/protocol';
-import { breakTicks } from '../../common/game/mining';
+import { breakTicks, adventureMayBreak } from '../../common/game/mining';
 import { computeBlockDrops } from '../../common/game/drops';
 import { enchantLevel } from '../../common/game/enchanting';
 import { blocks, STATE_BLOCK, getProp, S, STATE_FLUID, withProp } from '../../common/registry/blocks';
@@ -84,15 +84,16 @@ export class Mining {
       p.dig = null;
       return;
     }
-    if (!p.abilities.mayBuild || p.gamemode === 'spectator') return this.reject(p, x, y, z);
+    if (p.gamemode === 'spectator') return this.reject(p, x, y, z);
     if (!dim.isLoaded(x, z)) return;
     const state = dim.getState(x, y, z);
     if (state === 0 || STATE_FLUID[state]) return this.reject(p, x, y, z);
+    if (!p.abilities.mayBuild && !(p.gamemode === 'adventure' && adventureMayBreak(state, p.heldItem()))) return this.reject(p, x, y, z);
     if (!this.reachOk(p, x, y, z) || !this.sightOk(p, x, y, z)) {
       this.server.log(`[anticheat] ${p.name} dig out of reach/sight at ${x},${y},${z}`);
       return this.reject(p, x, y, z);
     }
-    if (!this.server.interaction.canModify(p, dim, x, y, z)) return this.reject(p, x, y, z);
+    if (!this.server.interaction.canModify(p, dim, x, y, z, true)) return this.reject(p, x, y, z);
     const held = p.heldItem();
     if (p.gamemode === 'creative' && held && items[held.id]?.def.tool?.type === 'sword') return this.reject(p, x, y, z);
 

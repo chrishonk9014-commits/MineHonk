@@ -369,7 +369,14 @@ export class Survival {
     const head = p.dim.getState(Math.floor(p.x), Math.floor(p.eyeY), Math.floor(p.z));
     if (STATE_OPAQUE[head] && !p.abilities.noClip && t % 10 === 0) this.damage(p, 1, { source: 'suffocate' });
     // Void
-    if (p.y < -64 && t % 10 === 0) this.damage(p, 4, { source: 'void' });
+    if (p.y < -64 && t % 10 === 0) {
+      if (p.gamemode === 'god' && !Number.isFinite(p.maxHealth)) {
+        // Infinite health can't die in the void, so it would fall forever: rescue instead.
+        p.body.fallDistance = 0;
+        this.server.interaction.sendToSpawn(p);
+        p.send({ t: 'chat', text: 'The void could not hold you.', kind: 'system' });
+      } else this.damage(p, 4, { source: 'void' });
+    }
 
     // Hunger & regeneration
     const peaceful = level.difficulty === 'peaceful';

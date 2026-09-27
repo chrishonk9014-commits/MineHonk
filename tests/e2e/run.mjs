@@ -67,6 +67,12 @@ try {
       await page.locator('.screen:not(.hidden) button', { hasText: 'Game Mode:' }).click();
     }
   }
+  if (mode === 'god' && process.env.HEARTS) {
+    const h = process.env.HEARTS;
+    const chip = page.locator('.screen:not(.hidden) .god-box button.chip', { hasText: new RegExp(`^${h === 'infinite' ? '∞' : h}$`) });
+    if ((await chip.count()) > 0) await chip.click();
+    else await page.locator('.screen:not(.hidden) .god-box input[type=number]').fill(h);
+  }
   const cheatsOff = page.locator('.screen:not(.hidden) button', { hasText: 'Allow Cheats: OFF' });
   if (process.env.CHEATS && (await cheatsOff.count()) > 0) await cheatsOff.click();
   await page.screenshot({ path: `${OUT}/02-create.png` });

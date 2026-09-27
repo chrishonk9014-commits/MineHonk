@@ -107,8 +107,10 @@ export class HandRenderer {
     this.arm.visible = !hasItem;
     this.pivot.position.set(0.56 + bobX - s2 * 0.3, -0.52 + bobY - this.equip * 0.6 + s * 0.2 - this.using * 0.05, -0.72 - s * 0.2);
     this.pivot.rotation.set(-s2 * 0.6 + this.using * 0.2, -0.1 - s * 0.6, 0);
-    this.arm.rotation.set(-1.2, 0.45, 0.2);
-    this.arm.position.set(0.1, 0.1, 0.1);
+    // The arm hangs down (-Y) from the shoulder: tip it forward into the screen so the hand
+    // reaches towards the centre and the sleeve stays near the bottom-right corner.
+    this.arm.rotation.set(1.8, 0.35, -0.1);
+    this.arm.position.set(0.0, -0.06, 0.3);
     this.armModel.material.color.setScalar(brightness);
     for (const m of this.heldMats) {
       const mb = m as THREE.MeshBasicMaterial;

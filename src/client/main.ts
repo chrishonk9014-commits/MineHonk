@@ -29,7 +29,8 @@ async function boot(): Promise<void> {
     const audio = new AudioEngine(settings);
     document.getElementById('boot')?.remove();
     const app = new App(canvas, ui, assets, settings, profile, audio, input);
-    (window as unknown as { minehonk: App }).minehonk = app;
+    // Developer handle: only in development builds and automated test browsers
+    if (import.meta.env.DEV || navigator.webdriver) (window as unknown as { minehonk: App }).minehonk = app;
   } catch (e) {
     console.error(e);
     setStatus(`Failed to start: ${(e as Error).message}`);

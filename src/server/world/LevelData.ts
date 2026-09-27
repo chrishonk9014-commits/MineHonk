@@ -2,6 +2,7 @@
 import type { GameMode, Difficulty, GodHearts } from '../../common/game/gamemode';
 import { normalizeGodHearts, GAME_MODES, DIFFICULTIES } from '../../common/game/gamemode';
 import { seedFromString } from '../../common/math/rng';
+import type { DimensionId } from '../../common/data/biomes';
 
 export const LEVEL_VERSION = 1;
 export const GENERATOR_VERSION = 1;
@@ -62,6 +63,17 @@ export interface LevelData {
   operators: string[];
   /** Progression flags (dragon killed, farlands discovered ...). */
   flags: Record<string, unknown>;
+  /** Known portals (bottom corner of the portal sheet), used to link travel. */
+  portals: PortalRecord[];
+}
+
+export interface PortalRecord {
+  dim: DimensionId;
+  kind: 'nether' | 'far';
+  x: number;
+  y: number;
+  z: number;
+  axis: 'x' | 'z';
 }
 
 export const DEFAULT_RULES: GameRules = {
@@ -131,6 +143,7 @@ export function createLevelData(o: NewWorldOptions): LevelData {
     banned: [],
     operators: o.owner ? [o.owner] : [],
     flags: {},
+    portals: [],
   };
 }
 
@@ -170,6 +183,9 @@ export function sanitizeLevelData(raw: unknown, fallbackId: string): LevelData |
   out.banned = Array.isArray(r.banned) ? r.banned.filter((s) => typeof s === 'string') : [];
   out.operators = Array.isArray(r.operators) ? r.operators.filter((s) => typeof s === 'string') : [];
   out.flags = r.flags && typeof r.flags === 'object' ? r.flags : {};
+  out.portals = Array.isArray(r.portals)
+    ? r.portals.filter((q): q is PortalRecord => !!q && typeof q === 'object' && ['overworld', 'nether', 'end', 'farlands'].includes(q.dim) && (q.kind === 'nether' || q.kind === 'far') && [q.x, q.y, q.z].every((n) => Number.isInteger(n)) && (q.axis === 'x' || q.axis === 'z')).slice(0, 1024)
+    : [];
   out.generatorVersion = num(r.generatorVersion, GENERATOR_VERSION);
   out.bonusChest = !!r.bonusChest;
   out.generateStructures = r.generateStructures !== false;

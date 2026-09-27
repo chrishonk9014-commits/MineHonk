@@ -62,6 +62,8 @@ export class Interaction {
     ignite?: (dim: Dimension, x: number, y: number, z: number) => void;
     igniteTnt?: (dim: Dimension, x: number, y: number, z: number) => void;
     portalLight?: (dim: Dimension, x: number, y: number, z: number) => boolean;
+    /** Player touching an end portal, end gateway or far portal block. */
+    enterPortal?: (p: ServerPlayer, kind: string) => void;
   } = {};
 
   constructor(private readonly server: GameServer) {

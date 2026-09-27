@@ -124,6 +124,36 @@ try {
     stopServer();
     process.exit(0);
   }
+  if (process.env.DIM) {
+    // Visit another dimension (needs CHEATS=1) and take a few screenshots
+    const dimName = process.env.DIM;
+    await page.evaluate((cmd) => window.minehonk.game.send({ t: 'chat', text: cmd }), `/dimension ${dimName}`);
+    await page.waitForFunction((d) => window.minehonk.game.dimension === d, dimName, { timeout: 60000 });
+    await page.waitForFunction(() => {
+      const l = document.querySelector('.loading');
+      return l && l.classList.contains('hidden');
+    }, null, { timeout: 120000 });
+    await page.waitForFunction(() => window.minehonk.game.renderer.chunks.stats().dirty < 20, null, { timeout: 120000 }).catch(() => {});
+    await page.waitForTimeout(2500);
+    const views = (process.env.VIEWS ?? '0,0.2;1.6,0.1;3.1,-0.2').split(';');
+    for (let i = 0; i < views.length; i++) {
+      const [yaw, pitch] = views[i].split(',').map(Number);
+      await page.evaluate(([y, p]) => {
+        const g = window.minehonk.game;
+        g.player.yaw = y;
+        g.player.pitch = p;
+      }, [yaw, pitch]);
+      await page.waitForTimeout(1500);
+      await page.screenshot({ path: `${OUT}/dim-${dimName}-${i}.png` });
+    }
+    console.log('dim state', JSON.stringify(await page.evaluate(() => {
+      const g = window.minehonk.game;
+      return { dim: g.dimension, pos: [g.player.body.x, g.player.body.y, g.player.body.z], fps: g.fps, chunks: g.renderer.chunks.stats(), chat: [...document.querySelectorAll('.chat .line')].map((l) => l.textContent).slice(-5) };
+    })));
+    await browser.close();
+    stopServer();
+    process.exit(0);
+  }
   if (process.env.STATIONS) {
     // Visual check of workstation screens (needs CHEATS=1)
     const send = async (text) => {

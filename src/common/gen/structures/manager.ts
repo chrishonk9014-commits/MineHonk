@@ -162,6 +162,19 @@ export class StructureManager {
     return starts;
   }
 
+  /** Type of the structure piece containing a position, if any. */
+  structureAt(x: number, y: number, z: number): string | null {
+    for (const s of this.startsFor(x >> 4, z >> 4)) {
+      const b = s.bounds;
+      if (x < b.x0 || x > b.x1 || y < b.y0 || y > b.y1 || z < b.z0 || z > b.z1) continue;
+      for (const p of s.pieces) {
+        const pb = p.box;
+        if (x >= pb.x0 && x <= pb.x1 && y >= pb.y0 && y <= pb.y1 && z >= pb.z0 && z <= pb.z1) return s.type;
+      }
+    }
+    return null;
+  }
+
   /** Finds the nearest start of a type (by start chunk) within `maxRegions` regions. */
   nearest(typeId: string, x: number, z: number, maxRegions = 8): Start | null {
     const t = this.types.find((tt) => tt.id === typeId);

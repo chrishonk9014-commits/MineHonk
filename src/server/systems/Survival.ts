@@ -11,6 +11,7 @@ import { enchantLevel } from '../../common/game/enchanting';
 import { updateEnvironment } from '../../common/physics/movement';
 import { isSurvivalLike } from '../../common/game/gamemode';
 import type { Entity } from '../entity/Entity';
+import { chunkIndex } from '../../common/world/constants';
 
 export type DamageSource =
   | 'fall'
@@ -198,6 +199,13 @@ export class Survival {
     }
   }
 
+  private terrainSent(p: ServerPlayer): boolean {
+    const cx = Math.floor(p.x) >> 4;
+    const cz = Math.floor(p.z) >> 4;
+    for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) if (!p.sentChunks.has(chunkIndex(cx + dx, cz + dz))) return false;
+    return true;
+  }
+
   heal(p: ServerPlayer, amount: number): void {
     if (p.dead || !Number.isFinite(p.maxHealth)) return;
     const before = p.health;
@@ -289,7 +297,8 @@ export class Survival {
   tickPlayer(p: ServerPlayer): void {
     if (p.dead) return;
     if (p.hurtCooldown > 0) p.hurtCooldown--;
-    if (p.spawnProtection > 0) p.spawnProtection--;
+    // Protection only counts down once the terrain around the player has been sent
+    if (p.spawnProtection > 0 && !p.awaitingTeleport && this.terrainSent(p)) p.spawnProtection--;
     const t = this.server.tickNo;
     const level = this.server.level;
     // Status effects

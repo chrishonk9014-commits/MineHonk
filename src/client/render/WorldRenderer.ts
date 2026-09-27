@@ -54,6 +54,9 @@ export interface FrameState {
   hurtTilt: number;
   /** Third person camera distance (clipped against terrain by the caller). */
   camDist?: number;
+  /** Portal overlay strength (0..1) and colour. */
+  portal?: number;
+  portalColor?: number;
 }
 
 export class WorldRenderer {
@@ -321,6 +324,9 @@ export class WorldRenderer {
     } else if (f.flash > 0) {
       om.color.setRGB(0.6, 0, 0);
       om.opacity = f.flash * 0.35;
+    } else if (f.portal && f.portal > 0) {
+      om.color.setHex(f.portalColor ?? 0x8a2be2);
+      om.opacity = f.portal * (0.5 + 0.08 * Math.sin(f.time * 0.4));
     } else om.opacity = 0;
     if (om.opacity > 0) {
       this.renderer.clearDepth();

@@ -23,7 +23,7 @@ import type { Slot, ItemStack } from '../../common/game/itemstack';
 import type { GameMode } from '../../common/game/gamemode';
 import type { DimensionId } from '../../common/data/biomes';
 import { items, itemById } from '../../common/registry/items';
-import { blocks, STATE_BLOCK, STATE_FLUID } from '../../common/registry/blocks';
+import { blocks, blockOf, STATE_BLOCK, STATE_FLUID } from '../../common/registry/blocks';
 import { lookDirection, rayBox } from './look';
 import { entityInfo } from '../../common/data/entities';
 import { raycastBlocks } from '../../common/physics/raycast';
@@ -108,6 +108,9 @@ export class Game {
   private thirdPerson: 0 | 1 | 2 = 0;
   private hudHidden = false;
   private flash = 0;
+  /** Portal swirl strength 0..1 while standing in a portal, and its colour. */
+  private portalFx = 0;
+  private portalKind: 'nether_portal' | 'far_portal' | null = null;
   private hurtTilt = 0;
   private shake = 0;
   private eyeCur = 1.62;
@@ -759,6 +762,7 @@ export class Game {
     if (this.flash > 0) this.flash = Math.max(0, this.flash - 0.1);
     if (this.hurtTilt > 0) this.hurtTilt = Math.max(0, this.hurtTilt - 0.12);
     if (this.shake > 0) this.shake = Math.max(0, this.shake - 0.05);
+    this.tickPortalFx();
     this.ambience();
     if (this.tickNo % 100 === 0) {
       this.pingTime = performance.now();
@@ -832,6 +836,46 @@ export class Game {
       if (s === 0) return;
       const def = blocks[STATE_BLOCK[s]!]!.def;
       this.audio.play('step.' + def.sound, b.x, b.y, b.z, 0.15, 1);
+    }
+  }
+
+  /** Local portal overlay: builds up while standing in a portal sheet. */
+  private tickPortalFx(): void {
+    const b = this.player.body;
+    let kind: 'nether_portal' | 'far_portal' | null = null;
+    for (let y = Math.floor(b.y); y <= Math.floor(b.y + 1.7) && !kind; y++)
+      for (const [dx, dz] of [
+        [-0.3, -0.3],
+        [0.3, 0.3],
+        [-0.3, 0.3],
+        [0.3, -0.3],
+      ] as const) {
+        const id = blockOf(this.world.getState(Math.floor(b.x + dx), y, Math.floor(b.z + dz))).id;
+        if (id === 'nether_portal' || id === 'far_portal') {
+          kind = id;
+          break;
+        }
+      }
+    if (kind) {
+      if (this.portalFx === 0) this.audio.play('portal.trigger', NaN, NaN, NaN, 0.5, 1, 'sound');
+      this.portalKind = kind;
+      const fast = this.player.gamemode === 'creative' || this.player.gamemode === 'spectator';
+      this.portalFx = Math.min(1, this.portalFx + (fast ? 0.5 : 1 / 70));
+    } else this.portalFx = Math.max(0, this.portalFx - 0.08);
+    // Portal hum when one is close
+    if (this.tickNo % 70 === 0 && Math.random() < 0.6) {
+      const px = Math.floor(b.x);
+      const py = Math.floor(b.y);
+      const pz = Math.floor(b.z);
+      search: for (let dy = -3; dy <= 3; dy++)
+        for (let dz = -4; dz <= 4; dz++)
+          for (let dx = -4; dx <= 4; dx++) {
+            const id = blockOf(this.world.getState(px + dx, py + dy, pz + dz)).id;
+            if (id === 'nether_portal' || id === 'far_portal') {
+              this.audio.play('portal.ambient', px + dx + 0.5, py + dy + 0.5, pz + dz + 0.5, 0.5, 0.8 + Math.random() * 0.4, 'ambient');
+              break search;
+            }
+          }
     }
   }
 
@@ -1131,6 +1175,8 @@ export class Game {
       darkness: this.effectLevel('darkness') > 0 || this.effectLevel('blindness') > 0 ? 1 : 0,
       hurtTilt: this.hurtTilt,
       camDist,
+      portal: this.portalFx,
+      portalColor: this.portalKind === 'far_portal' ? 0x2ad7c2 : 0x8a2be2,
     };
     // Local player model (third person)
     this.renderer.entities.update(this.entities.values(), alpha, this.tickNo + alpha, (x, y, z) => this.renderer.lightAt(x, y, z));

@@ -41,6 +41,23 @@ export interface Offer {
   maxUses: number;
 }
 
+/** Monster spawn lists that replace the biome's inside certain structures. */
+const STRUCTURE_SPAWNS: Record<string, SpawnEntry[]> = {
+  nether_fortress: [
+    { mob: 'blaze', weight: 10, min: 2, max: 3 },
+    { mob: 'wither_skeleton', weight: 8, min: 1, max: 3 },
+    { mob: 'zombified_piglin', weight: 5, min: 2, max: 4 },
+    { mob: 'skeleton', weight: 2, min: 1, max: 2 },
+    { mob: 'magma_cube', weight: 3, min: 1, max: 3 },
+  ],
+  bastion: [
+    { mob: 'piglin', weight: 10, min: 2, max: 4 },
+    { mob: 'hoglin', weight: 2, min: 1, max: 2 },
+  ],
+  witch_hut: [{ mob: 'witch', weight: 1, min: 1, max: 1 }],
+  pillager_outpost: [{ mob: 'pillager', weight: 1, min: 1, max: 3 }],
+};
+
 export class MobSystem {
   private readonly rng = new Random();
   private readonly spawners = new Map<Dimension, Map<string, { x: number; y: number; z: number; delay: number }>>();
@@ -360,10 +377,22 @@ export class MobSystem {
     let y: number;
     if (cat === 'creature') y = top;
     else if (cat === 'water') y = Math.max(1, top - 1 - r.int(8));
-    else y = 1 + r.int(Math.max(1, top));
+    else if (!dim.rules.hasSky) {
+      // Cavern dimensions: pick one of the column's floors instead of a random height
+      const floors: number[] = [];
+      for (let yy = 2; yy < top; yy++) if (STATE_SOLID[dim.getState(x, yy - 1, z)] && !STATE_SOLID[dim.getState(x, yy, z)] && !STATE_SOLID[dim.getState(x, yy + 1, z)] && !STATE_FLUID[dim.getState(x, yy, z)]) floors.push(yy);
+      if (!floors.length) return;
+      y = floors[r.int(floors.length)]!;
+    } else y = 1 + r.int(Math.max(1, top));
     const biome = biomeOf(dim.getBiome(x, z));
     const list: SpawnEntry[] = (cat === 'monster' || cat === 'creature' || cat === 'water' || cat === 'ambient' ? biome.spawns?.[cat] : undefined) ?? [];
     let entry: SpawnEntry | null = list.length ? weighted(list, r) : null;
+    // Structures with their own inhabitants (fortresses, witch huts, outposts)
+    if (cat === 'monster') {
+      const st = dim.generator.structureAt?.(x, y, z);
+      const sl = st ? STRUCTURE_SPAWNS[st] : undefined;
+      if (sl) entry = weighted(sl, r);
+    }
     // Underground-only spawns
     if (cat === 'ambient' && dim.id === 'overworld' && y < 60) entry = { mob: 'bat', weight: 1, min: 1, max: 2 };
     if (cat === 'monster' && dim.id === 'overworld' && y < 40 && r.chance(0.12)) entry = { mob: 'cave_stalker', weight: 1, min: 1, max: 1 };

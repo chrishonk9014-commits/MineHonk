@@ -6,6 +6,8 @@
 import type { GameServer } from './GameServer';
 import { MobSystem } from './systems/Mobs';
 import { Workstations } from './systems/Workstations';
+import { Portals } from './systems/Portals';
+import { Progression } from './systems/Progression';
 
 export function installGameplay(server: GameServer): void {
   const mobs = new MobSystem(server);
@@ -25,11 +27,22 @@ export function installGameplay(server: GameServer): void {
   h.releaseItem = (p, stack, ticks) => mobs.releaseBow(p, stack, ticks);
   h.igniteTnt = (dim, x, y, z) => mobs.igniteTnt(dim, x, y, z);
   it.explode = (dim, x, y, z, power, fire, source) => mobs.explode(dim, x, y, z, power, fire, source);
+  const portals = new Portals(server);
+  server.portals = portals;
+  h.portalLight = (dim, x, y, z) => portals.light(dim, x, y, z);
+  const progression = new Progression(server);
+  const prevDim = h.onDimension;
+  h.onDimension = (p, dim) => {
+    prevDim?.(p, dim);
+    progression.onDimension(p, dim);
+  };
   const prevTick = h.tick;
   h.tick = () => {
     prevTick?.();
     mobs.tick();
     mobs.tickArrowPickup();
     ws.tick();
+    portals.tick();
+    progression.tick();
   };
 }

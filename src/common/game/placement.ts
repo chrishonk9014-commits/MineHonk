@@ -182,6 +182,15 @@ export function canSurvive(state: number, w: WorldReader, x: number, y: number, 
       return true;
     case 'fire':
       return STATE_SOLID[below] === 1 || flammableNeighbour(w, x, y, z);
+    case 'portal': {
+      // A portal sheet needs portal or frame blocks on every side within its plane
+      const frame = def.id === 'far_portal' ? 'far_portal_frame' : 'obsidian';
+      const ok = (s: number): boolean => STATE_BLOCK[s] === STATE_BLOCK[state] || blocks[STATE_BLOCK[s]!]!.id === frame;
+      const alongX = getProp(state, 'axis') !== 'z';
+      const dx = alongX ? 1 : 0;
+      const dz = alongX ? 0 : 1;
+      return ok(below) && ok(w.getState(x, y + 1, z)) && ok(w.getState(x + dx, y, z + dz)) && ok(w.getState(x - dx, y, z - dz));
+    }
     case 'bed':
       return true;
     default:

@@ -11,79 +11,18 @@
 import { Chunk } from '../world/chunk';
 import type { DimensionId } from '../data/biomes';
 import { OverworldTerrain } from './overworld';
-import { chunkIndex } from '../world/constants';
 import { DecorView } from './decorate/view';
 import * as F from './decorate/features';
-import { StructureManager, type Start } from './structures/manager';
+import { StructureManager } from './structures/manager';
+import { ProtoCache, cloneChunk, addGenEntities, type DimensionGenerator, type GeneratorOptions, type SpawnPoint } from './pipeline';
 import { VILLAGE } from './structures/village';
 import { SURFACE_STRUCTURES } from './structures/misc';
 import { MINESHAFT, STRONGHOLD } from './structures/underground';
 import { biomeOf } from '../registry/biomes';
 import { STATE_FLUID } from '../registry/blocks';
+import { NetherGenerator } from './nether';
 
-export interface GeneratorOptions {
-  /** Generate villages, temples and other structures (default true). */
-  structures?: boolean;
-}
-
-export interface SpawnPoint {
-  x: number;
-  y: number;
-  z: number;
-}
-
-export interface DimensionGenerator {
-  readonly dimension: DimensionId;
-  readonly seed: number;
-  generate(cx: number, cz: number): Chunk;
-  findSpawn(): SpawnPoint;
-  biomeAt(x: number, z: number): number;
-  /** Nearest structure of a type (e.g. 'stronghold'), if the dimension has them. */
-  locate?(type: string, x: number, z: number): { x: number; y: number; z: number } | null;
-}
-
-/** Small LRU cache for proto chunks. */
-export class ProtoCache {
-  private readonly map = new Map<number, Chunk>();
-
-  constructor(
-    private readonly capacity: number,
-    private readonly make: (cx: number, cz: number) => Chunk,
-  ) {}
-
-  get(cx: number, cz: number): Chunk {
-    const k = chunkIndex(cx, cz);
-    let c = this.map.get(k);
-    if (c) {
-      this.map.delete(k);
-      this.map.set(k, c);
-      return c;
-    }
-    c = this.make(cx, cz);
-    this.map.set(k, c);
-    if (this.map.size > this.capacity) {
-      const first = this.map.keys().next().value as number;
-      this.map.delete(first);
-    }
-    return c;
-  }
-
-  clear(): void {
-    this.map.clear();
-  }
-}
-
-export function cloneChunk(src: Chunk): Chunk {
-  const c = new Chunk(src.cx, src.cz, src.hasSky);
-  for (let i = 0; i < src.sections.length; i++) {
-    const s = src.sections[i];
-    if (s) c.sections[i] = s.slice();
-  }
-  c.counts.set(src.counts);
-  c.heightmap.set(src.heightmap);
-  c.biomes.set(src.biomes);
-  return c;
-}
+export { ProtoCache, cloneChunk, type DimensionGenerator, type GeneratorOptions, type SpawnPoint };
 
 type Stage = (v: DecorView, seed: number, ocx: number, ocz: number) => void;
 
@@ -176,6 +115,10 @@ export class OverworldGenerator implements DimensionGenerator {
     return this.terrain.estimateBiome(x, z);
   }
 
+  structureAt(x: number, y: number, z: number): string | null {
+    return this.structures.structureAt(x, y, z);
+  }
+
   locate(type: string, x: number, z: number): { x: number; y: number; z: number } | null {
     const s = this.structures.nearest(type, x, z, type === 'stronghold' ? 0 : 12);
     return s ? { x: s.x, y: s.y, z: s.z } : null;
@@ -186,19 +129,11 @@ function newClimateScratch(): import('./climate').Climate {
   return { c: 0, e: 0, w: 0, pv: 0, t: 0, h: 0, v: 0, river: 0, mountain: 0, swamp: 0, plateau: 0, land: 0, height: 0, amp: 0 };
 }
 
-function addGenEntities(c: Chunk, s: Start): void {
-  if (!s.entities) return;
-  const x0 = c.cx << 4;
-  const z0 = c.cz << 4;
-  for (const e of s.entities) {
-    if (e.x >= x0 && e.x < x0 + 16 && e.z >= z0 && e.z < z0 + 16) c.genEntities.push({ ...e });
-  }
-}
-
 export function createGenerator(dim: DimensionId, seed: number, opts: GeneratorOptions = {}): DimensionGenerator {
   switch (dim) {
+    case 'nether':
+      return new NetherGenerator(seed, opts);
     case 'overworld':
-      return new OverworldGenerator(seed, opts);
     default:
       return new OverworldGenerator(seed, opts);
   }

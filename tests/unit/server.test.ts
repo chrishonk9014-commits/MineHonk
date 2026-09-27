@@ -51,7 +51,8 @@ describe('game server', () => {
     tick(server, need);
     server.handle(conn, { t: 'dig', action: 'finish', x, y, z, face: 1 });
     expect(dim.getState(x, y, z)).toBe(0);
-    const items = [...dim.entities.values()].filter((e) => e.type === 'item');
+    // Only the drop near the block (chickens elsewhere may lay eggs)
+    const items = [...dim.entities.values()].filter((e) => e.type === 'item' && Math.abs(e.x - x - 0.5) < 2 && Math.abs(e.z - z - 0.5) < 2 && Math.abs(e.y - y) < 3);
     expect(items.length).toBe(1);
   });
 

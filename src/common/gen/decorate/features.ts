@@ -164,7 +164,7 @@ function oreState(id: string): number {
 }
 
 /** Classic ellipsoid-along-a-segment vein. */
-function vein(v: DecorView, rng: Random, x: number, y: number, z: number, size: number, place: (x: number, y: number, z: number) => void): void {
+export function vein(v: DecorView, rng: Random, x: number, y: number, z: number, size: number, place: (x: number, y: number, z: number) => void): void {
   const ang = rng.next() * Math.PI;
   // Conservative reach of the vein; skip work when it cannot touch the target chunk.
   const reach = size / 8 + size / 16 + 2;
@@ -576,7 +576,7 @@ export function caveDecor(v: DecorView, seed: number, cx: number, cz: number, cl
 // ---------------------------------------------------------------------------
 // Surface: disks, vegetation, trees, sugar cane, cacti, ocean plants
 // ---------------------------------------------------------------------------
-function weighted<T extends { weight: number }>(list: T[], rng: Random): T {
+export function weighted<T extends { weight: number }>(list: T[], rng: Random): T {
   let total = 0;
   for (const e of list) total += e.weight;
   let r = rng.next() * total;

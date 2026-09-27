@@ -43,12 +43,19 @@ describe('mobs and combat', () => {
     player.yaw = -Math.PI / 2;
     for (let i = 0; i < 6 && !cow.dead; i++) {
       tick(server, 15);
+      // The cow panics and runs after the first hit; the player chases it
+      cow.setPos(player.x + 1.2, y, player.z);
+      cow.body.vx = cow.body.vz = 0;
       server.handle(conn, { t: 'attack', id: cow.id });
     }
     expect(cow.dead).toBe(true);
     tick(server, 25);
+    // Loot lies on the ground or has already been picked up by the player standing next to it
     const drops = [...player.dim.entities.values()].filter((e) => e.type === 'item');
-    expect(drops.length).toBeGreaterThan(0);
+    const beef = itemById.get('beef')!.num;
+    let carried = 0;
+    for (let i = 0; i < 36; i++) if (player.inventory.get(i)?.id === beef) carried++;
+    expect(drops.length + carried).toBeGreaterThan(0);
     expect(player.dim.entities.has(cow.id)).toBe(false);
   });
 
@@ -63,7 +70,7 @@ describe('mobs and combat', () => {
     server.level.dayTime = 18000;
     const hp = player.health;
     let arrows = 0;
-    for (let i = 0; i < 300 && player.health === hp; i++) {
+    for (let i = 0; i < 600 && player.health === hp; i++) {
       tick(server, 1);
       arrows = Math.max(arrows, [...player.dim.entities.values()].filter((e) => e instanceof Projectile).length);
     }

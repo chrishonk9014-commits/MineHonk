@@ -116,6 +116,9 @@ export class GameServer {
 
   // ------------------------------------------------------------------ lifecycle
 
+  /** Integrated single player servers pause while the game menu is open. */
+  paused = false;
+
   start(): void {
     if (this.running) return;
     this.running = true;
@@ -129,6 +132,7 @@ export class GameServer {
       if (!this.running) return;
       const now = performance.now();
       let ticksRun = 0;
+      if (this.paused) this.nextTickAt = now + TICK_MS;
       while (now >= this.nextTickAt && ticksRun < 5) {
         const t0 = performance.now();
         try {
@@ -378,6 +382,9 @@ export class GameServer {
         break;
       case 'ping':
         p.send({ t: 'pong', time: m.time });
+        break;
+      case 'request_progress':
+        p.send({ t: 'progress', achievements: [...p.achievements], stats: { ...p.statistics } });
         break;
       case 'hello':
         break;

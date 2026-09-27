@@ -80,7 +80,6 @@ export class ChunkRenderer implements ChunkListener {
         uniforms: u,
         vertexShader: CHUNK_VERT,
         fragmentShader: CHUNK_FRAG,
-        glslVersion: THREE.GLSL3,
         transparent: mode === 2,
         depthWrite: mode !== 2,
         side: mode === 1 && false ? THREE.FrontSide : mode === 2 ? THREE.DoubleSide : THREE.FrontSide,

@@ -230,6 +230,10 @@ export class Hud {
     if (progress !== undefined) ((b.children[1] as HTMLElement).children[0] as HTMLElement).style.width = `${Math.max(0, Math.min(1, progress)) * 100}%`;
   }
 
+  hasBoss(): boolean {
+    return this.bossBars.size > 0;
+  }
+
   subtitle(text: string): void {
     const d = el('div', {}, text);
     this.subtitlesEl.append(d);

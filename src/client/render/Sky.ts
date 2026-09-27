@@ -52,7 +52,6 @@ function pixelTexture(size: number, paint: (ctx: CanvasRenderingContext2D) => vo
   const t = new THREE.CanvasTexture(c);
   t.magFilter = THREE.NearestFilter;
   t.minFilter = THREE.NearestFilter;
-  t.colorSpace = THREE.SRGBColorSpace;
   return t;
 }
 
@@ -117,7 +116,6 @@ export class Sky {
     this.domeMat = new THREE.ShaderMaterial({
       vertexShader: SKY_VERT,
       fragmentShader: SKY_FRAG,
-      glslVersion: THREE.GLSL3,
       side: THREE.BackSide,
       depthWrite: false,
       depthTest: false,

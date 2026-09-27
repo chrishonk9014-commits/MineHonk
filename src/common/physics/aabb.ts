@@ -69,38 +69,43 @@ export class AABB {
     return x >= this.minX && x <= this.maxX && y >= this.minY && y <= this.maxY && z >= this.minZ && z <= this.maxZ;
   }
 
-  /** Clips movement along X against `o`. */
+  /**
+   * Clips a movement of this (moving) box along X so it does not enter the
+   * obstacle `o`. Only obstacles overlapping on the other two axes matter.
+   */
   clipX(o: AABB, dx: number): number {
     if (o.maxY <= this.minY || o.minY >= this.maxY || o.maxZ <= this.minZ || o.minZ >= this.maxZ) return dx;
-    if (dx > 0 && o.maxX <= this.minX) {
-      const d = this.minX - o.maxX;
+    if (dx > 0 && o.minX >= this.maxX) {
+      const d = o.minX - this.maxX;
       if (d < dx) dx = d;
-    } else if (dx < 0 && o.minX >= this.maxX) {
-      const d = this.maxX - o.minX;
+    } else if (dx < 0 && o.maxX <= this.minX) {
+      const d = o.maxX - this.minX;
       if (d > dx) dx = d;
     }
     return dx;
   }
 
+  /** Clips a movement of this box along Y against obstacle `o`. */
   clipY(o: AABB, dy: number): number {
     if (o.maxX <= this.minX || o.minX >= this.maxX || o.maxZ <= this.minZ || o.minZ >= this.maxZ) return dy;
-    if (dy > 0 && o.maxY <= this.minY) {
-      const d = this.minY - o.maxY;
+    if (dy > 0 && o.minY >= this.maxY) {
+      const d = o.minY - this.maxY;
       if (d < dy) dy = d;
-    } else if (dy < 0 && o.minY >= this.maxY) {
-      const d = this.maxY - o.minY;
+    } else if (dy < 0 && o.maxY <= this.minY) {
+      const d = o.maxY - this.minY;
       if (d > dy) dy = d;
     }
     return dy;
   }
 
+  /** Clips a movement of this box along Z against obstacle `o`. */
   clipZ(o: AABB, dz: number): number {
     if (o.maxX <= this.minX || o.minX >= this.maxX || o.maxY <= this.minY || o.minY >= this.maxY) return dz;
-    if (dz > 0 && o.maxZ <= this.minZ) {
-      const d = this.minZ - o.maxZ;
+    if (dz > 0 && o.minZ >= this.maxZ) {
+      const d = o.minZ - this.maxZ;
       if (d < dz) dz = d;
-    } else if (dz < 0 && o.minZ >= this.maxZ) {
-      const d = this.maxZ - o.minZ;
+    } else if (dz < 0 && o.maxZ <= this.minZ) {
+      const d = o.maxZ - this.minZ;
       if (d > dz) dz = d;
     }
     return dz;

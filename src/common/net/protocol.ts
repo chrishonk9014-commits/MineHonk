@@ -37,6 +37,7 @@ export type C2S =
   | { t: 'rename'; name: string }
   | { t: 'trade'; index: number }
   | { t: 'wake' }
+  | { t: 'request_progress' }
   | { t: 'ping'; time: number };
 
 export type ClickMode = 'pickup' | 'quick' | 'swap' | 'drop' | 'drag_start' | 'drag_add' | 'drag_end' | 'collect' | 'clone';
@@ -93,6 +94,7 @@ export type S2C =
   | { t: 'chunk'; data: Uint8Array }
   | { t: 'unload_chunk'; cx: number; cz: number }
   | { t: 'block'; x: number; y: number; z: number; state: number }
+  /** Batched changes in one chunk: list = [y << 8 | lz << 4 | lx, state, ...] */
   | { t: 'blocks'; cx: number; cz: number; list: number[] }
   | { t: 'light'; cx: number; cz: number; sy: number; data: Uint8Array }
   | { t: 'block_entity'; x: number; y: number; z: number; data: Record<string, unknown> | null }
@@ -131,6 +133,7 @@ export type S2C =
   | { t: 'pong'; time: number }
   | { t: 'take_item'; item: number; by: number }
   | { t: 'use_result'; seq: number; ok: boolean }
+  | { t: 'progress'; achievements: string[]; stats: Record<string, number> }
   | { t: 'debug'; data: Record<string, unknown> };
 
 export interface AbilitiesMsg {

@@ -92,6 +92,8 @@ export function validateC2S(raw: unknown): C2S | null {
       return { t: 'trade', index: m.index };
     case 'wake':
       return { t: 'wake' };
+    case 'request_progress':
+      return { t: 'request_progress' };
     case 'ping':
       if (!isNum(m.time)) return null;
       return { t: 'ping', time: m.time };

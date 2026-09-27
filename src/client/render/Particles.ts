@@ -109,7 +109,6 @@ export class Particles {
     this.material = new THREE.ShaderMaterial({
       vertexShader: VERT,
       fragmentShader: FRAG,
-      glslVersion: THREE.GLSL3,
       transparent: true,
       depthWrite: false,
       uniforms: { uAtlas: { value: atlasTex }, uFogColor: { value: new THREE.Color() }, uFogNear: { value: 50 }, uFogFar: { value: 100 } },

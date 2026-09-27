@@ -56,6 +56,10 @@ export class WorkerConnection implements ClientConnection {
     this.worker.postMessage({ type: 'c2s', msg });
   }
 
+  setPaused(paused: boolean): void {
+    this.worker.postMessage({ type: 'pause', paused });
+  }
+
   save(): Promise<void> {
     return new Promise((resolve) => {
       this.saveResolve = resolve;

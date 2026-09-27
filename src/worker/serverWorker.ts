@@ -34,6 +34,7 @@ type In =
   | { type: 'start'; worldId: string; create: NewWorldOptions | null; identity: Identity; hello: C2S & { t: 'hello' }; viewDistance: number }
   | { type: 'c2s'; msg: unknown }
   | { type: 'stop' }
+  | { type: 'pause'; paused: boolean }
   | { type: 'save' };
 
 self.onmessage = async (ev: MessageEvent<In>) => {
@@ -58,6 +59,10 @@ self.onmessage = async (ev: MessageEvent<In>) => {
       }
       case 'c2s':
         if (server) server.handle(conn, m.msg);
+        break;
+      case 'pause':
+        // Only meaningful for the single player integrated server
+        if (server && server.players.size <= 1) server.paused = !!m.paused;
         break;
       case 'save':
         if (server) await server.saveAll();

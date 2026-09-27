@@ -50,6 +50,8 @@ export interface FrameState {
   shake: number;
   darkness: number;
   hurtTilt: number;
+  /** Third person camera distance (clipped against terrain by the caller). */
+  camDist?: number;
 }
 
 export class WorldRenderer {
@@ -81,7 +83,7 @@ export class WorldRenderer {
     readonly settings: Settings,
   ) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance', alpha: false });
-    this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    this.renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
     this.renderer.autoClear = false;
     this.camera = new THREE.PerspectiveCamera(settings.fov, 1, 0.05, 1000);
     this.camera.rotation.order = 'YXZ';
@@ -116,7 +118,6 @@ export class WorldRenderer {
     t = new THREE.CanvasTexture(c);
     t.magFilter = THREE.NearestFilter;
     t.minFilter = THREE.NearestFilter;
-    t.colorSpace = THREE.SRGBColorSpace;
     this.texCache.set(name, t);
     return t;
   }
@@ -231,14 +232,14 @@ export class WorldRenderer {
       cam.position.set(f.x, f.y, f.z);
     } else {
       const dir = f.thirdPerson === 1 ? 1 : -1;
-      const back = 4;
+      const back = f.camDist ?? 4;
       const dx = Math.sin(yaw) * Math.cos(pitch) * back * dir;
       const dy = Math.sin(pitch) * back * dir;
       const dz = Math.cos(yaw) * Math.cos(pitch) * back * dir;
       cam.position.set(f.x + dx, f.y + dy, f.z + dz);
     }
-    cam.rotation.set(pitch + (f.thirdPerson === 2 ? 0 : 0), yaw + (f.thirdPerson === 2 ? Math.PI : 0), f.hurtTilt * 0.25);
-    if (f.thirdPerson === 2) cam.rotation.x = -pitch;
+    // Protocol pitch is positive when looking down; three.js rotation.x is positive looking up.
+    cam.rotation.set(f.thirdPerson === 2 ? pitch : -pitch, yaw + (f.thirdPerson === 2 ? Math.PI : 0), f.hurtTilt * 0.25);
     if (f.thirdPerson === 0 && bob > 0) {
       cam.position.x += Math.cos(yaw) * bobX * 0.2;
       cam.position.z -= Math.sin(yaw) * bobX * 0.2;

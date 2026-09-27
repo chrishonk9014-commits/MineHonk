@@ -90,6 +90,8 @@ export class LocalPlayer {
     const oz = this.body.z;
     const res = stepMovement(this.world, this.body, { forward: input.forward, strafe: input.strafe, jump: input.jump, sneak: input.sneak, sprint: this.sprinting, yaw: this.yaw }, { flying: this.flying, noClip: this.abilities.noClip, walkSpeed: this.abilities.walkSpeed, flySpeed: this.abilities.flySpeed }, this.eyeHeight);
     if (this.flying && this.body.onGround && !this.abilities.noClip && this.gamemode !== 'spectator') this.flying = false;
+    // The server computes fall damage itself; locally we only need a fresh count per fall
+    if (this.body.onGround) this.body.fallDistance = 0;
     const moved = Math.hypot(this.body.x - ox, this.body.z - oz);
     if (this.body.onGround && !this.flying) this.walkDist += moved * 0.6;
     const targetBob = this.body.onGround && !this.flying ? Math.min(0.1, moved) : 0;

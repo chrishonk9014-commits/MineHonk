@@ -26,7 +26,6 @@ export class Weather {
     this.geo.setAttribute('aOffset', new THREE.InstancedBufferAttribute(this.offsets, 3).setUsage(THREE.DynamicDrawUsage));
     this.geo.setAttribute('aKind', new THREE.InstancedBufferAttribute(this.kinds, 1).setUsage(THREE.DynamicDrawUsage));
     this.mat = new THREE.ShaderMaterial({
-      glslVersion: THREE.GLSL3,
       transparent: true,
       depthWrite: false,
       uniforms: { uAlpha: { value: 0 }, uLight: { value: 1 } },

@@ -96,7 +96,6 @@ export function skinTexture(key: string, w: number, h: number, painter: SkinPain
   t = new THREE.CanvasTexture(c);
   t.magFilter = THREE.NearestFilter;
   t.minFilter = THREE.NearestFilter;
-  t.colorSpace = THREE.SRGBColorSpace;
   t.generateMipmaps = false;
   skinCache.set(key, t);
   return t;

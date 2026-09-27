@@ -38,12 +38,13 @@ export class InventoryScreen {
   private creativeGrid: HTMLElement | null = null;
   private creativeCursor: Slot = null;
   private readonly keyHandler: (e: KeyboardEvent) => void;
+  private detachPreview: (() => void) | null = null;
 
   constructor(
     win: WindowState,
     cursor: Slot,
     private readonly send: (m: C2S) => void,
-    private readonly opts: { creative: boolean; playerSlots: () => Slot[]; onClose: () => void; advancedTooltips: boolean },
+    private readonly opts: { creative: boolean; playerSlots: () => Slot[]; onClose: () => void; advancedTooltips: boolean; attachPreview?: (host: HTMLElement) => () => void },
   ) {
     this.win = win;
     this.cursor = cursor;
@@ -90,6 +91,7 @@ export class InventoryScreen {
   }
 
   destroy(): void {
+    this.detachPreview?.();
     window.removeEventListener('mouseup', this.onMouseUp);
     window.removeEventListener('keydown', this.keyHandler, true);
     hideTooltip();
@@ -272,8 +274,8 @@ export class InventoryScreen {
     switch (w.kind) {
       case 'player': {
         const armor = el('div', { class: 'stack', style: { gap: '0' } }, this.slot(5), this.slot(6), this.slot(7), this.slot(8));
-        const preview = el('div', { style: { width: 'calc(var(--s) * 51)', height: 'calc(var(--s) * 72)', background: '#000', border: 'var(--s) solid #373737', marginLeft: 'calc(var(--s) * 2)' } });
-        preview.append(el('div', { class: 'item-icon', style: { position: 'static', width: '100%', height: '100%', backgroundImage: 'none' } }));
+        const preview = el('div', { class: 'player-preview', style: { width: 'calc(var(--s) * 51)', height: 'calc(var(--s) * 72)', background: '#000', border: 'var(--s) solid #373737', marginLeft: 'calc(var(--s) * 2)' } });
+        this.detachPreview = this.opts.attachPreview?.(preview) ?? null;
         const craft = el('div', {}, el('div', { class: 'gtitle' }, 'Crafting'), el('div', { class: 'grid', style: { gridTemplateColumns: 'repeat(2, calc(var(--s) * 18))' } }, this.slot(1), this.slot(2), this.slot(3), this.slot(4)));
         const top = row(armor, preview, el('div', { class: 'stack', style: { justifyContent: 'flex-end', height: 'calc(var(--s) * 72)' } }, this.slot(45)), craft, this.arrow(), this.slot(0, 'slot big'));
         top.style.marginBottom = 'calc(var(--s) * 6)';

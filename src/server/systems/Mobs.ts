@@ -962,7 +962,7 @@ export class MobSystem {
       if (a.data.color && b.data.color) baby.data.color = this.rng.chance(0.5) ? a.data.color : b.data.color;
       if (a.owner) baby.owner = a.owner;
       this.server.mining.dropXp(a.dim, a.x, a.y, a.z, 1 + this.rng.int(7));
-      for (const p of this.server.players.values()) if (p.dim === a.dim && p.distanceSq(a.x, a.y, a.z) < 256) this.server.interaction.grant(p, 'breed_animal');
+      for (const p of this.server.players.values()) if (p.dim === a.dim && p.distanceSq(a.x, a.y, a.z) < 256) this.server.interaction.grant(p, 'breed_animals');
     }
   }
 
@@ -1136,7 +1136,7 @@ export class MobSystem {
           m.sitting = true;
           m.metaDirty = true;
           s.particles(m.dim, 'heart', m.x, m.y + 1, m.z, 7, 0.5);
-          s.interaction.grant(p, 'tame_animal');
+          if (m.type === 'wolf') s.interaction.grant(p, 'tame_wolf');
         } else s.particles(m.dim, 'smoke', m.x, m.y + 1, m.z, 7, 0.5);
         return true;
       }
@@ -1154,7 +1154,7 @@ export class MobSystem {
         m.sitting = true;
         m.metaDirty = true;
         s.particles(m.dim, 'heart', m.x, m.y + 1, m.z, 7, 0.5);
-        s.interaction.grant(p, 'tame_animal');
+        s.interaction.grant(p, 'tame_wolf');
       } else s.particles(m.dim, 'smoke', m.x, m.y + 1, m.z, 7, 0.5);
       return true;
     }

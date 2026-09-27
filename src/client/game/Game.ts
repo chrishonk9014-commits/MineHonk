@@ -1176,6 +1176,7 @@ export class Game {
       hurtTilt: this.hurtTilt,
       camDist,
       portal: this.portalFx,
+      nausea: this.effectLevel('nausea') > 0 && !this.settings.reduceMotion ? 1 : 0,
       portalColor: this.portalKind === 'far_portal' ? 0x2ad7c2 : 0x8a2be2,
     };
     // Local player model (third person)

@@ -13,7 +13,7 @@ import { boxOf, type StructureType, type PlanContext, type Start } from './manag
 
 type YMode = 'surface' | 'seafloor' | 'underground' | 'sky' | 'buried';
 
-interface SingleDef {
+export interface SingleDef {
   id: string;
   spacing: number;
   separation: number;
@@ -33,7 +33,7 @@ interface SingleDef {
   entities?: (x: number, y: number, z: number, rng: Random) => Start['entities'];
 }
 
-function single(def: SingleDef): StructureType {
+export function single(def: SingleDef): StructureType {
   return {
     id: def.id,
     spacing: def.spacing,
@@ -95,7 +95,7 @@ function single(def: SingleDef): StructureType {
 
 const cat = (...c: string[]) => (b: Biome) => c.includes(b.category);
 const ids = (...c: string[]) => (b: Biome) => c.includes(b.id);
-const lootSeed = (b: Builder, x: number, y: number, z: number, seed: number): number => hashInts(seed, b.wx(x, z), b.oy + y, b.wz(x, z));
+export const lootSeed = (b: Builder, x: number, y: number, z: number, seed: number): number => hashInts(seed, b.wx(x, z), b.oy + y, b.wz(x, z));
 
 // ---------------------------------------------------------------------------
 // Desert temple: stepped sandstone pyramid with a trapped treasure pit

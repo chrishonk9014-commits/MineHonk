@@ -9,6 +9,7 @@ import { Workstations } from './systems/Workstations';
 import { Portals } from './systems/Portals';
 import { Progression } from './systems/Progression';
 import { EndSystem } from './systems/TheEnd';
+import { FarlandsSystem } from './systems/Farlands';
 
 export function installGameplay(server: GameServer): void {
   const mobs = new MobSystem(server);
@@ -22,11 +23,13 @@ export function installGameplay(server: GameServer): void {
   server.workstations = ws;
   const end = new EndSystem(server);
   server.theEnd = end;
-  h.useItem = (p, stack) => mobs.useItem(p, stack) || end.fillBottle(p, stack) || ws.fillBottle(p, stack) || ws.throwSplash(p, stack) || end.useItem(p, stack);
+  const far = new FarlandsSystem(server);
+  server.farlands = far;
+  h.useItem = (p, stack) => mobs.useItem(p, stack) || end.fillBottle(p, stack) || ws.fillBottle(p, stack) || ws.throwSplash(p, stack) || end.useItem(p, stack) || far.useItem(p, stack);
   h.useBlock = (p, x, y, z, state) => ws.useBlock(p, x, y, z, state);
   h.windowAction = (p, m) => ws.windowAction(p, m);
   const prevUseOnBlock = h.useItemOnBlock;
-  h.useItemOnBlock = (p, stack, x, y, z, face) => end.useOnBlock(p, stack, x, y, z) || mobs.useSpawnEgg(p, stack, x, y, z, face) || !!prevUseOnBlock?.(p, stack, x, y, z, face);
+  h.useItemOnBlock = (p, stack, x, y, z, face) => end.useOnBlock(p, stack, x, y, z) || far.useOnBlock(p, stack, x, y, z) || mobs.useSpawnEgg(p, stack, x, y, z, face) || !!prevUseOnBlock?.(p, stack, x, y, z, face);
   h.enterPortal = (p, kind) => end.enterPortal(p, kind);
   mobs.extraEntity = (dim, type, x, y, z) => {
     if (type !== 'end_crystal') return false;
@@ -56,6 +59,7 @@ export function installGameplay(server: GameServer): void {
     ws.tick();
     portals.tick();
     end.tick();
+    far.tick();
     progression.tick();
   };
 }

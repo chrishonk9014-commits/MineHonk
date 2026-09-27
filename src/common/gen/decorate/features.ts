@@ -617,7 +617,7 @@ export function disks(v: DecorView, seed: number, ocx: number, ocz: number): voi
 
 function canPlantOn(ground: number): boolean {
   const b = states();
-  return ground === b.grass || ground === b.dirt || ground === b.podzol || ground === S('coarse_dirt') || ground === b.mossBlock || ground === S('rooted_dirt') || ground === S('mud');
+  return ground === b.grass || ground === b.dirt || ground === b.podzol || ground === S('coarse_dirt') || ground === b.mossBlock || ground === S('rooted_dirt') || ground === S('mud') || ground === S('far_grass_block') || ground === S('far_dirt');
 }
 
 export function trees(v: DecorView, seed: number, ocx: number, ocz: number): void {

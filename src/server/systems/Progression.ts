@@ -5,6 +5,13 @@
  */
 import type { GameServer } from '../GameServer';
 import type { ServerPlayer } from '../player/ServerPlayer';
+import { Mob } from '../entity/Mob';
+
+const KILL_ACHIEVEMENTS: Record<string, string> = {
+  cave_stalker: 'kill_stalker',
+  ember_beast: 'kill_ember_beast',
+  glitch_beast: 'kill_glitch_beast',
+};
 
 const STRUCTURE_ACHIEVEMENTS: Record<string, string> = {
   village: 'find_village',
@@ -24,7 +31,16 @@ const DIMENSION_ACHIEVEMENTS: Record<string, string> = {
 };
 
 export class Progression {
-  constructor(private readonly server: GameServer) {}
+  constructor(private readonly server: GameServer) {
+    const prev = server.interaction.onMobKilled;
+    server.interaction.onMobKilled = (p, m) => {
+      prev?.(p, m);
+      if (!(m instanceof Mob)) return;
+      if (m.def.category === 'monster' || m.def.category === 'boss') server.interaction.grant(p, 'kill_mob');
+      const a = KILL_ACHIEVEMENTS[m.type];
+      if (a) server.interaction.grant(p, a);
+    };
+  }
 
   onDimension(p: ServerPlayer, dim: string): void {
     const a = DIMENSION_ACHIEVEMENTS[dim];

@@ -57,6 +57,8 @@ export interface FrameState {
   camDist?: number;
   /** Portal overlay strength (0..1) and colour. */
   portal?: number;
+  /** Nausea strength 0..1. */
+  nausea?: number;
   portalColor?: number;
 }
 
@@ -256,8 +258,11 @@ export class WorldRenderer {
       cam.position.x += (Math.random() - 0.5) * f.shake * 0.2;
       cam.position.y += (Math.random() - 0.5) * f.shake * 0.2;
     }
+    // Nausea: a slow roll and breathing field of view
+    const nausea = f.nausea ?? 0;
+    if (nausea > 0) cam.rotation.z += Math.sin(f.time * 0.12) * 0.12 * nausea;
     const rd = this.settings.renderDistance * 16;
-    cam.fov = this.settings.fov * f.fovMod;
+    cam.fov = this.settings.fov * f.fovMod * (1 + (nausea > 0 ? Math.sin(f.time * 0.09) * 0.1 * nausea : 0));
     cam.far = Math.max(300, rd * 1.8 + 200);
     cam.updateProjectionMatrix();
 

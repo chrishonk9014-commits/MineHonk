@@ -19,6 +19,8 @@ import { WORLD_BORDER } from '../../common/world/constants';
 const MAX_SIZE = 21;
 /** Ticks a survival player must stand in a nether portal. */
 export const NETHER_PORTAL_DELAY = 80;
+/** Far portals pull players through a little faster. */
+export const FAR_PORTAL_DELAY = 60;
 
 export interface PortalFrame {
   x: number;
@@ -117,6 +119,27 @@ export class Portals {
     return false;
   }
 
+  /** A Corrupted Eye pressed into a far portal frame awakens the gateway. */
+  lightFar(dim: Dimension, x: number, y: number, z: number): boolean {
+    if (dim.id !== 'overworld' && dim.id !== 'farlands') return false;
+    for (let f = 0; f < 6; f++) {
+      const ax = x + [0, 0, 0, 0, -1, 1][f]!;
+      const ay = y + [-1, 1, 0, 0, 0, 0][f]!;
+      const az = z + [0, 0, -1, 1, 0, 0][f]!;
+      for (const axis of ['x', 'z'] as const) {
+        const fr = this.findFrame(dim, ax, ay, az, axis, 'far_portal_frame');
+        if (!fr) continue;
+        this.fill(dim, fr, 'far_portal');
+        this.register(dim, 'far', fr);
+        this.server.playSound(dim, 'glitch.zap', ax + 0.5, ay + 0.5, az + 0.5, 2, 0.6);
+        this.server.playSound(dim, 'portal.open', ax + 0.5, ay + 0.5, az + 0.5, 1, 0.7);
+        this.server.particles(dim, 'glitch', ax + 0.5, ay + 1, az + 0.5, 40, 1.5);
+        return true;
+      }
+    }
+    return false;
+  }
+
   // ------------------------------------------------------------------ travel
 
   /** Kind of portal block the player's body touches. */
@@ -155,12 +178,14 @@ export class Portals {
         p.portalCooldown = Math.max(p.portalCooldown, 20);
         continue;
       }
-      if (kind === 'nether_portal') {
+      if (kind === 'nether_portal' || kind === 'far_portal') {
         p.portalTicks++;
-        const need = p.gamemode === 'creative' || p.gamemode === 'spectator' ? 1 : NETHER_PORTAL_DELAY;
+        const delay = kind === 'far_portal' ? FAR_PORTAL_DELAY : NETHER_PORTAL_DELAY;
+        const need = p.gamemode === 'creative' || p.gamemode === 'spectator' ? 1 : delay;
         if (p.portalTicks >= need) {
           p.portalTicks = 0;
-          this.travelNether(p);
+          if (kind === 'far_portal') this.travelFar(p);
+          else this.travelNether(p);
         }
       } else {
         this.server.interaction.hooks.enterPortal?.(p, kind);
@@ -178,6 +203,17 @@ export class Portals {
     const tz = Math.max(-lim, Math.min(lim, Math.floor(p.z * scale)));
     const axisHere = getProp(p.dim.getState(Math.floor(p.x), Math.floor(p.y + 0.5), Math.floor(p.z)), 'axis');
     this.depart(p, to, 'nether', tx, tz, axisHere === 'z' ? 'z' : 'x', to === 'nether' ? 16 : 128);
+  }
+
+  private travelFar(p: ServerPlayer): void {
+    const from = p.dim.id;
+    if (from !== 'overworld' && from !== 'farlands') return;
+    const to: DimensionId = from === 'overworld' ? 'farlands' : 'overworld';
+    const lim = WORLD_BORDER - 32;
+    const tx = Math.max(-lim, Math.min(lim, Math.floor(p.x)));
+    const tz = Math.max(-lim, Math.min(lim, Math.floor(p.z)));
+    const axisHere = getProp(p.dim.getState(Math.floor(p.x), Math.floor(p.y + 0.5), Math.floor(p.z)), 'axis');
+    this.depart(p, to, 'far', tx, tz, axisHere === 'z' ? 'z' : 'x', 128);
   }
 
   /**

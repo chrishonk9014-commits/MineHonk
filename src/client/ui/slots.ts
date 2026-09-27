@@ -6,6 +6,7 @@ import { items } from '../../common/registry/items';
 import { romanNumeral } from '../../common/data/enchantments';
 import { enchantName } from '../../common/game/enchanting';
 import { blockById } from '../../common/registry/blocks';
+import { POTION_BY_ID } from '../../common/data/potions';
 
 let icons: ItemIcons | null = null;
 export function setIcons(i: ItemIcons): void {
@@ -18,7 +19,7 @@ export function iconEl(stack: Slot, showCount = true): HTMLElement | null {
   if (!it) return null;
   const glint = !!(stack.tag?.ench && Object.keys(stack.tag.ench).length) || !!stack.tag?.stored || !!it.def.glint;
   const icon = el('div', { class: 'item-icon' + (glint ? ' glint' : '') });
-  const url = icons.icon(stack.id);
+  const url = icons.iconFor(stack);
   icon.style.backgroundImage = `url(${url})`;
   if (glint) {
     icon.style.setProperty('mask-image', `url(${url})`);
@@ -53,8 +54,19 @@ export function itemDisplayName(stack: Slot): string {
   if (!stack) return '';
   if (stack.tag?.name) return stack.tag.name;
   const it = items[stack.id];
+  if (stack.tag?.potion && (it?.id === 'potion' || it?.id === 'splash_potion')) {
+    const p = POTION_BY_ID.get(stack.tag.potion);
+    if (p) return (it.id === 'splash_potion' ? 'Splash ' : '') + p.name;
+  }
   return it?.def.name ?? '?';
 }
+
+function ticksToTime(t: number): string {
+  const s = Math.round(t / 20);
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+
+const HARMFUL = new Set(['slowness', 'poison', 'instant_damage', 'weakness', 'wither', 'hunger', 'nausea', 'blindness', 'darkness', 'levitation', 'mining_fatigue']);
 
 const tooltipEl = el('div', { class: 'tooltip hidden' });
 let tooltipAttached = false;
@@ -74,6 +86,16 @@ export function showTooltip(stack: Slot, x: number, y: number, advanced = false)
   tooltipEl.append(el('div', { class: rarity + (stack.tag?.name ? ' italic' : '') }, itemDisplayName(stack)));
   for (const [id, lvl] of Object.entries(stack.tag?.ench ?? {})) tooltipEl.append(el('div', { class: 'ench' }, `${enchantName(id)}${lvl > 1 || id !== 'silk_touch' ? ' ' + romanNumeral(lvl) : ''}`));
   for (const [id, lvl] of Object.entries(stack.tag?.stored ?? {})) tooltipEl.append(el('div', { class: 'yellow' }, `${enchantName(id)} ${romanNumeral(lvl)}`));
+  if (stack.tag?.potion) {
+    const p = POTION_BY_ID.get(stack.tag.potion);
+    if (p && p.effects.length === 0) tooltipEl.append(el('div', { class: 'dim' }, 'No Effects'));
+    for (const e of p?.effects ?? []) {
+      const nm = e.id.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+      const lvl = e.amp > 0 ? ' ' + romanNumeral(e.amp + 1) : '';
+      const dur = e.duration > 20 ? ` (${ticksToTime(e.duration * (it.id === 'splash_potion' ? 0.75 : 1))})` : '';
+      tooltipEl.append(el('div', { class: HARMFUL.has(e.id) ? 'error-text' : 'blue' }, nm + lvl + dur));
+    }
+  }
   const d = it.def;
   if (d.food) tooltipEl.append(el('div', { class: 'dim' }, `Restores ${d.food.hunger / 2} hunger`));
   if (d.weapon && d.tool?.type !== undefined) {

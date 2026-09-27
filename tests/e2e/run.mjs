@@ -118,6 +118,63 @@ try {
     stopServer();
     process.exit(0);
   }
+  if (process.env.STATIONS) {
+    // Visual check of workstation screens (needs CHEATS=1)
+    const send = async (text) => {
+      await page.evaluate((t) => window.minehonk.game.send({ t: 'chat', text: t }), text);
+      await page.waitForTimeout(1100);
+    };
+    const pos = await page.evaluate(() => {
+      const b = window.minehonk.game.player.body;
+      return [Math.floor(b.x), Math.floor(b.z)];
+    });
+    const [px, pz] = pos;
+    const y = 120;
+    await send(`/fill ${px - 4} ${y} ${pz - 4} ${px + 4} ${y} ${pz + 4} stone`);
+    await send(`/tp ${px + 0.5} ${y + 1} ${pz + 0.5}`);
+    await send(`/fill ${px - 2} ${y + 1} ${pz - 4} ${px + 2} ${y + 2} ${pz - 4} bookshelf`);
+    await send(`/fill ${px} ${y + 1} ${pz - 2} ${px} ${y + 1} ${pz - 2} enchanting_table`);
+    await send(`/fill ${px + 2} ${y + 1} ${pz} ${px + 2} ${y + 1} ${pz} anvil`);
+    await send(`/fill ${px - 2} ${y + 1} ${pz} ${px - 2} ${y + 1} ${pz} brewing_stand`);
+    await send('/xp 30L');
+    await send('/give lapis_lazuli 16');
+    await send('/give iron_sword');
+    await send('/give blaze_powder 4');
+    await send('/give nether_wart 4');
+    await send('/give iron_ingot 4');
+    const stations = [['enchanting', px, y + 1, pz - 2], ['anvil', px + 2, y + 1, pz], ['brewing', px - 2, y + 1, pz]];
+    for (const [name, x, by, z] of stations) {
+      await page.evaluate(([x, by, z]) => {
+        const g = window.minehonk.game;
+        g.player.pitch = 0.9;
+        g.send({ t: 'use_on', x, y: by, z, face: 1, hx: 0.5, hy: 1, hz: 0.5, hand: 0, yaw: g.player.yaw, pitch: g.player.pitch, seq: 0 });
+      }, [x, by, z]);
+      await page.waitForTimeout(1500);
+      // Shift-click the sword and lapis into the enchanting table to show offers
+      if (name === 'enchanting') {
+        const centres = await page.evaluate(() => [...document.querySelectorAll('.gui .inv-hotbar .slot')].slice(0, 2).map((e) => {
+          const r = e.getBoundingClientRect();
+          return [r.x + r.width / 2, r.y + r.height / 2];
+        }));
+        await page.keyboard.down('Shift');
+        for (const [cx, cy] of [centres[1], centres[0]]) {
+          await page.mouse.click(cx, cy);
+          await page.waitForTimeout(300);
+        }
+        await page.keyboard.up('Shift');
+        await page.waitForTimeout(800);
+        console.log('offers', JSON.stringify(await page.evaluate(() => [...document.querySelectorAll('.ench-option')].map((o) => o.textContent))));
+      }
+      const info = await page.evaluate(() => ({ title: [...document.querySelectorAll('.gui .gtitle')].map((t) => t.textContent) }));
+      console.log(name, JSON.stringify(info));
+      await page.screenshot({ path: `${OUT}/station-${name}.png` });
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(500);
+    }
+    await browser.close();
+    stopServer();
+    process.exit(0);
+  }
   if (process.env.TP) {
     // Optional sightseeing: teleport (needs CHEATS=1) and look around
     const [tx, ty, tz, yaw = '0', pitch = '0.3'] = process.env.TP.split(',');

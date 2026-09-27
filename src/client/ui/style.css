@@ -952,3 +952,92 @@ body {
   width: calc(var(--s) * 10);
   text-align: center;
 }
+
+/* ------------------------------------------------------------ enchanting / anvil / brewing */
+.ench-options {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin-left: calc(var(--s) * 12);
+  width: calc(var(--s) * 108);
+  background: #5a4a3a;
+  border: var(--s) solid #373737;
+}
+.ench-option {
+  height: calc(var(--s) * 19);
+  display: flex;
+  align-items: center;
+  gap: calc(var(--s) * 3);
+  padding: 0 calc(var(--s) * 3);
+  background: #6b5c4a;
+  border-bottom: var(--s) solid #3a3028;
+  font-size: calc(var(--s) * 6);
+  pointer-events: auto;
+}
+.ench-option.ok {
+  cursor: pointer;
+  background: #8a7a5a;
+  color: #f0e8c0;
+}
+.ench-option.ok:hover {
+  background: #a8986a;
+}
+.ench-option.locked {
+  color: #605040;
+}
+.ench-lapis {
+  width: calc(var(--s) * 8);
+  color: #3a5ad8;
+  text-shadow: none;
+}
+.ench-hint {
+  flex: 1;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-style: italic;
+}
+.ench-cost {
+  color: #80ff20;
+}
+.ench-option.locked .ench-cost {
+  color: #406010;
+}
+.anvil-name {
+  width: calc(var(--s) * 110);
+  height: calc(var(--s) * 14);
+  margin: 0 0 calc(var(--s) * 4) calc(var(--s) * 50);
+  pointer-events: auto;
+}
+.anvil-cost {
+  min-height: calc(var(--s) * 10);
+  margin: calc(var(--s) * 2) 0 calc(var(--s) * 4) calc(var(--s) * 50);
+}
+.brew-layout {
+  display: flex;
+  gap: calc(var(--s) * 16);
+  justify-content: center;
+  margin-bottom: calc(var(--s) * 6);
+}
+.brew-progress {
+  width: calc(var(--s) * 9);
+  height: calc(var(--s) * 20);
+  background: #6b6b6b;
+  display: flex;
+  align-items: flex-start;
+}
+.brew-progress > div {
+  width: 100%;
+  background: linear-gradient(#f0f0f0, #a0c0f0);
+  height: 0;
+}
+.brew-fuel {
+  width: calc(var(--s) * 18);
+  height: calc(var(--s) * 4);
+  background: #3a2a2a;
+}
+.brew-fuel > div {
+  height: 100%;
+  width: 0;
+  background: #f0a020;
+}

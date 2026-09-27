@@ -5,6 +5,7 @@
  */
 import type { GameServer } from './GameServer';
 import { MobSystem } from './systems/Mobs';
+import { Workstations } from './systems/Workstations';
 
 export function installGameplay(server: GameServer): void {
   const mobs = new MobSystem(server);
@@ -14,7 +15,11 @@ export function installGameplay(server: GameServer): void {
   h.attack = (p, target) => mobs.playerAttack(p, target);
   h.interactEntity = (p, target, hand) => mobs.interact(p, target, hand);
   h.restore = (dim, data) => mobs.restore(dim, data);
-  h.useItem = (p, stack) => mobs.useItem(p, stack);
+  const ws = new Workstations(server);
+  server.workstations = ws;
+  h.useItem = (p, stack) => mobs.useItem(p, stack) || ws.fillBottle(p, stack) || ws.throwSplash(p, stack);
+  h.useBlock = (p, x, y, z, state) => ws.useBlock(p, x, y, z, state);
+  h.windowAction = (p, m) => ws.windowAction(p, m);
   const prevUseOnBlock = h.useItemOnBlock;
   h.useItemOnBlock = (p, stack, x, y, z, face) => mobs.useSpawnEgg(p, stack, x, y, z, face) || !!prevUseOnBlock?.(p, stack, x, y, z, face);
   h.releaseItem = (p, stack, ticks) => mobs.releaseBow(p, stack, ticks);
@@ -25,5 +30,6 @@ export function installGameplay(server: GameServer): void {
     prevTick?.();
     mobs.tick();
     mobs.tickArrowPickup();
+    ws.tick();
   };
 }

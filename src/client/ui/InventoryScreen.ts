@@ -4,11 +4,16 @@
  * replies with authoritative contents.
  */
 import { el, clear } from './dom';
-import { fillSlot, showTooltip, hideTooltip, iconEl } from './slots';
+import { fillSlot, showTooltip, hideTooltip, iconEl, itemDisplayName } from './slots';
 import type { Slot } from '../../common/game/itemstack';
 import type { C2S, WindowKind, ClickMode } from '../../common/net/protocol';
 import { sprites } from './sprites';
 import { items, CREATIVE_TABS } from '../../common/registry/items';
+import { enchantName } from '../../common/game/enchanting';
+import { POTIONS } from '../../common/data/potions';
+import { ENCHANTMENTS } from '../../common/data/enchantments';
+import type { ItemStack } from '../../common/game/itemstack';
+import { romanNumeral } from '../../common/data/enchantments';
 
 export interface WindowState {
   id: number;
@@ -31,7 +36,7 @@ export class InventoryScreen {
   private lastClick = { slot: -1, time: 0 };
   private seq = 0;
   private win: WindowState;
-  private progress: { arrow?: HTMLElement; flame?: HTMLElement } = {};
+  private progress: { arrow?: HTMLElement; flame?: HTMLElement; brew?: HTMLElement; fuel?: HTMLElement } = {};
   private mouse = { x: 0, y: 0 };
   private creativeTab = 'building';
   private creativeSearch = '';
@@ -84,9 +89,8 @@ export class InventoryScreen {
 
   private slotStack(i: number): Slot {
     if (i >= 10000) {
-      const list = this.creativeItems();
-      const num = list[i - 10000];
-      return num ? { id: num, count: 1 } : null;
+      const st = this.creativeItems()[i - 10000];
+      return st ? { ...st } : null;
     }
     return this.win.slots[i] ?? null;
   }
@@ -192,16 +196,29 @@ export class InventoryScreen {
 
   // ---------------------------------------------------------------- creative
 
-  private creativeItems(): number[] {
+  private creativeCache: { key: string; list: ItemStack[] } | null = null;
+
+  /** Catalog stacks for the current tab/search; potions and books expand into variants. */
+  private creativeItems(): ItemStack[] {
     const q = this.creativeSearch.toLowerCase();
-    const out: number[] = [];
+    const key = this.creativeTab + '|' + q;
+    if (this.creativeCache?.key === key) return this.creativeCache.list;
+    const out: ItemStack[] = [];
     for (const it of items) {
       if (it.num === 0 || it.def.creative === 'hidden') continue;
-      if (q) {
-        if (!it.def.name.toLowerCase().includes(q) && !it.id.includes(q)) continue;
-      } else if ((it.def.creative ?? 'building') !== this.creativeTab) continue;
-      out.push(it.num);
+      const variants: ItemStack[] = [];
+      if (it.id === 'potion' || it.id === 'splash_potion') for (const p of POTIONS) variants.push({ id: it.num, count: 1, tag: { potion: p.id } });
+      else if (it.id === 'enchanted_book') for (const e of ENCHANTMENTS) variants.push({ id: it.num, count: 1, tag: { stored: { [e.id]: e.maxLevel } } });
+      else variants.push({ id: it.num, count: 1 });
+      for (const v of variants) {
+        if (q) {
+          const name = itemDisplayName(v).toLowerCase();
+          if (!name.includes(q) && !it.id.includes(q)) continue;
+        } else if ((it.def.creative ?? 'building') !== this.creativeTab) continue;
+        out.push(v);
+      }
     }
+    this.creativeCache = { key, list: out };
     return out;
   }
 
@@ -209,12 +226,12 @@ export class InventoryScreen {
     const playerSlots = this.opts.playerSlots();
     if (i >= 10000) {
       // catalog
-      const num = this.creativeItems()[i - 10000];
-      if (!num) return;
+      const st = this.creativeItems()[i - 10000];
+      if (!st) return;
       if (this.creativeCursor) {
         this.creativeCursor = null;
       } else {
-        this.creativeCursor = { id: num, count: e.shiftKey || e.button === 1 ? items[num]!.maxStack : 1 };
+        this.creativeCursor = { ...st, count: e.shiftKey || e.button === 1 ? items[st.id]!.maxStack : 1 };
       }
       this.renderCursor();
       return;
@@ -332,6 +349,62 @@ export class InventoryScreen {
         gui.append(title, top, this.invSection(2));
         break;
       }
+      case 'enchanting': {
+        const opts = (w.props.options as { cost: number; lapis: number; hint: { id: string; level: number } | null; ok: boolean }[] | undefined) ?? [];
+        const col = el('div', { class: 'ench-options' });
+        for (let i = 0; i < 3; i++) {
+          const o = opts[i];
+          const b = el('div', { class: 'ench-option' + (o && o.cost > 0 ? (o.ok ? ' ok' : ' locked') : ' empty') });
+          if (o && o.cost > 0) {
+            const hint = o.hint ? `${enchantName(o.hint.id)} ${romanNumeral(o.hint.level)} ...?` : '';
+            b.append(el('div', { class: 'ench-lapis' }, String(i + 1)), el('div', { class: 'ench-hint' }, hint), el('div', { class: 'ench-cost' }, String(o.cost)));
+            b.addEventListener('mousedown', (e) => {
+              e.stopPropagation();
+              if (o.ok) this.send({ t: 'enchant', option: i });
+            });
+          }
+          col.append(b);
+        }
+        const left = el('div', { class: 'row', style: { gap: 'calc(var(--s) * 2)', alignSelf: 'center' } }, this.slot(0), this.slot(1));
+        const top = row(left, col);
+        top.style.marginBottom = 'calc(var(--s) * 6)';
+        gui.append(title, top, this.invSection(2));
+        break;
+      }
+      case 'anvil': {
+        const input = el('input', { class: 'field anvil-name', maxLength: 35, placeholder: 'Item name', value: String(w.props.name ?? '') }) as HTMLInputElement;
+        let timer: ReturnType<typeof setTimeout> | null = null;
+        input.addEventListener('input', () => {
+          if (timer) clearTimeout(timer);
+          timer = setTimeout(() => this.send({ t: 'rename', name: input.value }), 150);
+        });
+        input.addEventListener('keydown', (e) => {
+          if (e.key !== 'Escape') e.stopPropagation();
+        });
+        const label = el('div', { class: 'anvil-cost' });
+        this.anvilLabel = label;
+        this.updateAnvilLabel();
+        const top = row(this.slot(0), el('div', { class: 'muted' }, '+'), this.slot(1), this.arrow(), this.slot(2, 'slot big'));
+        gui.append(title, input, top, label, this.invSection(3));
+        setTimeout(() => {
+          if (document.activeElement === document.body) input.focus();
+        }, 0);
+        break;
+      }
+      case 'brewing': {
+        const bubbles = el('div', { class: 'brew-progress' }, el('div'));
+        this.progress.brew = bubbles.firstChild as HTMLElement;
+        const fuelBar = el('div', { class: 'brew-fuel' }, el('div'));
+        this.progress.fuel = fuelBar.firstChild as HTMLElement;
+        const top = el(
+          'div',
+          { class: 'brew-layout' },
+          el('div', { class: 'stack' }, this.slot(4), fuelBar),
+          el('div', { class: 'stack' }, this.slot(3), bubbles, el('div', { class: 'row' }, this.slot(0), this.slot(1), this.slot(2))),
+        );
+        gui.append(title, top, this.invSection(5));
+        break;
+      }
       case 'merchant': {
         // Offer list on the left, payment slots and result on the right
         const offers = (w.props.offers as { buy: Slot; buy2: Slot; sell: Slot; out: boolean }[] | undefined) ?? [];
@@ -422,9 +495,9 @@ export class InventoryScreen {
     clear(this.creativeGrid);
     for (const k of [...this.slotEls.keys()]) if (k >= 10000) this.slotEls.delete(k);
     const list = this.creativeItems();
-    list.forEach((num, i) => {
+    list.forEach((st, i) => {
       const s = this.slot(10000 + i);
-      fillSlot(s, { id: num, count: 1 });
+      fillSlot(s, st);
       this.creativeGrid!.append(s);
     });
   }
@@ -432,7 +505,7 @@ export class InventoryScreen {
   // ---------------------------------------------------------------- updates
 
   setState(win: WindowState, cursor: Slot): void {
-    const rebuild = win.id !== this.win.id || win.kind !== this.win.kind || ((win.kind === 'stonecutter' || win.kind === 'merchant') && JSON.stringify(win.props) !== JSON.stringify(this.win.props));
+    const rebuild = win.id !== this.win.id || win.kind !== this.win.kind || ((win.kind === 'stonecutter' || win.kind === 'merchant' || win.kind === 'enchanting') && JSON.stringify(win.props) !== JSON.stringify(this.win.props));
     this.win = { ...win, props: { ...win.props } };
     this.cursor = cursor;
     if (rebuild) {
@@ -448,12 +521,32 @@ export class InventoryScreen {
 
   setProps(props: Record<string, unknown>): void {
     const merged = { ...this.win.props, ...props };
-    if ((this.win.kind === 'stonecutter' || this.win.kind === 'merchant') && JSON.stringify(merged) !== JSON.stringify(this.win.props)) {
+    if ((this.win.kind === 'stonecutter' || this.win.kind === 'merchant' || this.win.kind === 'enchanting') && JSON.stringify(merged) !== JSON.stringify(this.win.props)) {
       this.setState({ ...this.win, props: merged }, this.cursor);
       return;
     }
     this.win.props = merged;
+    if (this.win.kind === 'anvil') this.updateAnvilLabel();
     this.refreshProgress();
+  }
+
+  private anvilLabel: HTMLElement | null = null;
+
+  private updateAnvilLabel(): void {
+    const label = this.anvilLabel;
+    if (!label) return;
+    const w = this.win;
+    const cost = Number(w.props.cost ?? 0);
+    label.className = 'anvil-cost';
+    label.textContent = '';
+    if (cost <= 0) return;
+    if (w.props.tooExpensive) {
+      label.textContent = 'Too Expensive!';
+      label.classList.add('error-text');
+    } else {
+      label.textContent = `Enchantment Cost: ${cost}`;
+      label.classList.add(w.props.affordable ? 'ok-text' : 'error-text');
+    }
   }
 
   private refreshProgress(): void {
@@ -466,6 +559,11 @@ export class InventoryScreen {
       const f = p.burnTotal ? p.burn / p.burnTotal : 0;
       this.progress.flame.style.height = `${Math.min(1, f) * 100}%`;
     }
+    if (this.progress.brew) {
+      const f = p.brew > 0 ? 1 - p.brew / (p.brewTotal || 400) : 0;
+      this.progress.brew.style.height = `${Math.min(1, f) * 100}%`;
+    }
+    if (this.progress.fuel) this.progress.fuel.style.width = `${Math.min(1, (p.fuel ?? 0) / 20) * 100}%`;
   }
 
   refresh(): void {
@@ -474,6 +572,8 @@ export class InventoryScreen {
       if (i >= 10000) continue;
       fillSlot(s, slots[i] ?? null);
     }
+    // The tooltip only follows mouse moves; drop it when the hovered slot empties
+    if (this.hovered >= 0 && this.hovered < 10000 && !this.slotStack(this.hovered)) hideTooltip();
     this.refreshProgress();
   }
 

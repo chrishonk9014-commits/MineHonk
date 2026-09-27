@@ -1,3 +1,4 @@
+import { POTION_BY_ID } from '../../common/data/potions';
 /**
  * Generates inventory icons: isometric cubes for full blocks, flat sprites
  * for items/plants. Icons are cached as data URLs (for DOM UI).
@@ -58,6 +59,42 @@ export class ItemIcons {
     this.texCache.set(key, c);
     return c;
   }
+
+  /** Icon for a specific stack (potions are tinted by their contents). */
+  iconFor(stack: { id: number; tag?: { potion?: string } }): string {
+    const potion = stack.tag?.potion;
+    if (!potion) return this.icon(stack.id);
+    const key = `${stack.id}:${potion}`;
+    const cached = this.stackCache.get(key);
+    if (cached) return cached;
+    const c = this.render(stack.id);
+    const color = POTION_BY_ID.get(potion)?.color ?? 0x385dc6;
+    const ctx = c.getContext('2d', { willReadFrequently: true })!;
+    const img = ctx.getImageData(0, 0, c.width, c.height);
+    const d = img.data;
+    const tr = (color >> 16) & 255;
+    const tg = (color >> 8) & 255;
+    const tb = color & 255;
+    for (let i = 0; i < d.length; i += 4) {
+      if (d[i + 3] === 0) continue;
+      const r = d[i]!;
+      const g = d[i + 1]!;
+      const b = d[i + 2]!;
+      // Liquid pixels are the saturated blue ones in the base bottle sprite
+      if (b > r + 40 && b > g + 30) {
+        const lum = (r + g + b) / 3 / 128;
+        d[i] = Math.min(255, tr * lum);
+        d[i + 1] = Math.min(255, tg * lum);
+        d[i + 2] = Math.min(255, tb * lum);
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+    const url = c.toDataURL();
+    this.stackCache.set(key, url);
+    return url;
+  }
+
+  private readonly stackCache = new Map<string, string>();
 
   icon(itemNum: number): string {
     const cached = this.cache.get(itemNum);

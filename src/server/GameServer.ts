@@ -50,6 +50,8 @@ export class GameServer {
   readonly mining: Mining;
   /** Mob, combat and explosion system (installed by gameplay). */
   mobs: import('./systems/Mobs').MobSystem | null = null;
+  /** Enchanting, anvils, brewing and potions (installed by gameplay). */
+  workstations: import('./systems/Workstations').Workstations | null = null;
   readonly interaction: Interaction;
   readonly commands: Commands;
   readonly playerData: PlayerData;
@@ -609,6 +611,7 @@ export class GameServer {
   onChunkLoaded(dim: Dimension, c: Chunk, _entities: Record<string, unknown>[]): void {
     this.blockUpdates.onChunkReady(dim, c);
     this.mobs?.onChunkLoaded(dim, c);
+    this.workstations?.onChunk(dim, c);
   }
 
   onChunkUnloaded(dim: Dimension, c: Chunk): void {

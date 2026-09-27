@@ -624,6 +624,10 @@ export class Interaction {
       this.using.set(p, { slot: hand, hand: m.hand, item: stack.id, start: this.server.tickNo, duration: def.food.eatTime ?? 32, kind: 'eat' });
       return;
     }
+    if (def.use === 'potion') {
+      this.using.set(p, { slot: hand, hand: m.hand, item: stack.id, start: this.server.tickNo, duration: 32, kind: 'eat' });
+      return;
+    }
     if (def.use === 'bow' || def.use === 'crossbow' || def.use === 'trident') {
       this.using.set(p, { slot: hand, hand: m.hand, item: stack.id, start: this.server.tickNo, duration: 72000, kind: 'bow' });
       return;
@@ -679,8 +683,15 @@ export class Interaction {
 
   private finishEating(p: ServerPlayer, slot: number, stack: ItemStack): void {
     const def = items[stack.id]!.def;
-    const f = def.food!;
     const id = items[stack.id]!.id;
+    if (def.use === 'potion') {
+      this.server.workstations?.applyPotion(p, stack.tag?.potion ?? 'water');
+      if (p.gamemode !== 'creative') this.replaceOne(p, slot, stackOf('glass_bottle'));
+      p.addStat('drank.' + (stack.tag?.potion ?? 'water'));
+      p.statsDirty = true;
+      return;
+    }
+    const f = def.food!;
     if (f.special === 'milk') p.effects.clear();
     else this.survival.feed(p, f.hunger, f.saturation);
     for (const e of f.effects ?? []) if (e.chance === undefined || rng.chance(e.chance)) this.survival.addEffect(p, e.effect, e.amplifier ?? 0, e.duration);

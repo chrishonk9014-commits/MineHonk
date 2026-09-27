@@ -665,6 +665,26 @@ export class MobSystem {
           s.mining.dropXp(dim, hit.x, hit.y, hit.z, 3 + this.rng.int(9));
           return true;
         }
+        const potionId = p.data?.potion as string | undefined;
+        if (potionId) {
+          // Player-thrown splash potion: full effect list, scaled by distance
+          for (const t of dim.entitiesNear(hit.x, hit.y, hit.z, 4)) {
+            const f = 1 - Math.sqrt(t.distanceSq(hit.x, hit.y, hit.z)) / 4;
+            if (f <= 0) continue;
+            if (isPlayer(t)) s.workstations?.applyPotion(t, potionId, f);
+            else if (t instanceof LivingEntity) {
+              const harm = potionId.includes('harming') ? 6 : potionId.includes('healing') ? -6 : 0;
+              const undead = t.isUndead();
+              if (harm !== 0) {
+                const dmg = (undead ? -harm : harm) * f * (potionId.startsWith('strong_') ? 2 : 1);
+                if (dmg > 0) t.hurt(dmg, { source: 'magic', attacker: p.owner });
+                else t.health = Math.min(t.maxHealth, t.health - dmg);
+              }
+              if (potionId.includes('fire_resistance') || potionId.includes('water')) t.fireTicks = 0;
+            }
+          }
+          return true;
+        }
         const eff = String(p.data?.effect ?? 'instant_damage');
         for (const t of dim.entitiesNear(hit.x, hit.y, hit.z, 4)) {
           if (!isPlayer(t)) continue;

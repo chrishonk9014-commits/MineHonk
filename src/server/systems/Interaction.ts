@@ -40,6 +40,9 @@ interface UsingState {
   kind: 'eat' | 'bow' | 'block';
 }
 
+/** Block interactions (by interact kind or block id) that visitors may not use. */
+const VISITOR_BLOCKED = new Set(['chest', 'barrel', 'furnace', 'blast_furnace', 'smoker', 'brewing_stand', 'anvil', 'chipped_anvil', 'damaged_anvil', 'sign', 'jukebox', 'note_block', 'composter', 'cauldron', 'lectern', 'respawn_anchor', 'end_portal_frame', 'far_portal_frame']);
+
 export class Interaction {
   readonly survival: Survival;
   readonly containers: Containers;
@@ -80,6 +83,7 @@ export class Interaction {
    */
   canModify(p: ServerPlayer, dim: Dimension, x: number, y: number, z: number, breaking = false): boolean {
     if (!p.abilities.mayBuild && !(breaking && p.gamemode === 'adventure')) return false;
+    if (this.server.roleOf(p) === 'visitor') return false;
     if (y < 0 || y > 255) return false;
     void dim;
     void x;
@@ -226,6 +230,11 @@ export class Interaction {
     const dim = p.dim;
     const bt = blocks[STATE_BLOCK[state]!]!;
     const def = bt.def;
+    // Visitors may look around and use doors, but not shared storage or stations that change the world
+    if (this.server.roleOf(p) === 'visitor' && (VISITOR_BLOCKED.has(def.interact ?? '') || VISITOR_BLOCKED.has(bt.id))) {
+      p.send({ t: 'chat', text: 'Visitors cannot use that in this world.', kind: 'error' });
+      return true;
+    }
     if (this.hooks.useBlock?.(p, x, y, z, state)) return true;
     const adventureOk = p.gamemode !== 'spectator';
     if (!adventureOk) return false;
@@ -420,6 +429,7 @@ export class Interaction {
   // ------------------------------------------------------------------ item on block
 
   private useItemOnBlock(p: ServerPlayer, stack: ItemStack, hand: number, m: C2S & { t: 'use_on' }): boolean {
+    if (this.server.roleOf(p) === 'visitor') return false;
     const dim = p.dim;
     const { x, y, z, face } = m;
     const it = items[stack.id]!;
@@ -892,6 +902,7 @@ export class Interaction {
     const be = p.dim.getBlockEntity(m.x, m.y, m.z);
     if (!be || be.type !== 'sign') return;
     if (p.distanceSq(m.x + 0.5, m.y + 0.5, m.z + 0.5) > 64) return;
+    if (!this.canModify(p, p.dim, m.x, m.y, m.z)) return;
     const filter = this.server.opts.filterChat;
     const lines = m.lines.map((l) => {
       const clean = l.replace(/[\u0000-\u001f\u007f]/g, '').slice(0, 32);

@@ -63,6 +63,7 @@ export class Commands {
       run: (p, a) => {
         const t = findPlayer(a[0], p);
         if (!t || !a[1]) return 'Usage: /msg <player> <message>';
+        if (s.isMuted(p)) return 'You are muted in this world.';
         const text = a.slice(1).join(' ');
         const filtered = s.opts.filterChat ? s.opts.filterChat(text, p) : text;
         if (filtered === null) return 'Message blocked by the chat filter.';
@@ -76,6 +77,7 @@ export class Commands {
       level: 'any',
       run: (p, a) => {
         if (!a.length) return;
+        if (s.isMuted(p)) return 'You are muted in this world.';
         const text = a.join(' ');
         const filtered = s.opts.filterChat ? s.opts.filterChat(text, p) : text;
         if (filtered !== null) s.broadcastChat(`* ${p.name} ${filtered}`, 'chat');
@@ -416,6 +418,79 @@ export class Commands {
       },
     });
     this.register({
+      name: 'mute',
+      usage: '/mute <player> [minutes]',
+      level: 'op',
+      run: (p, a) => {
+        const t = findPlayer(a[0], p);
+        if (!t || t === p) return 'Player not found';
+        if (s.roleOf(t) === 'owner') return 'The owner cannot be muted';
+        const minutes = Math.max(1, Math.min(60 * 24 * 30, parseInt(a[1] ?? '15', 10) || 15));
+        s.level.muted[t.uuid] = Date.now() + minutes * 60000;
+        t.send({ t: 'chat', text: `You have been muted for ${minutes} minute${minutes === 1 ? '' : 's'}.`, kind: 'error' });
+        return `Muted ${t.name} for ${minutes} minute${minutes === 1 ? '' : 's'}`;
+      },
+    });
+    this.register({
+      name: 'unmute',
+      usage: '/unmute <player>',
+      level: 'op',
+      run: (p, a) => {
+        const t = findPlayer(a[0], p);
+        if (!t) return 'Player not found';
+        delete s.level.muted[t.uuid];
+        t.send({ t: 'chat', text: 'You can chat again.', kind: 'system' });
+        return `Unmuted ${t.name}`;
+      },
+    });
+    this.register({
+      name: 'report',
+      usage: '/report <player> <reason>',
+      level: 'any',
+      run: (p, a) => {
+        const t = findPlayer(a[0], p);
+        if (!t || t === p) return 'Player not found';
+        const reason = a.slice(1).join(' ').slice(0, 200);
+        if (reason.length < 3) return 'Please describe what happened: /report <player> <reason>';
+        const recent = s.level.reports.filter((r) => r.from === p.uuid && Date.now() - r.at < 60000).length;
+        if (recent >= 3) return 'You have sent several reports recently. Please wait a moment.';
+        s.level.reports.push({ from: p.uuid, target: t.uuid, reason, at: Date.now() });
+        if (s.level.reports.length > 200) s.level.reports.shift();
+        s.log(`[report] ${p.name} reported ${t.name}: ${reason}`);
+        s.onReport?.(p, t, reason);
+        for (const o of s.players.values()) if (o !== p && s.isOperator(o)) o.send({ t: 'chat', text: `${p.name} reported ${t.name}: ${reason}`, kind: 'error' });
+        return 'Thank you. Your report was sent to the world operators.';
+      },
+    });
+    this.register({
+      name: 'reports',
+      usage: '/reports',
+      level: 'op',
+      run: () => {
+        const list = s.level.reports.slice(-5);
+        if (!list.length) return 'No reports.';
+        const name = (uuid: string): string => [...s.players.values()].find((o) => o.uuid === uuid)?.name ?? uuid.slice(0, 8);
+        return list.map((r) => `${new Date(r.at).toISOString().slice(0, 16).replace('T', ' ')} ${name(r.from)} -> ${name(r.target)}: ${r.reason}`).join('\n');
+      },
+    });
+    this.register({
+      name: 'role',
+      usage: '/role <player> <builder|visitor>',
+      level: 'op',
+      run: (p, a) => {
+        const t = findPlayer(a[0], p);
+        if (!t) return 'Player not found';
+        const role = a[1];
+        if (role !== 'builder' && role !== 'visitor') return `${t.name} is a ${s.roleOf(t)}`;
+        const cur = s.roleOf(t);
+        if (cur === 'owner' || cur === 'operator') return 'Use /deop first to change an operator';
+        s.level.roles[t.uuid] = role;
+        t.send({ t: 'world_info', world: s.worldInfo(t) });
+        t.send({ t: 'chat', text: role === 'visitor' ? 'You are now a visitor: you can explore but not build.' : 'You can now build in this world.', kind: 'system' });
+        return `${t.name} is now a ${role}`;
+      },
+    });
+    this.register({
       name: 'pvp',
       usage: '/pvp <on|off>',
       level: 'op',
@@ -579,7 +654,7 @@ export class Commands {
     }
     try {
       const out = cmd.run(p, parts);
-      if (out) p.send({ t: 'chat', text: out, kind: 'system' });
+      if (out) for (const line of out.split('\n')) p.send({ t: 'chat', text: line, kind: 'system' });
     } catch (e) {
       p.send({ t: 'chat', text: `Command failed: ${(e as Error).message}`, kind: 'error' });
     }

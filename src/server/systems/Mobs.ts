@@ -1035,6 +1035,8 @@ export class MobSystem {
       return;
     }
     if (isPlayer(target) && (!s.level.pvp || target.gamemode === 'creative')) return;
+    // Visitors may defend themselves against monsters but not hurt animals, pets or villagers
+    if (s.roleOf(p) === 'visitor' && target instanceof Mob && target.def.category !== 'monster' && target.def.category !== 'boss') return;
     // Reach & line of sight
     const [ex, ey, ez] = s.eyePos(p);
     const reach = p.gamemode === 'creative' ? 6 : 4.5;
@@ -1102,6 +1104,8 @@ export class MobSystem {
   // ------------------------------------------------------------------ interactions
   interact(p: ServerPlayer, target: Entity, hand: 0 | 1): boolean {
     if (!(target instanceof Mob) || target.dead) return false;
+    // Visitors can trade but not shear, milk, tame, breed or name other players' animals
+    if (this.server.roleOf(p) === 'visitor' && target.type !== 'villager') return false;
     const s = this.server;
     const m = target;
     const slot = hand === 1 ? 40 : p.selectedSlot;

@@ -65,6 +65,14 @@ export interface LevelData {
   flags: Record<string, unknown>;
   /** Known portals (bottom corner of the portal sheet), used to link travel. */
   portals: PortalRecord[];
+  /** Per-player role overrides (operators are listed separately). */
+  roles: Record<string, 'builder' | 'visitor'>;
+  /** Role for players without an override. */
+  defaultRole: 'builder' | 'visitor';
+  /** Muted players: uuid -> time (ms) the mute ends. */
+  muted: Record<string, number>;
+  /** Player reports for operators (most recent last). */
+  reports: { from: string; target: string; reason: string; at: number }[];
 }
 
 export interface PortalRecord {
@@ -144,6 +152,10 @@ export function createLevelData(o: NewWorldOptions): LevelData {
     operators: o.owner ? [o.owner] : [],
     flags: {},
     portals: [],
+    roles: {},
+    defaultRole: 'builder',
+    muted: {},
+    reports: [],
   };
 }
 
@@ -183,6 +195,12 @@ export function sanitizeLevelData(raw: unknown, fallbackId: string): LevelData |
   out.banned = Array.isArray(r.banned) ? r.banned.filter((s) => typeof s === 'string') : [];
   out.operators = Array.isArray(r.operators) ? r.operators.filter((s) => typeof s === 'string') : [];
   out.flags = r.flags && typeof r.flags === 'object' ? r.flags : {};
+  out.roles = {};
+  if (r.roles && typeof r.roles === 'object') for (const [k, v] of Object.entries(r.roles)) if (v === 'builder' || v === 'visitor') out.roles[k] = v;
+  out.defaultRole = r.defaultRole === 'visitor' ? 'visitor' : 'builder';
+  out.muted = {};
+  if (r.muted && typeof r.muted === 'object') for (const [k, v] of Object.entries(r.muted)) if (typeof v === 'number' && Number.isFinite(v)) out.muted[k] = v;
+  out.reports = Array.isArray(r.reports) ? r.reports.filter((q) => q && typeof q.from === 'string' && typeof q.target === 'string' && typeof q.reason === 'string').slice(-200) : [];
   out.portals = Array.isArray(r.portals)
     ? r.portals.filter((q): q is PortalRecord => !!q && typeof q === 'object' && ['overworld', 'nether', 'end', 'farlands'].includes(q.dim) && (q.kind === 'nether' || q.kind === 'far') && [q.x, q.y, q.z].every((n) => Number.isInteger(n)) && (q.axis === 'x' || q.axis === 'z')).slice(0, 1024)
     : [];

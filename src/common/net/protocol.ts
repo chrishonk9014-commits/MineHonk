@@ -1,3 +1,4 @@
+import type { WorldRole } from './multiplayer';
 /**
  * Client <-> server protocol. Every message is a plain object with a `t`
  * discriminator. Binary payloads use Uint8Array. The same messages travel
@@ -69,9 +70,11 @@ export interface WorldInfo {
   godHearts: GodHearts;
   hardcore: boolean;
   cheats: boolean;
+  /** Only sent to owners and operators. */
   joinCode?: string;
   isOwner: boolean;
   isHost: boolean;
+  role: WorldRole;
 }
 
 export interface EntitySpawn {

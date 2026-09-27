@@ -15,6 +15,7 @@ import { validateC2S } from '../common/net/validate';
 import { PROTOCOL_VERSION, type C2S, type S2C, type WorldInfo, LIMITS, type ChatKind } from '../common/net/protocol';
 import { chunkIndex, chunkIndexX, chunkIndexZ, TICK_MS, WORLD_HEIGHT, DAY_LENGTH } from '../common/world/constants';
 import { encodeChunk, type Chunk } from '../common/world/chunk';
+import type { WorldRole } from '../common/net/multiplayer';
 import type { DimensionId } from '../common/data/biomes';
 import type { Entity } from './entity/Entity';
 import { BlockUpdates } from './systems/BlockUpdates';
@@ -55,6 +56,8 @@ export class GameServer {
   portals: import('./systems/Portals').Portals | null = null;
   theEnd: import('./systems/TheEnd').EndSystem | null = null;
   farlands: import('./systems/Farlands').FarlandsSystem | null = null;
+  /** Hook for the hosting layer to forward player reports (e.g. to platform moderation). */
+  onReport?: (from: ServerPlayer, target: ServerPlayer, reason: string) => void;
   readonly interaction: Interaction;
   readonly commands: Commands;
   readonly playerData: PlayerData;
@@ -280,14 +283,33 @@ export class GameServer {
       godHearts: this.level.godHearts,
       hardcore: this.level.hardcore,
       cheats: this.level.cheats,
-      joinCode: this.level.joinCode ?? undefined,
+      joinCode: this.isOperator(p) ? (this.level.joinCode ?? undefined) : undefined,
       isOwner: this.level.owner === null || this.level.owner === p.uuid,
       isHost: this.isOperator(p),
+      role: this.roleOf(p),
     };
   }
 
   isOperator(p: ServerPlayer): boolean {
     return this.level.owner === null || this.level.owner === p.uuid || this.level.operators.includes(p.uuid);
+  }
+
+  /** The player's role in this world (single player hosts own their world). */
+  roleOf(p: { uuid: string }): WorldRole {
+    const l = this.level;
+    if (l.owner === null || l.owner === p.uuid) return 'owner';
+    if (l.operators.includes(p.uuid)) return 'operator';
+    return l.roles[p.uuid] ?? l.defaultRole;
+  }
+
+  isMuted(p: ServerPlayer): boolean {
+    const until = this.level.muted[p.uuid];
+    if (until === undefined) return false;
+    if (until <= Date.now()) {
+      delete this.level.muted[p.uuid];
+      return false;
+    }
+    return true;
   }
 
   /** Called by the transport when a message arrives. */
@@ -557,6 +579,10 @@ export class GameServer {
     if (!clean) return;
     if (clean.startsWith('/')) {
       this.commands.run(p, clean.slice(1));
+      return;
+    }
+    if (this.isMuted(p)) {
+      p.send({ t: 'chat', text: 'You are muted in this world.', kind: 'error' });
       return;
     }
     const filtered = this.opts.filterChat ? this.opts.filterChat(clean, p) : clean;

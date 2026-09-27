@@ -51,6 +51,11 @@ try {
   });
   await page.goto(`http://localhost:${PORT}/`);
   await page.getByText('Singleplayer').waitFor({ timeout: 30000 });
+  if (process.env.PANORAMA) {
+    // Wait for the title panorama to generate and render
+    await page.waitForFunction(() => !document.querySelector('.title-screen')?.classList.contains('dirt'), null, { timeout: 60000 });
+    await page.waitForTimeout(Number(process.env.PANORAMA) || 4000);
+  }
   await page.screenshot({ path: `${OUT}/01-title.png` });
   await page.getByText('Singleplayer').click();
   await page.getByText('Create New World').first().click();

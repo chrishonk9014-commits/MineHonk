@@ -12,6 +12,7 @@ import { Game, type GameHost } from './game/Game';
 import { WorkerConnection, SocketConnection, type ClientConnection } from './net/ClientConnection';
 import { HubApi } from './net/HubApi';
 import * as MP from './ui/MultiplayerScreens';
+import { TitlePanorama } from './render/TitlePanorama';
 import type { WorldSummary as OnlineWorld } from '../common/net/multiplayer';
 import { el, clear } from './ui/dom';
 import * as S from './ui/Screens';
@@ -95,6 +96,24 @@ export class App implements GameHost, S.ScreenHost {
     this.screenLayer.append(s.root);
     this.input.enabled = false;
     if (this.game) this.input.unlock();
+    this.updatePanorama();
+  }
+
+  // ------------------------------------------------------------------ title panorama
+  private panorama: TitlePanorama | null = null;
+
+  private updatePanorama(): void {
+    const p = this.panorama;
+    if (!p) return;
+    const top = this.stack[this.stack.length - 1];
+    const onTitle = !!top && top.root.classList.contains('title-screen');
+    p.setActive(onTitle);
+    if (onTitle && p.ready) top.root.classList.remove('dirt');
+  }
+
+  private stopPanorama(): void {
+    this.panorama?.dispose();
+    this.panorama = null;
   }
 
   pop(): void {
@@ -107,6 +126,7 @@ export class App implements GameHost, S.ScreenHost {
       this.setPaused(false);
       this.game.resume();
     }
+    this.updatePanorama();
   }
 
   private setPaused(p: boolean): void {
@@ -173,6 +193,11 @@ export class App implements GameHost, S.ScreenHost {
   // ------------------------------------------------------------------ menus
   showTitle(): void {
     this.clearStack();
+    if (!this.game && !this.panorama && !this.settings.reduceMotion) {
+      this.panorama = new TitlePanorama(this.canvas, this.assets, this.settings);
+      this.panorama.onReady = () => this.updatePanorama();
+      this.panorama.run();
+    }
     this.push(
       S.titleScreen(
         this,
@@ -330,6 +355,7 @@ export class App implements GameHost, S.ScreenHost {
   }
 
   private startGame(conn: ClientConnection): void {
+    this.stopPanorama();
     const game = new Game(this.canvas, this.ui, this.assets, this.settings, this.input, this.audio, conn, this);
     this.game = game;
     // Screens must stay above the game's own layers

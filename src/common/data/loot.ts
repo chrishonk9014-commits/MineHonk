@@ -168,6 +168,12 @@ export const LOOT_TABLES: Record<string, LootTable> = {
       { rolls: 1, conditions: [{ c: 'chance', chance: 0.12 }], entries: [e('elytra', 1)] },
     ],
   },
+  'chest/end_ship': {
+    pools: [
+      { rolls: 1, entries: [e('elytra', 1)] },
+      { rolls: [2, 5], entries: [e('diamond', 5, [2, 7]), e('gold_ingot', 15, [2, 7]), e('emerald', 2, [2, 6]), ench('diamond_sword', 3), ench('diamond_chestplate', 3), e('void_shard', 4, [1, 3]), e('ender_pearl', 6, [1, 3])] },
+    ],
+  },
   'chest/mansion': {
     pools: [{ rolls: [1, 3], entries: [e('lead', 20), e('golden_apple', 15), e('enchanted_golden_apple', 2), e('music_disc_meadow', 15), e('name_tag', 20), e('chainmail_chestplate', 10), e('diamond_hoe', 15), book(10), e('totem_of_undying', 3)] }, { rolls: [1, 4], entries: [e('iron_ingot', 10, [1, 4]), e('gold_ingot', 5, [1, 4]), e('bread', 20), e('wheat', 20, [1, 4]), e('bucket', 10), e('redstone', 15, [1, 4]), e('coal', 15, [1, 4])] }],
   },

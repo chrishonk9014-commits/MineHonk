@@ -159,6 +159,7 @@ add({ id: 'clock', name: 'Clock', creative: 'tools' });
 add({ id: 'spyglass', name: 'Spyglass', maxStack: 1, creative: 'tools' });
 add({ id: 'ender_pearl', name: 'Ender Pearl', maxStack: 16, use: 'ender_pearl', creative: 'tools' });
 add({ id: 'ender_eye', name: 'Eye of Ender', use: 'ender_eye', creative: 'tools' });
+add({ id: 'end_crystal', name: 'End Crystal', creative: 'tools', rarity: 'rare' });
 add({ id: 'snowball', name: 'Snowball', maxStack: 16, use: 'snowball', creative: 'combat' });
 add({ id: 'egg', name: 'Egg', maxStack: 16, use: 'egg', creative: 'materials' });
 add({ id: 'bone_meal', name: 'Bone Meal', use: 'bone_meal', creative: 'materials' });

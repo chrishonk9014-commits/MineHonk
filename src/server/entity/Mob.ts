@@ -66,6 +66,10 @@ export class Mob extends LivingEntity {
   fuse = -1;
   data: Record<string, unknown> = {};
   noAi = false;
+  /** Movement and environment are driven externally (the Ender Dragon's fight controller). */
+  controlled = false;
+  /** Ticks the corpse stays before removal. */
+  deathDuration = 20;
   persistenceRequired = false;
   despawnTicks = 0;
   airTicks = 300;
@@ -175,7 +179,7 @@ export class Mob extends LivingEntity {
     this.prevY = b.y;
     if (this.dead) {
       this.deathTime++;
-      if (this.deathTime >= 20) this.remove();
+      if (this.deathTime >= this.deathDuration) this.remove();
       return;
     }
     if (this.hurtTime > 0) this.hurtTime--;
@@ -192,13 +196,13 @@ export class Mob extends LivingEntity {
       this.baby = false;
       this.metaDirty = true;
     }
-    this.environment();
+    if (!this.controlled) this.environment();
     if (this.dead || this.removed) return;
     if (!this.noAi && this.age % 2 === 0) {
       this.runGoals(this.targetGoals);
       this.runGoals(this.goals);
     }
-    this.move();
+    if (!this.controlled) this.move();
     this.idleSound();
   }
 

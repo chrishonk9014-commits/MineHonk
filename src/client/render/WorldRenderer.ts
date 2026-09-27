@@ -9,6 +9,7 @@ import { Sky } from './Sky';
 import { EntityRenderer } from './entities/EntityRenderer';
 import './entities/mobs';
 import './entities/projectiles';
+import './entities/endEntities';
 import { Particles } from './Particles';
 import { Weather } from './Weather';
 import { HandRenderer } from './HandRenderer';

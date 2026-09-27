@@ -178,6 +178,7 @@ shaped('glass_bottle', 3, ['G G', ' G '], { G: 'glass' });
 shaped('paper', 3, ['SSS'], { S: 'sugar_cane' });
 shapeless('book', 1, 'paper', 'paper', 'paper', 'leather');
 shapeless('ender_eye', 1, 'ender_pearl', 'blaze_powder');
+shaped('end_crystal', 1, ['GGG', 'GEG', 'GTG'], { G: 'glass', E: 'ender_eye', T: 'ghast_tear' });
 shapeless('blaze_powder', 2, 'blaze_rod');
 shapeless('magma_cream', 1, 'blaze_powder', 'slime_ball');
 shapeless('fermented_spider_eye', 1, 'spider_eye', 'brown_mushroom', 'sugar');

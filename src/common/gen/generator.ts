@@ -21,6 +21,7 @@ import { MINESHAFT, STRONGHOLD } from './structures/underground';
 import { biomeOf } from '../registry/biomes';
 import { STATE_FLUID } from '../registry/blocks';
 import { NetherGenerator } from './nether';
+import { EndGenerator } from './end';
 
 export { ProtoCache, cloneChunk, type DimensionGenerator, type GeneratorOptions, type SpawnPoint };
 
@@ -133,6 +134,8 @@ export function createGenerator(dim: DimensionId, seed: number, opts: GeneratorO
   switch (dim) {
     case 'nether':
       return new NetherGenerator(seed, opts);
+    case 'end':
+      return new EndGenerator(seed, opts);
     case 'overworld':
     default:
       return new OverworldGenerator(seed, opts);

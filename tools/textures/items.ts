@@ -901,6 +901,24 @@ const M: Record<string, string[]> = {
     '................',
     '................',
   ],
+  end_crystal: [
+    '................',
+    '................',
+    '...oooooooooo...',
+    '...oc......co...',
+    '...o.c....c.o...',
+    '...o..okko..o...',
+    '...o..keek..o...',
+    '...o..keek..o...',
+    '...o..okko..o...',
+    '...o.c....c.o...',
+    '...oc......co...',
+    '...oooooooooo...',
+    '................',
+    '....aaaaaaaa....',
+    '...abbbbbbbba...',
+    '................',
+  ],
   eye: [
     '................',
     '................',
@@ -1407,6 +1425,7 @@ export function registerItems(r: PainterRegistry): void {
   });
   r.add('ender_pearl', (t) => paintMask(t, 'pearl', { ...matPal(hex(0x1a6a5a)), e: hex(0x0a2a2a) }));
   r.add('ender_eye', (t) => paintMask(t, 'eye', { ...matPal(hex(0x2a8a6a)), e: hex(0x0a1a1a), k: hex(0x6ae8a8) }));
+  r.add('end_crystal', (t) => paintMask(t, 'end_crystal', { o: hex(0xb8b8d8), c: hex(0xf0f0ff), k: hex(0xc050c8), e: hex(0xffb8ff), a: hex(0x1a1020), b: hex(0x3a2a4a) }));
   r.add('rift_pearl', (t) => {
     paintMask(t, 'pearl', { ...matPal(hex(0x8a2ad0)), e: hex(0xff60ff) });
     glitchify(t);

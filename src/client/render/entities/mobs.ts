@@ -1082,6 +1082,108 @@ V.glitch_beast = {
   nameY: 4.2,
 };
 
+// The Ender Dragon (authored at half size, scaled x2): body, neck, head with
+// jaw, jointed wings, a long spiked tail and folded legs.
+const DRAGON_TAIL = 9;
+const DRAGON_NECK = 4;
+V.ender_dragon = {
+  parts: () => {
+    const hide = '#141414';
+    const belly = '#1e1a22';
+    const membrane = '#2a2530';
+    const spikes = (p: FacePainter): void => {
+      for (let z = 1; z < p.size[2]; z += 4) p.px('top', Math.floor(p.size[0] / 2) - 1, z, '#3a3440', 2, 2);
+    };
+    const parts: KitPart[] = [
+      { name: 'body', pivot: [0, 12, 0], from: [-6, -6, -14], size: [12, 12, 28], colors: { all: hide, bottom: belly }, noise: 0.15, paint: (p) => {
+        spikes(p);
+        p.speckle('all', '#2a2230', 0.06);
+      } },
+    ];
+    let prev = 'body';
+    for (let i = 0; i < DRAGON_NECK; i++) {
+      const name = 'neck' + i;
+      parts.push({ name, parent: prev, pivot: [0, i === 0 ? 3 : 0, i === 0 ? 14 : 5], from: [-2.5, -2.5, 0], size: [5, 5, 5], colors: { all: hide, bottom: belly }, paint: spikes });
+      prev = name;
+    }
+    parts.push(
+      { name: 'head', parent: prev, pivot: [0, 0, 5], from: [-4, -3, 0], size: [8, 7, 8], colors: { all: hide }, paint: (p) => {
+        p.px('left', 3, 2, '#e070ff', 3, 1);
+        p.px('right', 2, 2, '#e070ff', 3, 1);
+        p.px('front', 1, 1, '#e070ff', 2, 1);
+        p.px('front', 5, 1, '#e070ff', 2, 1);
+      } },
+      { name: 'snout', parent: 'head', pivot: [0, -1, 8], from: [-3, -2, 0], size: [6, 3, 7], colors: { all: hide }, paint: (p) => {
+        p.px('top', 1, 5, '#3a3a3a', 1, 1);
+        p.px('top', 4, 5, '#3a3a3a', 1, 1);
+      } },
+      { name: 'jaw', parent: 'head', pivot: [0, -3, 8], from: [-3, -2, 0], size: [6, 2, 7], colors: { all: '#101010' } },
+      { name: 'hornL', parent: 'head', pivot: [2.5, 4, 3], from: [-0.5, 0, -3], size: [1, 2, 4], colors: { all: '#c8c0b8' } },
+      { name: 'hornR', parent: 'head', pivot: [-2.5, 4, 3], from: [-0.5, 0, -3], size: [1, 2, 4], colors: { all: '#c8c0b8' } },
+      { name: 'wingL', parent: 'body', pivot: [6, 5, 6], from: [0, -1, -9], size: [24, 2, 16], colors: { all: membrane, top: hide }, noise: 0.2, paint: (p) => {
+        for (let x = 0; x < 24; x += 6) p.px('bottom', x, 0, '#3a3440', 1, 16);
+      } },
+      { name: 'wingTipL', parent: 'wingL', pivot: [24, 0, 0], from: [0, -0.5, -9], size: [24, 1, 16], colors: { all: membrane }, noise: 0.2 },
+      { name: 'wingR', parent: 'body', pivot: [-6, 5, 6], from: [-24, -1, -9], size: [24, 2, 16], colors: { all: membrane, top: hide }, noise: 0.2, paint: (p) => {
+        for (let x = 0; x < 24; x += 6) p.px('bottom', x, 0, '#3a3440', 1, 16);
+      } },
+      { name: 'wingTipR', parent: 'wingR', pivot: [-24, 0, 0], from: [-24, -0.5, -9], size: [24, 1, 16], colors: { all: membrane }, noise: 0.2 },
+      { name: 'legFL', parent: 'body', pivot: [5, -5, 9], from: [-1.5, -9, -1.5], size: [3, 9, 3], colors: { all: hide } },
+      { name: 'legFR', parent: 'body', pivot: [-5, -5, 9], from: [-1.5, -9, -1.5], size: [3, 9, 3], colors: { all: hide } },
+      { name: 'legBL', parent: 'body', pivot: [5, -4, -9], from: [-2, -11, -2], size: [4, 11, 4], colors: { all: hide } },
+      { name: 'legBR', parent: 'body', pivot: [-5, -4, -9], from: [-2, -11, -2], size: [4, 11, 4], colors: { all: hide } },
+    );
+    prev = 'body';
+    for (let i = 0; i < DRAGON_TAIL; i++) {
+      const name = 'tail' + i;
+      const w = Math.max(2, 5 - Math.floor(i / 3));
+      parts.push({ name, parent: prev, pivot: [0, i === 0 ? 1 : 0, i === 0 ? -14 : -5], from: [-w / 2, -w / 2, -5], size: [w, w, 5], colors: { all: hide, bottom: belly }, paint: spikes });
+      prev = name;
+    }
+    return parts;
+  },
+  anim: (m, e, alpha, time) => {
+    const perched = e.meta.phase === 'perch';
+    const dying = e.meta.dying === true;
+    const speed = perched ? 0.08 : 0.22;
+    const t = time * speed + e.id;
+    const flap = perched ? 0.25 + Math.sin(t) * 0.1 : Math.sin(t) * 0.7;
+    const tip = perched ? -0.9 : Math.sin(t - 0.9) * 0.6;
+    const wl = m.part('wingL');
+    const wr = m.part('wingR');
+    const tl = m.part('wingTipL');
+    const tr = m.part('wingTipR');
+    if (wl) wl.rotation.z = flap;
+    if (wr) wr.rotation.z = -flap;
+    if (tl) tl.rotation.z = tip;
+    if (tr) tr.rotation.z = -tip;
+    const pitch = e.pitch;
+    for (let i = 0; i < DRAGON_NECK; i++) {
+      const n = m.part('neck' + i);
+      if (n) n.rotation.x = (perched ? 0.18 : -pitch * 0.15) + Math.sin(t * 0.5 + i * 0.6) * 0.05;
+    }
+    const head = m.part('head');
+    if (head) head.rotation.x = perched ? 0.3 : -pitch * 0.2;
+    const jaw = m.part('jaw');
+    if (jaw) jaw.rotation.x = perched ? 0.25 + Math.sin(time * 0.3) * 0.15 : 0.05 + Math.max(0, Math.sin(t * 0.7)) * 0.1;
+    for (let i = 0; i < DRAGON_TAIL; i++) {
+      const tp = m.part('tail' + i);
+      if (tp) {
+        tp.rotation.y = Math.sin(t * 0.6 - i * 0.5) * 0.12;
+        tp.rotation.x = perched ? -0.08 : 0.04;
+      }
+    }
+    for (const leg of ['legFL', 'legFR', 'legBL', 'legBR']) {
+      const l = m.part(leg);
+      if (l) l.rotation.x = perched ? 0 : 0.9;
+    }
+    if (dying && Math.floor(time / 2) % 2 === 0) m.material.color.setRGB(1.6, 1.4, 1.8);
+  },
+  scale: 2,
+  glow: true,
+  nameY: 6,
+};
+
 function glitchJitter(m: BoxModel, e: ClientEntity, time: number): void {
   const t = Math.floor(time / 2);
   const glitch = ((t * 7919 + e.id * 104729) % 97) < 6;

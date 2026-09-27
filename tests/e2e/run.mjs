@@ -88,7 +88,7 @@ try {
   if (process.env.GALLERY) {
     // Summon a line-up of mobs in front of the player for a visual check
     const list = process.env.GALLERY.split(',');
-    await page.evaluate(async (mobs) => {
+    await page.evaluate(async ([mobs, dist, gy]) => {
       const g = window.minehonk.game;
       const b = g.player.body;
       const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -101,19 +101,19 @@ try {
       const pz = Math.floor(b.z);
       const y = 120;
       g.player.flying = true;
-      await send(`/tp ${px} ${y + 1} ${pz + 2}`);
       await send(`/fill ${px - 12} ${y - 1} ${pz - 16} ${px + 12} ${y - 1} ${pz + 6} grass_block`);
+      await send(`/tp ${px} ${y + 1} ${pz + 2}`);
       await send('/time set 6000');
       for (let i = 0; i < mobs.length; i++) {
         const row = Math.floor(i / 6);
         const col = i % 6;
         const close = mobs.length <= 6;
-        await send(`/summon ${mobs[i]} ${close ? px + 0.5 + (i - (mobs.length - 1) / 2) * 2.5 : px - 7.5 + col * 3} ${y} ${close ? pz - 3 : pz - 4 - row * 5} noai`);
+        await send(`/summon ${mobs[i]} ${close ? px + 0.5 + (i - (mobs.length - 1) / 2) * 2.5 : px - 7.5 + col * 3} ${y + gy} ${close ? pz - dist : pz - 4 - row * 5} noai`);
       }
       g.player.yaw = Number(localStorage.getItem('e2e.yaw') || 0);
       g.player.pitch = mobs.length <= 6 ? 0.3 : 0.3;
       window.minehonk.settings.fov = Number(localStorage.getItem('e2e.fov') || 70);
-    }, list);
+    }, [list, Number(process.env.GALLERY_DIST ?? 3), Number(process.env.GALLERY_Y ?? 0)]);
     await page.waitForTimeout(2500);
     console.log('gallery pos', JSON.stringify(await page.evaluate(() => {
       const g = window.minehonk.game;

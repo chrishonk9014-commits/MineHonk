@@ -26,6 +26,8 @@ export interface VisualContext {
   icons: ItemIcons;
   atlas: THREE.Texture;
   blockTexture(name: string): THREE.Texture;
+  /** Another rendered entity by id (e.g. the dragon an end crystal beams to). */
+  entity?(id: number): ClientEntity | undefined;
 }
 
 const factories = new Map<string, VisualFactory>();
@@ -265,12 +267,15 @@ function fallbackVisual(e: ClientEntity): EntityVisual {
 export class EntityRenderer {
   readonly group = new THREE.Group();
   private readonly visuals = new Map<number, EntityVisual>();
+  private readonly known = new Map<number, ClientEntity>();
+  private readonly ctx: VisualContext;
 
   constructor(
-    private readonly ctx: VisualContext,
+    ctx: VisualContext,
     private readonly world: ClientWorld,
   ) {
     this.group.name = 'entities';
+    this.ctx = { ...ctx, entity: (id) => this.known.get(id) };
   }
 
   add(e: ClientEntity): void {
@@ -278,6 +283,7 @@ export class EntityRenderer {
     const f = factories.get(e.type);
     const v = f ? f(e, this.ctx) : fallbackVisual(e);
     this.visuals.set(e.id, v);
+    this.known.set(e.id, e);
     this.group.add(v.object);
   }
 
@@ -287,6 +293,7 @@ export class EntityRenderer {
     this.group.remove(v.object);
     v.dispose();
     this.visuals.delete(id);
+    this.known.delete(id);
   }
 
   /** Rebuilds a visual (e.g. metadata changed). */

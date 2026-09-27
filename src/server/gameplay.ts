@@ -8,6 +8,7 @@ import { MobSystem } from './systems/Mobs';
 import { Workstations } from './systems/Workstations';
 import { Portals } from './systems/Portals';
 import { Progression } from './systems/Progression';
+import { EndSystem } from './systems/TheEnd';
 
 export function installGameplay(server: GameServer): void {
   const mobs = new MobSystem(server);
@@ -16,14 +17,25 @@ export function installGameplay(server: GameServer): void {
   const h = it.hooks;
   h.attack = (p, target) => mobs.playerAttack(p, target);
   h.interactEntity = (p, target, hand) => mobs.interact(p, target, hand);
-  h.restore = (dim, data) => mobs.restore(dim, data);
+  h.restore = (dim, data) => mobs.restore(dim, data) ?? end.restore(dim, data);
   const ws = new Workstations(server);
   server.workstations = ws;
-  h.useItem = (p, stack) => mobs.useItem(p, stack) || ws.fillBottle(p, stack) || ws.throwSplash(p, stack);
+  const end = new EndSystem(server);
+  server.theEnd = end;
+  h.useItem = (p, stack) => mobs.useItem(p, stack) || end.fillBottle(p, stack) || ws.fillBottle(p, stack) || ws.throwSplash(p, stack) || end.useItem(p, stack);
   h.useBlock = (p, x, y, z, state) => ws.useBlock(p, x, y, z, state);
   h.windowAction = (p, m) => ws.windowAction(p, m);
   const prevUseOnBlock = h.useItemOnBlock;
-  h.useItemOnBlock = (p, stack, x, y, z, face) => mobs.useSpawnEgg(p, stack, x, y, z, face) || !!prevUseOnBlock?.(p, stack, x, y, z, face);
+  h.useItemOnBlock = (p, stack, x, y, z, face) => end.useOnBlock(p, stack, x, y, z) || mobs.useSpawnEgg(p, stack, x, y, z, face) || !!prevUseOnBlock?.(p, stack, x, y, z, face);
+  h.enterPortal = (p, kind) => end.enterPortal(p, kind);
+  mobs.extraEntity = (dim, type, x, y, z) => {
+    if (type !== 'end_crystal') return false;
+    end.spawnCrystal(dim, x, y, z);
+    return true;
+  };
+  mobs.onBossDeath = (m, killer) => {
+    if (m.type === 'ender_dragon') end.fight.onDeath(m, killer);
+  };
   h.releaseItem = (p, stack, ticks) => mobs.releaseBow(p, stack, ticks);
   h.igniteTnt = (dim, x, y, z) => mobs.igniteTnt(dim, x, y, z);
   it.explode = (dim, x, y, z, power, fire, source) => mobs.explode(dim, x, y, z, power, fire, source);
@@ -43,6 +55,7 @@ export function installGameplay(server: GameServer): void {
     mobs.tickArrowPickup();
     ws.tick();
     portals.tick();
+    end.tick();
     progression.tick();
   };
 }

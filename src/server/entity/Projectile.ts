@@ -11,7 +11,7 @@ import type { EntitySpawn } from '../../common/net/protocol';
 import { entityInfo } from '../../common/data/entities';
 import type { ItemStack } from '../../common/game/itemstack';
 
-export type ProjectileKind = 'arrow' | 'snowball' | 'egg' | 'ender_pearl' | 'small_fireball' | 'fireball' | 'potion' | 'shulker_bullet' | 'rift_bolt' | 'experience_bottle' | 'trident';
+export type ProjectileKind = 'arrow' | 'snowball' | 'egg' | 'ender_pearl' | 'small_fireball' | 'fireball' | 'dragon_fireball' | 'potion' | 'shulker_bullet' | 'rift_bolt' | 'experience_bottle' | 'trident';
 
 const GRAVITY: Record<ProjectileKind, number> = {
   arrow: 0.05,
@@ -23,6 +23,7 @@ const GRAVITY: Record<ProjectileKind, number> = {
   experience_bottle: 0.07,
   small_fireball: 0,
   fireball: 0,
+  dragon_fireball: 0,
   shulker_bullet: 0,
   rift_bolt: 0,
 };
@@ -58,7 +59,8 @@ export class Projectile extends Entity {
   onHit: ((p: Projectile, hit: ProjectileHit) => boolean) | null = null;
 
   constructor(readonly kind: ProjectileKind) {
-    super(kind === 'fireball' ? 1 : kind === 'arrow' || kind === 'trident' ? 0.5 : 0.25, kind === 'fireball' ? 1 : kind === 'arrow' || kind === 'trident' ? 0.5 : 0.25);
+    const size = kind === 'fireball' || kind === 'dragon_fireball' ? 1 : kind === 'arrow' || kind === 'trident' ? 0.5 : 0.25;
+    super(size, size);
     this.type = kind;
     this.persistent = false;
   }
@@ -154,7 +156,7 @@ export class Projectile extends Entity {
     } else this.setPos(ex, ey, ez);
     // Drag & gravity
     const inWater = this.dim.getState(Math.floor(this.x), Math.floor(this.y), Math.floor(this.z)) !== 0 && this.isInFluid();
-    const drag = inWater ? 0.6 : this.kind === 'fireball' || this.kind === 'small_fireball' || this.kind === 'rift_bolt' ? 1 : 0.99;
+    const drag = inWater ? 0.6 : this.kind === 'fireball' || this.kind === 'small_fireball' || this.kind === 'dragon_fireball' || this.kind === 'rift_bolt' ? 1 : 0.99;
     this.vx *= drag;
     this.vy *= drag;
     this.vz *= drag;
@@ -164,6 +166,7 @@ export class Projectile extends Entity {
       this.pitch = -Math.atan2(this.vy, Math.hypot(this.vx, this.vz));
     }
     if ((this.kind === 'fireball' || this.kind === 'small_fireball') && this.age % 2 === 0) this.dim.server.particles(this.dim, 'smoke', this.x, this.y + 0.2, this.z, 1, 0.1);
+    if (this.kind === 'dragon_fireball' && this.age % 2 === 0) this.dim.server.particles(this.dim, 'dragon_breath', this.x, this.y + 0.3, this.z, 2, 0.2);
     if (this.kind === 'rift_bolt' && this.age % 2 === 0) this.dim.server.particles(this.dim, 'portal', this.x, this.y, this.z, 2, 0.2);
     if (this.crit && this.age % 2 === 0) this.dim.server.particles(this.dim, 'crit', this.x, this.y, this.z, 1, 0.05);
   }

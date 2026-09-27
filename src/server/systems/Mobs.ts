@@ -9,6 +9,7 @@ import { Mob, isPlayer, isAlive, type Target } from '../entity/Mob';
 import { LivingEntity, type HurtInfo } from '../entity/Living';
 import type { Entity } from '../entity/Entity';
 import { Projectile, PrimedTnt, type ProjectileKind, type ProjectileHit } from '../entity/Projectile';
+import { EndCrystal } from '../entity/EndEntities';
 import type { ServerPlayer } from '../player/ServerPlayer';
 import { installBrain } from '../ai/brains';
 import type { RangedKind } from '../ai/goals';
@@ -152,9 +153,15 @@ export class MobSystem {
   }
 
   /** Called once per chunk right after world generation. */
+  /** Spawns generated non-mob entities (end crystals); returns true when handled. */
+  extraEntity?: (dim: Dimension, type: string, x: number, y: number, z: number) => boolean;
+  /** Boss death hand-off (the dragon fight runs its own death sequence). */
+  onBossDeath?: (m: Mob, killer: ServerPlayer | null) => void;
+
   onChunkGenerated(dim: Dimension, c: Chunk): void {
     let spawned = false;
     for (const e of c.genEntities) {
+      if (this.extraEntity?.(dim, e.type, e.x, e.y, e.z)) continue;
       const m = this.spawn(dim, e.type, e.x, e.y, e.z, { data: e.data, persistent: true, reason: 'structure' });
       if (m) spawned = true;
     }
@@ -617,6 +624,15 @@ export class MobSystem {
     const s = this.server;
     const dim = p.dim;
     const e = hit.entity;
+    if (e && e === p.owner && p.kind === 'dragon_fireball') return false;
+    if (e instanceof EndCrystal) {
+      e.destroy(p.owner);
+      return true;
+    }
+    if (p.kind === 'dragon_fireball') {
+      s.theEnd?.breathCloud(dim, hit.x, hit.block ? hit.y : Math.floor(hit.y), hit.z, p.owner);
+      return true;
+    }
     switch (p.kind) {
       case 'arrow':
       case 'trident': {
@@ -807,6 +823,10 @@ export class MobSystem {
       const impact = (1 - dist) * exposure;
       const dmg = Math.floor(((impact * impact + impact) / 2) * 7 * radius + 1);
       if (e instanceof Projectile) continue;
+      if (e instanceof EndCrystal) {
+        if (e !== source) e.destroy(source);
+        continue;
+      }
       if (e.type === 'item' || e.type === 'xp_orb') {
         if (impact > 0.3) e.remove();
         continue;
@@ -950,6 +970,14 @@ export class MobSystem {
     const s = this.server;
     const killer = info.attacker && isPlayer(info.attacker) ? info.attacker : m.dim.server.tickNo - m.lastHurtByPlayerTick < 100 && isPlayer(m.lastAttacker) ? (m.lastAttacker as ServerPlayer) : null;
     const byPlayer = !!killer || (info.attacker instanceof Mob && !!info.attacker.owner);
+    if (m.def.category === 'boss' && this.onBossDeath) {
+      if (killer) {
+        killer.addStat('killed.' + m.type);
+        killer.addStat('mob_kills');
+      }
+      this.onBossDeath(m, killer);
+      return;
+    }
     const weapon = killer ? killer.inventory.get(killer.selectedSlot) : null;
     const looting = enchantLevel(weapon, 'looting');
     if (!m.baby && s.level.rules.doMobLoot) {
@@ -991,6 +1019,10 @@ export class MobSystem {
     const s = this.server;
     if (p.dead || p.gamemode === 'spectator') return;
     if (target.removed || (target as LivingEntity).dead) return;
+    if (target instanceof EndCrystal) {
+      target.destroy(p);
+      return;
+    }
     if (!(target instanceof LivingEntity) && !isPlayer(target) && !(target instanceof PrimedTnt)) {
       // Punching items/xp does nothing; fireballs are deflected
       if (target instanceof Projectile && target.kind === 'fireball') {

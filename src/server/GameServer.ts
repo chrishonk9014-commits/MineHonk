@@ -53,6 +53,7 @@ export class GameServer {
   /** Enchanting, anvils, brewing and potions (installed by gameplay). */
   workstations: import('./systems/Workstations').Workstations | null = null;
   portals: import('./systems/Portals').Portals | null = null;
+  theEnd: import('./systems/TheEnd').EndSystem | null = null;
   readonly interaction: Interaction;
   readonly commands: Commands;
   readonly playerData: PlayerData;

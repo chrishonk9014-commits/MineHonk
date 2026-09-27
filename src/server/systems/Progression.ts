@@ -12,6 +12,7 @@ const STRUCTURE_ACHIEVEMENTS: Record<string, string> = {
   jungle_temple: 'find_temple',
   sky_shrine: 'find_sky_shrine',
   nether_fortress: 'find_fortress',
+  stronghold: 'follow_ender_eye',
   end_city: 'find_end_city',
   glitched_ruin: 'find_far_portal',
 };

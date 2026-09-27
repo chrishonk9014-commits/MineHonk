@@ -19,6 +19,7 @@ import { registerDeco } from './textures/blocksDeco';
 import { registerDims } from './textures/blocksDims';
 import { registerItems } from './textures/items';
 import { BLOCK_DEFS } from '../src/common/data/blocks';
+import { buildFont } from './gen-font';
 
 const OUT = path.resolve('public/assets');
 const OVERRIDES = path.resolve('assets/overrides');
@@ -123,3 +124,6 @@ const items = pack('items', itemReg, [...itemReg.painters.keys()]);
 fs.writeFileSync(path.join(OUT, 'items.png'), PNG.sync.write(items.png));
 fs.writeFileSync(path.join(OUT, 'items.json'), JSON.stringify({ tile: 16, columns: 32, width: items.png.width, height: items.png.height, textures: items.map }));
 console.log(`[gen-assets] items atlas ${items.png.width}x${items.png.height}, ${Object.keys(items.map).length} textures`);
+
+buildFont(OUT);
+console.log('[gen-assets] font written');

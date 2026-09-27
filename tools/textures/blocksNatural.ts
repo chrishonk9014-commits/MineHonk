@@ -429,6 +429,13 @@ export function registerNatural(r: PainterRegistry): void {
   });
   r.add('grass_block_top', (t) => grassTopGray(t));
   r.add('grass_block_side', (t) => grassSide(t, null));
+  r.add('grass_block_snow', (t) => {
+    dirt(t);
+    for (let x = 0; x < 16; x++) {
+      const d = 3 + t.rng.int(3);
+      for (let y = 0; y < d; y++) t.set(x, y, y === d - 1 ? hex(0xdfe9ec) : hex(0xf5fbfb));
+    }
+  });
   r.add('grass_block_side_overlay', (t) => {
     t.clear();
     for (let x = 0; x < 16; x++) for (let y = 0; y < 3; y++) t.set(x, y, [0xa0, 0xa0, 0xa0, TINT_ALPHA]);

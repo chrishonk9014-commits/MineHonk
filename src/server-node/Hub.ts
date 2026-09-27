@@ -31,6 +31,8 @@ export interface HubOptions {
   maxPlayersPerWorld?: number;
   /** Behind a trusted reverse proxy: take the client IP from X-Forwarded-For. */
   trustProxy?: boolean;
+  /** Other sites allowed to call the API (the game served elsewhere). Tokens are bearer headers, never cookies. */
+  corsOrigins?: string[];
   serverOptions?: { genBudgetMs?: number; chunksPerTick?: number };
 }
 
@@ -223,6 +225,18 @@ export class Hub {
     try {
       if (url.pathname.startsWith('/api/')) {
         res.setHeader('Cache-Control', 'no-store');
+        const origin = req.headers.origin;
+        if (origin && this.opts.corsOrigins?.includes(origin)) {
+          res.setHeader('Access-Control-Allow-Origin', origin);
+          res.setHeader('Vary', 'Origin');
+          res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type');
+          res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE');
+          if (req.method === 'OPTIONS') {
+            res.writeHead(204);
+            res.end();
+            return;
+          }
+        }
         const out = await this.api(req, url);
         this.json(res, 200, out);
         return;

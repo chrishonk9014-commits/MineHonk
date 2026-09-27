@@ -9,7 +9,10 @@ import type { Input } from './input/Input';
 import type { AudioEngine } from './audio/Audio';
 import type { GameAssets } from './render/WorldRenderer';
 import { Game, type GameHost } from './game/Game';
-import { WorkerConnection, type ClientConnection } from './net/ClientConnection';
+import { WorkerConnection, SocketConnection, type ClientConnection } from './net/ClientConnection';
+import { HubApi } from './net/HubApi';
+import * as MP from './ui/MultiplayerScreens';
+import type { WorldSummary as OnlineWorld } from '../common/net/multiplayer';
 import { el, clear } from './ui/dom';
 import * as S from './ui/Screens';
 import { listWorlds, deleteWorld, updateWorld, exportWorld, importWorld } from '../server/storage/IndexedDBStorage';
@@ -167,7 +170,7 @@ export class App implements GameHost, S.ScreenHost {
         this,
         {
           singleplayer: () => void this.showWorlds(),
-          multiplayer: () => this.push(S.messageScreen(this, 'Multiplayer', 'Connecting to MineHonk servers is available when this page is served by a MineHonk server (npm run server).')),
+          multiplayer: () => void this.openMultiplayer(),
           options: () => this.push(S.optionsScreen(this, false)),
           profile: () => this.push(S.profileScreen(this, this.profile, () => this.showTitle())),
         },
@@ -175,6 +178,54 @@ export class App implements GameHost, S.ScreenHost {
       ),
     );
     this.audio.music.update('menu');
+  }
+
+  // ------------------------------------------------------------------ multiplayer
+  private hub: HubApi | null = null;
+
+  private async openMultiplayer(server = HubApi.savedServer()): Promise<void> {
+    const api = new HubApi(server);
+    this.hub = api;
+    this.setLoading('Contacting server...');
+    const ok = await api.health();
+    this.setLoading(null);
+    if (!ok) {
+      this.push(
+        MP.serverScreen(this, server, {
+          connect: (url) => {
+            HubApi.saveServer(url);
+            this.pop();
+            void this.openMultiplayer(url);
+          },
+        }),
+      );
+      return;
+    }
+    const lobby = (): void =>
+      this.replace(
+        MP.lobbyScreen(this, api, {
+          play: (w) => this.startRemote(api, w),
+          back: () => this.showTitle(),
+        }),
+      );
+    if (await api.resume()) {
+      this.push(MP.lobbyScreen(this, api, { play: (w) => this.startRemote(api, w), back: () => this.showTitle() }));
+      return;
+    }
+    this.push(MP.signInScreen(this, api, lobby));
+  }
+
+  private startRemote(api: HubApi, world: OnlineWorld): void {
+    if (!api.token) return;
+    this.clearStack();
+    this.audio.music.stop();
+    this.setLoading(`Joining ${world.name}...`);
+    const conn = new SocketConnection(api.playUrl(world.id));
+    conn.send({ t: 'hello', version: PROTOCOL_VERSION, name: api.account?.name ?? this.profile.name, token: api.token, viewDistance: this.settings.renderDistance, registryHash: registryHash() });
+    this.conn = conn;
+    this.worldId = null;
+    this.quitting = false;
+    this.startGame(conn);
   }
 
   private async showWorlds(): Promise<void> {
@@ -336,6 +387,12 @@ export class App implements GameHost, S.ScreenHost {
             this.game?.send({ t: 'request_progress' });
           },
           quit: () => void this.quitToTitle(),
+          invite: local
+            ? undefined
+            : () => {
+                const code = this.game?.worldInfo?.joinCode;
+                this.push(S.messageScreen(this, 'Invite Friends', code ? `Join code: ${code}\n\nFriends can enter it under Multiplayer > Join by Code.` : 'Only the world owner and operators can share the join code. Friends of the owner can join friends-only worlds from their world list.'));
+              },
         },
         local,
       ),

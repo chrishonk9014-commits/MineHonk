@@ -25,6 +25,7 @@ const hub = await Hub.create({
   staticDir,
   maxPlayersPerWorld: Number(process.env.MAX_PLAYERS ?? 16),
   trustProxy: process.env.TRUST_PROXY === '1',
+  corsOrigins: (process.env.CORS_ORIGINS ?? '').split(',').map((s) => s.trim()).filter(Boolean),
 });
 await hub.listen();
 console.log(`[hub] data in ${dataDir}${staticDir ? `, serving client from ${staticDir}` : ' (no client build found; run npm run build)'}`);

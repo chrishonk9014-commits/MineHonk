@@ -30,13 +30,13 @@ export interface ScreenHost {
   settingsChanged(rebuildChunks?: boolean): void;
 }
 
-function titled(title: string, cls = 'screen dirt'): { root: HTMLElement; body: HTMLElement } {
+export function titled(title: string, cls = 'screen dirt'): { root: HTMLElement; body: HTMLElement } {
   const body = el('div', { class: 'stack' });
   const root = el('div', { class: cls }, el('div', { class: 'title-text' }, title), body);
   return { root, body };
 }
 
-function wrapClick(host: ScreenHost, f: () => void): () => void {
+export function wrapClick(host: ScreenHost, f: () => void): () => void {
   return () => {
     host.uiClick();
     f();

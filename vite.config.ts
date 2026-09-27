@@ -15,9 +15,10 @@ export default defineConfig({
   server: {
     port: 5173,
     host: true,
+    // `npm run server` (PORT=8080) in another terminal provides multiplayer during development
     proxy: {
-      '/api': 'http://localhost:25580',
-      '/ws': { target: 'ws://localhost:25580', ws: true },
+      '/api': 'http://localhost:8080',
+      '/play': { target: 'ws://localhost:8080', ws: true },
     },
   },
 });

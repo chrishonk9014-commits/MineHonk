@@ -1041,3 +1041,53 @@ body {
   width: 0;
   background: #f0a020;
 }
+
+/* Multiplayer menus */
+.btn.active {
+  border-color: #fff;
+  color: #ffffa0;
+}
+.btn.tiny {
+  width: auto !important;
+  min-width: calc(var(--s) * 40);
+  height: calc(var(--s) * 16);
+  padding: 0 calc(var(--s) * 4);
+  font-size: calc(var(--s) * 8);
+  flex: none;
+}
+.btn.danger {
+  color: #ff8080;
+}
+.list-header {
+  padding: calc(var(--s) * 3) calc(var(--s) * 4) calc(var(--s) * 1);
+  color: #ffff80;
+  font-size: calc(var(--s) * 8);
+}
+.list-item .presence {
+  width: calc(var(--s) * 6);
+  height: calc(var(--s) * 6);
+  margin-top: calc(var(--s) * 3);
+  flex: none;
+  background: #555;
+  border: var(--s) solid #000;
+}
+.list-item .presence.on {
+  background: #3ce03c;
+}
+.join-code {
+  font-size: calc(var(--s) * 14);
+  letter-spacing: calc(var(--s) * 1);
+  color: #fff;
+  padding: calc(var(--s) * 2) calc(var(--s) * 6);
+  background: rgba(0, 0, 0, 0.5);
+  border: var(--s) solid #555;
+  user-select: text;
+}
+.list-item .btn.tiny {
+  align-self: center;
+}
+.btn.quarter {
+  width: calc(var(--s) * 70);
+  min-width: 0;
+  font-size: calc(var(--s) * 8);
+}

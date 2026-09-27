@@ -79,6 +79,45 @@ try {
   console.log(`world ready in ${Date.now() - t0} ms`);
   await page.waitForTimeout(3000);
   await page.screenshot({ path: `${OUT}/03-ingame.png` });
+  if (process.env.GALLERY) {
+    // Summon a line-up of mobs in front of the player for a visual check
+    const list = process.env.GALLERY.split(',');
+    await page.evaluate(async (mobs) => {
+      const g = window.minehonk.game;
+      const b = g.player.body;
+      const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+      // Commands are rate limited like chat: space them out
+      const send = async (text) => {
+        g.send({ t: 'chat', text });
+        await wait(1100);
+      };
+      const px = Math.floor(b.x);
+      const pz = Math.floor(b.z);
+      const y = 120;
+      g.player.flying = true;
+      await send(`/tp ${px} ${y + 1} ${pz + 2}`);
+      await send(`/fill ${px - 12} ${y - 1} ${pz - 16} ${px + 12} ${y - 1} ${pz + 6} grass_block`);
+      await send('/time set 6000');
+      for (let i = 0; i < mobs.length; i++) {
+        const row = Math.floor(i / 6);
+        const col = i % 6;
+        const close = mobs.length <= 6;
+        await send(`/summon ${mobs[i]} ${close ? px + 0.5 + (i - (mobs.length - 1) / 2) * 2.5 : px - 7.5 + col * 3} ${y} ${close ? pz - 3 : pz - 4 - row * 5} noai`);
+      }
+      g.player.yaw = Number(localStorage.getItem('e2e.yaw') || 0);
+      g.player.pitch = mobs.length <= 6 ? 0.3 : 0.3;
+      window.minehonk.settings.fov = Number(localStorage.getItem('e2e.fov') || 70);
+    }, list);
+    await page.waitForTimeout(2500);
+    console.log('gallery pos', JSON.stringify(await page.evaluate(() => {
+      const g = window.minehonk.game;
+      return { p: [g.player.body.x, g.player.body.y, g.player.body.z], mobs: [...g.entities.values()].map((e) => [e.type, Math.round(e.x), Math.round(e.y), Math.round(e.z)]), chat: [...document.querySelectorAll('.chat .line')].map((l) => l.textContent).slice(-20) };
+    })));
+    await page.screenshot({ path: `${OUT}/gallery.png` });
+    await browser.close();
+    stopServer();
+    process.exit(0);
+  }
   if (process.env.TP) {
     // Optional sightseeing: teleport (needs CHEATS=1) and look around
     const [tx, ty, tz, yaw = '0', pitch = '0.3'] = process.env.TP.split(',');
@@ -131,25 +170,25 @@ try {
     // Look at the ground just in front (not under our feet, so we can place it back)
     g.player.yaw = 0;
     g.player.pitch = 0.95;
-    await new Promise((r) => setTimeout(r, 300));
-    const t = g.interaction.target;
-    if (!t) return { error: 'no target' };
-    const before = g.world.getState(t.x, t.y, t.z);
     const canvas = document.getElementById('game-canvas');
-    canvas.dispatchEvent(new MouseEvent('mousedown', { button: 0, bubbles: true }));
-    const t0 = performance.now();
-    while (performance.now() - t0 < 8000 && g.world.getState(t.x, t.y, t.z) !== 0) await new Promise((r) => setTimeout(r, 100));
-    window.dispatchEvent(new MouseEvent('mouseup', { button: 0 }));
-    const brokeIn = performance.now() - t0;
-    // wait for the drop to be picked up
-    const t1 = performance.now();
-    let count = 0;
-    while (performance.now() - t1 < 6000) {
-      count = g.invSlots.reduce((a, s) => a + (s ? s.count : 0), 0);
-      if (count > 0) break;
-      await new Promise((r) => setTimeout(r, 100));
+    const count = () => g.invSlots.reduce((a, s) => a + (s ? s.count : 0), 0);
+    const attempts = [];
+    // Some surface blocks (snow layers, grass plants) drop nothing by hand: keep digging
+    for (let attempt = 0; attempt < 4 && count() === 0; attempt++) {
+      await new Promise((r) => setTimeout(r, 300));
+      const t = g.interaction.target;
+      if (!t) return { error: 'no target', attempts };
+      const before = g.world.getState(t.x, t.y, t.z);
+      canvas.dispatchEvent(new MouseEvent('mousedown', { button: 0, bubbles: true }));
+      const t0 = performance.now();
+      while (performance.now() - t0 < 8000 && g.world.getState(t.x, t.y, t.z) !== 0) await new Promise((r) => setTimeout(r, 100));
+      window.dispatchEvent(new MouseEvent('mouseup', { button: 0 }));
+      const brokeIn = Math.round(performance.now() - t0);
+      const t1 = performance.now();
+      while (performance.now() - t1 < 3000 && count() === 0) await new Promise((r) => setTimeout(r, 100));
+      attempts.push({ before, after: g.world.getState(t.x, t.y, t.z), brokeIn });
     }
-    return { before, after: g.world.getState(t.x, t.y, t.z), brokeIn: Math.round(brokeIn), items: g.invSlots.map((s, i) => (s ? [i, s.id, s.count] : null)).filter(Boolean), entities: g.entities.size };
+    return { attempts, after: 0, items: g.invSlots.map((s, i) => (s ? [i, s.id, s.count] : null)).filter(Boolean) };
   });
   console.log('mined', JSON.stringify(mined));
   if (mined.error || mined.after !== 0 || mined.items.length === 0) throw new Error('mining failed: ' + JSON.stringify(mined));

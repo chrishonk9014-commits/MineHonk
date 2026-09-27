@@ -32,6 +32,8 @@ export class LocalPlayer {
   dead = false;
   sleeping = false;
   fovMod = 1;
+  /** Active status effects (from the server's stats). */
+  effects: { id: string; amp: number }[] = [];
 
   constructor(private readonly world: ClientWorld) {}
 
@@ -88,7 +90,18 @@ export class LocalPlayer {
     this.sneaking = input.sneak;
     const ox = this.body.x;
     const oz = this.body.z;
-    const res = stepMovement(this.world, this.body, { forward: input.forward, strafe: input.strafe, jump: input.jump, sneak: input.sneak, sprint: this.sprinting, yaw: this.yaw }, { flying: this.flying, noClip: this.abilities.noClip, walkSpeed: this.abilities.walkSpeed, flySpeed: this.abilities.flySpeed }, this.eyeHeight);
+    const eff = (id: string): number => {
+      const e = this.effects.find((x) => x.id === id);
+      return e ? e.amp + 1 : 0;
+    };
+    const speedMul = Math.max(0.1, 1 + eff('speed') * 0.2 - eff('slowness') * 0.15);
+    const res = stepMovement(
+      this.world,
+      this.body,
+      { forward: input.forward, strafe: input.strafe, jump: input.jump, sneak: input.sneak, sprint: this.sprinting, yaw: this.yaw },
+      { flying: this.flying, noClip: this.abilities.noClip, walkSpeed: this.abilities.walkSpeed, flySpeed: this.abilities.flySpeed, speedMul, jumpBoost: eff('jump_boost'), levitation: this.flying ? 0 : eff('levitation'), slowFalling: eff('slow_falling') > 0 },
+      this.eyeHeight,
+    );
     if (this.flying && this.body.onGround && !this.abilities.noClip && this.gamemode !== 'spectator') this.flying = false;
     // The server computes fall damage itself; locally we only need a fresh count per fall
     if (this.body.onGround) this.body.fallDistance = 0;
@@ -97,7 +110,7 @@ export class LocalPlayer {
     const targetBob = this.body.onGround && !this.flying ? Math.min(0.1, moved) : 0;
     this.bob += (targetBob - this.bob) * 0.4;
     void res;
-    this.fovMod += ((this.sprinting ? 1.12 : 1) * (this.flying ? 1.05 : 1) - this.fovMod) * 0.35;
+    this.fovMod += ((this.sprinting ? 1.12 : 1) * (this.flying ? 1.05 : 1) * (1 + (speedMul - 1) * 0.5) - this.fovMod) * 0.35;
     return this.movePacket(false);
   }
 

@@ -253,7 +253,7 @@ export class Survival {
   onMove(p: ServerPlayer, prevY: number, onGround: boolean): void {
     updateEnvironment(p.dim, p.body, p.eyeHeight);
     const b = p.body;
-    if (p.abilities.flying || b.inWater || b.onClimbable || p.gamemode === 'spectator') {
+    if (p.abilities.flying || b.inWater || b.onClimbable || p.gamemode === 'spectator' || p.effects.has('slow_falling') || p.effects.has('levitation')) {
       b.fallDistance = 0;
       return;
     }

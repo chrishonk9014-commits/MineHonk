@@ -58,8 +58,8 @@ export function animateHumanoid(m: BoxModel, e: ClientEntity, alpha: number, opt
     ra.rotation.z = Math.sin(t * Math.PI) * 0.3;
   } else if (ra) ra.rotation.z = 0;
   if (head) {
-    head.rotation.y = -angle(e.headYaw - e.yaw);
-    head.rotation.x = -e.pitch;
+    head.rotation.y = angle(e.headYaw - e.yaw);
+    head.rotation.x = e.pitch;
   }
   const body = m.part('body');
   const sneak = e.meta.sneak === true;
@@ -111,7 +111,8 @@ export function boxVisual(model: BoxModel, animate: (m: BoxModel, e: ClientEntit
     update(e, alpha, time) {
       const [x, y, z] = e.lerp(alpha);
       holder.position.set(x, y, z);
-      model.root.rotation.y = Math.PI - e.yaw;
+      // Models face +Z; yaw 0 faces -Z (north) and increases counter-clockwise
+      model.root.rotation.y = Math.PI + e.yaw;
       model.root.rotation.z = 0;
       if (e.dead) model.root.rotation.z = Math.min(Math.PI / 2, (e.deathTime / 10) * (Math.PI / 2));
       animate(model, e, alpha, time);

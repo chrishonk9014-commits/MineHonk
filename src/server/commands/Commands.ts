@@ -5,6 +5,7 @@
  */
 import type { GameServer } from '../GameServer';
 import type { ServerPlayer } from '../player/ServerPlayer';
+import { stateFromString } from '../../common/registry/blocks';
 import { GAME_MODES, type GameMode, DIFFICULTIES, type Difficulty, maxHealthFor, normalizeGodHearts } from '../../common/game/gamemode';
 import { itemById, items } from '../../common/registry/items';
 import { stackOf } from '../../common/game/itemstack';
@@ -423,6 +424,60 @@ export class Commands {
         s.level.pvp = a[0] === 'on';
         for (const o of s.players.values()) o.send({ t: 'world_info', world: s.worldInfo(o) });
         s.broadcastChat(`PvP has been turned ${a[0]}`, 'announce');
+      },
+    });
+    this.register({
+      name: 'fill',
+      usage: '/fill <x1> <y1> <z1> <x2> <y2> <z2> <block>',
+      level: 'cheat',
+      run: (p, args) => {
+        if (args.length < 7) return 'Usage: /fill <x1> <y1> <z1> <x2> <y2> <z2> <block>';
+        const base = [p.x, p.y, p.z];
+        const c = args.slice(0, 6).map((v, i) => Math.floor(v.startsWith('~') ? base[i % 3]! + (Number(v.slice(1)) || 0) : Number(v)));
+        if (!c.every(Number.isFinite)) return 'Invalid coordinates';
+        let state: number;
+        try {
+          state = args[6] === 'air' ? 0 : stateFromString(args[6]!);
+        } catch {
+          return `Unknown block: ${args[6]}`;
+        }
+        const [x0, x1] = [Math.min(c[0]!, c[3]!), Math.max(c[0]!, c[3]!)];
+        const [y0, y1] = [Math.max(0, Math.min(c[1]!, c[4]!)), Math.min(255, Math.max(c[1]!, c[4]!))];
+        const [z0, z1] = [Math.min(c[2]!, c[5]!), Math.max(c[2]!, c[5]!)];
+        const vol = (x1 - x0 + 1) * (y1 - y0 + 1) * (z1 - z0 + 1);
+        if (vol > 32768) return `Too many blocks (${vol} > 32768)`;
+        let n = 0;
+        for (let x = x0; x <= x1; x++)
+          for (let y = y0; y <= y1; y++)
+            for (let z = z0; z <= z1; z++) {
+              if (!p.dim.isLoaded(x, z)) continue;
+              if (p.dim.getState(x, y, z) !== state) {
+                p.dim.setBlock(x, y, z, state);
+                n++;
+              }
+            }
+        return `Filled ${n} blocks`;
+      },
+    });
+    this.register({
+      name: 'summon',
+      usage: '/summon <mob> [x y z] [noai]',
+      level: 'cheat',
+      run: (p, args) => {
+        const type = args[0];
+        if (!type || !s.mobs) return 'Usage: /summon <mob> [x y z]';
+        const coord = (v: string | undefined, base: number): number => (v === undefined ? base : v.startsWith('~') ? base + (Number(v.slice(1)) || 0) : Number(v));
+        const x = coord(args[1], p.x);
+        const y = coord(args[2], p.y);
+        const z = coord(args[3], p.z);
+        if (![x, y, z].every(Number.isFinite)) return 'Invalid coordinates';
+        const m = s.mobs.spawn(p.dim, type, x, y, z, { reason: 'command', persistent: true });
+        if (m && args.includes('noai')) {
+          m.noAi = true;
+          // Face the summoner (handy for inspecting models)
+          m.yaw = m.headYaw = Math.atan2(-(p.x - x), -(p.z - z));
+        }
+        return m ? `Summoned ${m.def.name}` : `Unknown mob: ${type}`;
       },
     });
     this.register({

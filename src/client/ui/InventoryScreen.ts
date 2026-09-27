@@ -46,7 +46,8 @@ export class InventoryScreen {
     private readonly send: (m: C2S) => void,
     private readonly opts: { creative: boolean; playerSlots: () => Slot[]; onClose: () => void; advancedTooltips: boolean; attachPreview?: (host: HTMLElement) => () => void },
   ) {
-    this.win = win;
+    // Own copy: the caller mutates its window state as messages arrive
+    this.win = { ...win, props: { ...win.props } };
     this.cursor = cursor;
     this.build();
     this.root.addEventListener('mousemove', (e) => {
@@ -331,6 +332,33 @@ export class InventoryScreen {
         gui.append(title, top, this.invSection(2));
         break;
       }
+      case 'merchant': {
+        // Offer list on the left, payment slots and result on the right
+        const offers = (w.props.offers as { buy: Slot; buy2: Slot; sell: Slot; out: boolean }[] | undefined) ?? [];
+        const list = el('div', { class: 'offer-list' });
+        offers.forEach((o, idx) => {
+          const b = el('div', { class: 'offer' + (idx === w.props.selected ? ' selected' : '') + (o.out ? ' out' : '') });
+          const cell = (st: Slot): HTMLElement => {
+            const c = el('div', { class: 'offer-cell' });
+            const ic = iconEl(st);
+            if (ic) c.append(ic);
+            return c;
+          };
+          b.append(cell(o.buy), o.buy2 ? cell(o.buy2) : el('div', { class: 'offer-cell' }), el('div', { class: 'offer-arrow' }, o.out ? '✕' : '→'), cell(o.sell));
+          b.addEventListener('mousedown', (e) => {
+            e.stopPropagation();
+            this.send({ t: 'trade', index: idx });
+          });
+          b.addEventListener('mousemove', (e) => showTooltip(o.sell, e.clientX, e.clientY, this.opts.advancedTooltips));
+          b.addEventListener('mouseleave', () => hideTooltip());
+          list.append(b);
+        });
+        const right = el('div', { class: 'stack' }, row(this.slot(0), this.slot(1), this.arrow(), this.slot(2, 'slot big')), this.invSection(3));
+        const body = row(list, right);
+        body.style.alignItems = 'flex-start';
+        gui.append(title, body);
+        break;
+      }
       case 'smithing': {
         const top = row(this.slot(0), el('div', { class: 'muted' }, '+'), this.slot(1), this.arrow(), this.slot(2, 'slot big'));
         top.style.margin = '0 0 calc(var(--s) * 6) calc(var(--s) * 30)';
@@ -404,8 +432,8 @@ export class InventoryScreen {
   // ---------------------------------------------------------------- updates
 
   setState(win: WindowState, cursor: Slot): void {
-    const rebuild = win.id !== this.win.id || win.kind !== this.win.kind || (win.kind === 'stonecutter' && JSON.stringify(win.props) !== JSON.stringify(this.win.props));
-    this.win = win;
+    const rebuild = win.id !== this.win.id || win.kind !== this.win.kind || ((win.kind === 'stonecutter' || win.kind === 'merchant') && JSON.stringify(win.props) !== JSON.stringify(this.win.props));
+    this.win = { ...win, props: { ...win.props } };
     this.cursor = cursor;
     if (rebuild) {
       const gui = this.root.querySelector('.gui');
@@ -419,7 +447,12 @@ export class InventoryScreen {
   }
 
   setProps(props: Record<string, unknown>): void {
-    this.win.props = { ...this.win.props, ...props };
+    const merged = { ...this.win.props, ...props };
+    if ((this.win.kind === 'stonecutter' || this.win.kind === 'merchant') && JSON.stringify(merged) !== JSON.stringify(this.win.props)) {
+      this.setState({ ...this.win, props: merged }, this.cursor);
+      return;
+    }
+    this.win.props = merged;
     this.refreshProgress();
   }
 

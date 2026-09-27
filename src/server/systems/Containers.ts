@@ -174,6 +174,7 @@ export class Containers {
     this.windows.set(p, w);
     p.windowId = w.id;
     p.send({ t: 'open_window', window: w.id, kind: w.kind, title: w.title, size: w.containerSize, data: w.props });
+    (w as Window & { sentProps?: string }).sentProps = JSON.stringify(w.props);
     this.sync(p);
   }
 
@@ -481,6 +482,14 @@ export class Containers {
     const w = this.windowOf(p);
     w.refresh?.();
     p.send({ t: 'inventory', window: w.id, slots: w.slots.map((s) => cloneStack(s.get())), cursor: cloneStack(p.cursor), seq });
+    // Recipe / offer lists live in window props; resend them when they change
+    if (w.id !== 0 && w.kind !== 'furnace' && w.kind !== 'blast_furnace' && w.kind !== 'smoker') {
+      const json = JSON.stringify(w.props);
+      if (json !== (w as Window & { sentProps?: string }).sentProps) {
+        (w as Window & { sentProps?: string }).sentProps = json;
+        p.send({ t: 'window_prop', window: w.id, prop: 'all', value: w.props });
+      }
+    }
     if (w.id !== 0) this.syncInventory(p, false);
   }
 

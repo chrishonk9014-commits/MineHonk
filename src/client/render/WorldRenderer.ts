@@ -7,6 +7,8 @@ import type { ClientWorld } from '../world/ClientWorld';
 import { ChunkRenderer } from './ChunkRenderer';
 import { Sky } from './Sky';
 import { EntityRenderer } from './entities/EntityRenderer';
+import './entities/mobs';
+import './entities/projectiles';
 import { Particles } from './Particles';
 import { Weather } from './Weather';
 import { HandRenderer } from './HandRenderer';

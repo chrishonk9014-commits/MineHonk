@@ -380,7 +380,7 @@ export class Game {
       case 'meta': {
         const e = this.entities.get(m.id);
         if (!e) break;
-        const visualChange = (['item', 'name', 'count', 'state', 'variant', 'baby', 'color', 'sheared', 'charged', 'saddle'] as const).some((k) => JSON.stringify(e.meta[k]) !== JSON.stringify(m.meta[k]));
+        const visualChange = (['item', 'name', 'count', 'state', 'variant', 'color', 'sheared', 'charged', 'saddle', 'held', 'tame', 'profession', 'size'] as const).some((k) => JSON.stringify(e.meta[k]) !== JSON.stringify(m.meta[k]));
         e.meta = m.meta;
         if (visualChange) this.renderer.entities.refresh(e);
         break;
@@ -445,7 +445,7 @@ export class Game {
         break;
       case 'window_prop':
         if (this.window && this.window.id === m.window) {
-          const props = m.prop === 'furnace' && m.value && typeof m.value === 'object' ? (m.value as Record<string, unknown>) : { [m.prop]: m.value };
+          const props = (m.prop === 'furnace' || m.prop === 'all') && m.value && typeof m.value === 'object' ? (m.value as Record<string, unknown>) : { [m.prop]: m.value };
           Object.assign(this.window.props, props);
           this.screen?.setProps(this.window.props);
         }
@@ -633,6 +633,7 @@ export class Game {
     if (this.prevHealth >= 0 && s.health < this.prevHealth && Number.isFinite(s.health)) this.hurtFx();
     this.prevHealth = s.health;
     this.stats = s;
+    this.player.effects = s.effects;
   }
 
   // ------------------------------------------------------------------ simulation

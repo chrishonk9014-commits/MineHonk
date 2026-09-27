@@ -911,3 +911,44 @@ body {
   color: #fff;
   text-shadow: var(--s) var(--s) 0 #3f3f3f;
 }
+
+/* ------------------------------------------------------------ merchant */
+.offer-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s);
+  width: calc(var(--s) * 96);
+  max-height: calc(var(--s) * 150);
+  overflow-y: auto;
+  margin-right: calc(var(--s) * 6);
+}
+.offer {
+  display: flex;
+  align-items: center;
+  gap: var(--s);
+  padding: var(--s);
+  background: #8b8b8b;
+  border: var(--s) solid #555;
+  cursor: pointer;
+  pointer-events: auto;
+}
+.offer:hover {
+  border-color: #fff;
+}
+.offer.selected {
+  background: #a8a8c8;
+  border-color: #fff;
+}
+.offer.out {
+  opacity: 0.5;
+}
+.offer-cell {
+  width: calc(var(--s) * 18);
+  height: calc(var(--s) * 18);
+  position: relative;
+}
+.offer-arrow {
+  color: #404040;
+  width: calc(var(--s) * 10);
+  text-align: center;
+}

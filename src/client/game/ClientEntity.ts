@@ -77,12 +77,9 @@ export class ClientEntity {
       this.pitch += (this.tpitch - this.pitch) * f;
       this.headYaw += angleDiff(this.theadYaw, this.headYaw) * f;
       this.steps--;
-    } else if (this.vx || this.vy || this.vz) {
-      // simple extrapolation for projectiles/items between updates
-      this.x += this.vx;
-      this.y += this.vy;
-      this.z += this.vz;
     }
+    // No velocity extrapolation: the server sends positions for everything that
+    // moves, and extrapolating a stale spawn velocity makes resting mobs drift.
     const moved = Math.hypot(this.x - this.px, this.z - this.pz);
     this.limbSpeed += (Math.min(1, moved * 4) - this.limbSpeed) * 0.4;
     this.walkDist += this.limbSpeed;

@@ -222,6 +222,10 @@ export interface MoveAbilities {
   /** Multiplier from potion effects etc. */
   speedMul?: number;
   jumpBoost?: number;
+  /** Levitation level (effect amplifier + 1): floats upwards. */
+  levitation?: number;
+  /** Slow falling: tiny gravity and no fall distance. */
+  slowFalling?: boolean;
 }
 
 export interface MoveResult {
@@ -347,8 +351,17 @@ export function stepMovement(world: BlockAccess, b: Body, input: MoveInput, ab: 
     b.fallDistance += prevY - b.y;
   }
 
-  b.vy -= 0.08;
-  b.vy *= 0.98;
+  if (ab.levitation) {
+    b.vy += (0.05 * ab.levitation - b.vy) * 0.2;
+    b.fallDistance = 0;
+  } else if (ab.slowFalling && b.vy <= 0) {
+    b.vy -= 0.01;
+    b.vy *= 0.98;
+    b.fallDistance = 0;
+  } else {
+    b.vy -= 0.08;
+    b.vy *= 0.98;
+  }
   b.vx *= slip;
   b.vz *= slip;
   return res;

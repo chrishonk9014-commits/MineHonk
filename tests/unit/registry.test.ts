@@ -50,3 +50,23 @@ describe('chunk keys', () => {
     }
   });
 });
+
+import { collisionShape, edgeBox } from '../../src/common/physics/shapes';
+import { stateOf as st } from '../../src/common/registry/blocks';
+describe('shapes', () => {
+  it('edge boxes land on the requested side', () => {
+    expect(edgeBox('north', 3)[2]).toBe(0);
+    expect(edgeBox('south', 3)[5]).toBe(1);
+    expect(edgeBox('west', 3)[0]).toBe(0);
+    expect(edgeBox('west', 3)[3]).toBeCloseTo(3 / 16);
+    expect(edgeBox('east', 3)[0]).toBeCloseTo(13 / 16);
+  });
+  it('closed door facing east sits on the west edge', () => {
+    const s = collisionShape(st('oak_door', { facing: 'east', open: false }));
+    expect(s[0]![0]).toBe(0);
+    expect(s[0]![3]).toBeCloseTo(3 / 16);
+  });
+  it('bottom slab is half height', () => {
+    expect(collisionShape(st('stone_slab'))[0]![4]).toBe(0.5);
+  });
+});

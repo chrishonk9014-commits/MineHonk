@@ -1,0 +1,175 @@
+/** Persistent world-level settings and state. */
+import type { GameMode, Difficulty, GodHearts } from '../../common/game/gamemode';
+import { normalizeGodHearts, GAME_MODES, DIFFICULTIES } from '../../common/game/gamemode';
+import { seedFromString } from '../../common/math/rng';
+
+export const LEVEL_VERSION = 1;
+export const GENERATOR_VERSION = 1;
+
+export interface GameRules {
+  doDaylightCycle: boolean;
+  doWeatherCycle: boolean;
+  doMobSpawning: boolean;
+  keepInventory: boolean;
+  mobGriefing: boolean;
+  naturalRegeneration: boolean;
+  doFireTick: boolean;
+  /** Minutes for a full day/night cycle. */
+  dayLengthMinutes: number;
+  /** God Mode: hunger still drains. */
+  godHunger: boolean;
+  /** God Mode: environmental hazards (lava, drowning, void) still hurt. */
+  godHazards: boolean;
+  showCoordinates: boolean;
+  randomTickSpeed: number;
+  spawnRadius: number;
+}
+
+export interface LevelData {
+  version: number;
+  generatorVersion: number;
+  id: string;
+  name: string;
+  seed: string;
+  seedNum: number;
+  mode: GameMode;
+  difficulty: Difficulty;
+  godHearts: GodHearts;
+  pvp: boolean;
+  cheats: boolean;
+  hardcore: boolean;
+  bonusChest: boolean;
+  generateStructures: boolean;
+  createdAt: number;
+  lastPlayed: number;
+  /** Total ticks the world has run. */
+  time: number;
+  /** Time of day 0..23999. */
+  dayTime: number;
+  rainTime: number;
+  raining: boolean;
+  thunderTime: number;
+  thundering: boolean;
+  spawn: [number, number, number] | null;
+  rules: GameRules;
+  /** Multiplayer */
+  owner: string | null;
+  visibility: 'private' | 'friends' | 'public';
+  joinCode: string | null;
+  allowlist: string[];
+  banned: string[];
+  operators: string[];
+  /** Progression flags (dragon killed, farlands discovered ...). */
+  flags: Record<string, unknown>;
+}
+
+export const DEFAULT_RULES: GameRules = {
+  doDaylightCycle: true,
+  doWeatherCycle: true,
+  doMobSpawning: true,
+  keepInventory: false,
+  mobGriefing: true,
+  naturalRegeneration: true,
+  doFireTick: true,
+  dayLengthMinutes: 20,
+  godHunger: true,
+  godHazards: true,
+  showCoordinates: true,
+  randomTickSpeed: 3,
+  spawnRadius: 8,
+};
+
+export interface NewWorldOptions {
+  id: string;
+  name: string;
+  seed: string;
+  mode: GameMode;
+  difficulty: Difficulty;
+  godHearts?: GodHearts;
+  pvp?: boolean;
+  cheats?: boolean;
+  bonusChest?: boolean;
+  generateStructures?: boolean;
+  owner?: string | null;
+  visibility?: LevelData['visibility'];
+  rules?: Partial<GameRules>;
+}
+
+export function createLevelData(o: NewWorldOptions): LevelData {
+  const hardcore = o.mode === 'hardcore';
+  return {
+    version: LEVEL_VERSION,
+    generatorVersion: GENERATOR_VERSION,
+    id: o.id,
+    name: (o.name || 'New World').slice(0, 48),
+    seed: o.seed,
+    seedNum: seedFromString(o.seed),
+    mode: o.mode,
+    difficulty: hardcore ? 'hard' : o.difficulty,
+    godHearts: normalizeGodHearts(o.godHearts ?? 10),
+    pvp: o.pvp ?? true,
+    cheats: o.cheats ?? o.mode === 'creative',
+    hardcore,
+    bonusChest: o.bonusChest ?? false,
+    generateStructures: o.generateStructures ?? true,
+    createdAt: Date.now(),
+    lastPlayed: Date.now(),
+    time: 0,
+    dayTime: 1000,
+    rainTime: 12000 + Math.floor(Math.random() * 168000),
+    raining: false,
+    thunderTime: 12000 + Math.floor(Math.random() * 168000),
+    thundering: false,
+    spawn: null,
+    rules: { ...DEFAULT_RULES, ...(o.rules ?? {}) },
+    owner: o.owner ?? null,
+    visibility: o.visibility ?? 'private',
+    joinCode: null,
+    allowlist: [],
+    banned: [],
+    operators: o.owner ? [o.owner] : [],
+    flags: {},
+  };
+}
+
+/** Validates/repairs level data loaded from storage (defensive against corruption). */
+export function sanitizeLevelData(raw: unknown, fallbackId: string): LevelData | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = raw as Partial<LevelData>;
+  if (typeof r.seed !== 'string') return null;
+  const base = createLevelData({
+    id: typeof r.id === 'string' ? r.id : fallbackId,
+    name: typeof r.name === 'string' ? r.name : 'World',
+    seed: r.seed,
+    mode: GAME_MODES.includes(r.mode as GameMode) ? (r.mode as GameMode) : 'survival',
+    difficulty: DIFFICULTIES.includes(r.difficulty as Difficulty) ? (r.difficulty as Difficulty) : 'normal',
+    godHearts: r.godHearts,
+  });
+  const out: LevelData = { ...base };
+  const num = (v: unknown, d: number): number => (typeof v === 'number' && Number.isFinite(v) ? v : d);
+  out.seedNum = typeof r.seedNum === 'number' ? r.seedNum >>> 0 : base.seedNum;
+  out.pvp = typeof r.pvp === 'boolean' ? r.pvp : base.pvp;
+  out.cheats = typeof r.cheats === 'boolean' ? r.cheats : base.cheats;
+  out.hardcore = out.mode === 'hardcore';
+  out.createdAt = num(r.createdAt, base.createdAt);
+  out.lastPlayed = num(r.lastPlayed, base.lastPlayed);
+  out.time = num(r.time, 0);
+  out.dayTime = ((num(r.dayTime, 1000) % 24000) + 24000) % 24000;
+  out.rainTime = num(r.rainTime, base.rainTime);
+  out.raining = !!r.raining;
+  out.thunderTime = num(r.thunderTime, base.thunderTime);
+  out.thundering = !!r.thundering;
+  out.spawn = Array.isArray(r.spawn) && r.spawn.length === 3 && r.spawn.every((v) => Number.isFinite(v)) ? (r.spawn as [number, number, number]) : null;
+  out.rules = { ...DEFAULT_RULES, ...(r.rules && typeof r.rules === 'object' ? r.rules : {}) };
+  out.owner = typeof r.owner === 'string' ? r.owner : null;
+  out.visibility = r.visibility === 'public' || r.visibility === 'friends' ? r.visibility : 'private';
+  out.joinCode = typeof r.joinCode === 'string' ? r.joinCode : null;
+  out.allowlist = Array.isArray(r.allowlist) ? r.allowlist.filter((s) => typeof s === 'string') : [];
+  out.banned = Array.isArray(r.banned) ? r.banned.filter((s) => typeof s === 'string') : [];
+  out.operators = Array.isArray(r.operators) ? r.operators.filter((s) => typeof s === 'string') : [];
+  out.flags = r.flags && typeof r.flags === 'object' ? r.flags : {};
+  out.generatorVersion = num(r.generatorVersion, GENERATOR_VERSION);
+  out.bonusChest = !!r.bonusChest;
+  out.generateStructures = r.generateStructures !== false;
+  return out;
+}

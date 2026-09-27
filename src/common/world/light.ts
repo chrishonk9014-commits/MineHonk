@@ -39,7 +39,7 @@ class Queue {
         this.tail = n;
       }
       if (this.tail >= this.x.length * 0.75) {
-        const grow = (a: Int32Array): Int32Array => {
+        const grow = (a: Int32Array): Int32Array<ArrayBuffer> => {
           const b = new Int32Array(a.length * 2);
           b.set(a);
           return b;

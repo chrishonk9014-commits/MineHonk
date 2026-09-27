@@ -3,6 +3,7 @@ dist/
 dist-server/
 saves/
 server-data/
+data/
 *.log
 .DS_Store
 tests/e2e/out/

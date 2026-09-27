@@ -6,6 +6,7 @@
 import type { ItemDef } from './itemTypes';
 import { ITEM_DEFS } from '../data/items';
 import { blocks, initBlocks } from './blocks';
+import { MOB_DEFS } from '../data/mobs';
 
 export interface ItemType {
   readonly num: number;
@@ -90,6 +91,11 @@ export function initItems(): void {
     });
   }
   for (const d of explicit.values()) register(d);
+  // Spawn eggs generated from the mob registry
+  for (const m of MOB_DEFS) {
+    if (m.id === 'ender_dragon') continue;
+    register({ id: 'spawn_egg_' + m.id, name: m.name + ' Spawn Egg', use: 'spawn_egg', spawns: m.id, creative: 'spawn_eggs', rarity: m.category === 'boss' ? 'epic' : undefined });
+  }
 }
 
 export function getItem(id: string): ItemType {

@@ -233,4 +233,12 @@ export class Mining {
       dim.addEntity(o);
     }
   }
+
+  /** Drops what a block yields when destroyed without a tool (explosions). */
+  dropBlock(dim: Dimension, x: number, y: number, z: number, state: number): void {
+    const drops = computeBlockDrops(state, null, this.dropRng);
+    for (const st of drops.items) this.dropItem(dim, x + 0.5, y + 0.3, z + 0.5, st);
+  }
+
+  private readonly dropRng = new Random();
 }

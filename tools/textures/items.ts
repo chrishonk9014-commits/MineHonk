@@ -8,6 +8,8 @@
 import { Tex, type RGB, hex, shade, mix } from './canvas';
 import type { PainterRegistry } from './registry';
 import { DYE } from './blocksDeco';
+import { MOB_DEFS } from '../../src/common/data/mobs';
+import { hashInts } from '../../src/common/math/rng';
 
 type Pal = Record<string, RGB>;
 
@@ -1496,6 +1498,22 @@ export function registerItems(r: PainterRegistry): void {
   r.add('dried_kelp', (t) => paintMask(t, 'leather', matPal(hex(0x3a5a2a))));
   r.add('chorus_fruit', (t) => paintMask(t, 'ball', matPal(hex(0x8a5a9a))));
   r.add('egg', (t) => paintMask(t, 'egg', matPal(hex(0xe8dcc0))));
+  // Spawn eggs: the egg silhouette in each mob's colours with seeded spots
+  for (const m of MOB_DEFS) {
+    if (m.id === 'ender_dragon') continue;
+    r.add('spawn_egg_' + m.id, (t) => {
+      paintMask(t, 'egg', matPal(hex(m.egg[0])));
+      const spot = hex(m.egg[1]);
+      for (let y = 3; y < 15; y++)
+        for (let x = 3; x < 13; x++) {
+          const c = t.get(x, y);
+          if (c[3] === 0) continue;
+          const edge = t.get(x - 1, y)[3] === 0 || t.get(x + 1, y)[3] === 0 || t.get(x, y - 1)[3] === 0 || t.get(x, y + 1)[3] === 0;
+          if (edge) continue;
+          if (hashInts(m.egg[1], x, y, m.id.length) % 5 === 0) t.set(x, y, spot);
+        }
+    });
+  }
   const meat = (n: string, c: number) => r.add(n, (t) => paintMask(t, 'meat', { ...matPal(hex(c)), d: hex(0xf0ece0) }));
   meat('beef', 0xc83a3a);
   meat('cooked_beef', 0x8a4a2a);

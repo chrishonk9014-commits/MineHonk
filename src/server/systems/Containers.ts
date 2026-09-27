@@ -96,6 +96,11 @@ export class Containers {
     return w;
   }
 
+  /** Appends the player's main inventory and hotbar to a custom window. */
+  addPlayerSlots(w: Window, p: ServerPlayer): void {
+    this.addPlayerInventory(w, p);
+  }
+
   private addPlayerInventory(w: Window, p: ServerPlayer): void {
     const inv = p.inventory;
     for (let i = 9; i < 36; i++) w.slots.push(invSlot(inv, i, 'main'));

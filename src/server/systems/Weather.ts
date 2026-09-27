@@ -9,6 +9,14 @@ const rng = new Random();
 export class Weather {
   constructor(private readonly server: GameServer) {}
 
+  get raining(): boolean {
+    return this.server.level.raining;
+  }
+
+  get thundering(): boolean {
+    return this.server.level.thundering;
+  }
+
   set(kind: 'clear' | 'rain' | 'thunder', duration = 6000 + rng.int(12000)): void {
     const l = this.server.level;
     l.raining = kind !== 'clear';

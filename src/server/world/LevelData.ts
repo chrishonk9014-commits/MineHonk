@@ -12,6 +12,7 @@ export interface GameRules {
   doMobSpawning: boolean;
   keepInventory: boolean;
   mobGriefing: boolean;
+  doMobLoot: boolean;
   naturalRegeneration: boolean;
   doFireTick: boolean;
   /** Minutes for a full day/night cycle. */
@@ -69,6 +70,7 @@ export const DEFAULT_RULES: GameRules = {
   doMobSpawning: true,
   keepInventory: false,
   mobGriefing: true,
+  doMobLoot: true,
   naturalRegeneration: true,
   doFireTick: true,
   dayLengthMinutes: 20,

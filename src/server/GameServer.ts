@@ -48,6 +48,8 @@ export class GameServer {
   readonly players = new Map<string, ServerPlayer>();
   readonly blockUpdates: BlockUpdates;
   readonly mining: Mining;
+  /** Mob, combat and explosion system (installed by gameplay). */
+  mobs: import('./systems/Mobs').MobSystem | null = null;
   readonly interaction: Interaction;
   readonly commands: Commands;
   readonly playerData: PlayerData;
@@ -601,13 +603,16 @@ export class GameServer {
 
   onChunkGenerated(dim: Dimension, c: Chunk): void {
     this.blockUpdates.onChunkReady(dim, c);
+    this.mobs?.onChunkGenerated(dim, c);
   }
 
   onChunkLoaded(dim: Dimension, c: Chunk, _entities: Record<string, unknown>[]): void {
     this.blockUpdates.onChunkReady(dim, c);
+    this.mobs?.onChunkLoaded(dim, c);
   }
 
   onChunkUnloaded(dim: Dimension, c: Chunk): void {
+    this.mobs?.onChunkUnloaded(dim, c);
     const k = chunkIndex(c.cx, c.cz);
     // Entities in unloaded chunks are removed (persistent ones were saved with the chunk).
     const b = dim.buckets.get(k);

@@ -886,8 +886,21 @@ export class Interaction {
   }
 
   handleWindowAction(p: ServerPlayer, m: C2S): void {
+    if (m.t === 'trade') {
+      // Stonecutter recipe / merchant offer selection
+      const w = this.containers.windowOf(p) as Window & { select?: (i: number) => void };
+      if (w.id !== 0 && w.id === p.windowId && w.select && Number.isInteger(m.index)) {
+        w.select(m.index);
+        w.refresh?.();
+        this.containers.sync(p);
+      }
+      return;
+    }
     this.hooks.windowAction?.(p, m);
   }
+
+  /** Optional progression hook when a player kills a mob. */
+  onMobKilled?: (p: ServerPlayer, m: Entity) => void;
 
   openCustomWindow(p: ServerPlayer, w: Window): void {
     this.containers.openCustom(p, w);

@@ -6,6 +6,7 @@ import { PROTOCOL_VERSION } from '../../src/common/net/protocol';
 import { initItems } from '../../src/common/registry/items';
 import { registryHash } from '../../src/common/registry/hash';
 import type { NewWorldOptions } from '../../src/server/world/LevelData';
+import { installGameplay } from '../../src/server/gameplay';
 
 initItems();
 
@@ -33,6 +34,9 @@ export class FakeConn implements Connection {
 
 export async function makeServer(opts: Partial<NewWorldOptions> = {}, storage = new MemoryStorage()): Promise<{ server: GameServer; storage: MemoryStorage }> {
   const server = await GameServer.open(storage, { id: 'test', name: 'Test', seed: 'test-seed', mode: 'survival', difficulty: 'normal', ...opts }, { log: () => {}, genBudgetMs: 1000, chunksPerTick: 400 });
+  installGameplay(server);
+  // Tests control spawning explicitly
+  server.level.rules.doMobSpawning = false;
   return { server, storage };
 }
 

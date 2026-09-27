@@ -7,12 +7,16 @@ import { S, stateOf, STATE_REPLACEABLE, STATE_BLOCK, blocks, blockHasTag, withPr
 import type { TreeKind } from '../../data/biomes';
 
 export interface TreeReader {
+  /** Reads used for placement decisions (world generation passes pure terrain here). */
   getState(x: number, y: number, z: number): number;
+  /** Reads used when deciding whether a single block may be overwritten (defaults to getState). */
+  current?(x: number, y: number, z: number): number;
 }
 export type TreeSetter = (x: number, y: number, z: number, state: number) => void;
 
 interface Ctx {
   r: TreeReader;
+  cur: (x: number, y: number, z: number) => number;
   set: TreeSetter;
   rng: Random;
 }
@@ -25,12 +29,12 @@ function replaceableForLog(s: number): boolean {
 
 function log(c: Ctx, x: number, y: number, z: number, state: number): void {
   if (y < 1 || y > 254) return;
-  if (replaceableForLog(c.r.getState(x, y, z))) c.set(x, y, z, state);
+  if (replaceableForLog(c.cur(x, y, z))) c.set(x, y, z, state);
 }
 
 function leaf(c: Ctx, x: number, y: number, z: number, state: number): void {
   if (y < 1 || y > 254) return;
-  const s = c.r.getState(x, y, z);
+  const s = c.cur(x, y, z);
   if (s === 0 || (STATE_REPLACEABLE[s] && !blocks[STATE_BLOCK[s]!]!.def.fluid)) c.set(x, y, z, state);
 }
 
@@ -185,7 +189,7 @@ function vines(c: Ctx, x: number, y: number, z: number, chance: number): void {
     const vz = z + dz;
     const len = 1 + c.rng.int(4);
     for (let k = 0; k < len; k++) {
-      if (c.r.getState(vx, y - k, vz) !== 0) break;
+      if (c.cur(vx, y - k, vz) !== 0) break;
       c.set(vx, y - k, vz, stateOf('vine', { [side]: true }));
     }
   }
@@ -276,13 +280,13 @@ function swampOak(c: Ctx, x: number, y: number, z: number): boolean {
         if (Math.abs(dx) === r && Math.abs(dz) === r && c.rng.chance(0.6)) continue;
         leaf(c, x + dx, y + h + dy, z + dz, lv);
         if ((Math.abs(dx) === r || Math.abs(dz) === r) && dy === -3 && c.rng.chance(0.3)) {
-          for (let k = 1; k <= 3; k++) if (c.r.getState(x + dx, y + h + dy - k, z + dz) === 0) c.set(x + dx, y + h + dy - k, z + dz, stateOf('vine', { north: true }));
+          for (let k = 1; k <= 3; k++) if (c.cur(x + dx, y + h + dy - k, z + dz) === 0) c.set(x + dx, y + h + dy - k, z + dz, stateOf('vine', { north: true }));
         }
       }
     }
   }
   for (let i = 0; i < h; i++) {
-    const s = c.r.getState(x, y + i, z);
+    const s = c.cur(x, y + i, z);
     if (replaceableForLog(s) || blocks[STATE_BLOCK[s]!]!.id === 'water') c.set(x, y + i, z, logOf('oak'));
   }
   return true;
@@ -300,7 +304,7 @@ function mangrove(c: Ctx, x: number, y: number, z: number): boolean {
     [0, -1],
   ] as const) {
     for (let k = 0; k < 3; k++) {
-      const s = c.r.getState(x + dx * 2, y + 2 - k, z + dz * 2);
+      const s = c.cur(x + dx * 2, y + 2 - k, z + dz * 2);
       if (replaceableForLog(s) || blocks[STATE_BLOCK[s]!]!.id === 'water') c.set(x + dx * 2, y + 2 - k, z + dz * 2, root);
     }
     log(c, x + dx, y + 2, z + dz, root);
@@ -380,7 +384,7 @@ function fungus(c: Ctx, x: number, y: number, z: number, kind: 'crimson' | 'warp
   if (kind === 'crimson') for (let k = 0; k < 4; k++) {
     const vx = x + c.rng.range(-r, r);
     const vz = z + c.rng.range(-r, r);
-    for (let l = 0; l < 3; l++) if (c.r.getState(vx, y + h - 4 - l, vz) === 0) c.set(vx, y + h - 4 - l, vz, S('weeping_vines'));
+    for (let l = 0; l < 3; l++) if (c.cur(vx, y + h - 4 - l, vz) === 0) c.set(vx, y + h - 4 - l, vz, S('weeping_vines'));
   }
   return true;
 }
@@ -428,18 +432,18 @@ function chorus(c: Ctx, x: number, y: number, z: number, depth = 0): boolean {
         [0, -1],
       ];
       const [dx, dz] = c.rng.pick(dirs);
-      if (c.r.getState(x + dx, top - 1, z + dz) !== 0) continue;
+      if (c.cur(x + dx, top - 1, z + dz) !== 0) continue;
       c.set(x + dx, top - 1, z + dz, plant);
       chorus(c, x + dx, top, z + dz, depth + 1);
     }
   }
-  if (c.r.getState(x, top, z) === 0) c.set(x, top, z, stateOf('chorus_flower', { age: 5 }));
+  if (c.cur(x, top, z) === 0) c.set(x, top, z, stateOf('chorus_flower', { age: 5 }));
   return true;
 }
 
 /** Places a generated tree/plant of the given kind rooted at (x, y, z) (y = first trunk block). */
 export function placeTree(r: TreeReader, set: TreeSetter, rng: Random, kind: TreeKind, x: number, y: number, z: number): boolean {
-  const c: Ctx = { r, set, rng };
+  const c: Ctx = { r, cur: r.current ? (x2, y2, z2) => r.current!(x2, y2, z2) : (x2, y2, z2) => r.getState(x2, y2, z2), set, rng };
   switch (kind) {
     case 'oak':
       return oak(c, x, y, z);

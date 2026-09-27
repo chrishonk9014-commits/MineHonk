@@ -66,7 +66,7 @@ export class Dimension implements BlockAccess {
     seed: number,
   ) {
     this.rules = DIMENSION_RULES[id];
-    this.generator = createGenerator(id, seed);
+    this.generator = createGenerator(id, seed, { structures: server.level.generateStructures !== false });
     this.light = new LightEngine(
       {
         getChunk: (cx, cz) => this.chunks.get(chunkIndex(cx, cz)),

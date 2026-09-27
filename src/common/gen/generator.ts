@@ -12,6 +12,19 @@ import { Chunk } from '../world/chunk';
 import type { DimensionId } from '../data/biomes';
 import { OverworldTerrain } from './overworld';
 import { chunkIndex } from '../world/constants';
+import { DecorView } from './decorate/view';
+import * as F from './decorate/features';
+import { StructureManager, type Start } from './structures/manager';
+import { VILLAGE } from './structures/village';
+import { SURFACE_STRUCTURES } from './structures/misc';
+import { MINESHAFT, STRONGHOLD } from './structures/underground';
+import { biomeOf } from '../registry/biomes';
+import { STATE_FLUID } from '../registry/blocks';
+
+export interface GeneratorOptions {
+  /** Generate villages, temples and other structures (default true). */
+  structures?: boolean;
+}
 
 export interface SpawnPoint {
   x: number;
@@ -25,6 +38,8 @@ export interface DimensionGenerator {
   generate(cx: number, cz: number): Chunk;
   findSpawn(): SpawnPoint;
   biomeAt(x: number, z: number): number;
+  /** Nearest structure of a type (e.g. 'stronghold'), if the dimension has them. */
+  locate?(type: string, x: number, z: number): { x: number; y: number; z: number } | null;
 }
 
 /** Small LRU cache for proto chunks. */
@@ -70,22 +85,73 @@ export function cloneChunk(src: Chunk): Chunk {
   return c;
 }
 
+type Stage = (v: DecorView, seed: number, ocx: number, ocz: number) => void;
+
+/** Stages replayed over the 3x3 neighbourhood, in this global order. */
+const NEIGHBOUR_STAGES: Stage[] = [F.lakes, F.geodes, F.ores, F.dungeons, F.springs, F.disks, F.iceFeatures, F.boulders, F.trees];
+
 export class OverworldGenerator implements DimensionGenerator {
   readonly dimension = 'overworld' as const;
   readonly terrain: OverworldTerrain;
+  readonly structures: StructureManager;
   private readonly protos: ProtoCache;
 
-  constructor(readonly seed: number) {
+  constructor(
+    readonly seed: number,
+    opts: GeneratorOptions = {},
+  ) {
     this.terrain = new OverworldTerrain(seed);
-    this.protos = new ProtoCache(400, (cx, cz) => this.terrain.generate(cx, cz));
+    this.protos = new ProtoCache(600, (cx, cz) => this.terrain.generate(cx, cz));
+    const ground = (x: number, z: number): { y: number; water: boolean } => {
+      const c = this.protos.get(x >> 4, z >> 4);
+      let y = c.getHeight(x & 15, z & 15) - 1;
+      let water = false;
+      while (y > 0) {
+        const s = c.get(x & 15, y, z & 15);
+        if (s !== 0 && !STATE_FLUID[s]) break;
+        if (STATE_FLUID[s]) water = true;
+        y--;
+      }
+      return { y, water };
+    };
+    this.structures = new StructureManager(
+      seed,
+      [VILLAGE, ...SURFACE_STRUCTURES, MINESHAFT, STRONGHOLD],
+      {
+        seed,
+        groundY: (x, z) => ground(x, z).y,
+        isWater: (x, z) => ground(x, z).water,
+        biome: (x, z) => biomeOf(this.protos.get(x >> 4, z >> 4).getBiome(x & 15, z & 15)),
+        estimateHeight: (x, z) => this.terrain.estimateHeight(x, z),
+        estimateBiome: (x, z) => biomeOf(this.terrain.estimateBiome(x, z)),
+      },
+      () => opts.structures !== false,
+    );
   }
 
   generate(cx: number, cz: number): Chunk {
     const proto = this.protos.get(cx, cz);
     const c = cloneChunk(proto);
+    const v = new DecorView(c, (x, z) => this.protos.get(x, z));
+    const seed = this.seed;
+    for (const stage of NEIGHBOUR_STAGES) {
+      for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) stage(v, seed, cx + dx, cz + dz);
+    }
+    F.caveDecor(v, seed, cx, cz, (x, z) => {
+      const cl = this.terrain.climate.sample(x, z, this.climateScratch);
+      return { humidity: cl.h, continentalness: cl.c, weirdness: cl.w };
+    });
+    const starts = this.structures.build(v);
+    F.vegetation(v, seed, cx, cz);
+    F.freeze(v);
+    c.recount();
     c.recomputeHeightmap();
+    // Structure entities (villagers, witches ...) that stand in this chunk
+    for (const s of starts) addGenEntities(c, s);
     return c;
   }
+
+  private readonly climateScratch = newClimateScratch();
 
   findSpawn(): SpawnPoint {
     for (let r = 0; r < 4000; r += 16) {
@@ -96,8 +162,9 @@ export class OverworldGenerator implements DimensionGenerator {
         const z = Math.round(Math.sin(a) * r);
         const h = this.terrain.estimateHeight(x, z);
         if (h > 64 && h < 100) {
-          const b = this.terrain.estimateBiome(x, z);
-          void b;
+          const biome = biomeOf(this.terrain.estimateBiome(x, z));
+          // Prefer friendly biomes to start in
+          if (r < 1200 && (biome.category === 'ocean' || biome.category === 'mountain' || biome.id === 'mushroom_fields')) continue;
           return { x, y: h + 1, z };
         }
       }
@@ -108,13 +175,31 @@ export class OverworldGenerator implements DimensionGenerator {
   biomeAt(x: number, z: number): number {
     return this.terrain.estimateBiome(x, z);
   }
+
+  locate(type: string, x: number, z: number): { x: number; y: number; z: number } | null {
+    const s = this.structures.nearest(type, x, z, type === 'stronghold' ? 0 : 12);
+    return s ? { x: s.x, y: s.y, z: s.z } : null;
+  }
 }
 
-export function createGenerator(dim: DimensionId, seed: number): DimensionGenerator {
+function newClimateScratch(): import('./climate').Climate {
+  return { c: 0, e: 0, w: 0, pv: 0, t: 0, h: 0, v: 0, river: 0, mountain: 0, swamp: 0, plateau: 0, land: 0, height: 0, amp: 0 };
+}
+
+function addGenEntities(c: Chunk, s: Start): void {
+  if (!s.entities) return;
+  const x0 = c.cx << 4;
+  const z0 = c.cz << 4;
+  for (const e of s.entities) {
+    if (e.x >= x0 && e.x < x0 + 16 && e.z >= z0 && e.z < z0 + 16) c.genEntities.push({ ...e });
+  }
+}
+
+export function createGenerator(dim: DimensionId, seed: number, opts: GeneratorOptions = {}): DimensionGenerator {
   switch (dim) {
     case 'overworld':
-      return new OverworldGenerator(seed);
+      return new OverworldGenerator(seed, opts);
     default:
-      return new OverworldGenerator(seed);
+      return new OverworldGenerator(seed, opts);
   }
 }

@@ -20,6 +20,8 @@ export class Chunk {
   /** Biome id per column. */
   readonly biomes = new Uint8Array(256);
   readonly blockEntities = new Map<number, BlockEntityData>();
+  /** Entities placed by world generation, spawned once when the chunk is first generated (not serialised). */
+  readonly genEntities: { type: string; x: number; y: number; z: number; data?: Record<string, unknown> }[] = [];
   /** Non-air counts per section to free sections that become empty. */
   readonly counts = new Uint16Array(SECTIONS_PER_CHUNK);
 

@@ -21,6 +21,7 @@ in vec3 vDir;
 uniform vec3 uZenith;
 uniform vec3 uHorizon;
 uniform vec3 uVoid;
+uniform float uVoidAmount;
 uniform vec3 uSunDir;
 uniform vec3 uGlow;
 uniform float uGlowStrength;
@@ -30,7 +31,8 @@ void main() {
   vec3 d = normalize(vDir);
   float up = d.y;
   vec3 col = mix(uHorizon, uZenith, pow(clamp(up, 0.0, 1.0), 0.55));
-  if (up < 0.0) col = mix(uHorizon, uVoid, clamp(-up * 4.0, 0.0, 1.0));
+  // Below the horizon the sky matches the fog, darkening into the void only when the camera is low
+  if (up < 0.0) col = mix(uHorizon, uVoid, clamp(-up * 3.0, 0.0, 1.0) * uVoidAmount);
   vec3 sunH = normalize(vec3(uSunDir.x, 0.0, uSunDir.z) + 1e-5);
   float toward = max(dot(normalize(vec3(d.x, 0.0, d.z) + 1e-5), sunH), 0.0);
   float band = exp(-abs(up - 0.05) * 7.0);
@@ -123,6 +125,7 @@ export class Sky {
         uZenith: { value: new THREE.Color() },
         uHorizon: { value: new THREE.Color() },
         uVoid: { value: new THREE.Color(0x0a0c18) },
+        uVoidAmount: { value: 0 },
         uSunDir: { value: new THREE.Vector3(0, 1, 0) },
         uGlow: { value: new THREE.Color(0xff7a30) },
         uGlowStrength: { value: 0 },
@@ -237,6 +240,7 @@ export class Sky {
     this.group.position.copy(camera.position);
     const u = this.domeMat.uniforms;
     u.uTime!.value = time;
+    u.uVoidAmount!.value = Math.min(1, Math.max(0, (63 - camera.position.y) / 20));
     const dim = this.dimension;
     const state: SkyState = { daylight: 1, fog: new THREE.Color(), skyTint: new THREE.Color(1, 1, 1), ambient: 0.03 };
     if (dim === 'nether' || dim === 'end') {

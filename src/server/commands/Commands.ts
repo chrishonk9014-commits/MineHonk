@@ -425,6 +425,19 @@ export class Commands {
         s.broadcastChat(`PvP has been turned ${a[0]}`, 'announce');
       },
     });
+    this.register({
+      name: 'locate',
+      usage: '/locate <structure>',
+      level: 'cheat',
+      run: (p, args) => {
+        const type = args[0];
+        if (!type) return 'Usage: /locate <village|stronghold|desert_temple|jungle_temple|witch_hut|igloo|ruined_portal|shipwreck|ocean_ruin|pillager_outpost|mineshaft|sky_shrine|overgrown_ruin|stalker_den|glitched_ruin>';
+        const loc = p.dim.generator.locate?.(type, Math.floor(p.x), Math.floor(p.z));
+        if (!loc) return `No ${type} found nearby`;
+        const d = Math.round(Math.hypot(loc.x - p.x, loc.z - p.z));
+        return `The nearest ${type} is at [${loc.x}, ~, ${loc.z}] (${d} blocks away)`;
+      },
+    });
     // --- Debug tools ---
     this.register({
       name: 'tps',

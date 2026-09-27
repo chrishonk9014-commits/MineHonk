@@ -67,6 +67,8 @@ try {
       await page.locator('.screen:not(.hidden) button', { hasText: 'Game Mode:' }).click();
     }
   }
+  const cheatsOff = page.locator('.screen:not(.hidden) button', { hasText: 'Allow Cheats: OFF' });
+  if (process.env.CHEATS && (await cheatsOff.count()) > 0) await cheatsOff.click();
   await page.screenshot({ path: `${OUT}/02-create.png` });
   await page.locator('.screen:not(.hidden) button', { hasText: 'Create New World' }).last().click();
   const t0 = Date.now();
@@ -77,6 +79,26 @@ try {
   console.log(`world ready in ${Date.now() - t0} ms`);
   await page.waitForTimeout(3000);
   await page.screenshot({ path: `${OUT}/03-ingame.png` });
+  if (process.env.TP) {
+    // Optional sightseeing: teleport (needs CHEATS=1) and look around
+    const [tx, ty, tz, yaw = '0', pitch = '0.3'] = process.env.TP.split(',');
+    await page.evaluate((cmd) => window.minehonk.game.send({ t: 'chat', text: cmd }), `/tp ${tx} ${ty} ${tz}`);
+    await page.waitForTimeout(1000);
+    await page.evaluate(([y, p]) => {
+      const g = window.minehonk.game;
+      g.player.yaw = Number(y);
+      g.player.pitch = Number(p);
+      if (g.player.abilities.mayFly) g.player.flying = true;
+    }, [yaw, pitch]);
+    await page.waitForFunction(() => window.minehonk.game.renderer.chunks.stats().dirty < 30, null, { timeout: 120000 }).catch(() => {});
+    await page.waitForTimeout(2000);
+    await page.screenshot({ path: `${OUT}/03b-teleport.png` });
+    if (process.env.TP_ONLY) {
+      await browser.close();
+      stopServer();
+      process.exit(0);
+    }
+  }
   // Walk forward and look around
   await page.keyboard.down('KeyW');
   await page.waitForTimeout(1500);
@@ -93,6 +115,64 @@ try {
     return { pos: [b.x, b.y, b.z], chunks: g.world.chunks.size, fps: g.fps, entities: g.entities.size, health: g.stats.health, maxHealth: g.stats.maxHealth, mode: g.player.gamemode, target: g.interaction.target };
   });
   console.log('state', JSON.stringify(info));
+  // Horizon view
+  await page.evaluate(() => {
+    const g = window.minehonk.game;
+    g.player.yaw = Math.PI * 0.75;
+    g.player.pitch = -0.15;
+  });
+  await page.waitForTimeout(1500);
+  await page.screenshot({ path: `${OUT}/04b-horizon.png` });
+  // Mine the block underfoot with a simulated held left mouse button
+  const mined = await page.evaluate(async () => {
+    const app = window.minehonk;
+    const g = app.game;
+    app.input.locked = true;
+    // Look at the ground just in front (not under our feet, so we can place it back)
+    g.player.yaw = 0;
+    g.player.pitch = 0.95;
+    await new Promise((r) => setTimeout(r, 300));
+    const t = g.interaction.target;
+    if (!t) return { error: 'no target' };
+    const before = g.world.getState(t.x, t.y, t.z);
+    const canvas = document.getElementById('game-canvas');
+    canvas.dispatchEvent(new MouseEvent('mousedown', { button: 0, bubbles: true }));
+    const t0 = performance.now();
+    while (performance.now() - t0 < 8000 && g.world.getState(t.x, t.y, t.z) !== 0) await new Promise((r) => setTimeout(r, 100));
+    window.dispatchEvent(new MouseEvent('mouseup', { button: 0 }));
+    const brokeIn = performance.now() - t0;
+    // wait for the drop to be picked up
+    const t1 = performance.now();
+    let count = 0;
+    while (performance.now() - t1 < 6000) {
+      count = g.invSlots.reduce((a, s) => a + (s ? s.count : 0), 0);
+      if (count > 0) break;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    return { before, after: g.world.getState(t.x, t.y, t.z), brokeIn: Math.round(brokeIn), items: g.invSlots.map((s, i) => (s ? [i, s.id, s.count] : null)).filter(Boolean), entities: g.entities.size };
+  });
+  console.log('mined', JSON.stringify(mined));
+  if (mined.error || mined.after !== 0 || mined.items.length === 0) throw new Error('mining failed: ' + JSON.stringify(mined));
+  // Place it back: select the slot holding the item and right click the block below
+  const placed = await page.evaluate(async () => {
+    const g = window.minehonk.game;
+    const slot = g.invSlots.findIndex((s, i) => s && i >= 36 && i <= 44);
+    if (slot < 0) return { error: 'item not in hotbar' };
+    g.selected = slot - 36;
+    g.send({ t: 'hotbar', slot: slot - 36 });
+    await new Promise((r) => setTimeout(r, 400));
+    const t = g.interaction.target;
+    if (!t) return { error: 'no target to place on' };
+    const canvas = document.getElementById('game-canvas');
+    canvas.dispatchEvent(new MouseEvent('mousedown', { button: 2, bubbles: true }));
+    await new Promise((r) => setTimeout(r, 120));
+    window.dispatchEvent(new MouseEvent('mouseup', { button: 2 }));
+    await new Promise((r) => setTimeout(r, 1500));
+    const count = g.invSlots.reduce((a, s) => a + (s ? s.count : 0), 0);
+    return { target: [t.x, t.y, t.z, t.face], count };
+  });
+  console.log('placed', JSON.stringify(placed));
+  if (placed.error || placed.count !== 0) throw new Error('placing failed: ' + JSON.stringify(placed));
   // Open inventory
   await page.keyboard.press('KeyE');
   await page.waitForTimeout(500);

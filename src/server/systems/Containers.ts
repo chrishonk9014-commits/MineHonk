@@ -16,6 +16,8 @@ import type { Dimension } from '../world/Dimension';
 import { getProp, blocks, STATE_BLOCK, withProp } from '../../common/registry/blocks';
 import { FACE_DX, FACE_DZ } from '../../common/world/constants';
 import { isSurvivalLike } from '../../common/game/gamemode';
+import { rollLoot } from '../../common/game/loot';
+import { Random } from '../../common/math/rng';
 
 export interface WSlot {
   get(): Slot;
@@ -197,12 +199,47 @@ export class Containers {
     return `${dim.id}:${x},${y},${z}`;
   }
 
+  /**
+   * Generated containers carry a loot table reference instead of items; the
+   * loot is rolled (deterministically from the stored seed) the first time the
+   * container is opened or broken.
+   */
+  materializeLoot(dim: Dimension, x: number, y: number, z: number, size = 27): void {
+    const be = dim.getBlockEntity(x, y, z) as (Record<string, unknown> & { type: string }) | undefined;
+    if (!be || typeof be.loot !== 'string') return;
+    const rng = new Random(Number(be.lootSeed ?? 0) >>> 0);
+    const stacks = rollLoot(be.loot, { rng, difficulty: this.server.level.difficulty });
+    // Spread stacks over random slots, splitting some stacks like a hand-packed chest
+    const slots: Slot[] = new Array(size).fill(null);
+    const pieces: ItemStack[] = [];
+    for (const st of stacks) {
+      let rest = { ...st };
+      while (rest.count > 1 && pieces.length + stacks.length < size && rng.chance(0.3)) {
+        const n = 1 + rng.int(rest.count - 1);
+        pieces.push({ ...rest, count: n });
+        rest = { ...rest, count: rest.count - n };
+      }
+      pieces.push(rest);
+    }
+    const free = [...Array(size).keys()];
+    for (const pc of pieces) {
+      if (!free.length) break;
+      const i = free.splice(rng.int(free.length), 1)[0]!;
+      slots[i] = pc;
+    }
+    delete be.loot;
+    delete be.lootSeed;
+    be.items = slots.map(toSaved);
+    dim.setBlockEntity(x, y, z, be);
+  }
+
   /** Live inventory for a block entity container (created on demand). */
   containerAt(dim: Dimension, x: number, y: number, z: number, size: number, type: string): Inventory {
     const key = this.keyOf(dim, x, y, z);
     let inv = this.live.get(key);
     if (inv && inv.size === size) return inv;
     inv = new Inventory(size);
+    this.materializeLoot(dim, x, y, z, size);
     const be = dim.getBlockEntity(x, y, z) as { items?: (SavedStack | null)[] } | undefined;
     if (be?.items) for (let i = 0; i < Math.min(size, be.items.length); i++) inv.slots[i] = fromSaved(be.items[i]);
     else dim.setBlockEntity(x, y, z, { type, items: new Array(size).fill(null) });

@@ -159,6 +159,8 @@ export class Mining {
       const below = dim.getState(x, y - 1, z);
       if (below !== 0 && !STATE_FLUID[below]) replacement = S('water');
     }
+    // Generated loot chests fill themselves before they can spill
+    if (survival) this.server.interaction.containers.materializeLoot(dim, x, y, z);
     const be = dim.getBlockEntity(x, y, z);
     dim.setBlock(x, y, z, replacement);
     this.removeCompanion(dim, x, y, z, state);

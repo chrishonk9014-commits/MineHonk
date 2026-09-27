@@ -1,7 +1,7 @@
 /** Small 3D player doll shown in the inventory; it turns to follow the mouse. */
 import * as THREE from 'three';
 import { BoxModel, humanoidDef } from './entities/BoxModel';
-import { skinTexture, paintPlayer } from './entities/skins';
+import { playerSkin } from './entities/skins';
 
 class PreviewRenderer {
   readonly canvas = document.createElement('canvas');
@@ -17,7 +17,7 @@ class PreviewRenderer {
     this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, alpha: true, antialias: false });
     this.renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
     this.renderer.setClearColor(0x000000, 0);
-    this.model = new BoxModel(humanoidDef(), skinTexture('player:default', 64, 64, paintPlayer));
+    this.model = new BoxModel(humanoidDef(), playerSkin(null));
     this.model.setBrightness(1);
     this.scene.add(this.model.root);
     // Orthographic frustum bounds are relative to the camera, so keep it at y=0
@@ -27,6 +27,11 @@ class PreviewRenderer {
     this.canvas.style.height = '100%';
     this.canvas.style.display = 'block';
     window.addEventListener('mousemove', (e) => (this.mouse = { x: e.clientX, y: e.clientY }));
+  }
+
+  setSkin(name: string | null): void {
+    this.model.material.map = playerSkin(name);
+    this.model.material.needsUpdate = true;
   }
 
   attach(host: HTMLElement): () => void {
@@ -81,11 +86,12 @@ class PreviewRenderer {
 let instance: PreviewRenderer | null = null;
 
 /** Shows the player doll inside `host`. Returns a detach function. */
-export function attachPlayerPreview(host: HTMLElement): () => void {
+export function attachPlayerPreview(host: HTMLElement, name: string | null = null): () => void {
   try {
     instance ??= new PreviewRenderer();
   } catch {
     return () => {};
   }
+  instance.setSkin(name);
   return instance.attach(host);
 }

@@ -37,14 +37,59 @@ export function px(ctx: CanvasRenderingContext2D, x: number, y: number, col: str
   ctx.fillRect(x, y, w, h);
 }
 
+interface PlayerLook {
+  skin: string;
+  skinD: string;
+  hair: string;
+  shirt: string;
+  shirtD: string;
+  pants: string;
+  eyes: string;
+}
+
+const SKIN_TONES: [string, string][] = [
+  ['#c8926a', '#a87450'],
+  ['#e8b890', '#c89870'],
+  ['#8a5a3a', '#6a4028'],
+  ['#5a3a24', '#442a18'],
+  ['#f0c8a8', '#d0a888'],
+];
+const HAIR = ['#4a2e1a', '#1e1a18', '#c89a4a', '#8a3a1a', '#6a6a6a', '#e8d8a8'];
+const SHIRTS: [string, string][] = [
+  ['#2f8f7a', '#236e5e'],
+  ['#b83a3a', '#8e2a2a'],
+  ['#3a6ab8', '#2a4e8e'],
+  ['#d8a030', '#b08020'],
+  ['#7a3ab8', '#5e2a8e'],
+  ['#3a9a3a', '#2a7a2a'],
+  ['#e0e0e0', '#b8b8b8'],
+  ['#e06a9a', '#b8507a'],
+  ['#303038', '#202028'],
+  ['#e07a30', '#b85e20'],
+];
+const PANTS = ['#34427a', '#3a3a3a', '#5a4030', '#2a5a4a', '#6a6a78', '#4a2a5a'];
+const EYES = ['#2a4a8a', '#3a6a2a', '#5a3a1a', '#4a4a4a'];
+
+/** A stable look for a player name (the original "Honk" adventurer for the default). */
+export function playerLook(name: string | null): PlayerLook {
+  if (!name) return { skin: '#c8926a', skinD: '#a87450', hair: '#4a2e1a', shirt: '#2f8f7a', shirtD: '#236e5e', pants: '#34427a', eyes: '#2a4a8a' };
+  const r = new Random(hashString('look:' + name.toLowerCase()));
+  const [skin, skinD] = SKIN_TONES[r.int(SKIN_TONES.length)]!;
+  const [shirt, shirtD] = SHIRTS[r.int(SHIRTS.length)]!;
+  return { skin, skinD, hair: HAIR[r.int(HAIR.length)]!, shirt, shirtD, pants: PANTS[r.int(PANTS.length)]!, eyes: EYES[r.int(EYES.length)]! };
+}
+
+/** Skin texture for a player (cached per name). */
+export function playerSkin(name: string | null): THREE.CanvasTexture {
+  const look = playerLook(name);
+  return skinTexture(`player:${name?.toLowerCase() ?? 'default'}`, 64, 64, (ctx, rng) => paintPlayerLook(ctx, rng, look));
+}
+
 /** The default player look: original "Honk" adventurer. */
-export const paintPlayer: SkinPainter = (ctx, rng) => {
-  const skin = '#c8926a';
-  const skinD = '#a87450';
-  const hair = '#4a2e1a';
-  const shirt = '#2f8f7a';
-  const shirtD = '#236e5e';
-  const pants = '#34427a';
+export const paintPlayer: SkinPainter = (ctx, rng) => paintPlayerLook(ctx, rng, playerLook(null));
+
+function paintPlayerLook(ctx: CanvasRenderingContext2D, rng: Random, look: PlayerLook): void {
+  const { skin, skinD, hair, shirt, shirtD, pants } = look;
   const shoe = '#3a3a3a';
   // head
   paintBox(ctx, rng, 0, 0, 8, 8, 8, { all: skin, top: hair, back: hair });
@@ -56,8 +101,8 @@ export const paintPlayer: SkinPainter = (ctx, rng) => {
   // face
   px(ctx, 9, 12, '#ffffff', 2, 1);
   px(ctx, 13, 12, '#ffffff', 2, 1);
-  px(ctx, 10, 12, '#2a4a8a');
-  px(ctx, 13, 12, '#2a4a8a');
+  px(ctx, 10, 12, look.eyes);
+  px(ctx, 13, 12, look.eyes);
   px(ctx, 11, 14, skinD, 2, 1);
   px(ctx, 10, 15, '#8a4a3a', 4, 1);
   // body
@@ -81,7 +126,7 @@ export const paintPlayer: SkinPainter = (ctx, rng) => {
     paintBox(ctx, rng, u, v, 4, 12, 4, { all: pants, bottom: shoe });
     px(ctx, u, v + 4 + 9, shoe, 16, 3);
   }
-};
+}
 
 const skinCache = new Map<string, THREE.CanvasTexture>();
 

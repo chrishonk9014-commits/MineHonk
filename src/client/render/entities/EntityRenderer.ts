@@ -5,7 +5,7 @@
 import * as THREE from 'three';
 import type { ClientEntity } from '../../game/ClientEntity';
 import { BoxModel, humanoidDef } from './BoxModel';
-import { skinTexture, paintPlayer } from './skins';
+import { playerSkin } from './skins';
 import type { ItemIcons } from '../ItemIcons';
 import { items } from '../../../common/registry/items';
 import { blocks, STATE_BLOCK } from '../../../common/registry/blocks';
@@ -136,8 +136,9 @@ export function boxVisual(model: BoxModel, animate: (m: BoxModel, e: ClientEntit
 // ------------------------------------------------------------------ built-in visuals
 
 registerVisual('player', (e) => {
-  const m = new BoxModel(humanoidDef(), skinTexture('player:default', 64, 64, paintPlayer));
-  return boxVisual(m, (mm, ee, a) => animateHumanoid(mm, ee, a), { name: String(e.meta.name ?? 'Player'), nameY: 2.15 });
+  const name = typeof e.meta.name === 'string' ? e.meta.name : null;
+  const m = new BoxModel(humanoidDef(), playerSkin(name));
+  return boxVisual(m, (mm, ee, a) => animateHumanoid(mm, ee, a), { name: name ?? 'Player', nameY: 2.15 });
 });
 
 registerVisual('item', (e, ctx) => {

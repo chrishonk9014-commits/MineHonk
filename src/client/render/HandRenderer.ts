@@ -1,7 +1,7 @@
 /** First-person arm and held item, rendered in an overlay pass. */
 import * as THREE from 'three';
 import { BoxModel, humanoidDef } from './entities/BoxModel';
-import { skinTexture, paintPlayer } from './entities/skins';
+import { playerSkin } from './entities/skins';
 import type { ItemIcons } from './ItemIcons';
 import { items } from '../../common/registry/items';
 import { blockById } from '../../common/registry/blocks';
@@ -26,13 +26,23 @@ export class HandRenderer {
     private readonly blockTex: (name: string) => THREE.Texture,
   ) {
     this.scene.add(this.pivot);
-    this.armModel = new BoxModel(humanoidDef(), skinTexture('player:default', 64, 64, paintPlayer));
+    this.armModel = new BoxModel(humanoidDef(), playerSkin(null));
     const ra = this.armModel.part('rightArm')!;
     // Detach the arm geometry into our own group
     this.arm = new THREE.Group();
     const armMesh = ra.children.find((c) => c instanceof THREE.Mesh)!.clone();
     this.arm.add(armMesh);
     this.pivot.add(this.arm);
+  }
+
+  /** Uses the local player's own look for the first-person arm. */
+  setSkin(name: string): void {
+    const mesh = this.arm.children[0] as THREE.Mesh | undefined;
+    const mat = mesh?.material as THREE.MeshBasicMaterial | undefined;
+    if (mat) {
+      mat.map = playerSkin(name);
+      mat.needsUpdate = true;
+    }
   }
 
   setItem(itemNum: number): void {

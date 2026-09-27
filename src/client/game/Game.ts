@@ -108,6 +108,8 @@ export class Game {
   private thirdPerson: 0 | 1 | 2 = 0;
   private hudHidden = false;
   private flash = 0;
+  /** Account or profile name used for this player's look. */
+  private playerName: string | null = null;
   /** Portal swirl strength 0..1 while standing in a portal, and its colour. */
   private portalFx = 0;
   private portalKind: 'nether_portal' | 'far_portal' | null = null;
@@ -245,7 +247,7 @@ export class Game {
       playerSlots: () => this.invSlots,
       onClose: () => this.closeWindow(true),
       advancedTooltips: this.debug,
-      attachPreview: attachPlayerPreview,
+      attachPreview: (host: HTMLElement) => attachPlayerPreview(host, this.playerName),
     });
     this.root.append(this.screen.root);
     this.input.enabled = false;
@@ -295,6 +297,8 @@ export class Game {
     switch (m.t) {
       case 'welcome': {
         this.joined = true;
+        this.playerName = m.name;
+        this.renderer.hand.setSkin(m.name);
         this.player.entityId = m.entityId;
         this.player.gamemode = m.gamemode;
         this.setAbilities(m.abilities);

@@ -64,9 +64,9 @@ export class HandRenderer {
         this.heldMats.push(mat);
         return mat;
       });
-      const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 0.4), faces);
-      mesh.position.set(0.05, 0.12, -0.15);
-      mesh.rotation.set(0.1, 0.8, 0);
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.25, 0.25), faces);
+      mesh.position.set(0.04, 0.17, -0.2);
+      mesh.rotation.set(0.15, 0.75, 0);
       this.held = mesh;
     } else {
       const tex = new THREE.CanvasTexture(this.icons.render(itemNum));
@@ -76,12 +76,13 @@ export class HandRenderer {
       const g = new THREE.Group();
       // cheap extrusion: stacked planes
       for (let i = 0; i < 4; i++) {
-        const p = new THREE.Mesh(new THREE.PlaneGeometry(0.6, 0.6), mat);
+        const p = new THREE.Mesh(new THREE.PlaneGeometry(0.55, 0.55), mat);
         p.position.z = i * 0.012;
         g.add(p);
       }
-      g.position.set(0.02, 0.28, -0.08);
-      g.rotation.set(0, Math.PI / 2 - 0.3, 0.5);
+      // Sprites face the camera, turned so a tool's tip points up and inwards
+      g.position.set(-0.06, 0.2, -0.12);
+      g.rotation.set(0.05, -0.5, 1.1);
       this.held = g;
     }
     this.pivot.add(this.held);

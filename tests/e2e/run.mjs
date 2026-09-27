@@ -159,6 +159,23 @@ try {
     stopServer();
     process.exit(0);
   }
+  if (process.env.HELD) {
+    // Screenshot each listed item held in first person (needs CHEATS=1)
+    const itemsToHold = process.env.HELD.split(',');
+    for (const id of itemsToHold) {
+      await page.evaluate((cmd) => window.minehonk.game.send({ t: 'chat', text: cmd }), `/give ${id}`);
+      await page.waitForTimeout(1100);
+    }
+    await page.mouse.click(640, 360);
+    for (let i = 0; i < itemsToHold.length; i++) {
+      await page.keyboard.press(`Digit${i + 1}`);
+      await page.waitForTimeout(900);
+      await page.screenshot({ path: `${OUT}/held-${itemsToHold[i]}.png` });
+    }
+    await browser.close();
+    stopServer();
+    process.exit(0);
+  }
   if (process.env.STATIONS) {
     // Visual check of workstation screens (needs CHEATS=1)
     const send = async (text) => {

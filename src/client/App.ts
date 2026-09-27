@@ -46,6 +46,14 @@ export class App implements GameHost, S.ScreenHost {
     ui.append(this.screenLayer, this.loading.root, this.fpsEl);
     window.addEventListener('keydown', this.onKey, true);
     window.addEventListener('resize', () => this.applyGuiScale());
+    // Tabs can be closed or frozen at any time: save single player worlds when hidden
+    const saveNow = (): void => {
+      if (this.conn instanceof WorkerConnection) void this.conn.save();
+    };
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') saveNow();
+    });
+    window.addEventListener('pagehide', saveNow);
     document.addEventListener('visibilitychange', () => {
       // Flush the world to storage when the tab is hidden (it may be closed)
       if (document.visibilityState === 'hidden' && this.conn instanceof WorkerConnection) void this.conn.save();
@@ -310,6 +318,8 @@ export class App implements GameHost, S.ScreenHost {
     this.clearStack();
     this.audio.music.stop();
     this.setLoading(create ? 'Generating world...' : 'Loading world...');
+    // Ask the browser not to evict saved worlds under storage pressure
+    void navigator.storage?.persist?.().catch(() => false);
     const hello = { t: 'hello' as const, version: PROTOCOL_VERSION, name: this.profile.name, viewDistance: this.settings.renderDistance, registryHash: registryHash() };
     const conn = new WorkerConnection(worldId, create, { uuid: this.profile.uuid, name: this.profile.name, isHost: true }, hello);
     conn.onLog = (t) => console.log(t);

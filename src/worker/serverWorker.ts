@@ -49,6 +49,8 @@ self.onmessage = async (ev: MessageEvent<In>) => {
           genBudgetMs: 30,
           maxViewDistance: 32,
           maxPlayers: 1,
+          // Browsers can close tabs abruptly: save every minute
+          autosaveTicks: 20 * 60,
         });
         installGameplay(server);
         server.start();
@@ -65,7 +67,7 @@ self.onmessage = async (ev: MessageEvent<In>) => {
         if (server && server.players.size <= 1) server.paused = !!m.paused;
         break;
       case 'save':
-        if (server) await server.saveAll();
+        if (server) await server.saveAll().catch((e) => server?.saveFailed(e));
         post({ type: 'saved' });
         break;
       case 'stop':

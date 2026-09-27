@@ -102,8 +102,17 @@ export class GameServer {
 
   /** Opens an existing world or creates a new one. */
   static async open(storage: WorldStorage, create: NewWorldOptions | null, opts: ServerOptions = {}): Promise<GameServer> {
-    const raw = await storage.readLevel();
+    const raw = await storage.readLevel().catch(() => null);
     let level = raw ? sanitizeLevelData(raw, create?.id ?? 'world') : null;
+    if (!level && !create) {
+      // The main copy is damaged: fall back to the backup written by the last good save
+      const bak = await storage.readMeta('level_backup').catch(() => null);
+      level = bak ? sanitizeLevelData(bak, 'world') : null;
+      if (level) {
+        opts.log?.('[server] level data was damaged; restored from the last backup');
+        await storage.writeLevel(level);
+      }
+    }
     if (!level) {
       if (!create) throw new Error('World data missing or corrupted');
       level = createLevelData(create);
@@ -180,6 +189,7 @@ export class GameServer {
       for (const p of this.players.values()) await this.playerData.save(p);
       for (const d of this.dims.values()) await d.saveAll();
       await this.storage.writeLevel(this.level);
+      await this.storage.writeMeta('level_backup', this.level);
       await this.storage.flush();
     })();
     try {
@@ -738,9 +748,20 @@ export class GameServer {
     if (this.tickNo % 200 === 0) {
       for (const d of this.dims.values()) void d.unloadUnused(this.tickNo, 200);
     }
-    if (this.tickNo % this.opts.autosaveTicks === 0) void this.saveAll().catch((e) => this.log(`[server] autosave failed: ${e}`));
+    if (this.tickNo % this.opts.autosaveTicks === 0) void this.saveAll().catch((e) => this.saveFailed(e));
   }
   private dayAcc = 0;
+  private lastSaveWarning = -Infinity;
+
+  /** Tells players (at most every few minutes) that saving is failing, e.g. because storage is full. */
+  saveFailed(e: unknown): void {
+    const err = e as { name?: string; message?: string };
+    this.log(`[server] save failed: ${err?.message ?? e}`);
+    if (this.tickNo - this.lastSaveWarning < 20 * 60 * 5) return;
+    this.lastSaveWarning = this.tickNo;
+    const full = err?.name === 'QuotaExceededError' || /quota|space|ENOSPC/i.test(String(err?.message ?? ''));
+    this.broadcastChat(full ? 'The world could not be saved: storage is full. Free some space or export the world.' : `The world could not be saved (${err?.message ?? 'unknown error'}). Progress since the last save may be lost.`, 'error');
+  }
 
   private handlePendingSpawn(p: ServerPlayer): void {
     const ps = p as { needsSafeSpawn?: boolean };

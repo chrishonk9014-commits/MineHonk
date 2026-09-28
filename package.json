@@ -15,7 +15,10 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "node tests/e2e/run.mjs",
-    "test:e2e:mp": "node tests/e2e/multiplayer.mjs"
+    "test:e2e:mp": "node tests/e2e/multiplayer.mjs",
+    "test:e2e:v1": "node tests/e2e/v1.mjs",
+    "test:e2e:render": "node tests/e2e/render-equivalence.mjs",
+    "bench": "node tests/perf/bench.mjs"
   },
   "engines": {
     "node": ">=20"

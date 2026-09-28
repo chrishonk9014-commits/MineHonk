@@ -129,8 +129,8 @@ End-to-end tests use the production build (`npx vite build`). The multiplayer
 test also needs `npm run build:server`. More browser checks:
 
 ```bash
-node tests/e2e/v1.mjs                   # Recipe Book, Admin Panel, cheat-free advancements
-node tests/e2e/render-equivalence.mjs   # culling never changes a pixel
+npm run test:e2e:v1       # Recipe Book, Admin Panel, cheat-free advancements
+npm run test:e2e:render   # culling never changes a pixel
 ```
 
 ### Performance tools

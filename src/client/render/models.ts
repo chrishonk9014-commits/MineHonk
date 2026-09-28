@@ -695,7 +695,7 @@ function custom(def: BlockDef, state: number): ModelQuad[] {
     case 'redstone_wire':
       return wireModel(def, state);
     case 'sculk_sensor':
-      return element([0, 0, 0], [16, 8, 16], { up: { tex: def.tex.top! }, down: { tex: def.tex.bottom!, cull: 'down' }, north: { tex: def.tex.side!, cull: 'north' }, south: { tex: def.tex.side!, cull: 'south' }, west: { tex: def.tex.side!, cull: 'west' }, east: { tex: def.tex.side!, cull: 'east' } });
+      return element([0, 0, 0], [16, 8, 16], { up: { tex: getProp(state, 'phase') === 'active' ? def.tex.on! : def.tex.top! }, down: { tex: def.tex.bottom!, cull: 'down' }, north: { tex: def.tex.side!, cull: 'north' }, south: { tex: def.tex.side!, cull: 'south' }, west: { tex: def.tex.side!, cull: 'west' }, east: { tex: def.tex.side!, cull: 'east' } });
     case 'chorus_plant': {
       const q = box([4, 4, 4], [12, 12, 12], def.tex.all!);
       const arms: [string, V3, V3][] = [

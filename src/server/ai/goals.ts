@@ -537,6 +537,20 @@ export class TeleportGoal implements Goal {
   }
 }
 
+/** Hands every decision to the Warden system (it hears and smells rather than sees). */
+export class WardenGoal implements Goal {
+  flags: GoalFlag[] = ['move', 'look', 'target'];
+  canUse(): boolean {
+    return true;
+  }
+  canContinue(): boolean {
+    return true;
+  }
+  tick(m: Mob): void {
+    m.dim.server.warden?.think(m);
+  }
+}
+
 export class FollowOwnerGoal implements Goal {
   flags: GoalFlag[] = ['move', 'look'];
   private owner: Target | null = null;

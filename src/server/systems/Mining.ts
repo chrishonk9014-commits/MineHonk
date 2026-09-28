@@ -171,6 +171,7 @@ export class Mining {
     this.removeCompanion(dim, x, y, z, state);
     this.server.particles(dim, 'block', x + 0.5, y + 0.5, z + 0.5, 30, 0.5, state);
     this.server.playSound(dim, 'break.' + def.sound, x + 0.5, y + 0.5, z + 0.5, 1, 0.8);
+    this.server.sculk?.vibrate(dim, x + 0.5, y + 0.5, z + 0.5, p, 'block_break');
     this.server.broadcastNear(dim, x, y, z, 64, { t: 'dig_progress', x, y, z, stage: -1, by: p.id }, p);
     p.addStat('mined.' + bt.id);
     p.addStat('blocks_mined');

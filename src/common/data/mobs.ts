@@ -52,7 +52,8 @@ export type Brain =
   | 'llama'
   | 'camel'
   | 'frog'
-  | 'axolotl';
+  | 'axolotl'
+  | 'warden';
 
 export interface MobDef {
   id: string;
@@ -171,6 +172,8 @@ mob({ id: 'farlands_wanderer', name: 'Farlands Wanderer', category: 'monster', w
 mob({ id: 'glitch_zombie', name: 'Glitched Zombie', category: 'monster', width: 0.6, height: 1.95, health: 24, speed: 0.11, damage: 4, armor: 2, brain: 'zombie', model: 'glitch_zombie', egg: [0x00afaf, 0xff00ff], undead: true, farlands: true, maxSpawnLight: 7 });
 mob({ id: 'glitch_skeleton', name: 'Glitched Skeleton', category: 'monster', width: 0.6, height: 1.99, health: 22, speed: 0.1, damage: 3, brain: 'skeleton', model: 'glitch_skeleton', egg: [0xc1c1c1, 0xff00ff], undead: true, farlands: true, equipment: [['bow', 1]], maxSpawnLight: 7 });
 mob({ id: 'void_wisp', name: 'Void Wisp', category: 'monster', width: 0.5, height: 0.5, health: 8, speed: 0.12, damage: 3, brain: 'void_wisp', model: 'void_wisp', egg: [0x05030a, 0x9a4dff], flying: true, farlands: true, maxSpawnLight: 15 });
+/** Blind guardian of the deep dark, called up by sculk shriekers. */
+mob({ id: 'warden', name: 'Warden', category: 'monster', width: 0.9, height: 2.9, eye: 2.6, health: 500, speed: 0.13, damage: 30, knockbackRes: 1, followRange: 48, brain: 'warden', model: 'warden', egg: [0x0f4649, 0x39d6e0], idleInterval: 160, xp: 5 });
 /** The Farlands' corrupted guardian. */
 mob({ id: 'glitch_beast', name: 'Glitch Beast', category: 'boss', width: 2.2, height: 3.4, health: 400, speed: 0.12, damage: 14, armor: 12, knockbackRes: 1, followRange: 64, brain: 'glitch_beast', model: 'glitch_beast', egg: [0x0b0b12, 0x00ffd0], farlands: true, fireImmune: true });
 mob({ id: 'ender_dragon', name: 'Ender Dragon', category: 'boss', width: 16, height: 8, health: 200, speed: 0.3, damage: 10, knockbackRes: 1, followRange: 150, brain: 'dragon', model: 'ender_dragon', egg: [0x1c1c1c, 0xe079fa], fireImmune: true, flying: true });

@@ -340,6 +340,11 @@ export function registerDims(r: PainterRegistry): void {
     blotchy(t, [hex(0x0b1e26), hex(0x0f2a33)], 1, 1);
     t.rect(3, 3, 10, 10, hex(0x1a4a5a));
   });
+  r.add('sculk_sensor_top_active', (t) => {
+    blotchy(t, [hex(0x0b1e26), hex(0x0f2a33)], 1, 1);
+    t.rect(3, 3, 10, 10, hex(0x2ae8e8));
+    t.rect(5, 5, 6, 6, hex(0xc8ffff));
+  });
   r.add('sculk_sensor_side', (t) => {
     blotchy(t, [hex(0x0b1e26), hex(0x0f2a33)], 1, 1);
     t.rect(0, 0, 16, 8, hex(0x163c48));

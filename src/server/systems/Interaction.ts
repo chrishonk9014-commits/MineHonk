@@ -160,6 +160,7 @@ export class Interaction {
     if (!(p.sneaking && stack)) {
       if (this.useBlock(p, x, y, z, state)) {
         p.send({ t: 'use_result', seq: m.seq, ok: true });
+        this.server.sculk?.vibrate(dim, x + 0.5, y + 0.5, z + 0.5, p, 'block_use');
         return;
       }
     }
@@ -219,6 +220,7 @@ export class Interaction {
       p.send({ t: 'open_window', window: -1, kind: 'player', title: 'sign', size: 0, data: { sign: [first.x, first.y, first.z] } });
     }
     this.server.playSound(dim, 'place.' + pdef.sound, first.x + 0.5, first.y + 0.5, first.z + 0.5, 1, 0.8, p);
+    this.server.sculk?.vibrate(dim, first.x + 0.5, first.y + 0.5, first.z + 0.5, p, 'block_place');
     if (isSurvivalLike(p.gamemode)) this.consume(p, hand, 1);
     p.addStat('placed.' + blocks[STATE_BLOCK[first.state]!]!.id);
     if (pdef.model === 'crop' && !cheat) this.grant(p, 'plant_seed');
@@ -746,6 +748,7 @@ export class Interaction {
   }
 
   private finishEating(p: ServerPlayer, slot: number, stack: ItemStack): void {
+    this.server.sculk?.vibrate(p.dim, p.x, p.y + 1, p.z, p, 'eat');
     const def = items[stack.id]!.def;
     const id = items[stack.id]!.id;
     if (def.use === 'potion') {

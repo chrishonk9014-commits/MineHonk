@@ -26,6 +26,8 @@ export interface GameRules {
   showCoordinates: boolean;
   randomTickSpeed: number;
   spawnRadius: number;
+  /** Seconds a Warden stays calm before it burrows back into the ground. */
+  wardenCalmSeconds: number;
 }
 
 export interface LevelData {
@@ -102,6 +104,7 @@ export const DEFAULT_RULES: GameRules = {
   showCoordinates: true,
   randomTickSpeed: 3,
   spawnRadius: 8,
+  wardenCalmSeconds: 60,
 };
 
 export interface NewWorldOptions {

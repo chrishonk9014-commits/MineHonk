@@ -13,6 +13,8 @@ import { FarlandsSystem } from './systems/Farlands';
 import { Gadgets } from './systems/Gadgets';
 import { Mounts } from './systems/Mounts';
 import { Power } from './systems/Power';
+import { Sculk } from './systems/Sculk';
+import { WardenSystem } from './systems/Warden';
 
 export function installGameplay(server: GameServer): void {
   const mobs = new MobSystem(server);
@@ -34,6 +36,10 @@ export function installGameplay(server: GameServer): void {
   server.mounts = mounts;
   const power = new Power(server);
   server.power = power;
+  const sculk = new Sculk(server);
+  server.sculk = sculk;
+  server.warden = new WardenSystem(server);
+  power.extraPower = (dim, x, y, z) => sculk.sensorPower(dim, x, y, z);
   h.useItem = (p, stack, hand) => mobs.useItem(p, stack) || end.fillBottle(p, stack) || ws.fillBottle(p, stack) || ws.throwSplash(p, stack) || end.useItem(p, stack) || far.useItem(p, stack) || gadgets.useItem(p, stack, hand);
   h.useBlock = (p, x, y, z, state) => ws.useBlock(p, x, y, z, state);
   h.windowAction = (p, m) => ws.windowAction(p, m);
@@ -72,6 +78,7 @@ export function installGameplay(server: GameServer): void {
     gadgets.tick();
     mounts.tick();
     power.tick();
+    sculk.tick();
     progression.tick();
   };
 }

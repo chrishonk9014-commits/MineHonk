@@ -118,6 +118,13 @@ export class ServerPlayer extends Entity {
   vehicle: Entity | null = null;
   /** Where the player last died (the Recovery Compass points there). */
   lastDeath: { dim: DimensionId; x: number; y: number; z: number } | null = null;
+  /** Sculk shrieker warnings (0-4); the fourth calls the Warden. Fades over time. */
+  wardenWarning = 0;
+  wardenWarningAt = 0;
+  /** Shriekers ignore this player until this tick. */
+  shriekCooldownUntil = 0;
+  /** Distance walked since the last footstep vibration. */
+  stepDistance = 0;
 
   constructor(
     readonly conn: Connection,

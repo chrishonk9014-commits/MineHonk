@@ -128,6 +128,8 @@ export type S2C =
   | { t: 'chat'; text: string; kind: ChatKind; from?: string }
   | { t: 'sound'; name: string; x: number; y: number; z: number; volume: number; pitch: number }
   | { t: 'particles'; kind: string; x: number; y: number; z: number; count: number; spread?: number; data?: number }
+  /** A particle travelling from one point to another over `ticks` (vibrations, sonic booms). */
+  | { t: 'trail'; kind: string; x0: number; y0: number; z0: number; x1: number; y1: number; z1: number; ticks: number }
   | { t: 'teleport'; x: number; y: number; z: number; yaw?: number; pitch?: number; seq: number }
   | { t: 'dig_progress'; x: number; y: number; z: number; stage: number; by: number }
   | { t: 'gamemode'; mode: GameMode; abilities: AbilitiesMsg }
@@ -171,7 +173,7 @@ export interface AbilitiesMsg {
   flySpeed: number;
 }
 
-export type EntityAnim = 'swing' | 'hurt' | 'death' | 'crit' | 'eat' | 'magic_crit' | 'wake' | 'sleep' | 'totem' | 'teleport' | 'attack';
+export type EntityAnim = 'swing' | 'hurt' | 'death' | 'crit' | 'eat' | 'magic_crit' | 'wake' | 'sleep' | 'totem' | 'teleport' | 'attack' | 'roar';
 export type ChatKind = 'chat' | 'system' | 'join' | 'leave' | 'death' | 'announce' | 'error' | 'achievement' | 'whisper';
 export type WindowKind =
   | 'player'

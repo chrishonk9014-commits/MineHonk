@@ -508,6 +508,7 @@ function accessibilityScreen(host: ScreenHost, inGame: boolean): Screen {
     el('div', { class: 'row' }, cycle((v: boolean) => `High Contrast: ${onOff(v)}`, [false, true], s.highContrast, (v) => ((s.highContrast = v), change())), cycle((v: boolean) => `Reduce Motion: ${onOff(v)}`, [false, true], s.reduceMotion, (v) => ((s.reduceMotion = v), change()))),
     el('div', { class: 'row' }, cycle((v: boolean) => `Subtitles: ${onOff(v)}`, [false, true], s.subtitles, (v) => ((s.subtitles = v), change())), slider((v) => `Chat Opacity: ${Math.round(v * 100)}%`, s.chatOpacity, 0.1, 1, 0.05, (v) => ((s.chatOpacity = v), change()))),
     el('div', { class: 'row' }, cycle((v: boolean) => `Toggle Sprint: ${onOff(v)}`, [false, true], s.toggleSprint, (v) => ((s.toggleSprint = v), change())), cycle((v: boolean) => `Toggle Sneak: ${onOff(v)}`, [false, true], s.toggleSneak, (v) => ((s.toggleSneak = v), change()))),
+    el('div', { class: 'row' }, slider((v) => `Darkness Effect Pulsing: ${Math.round(v * 100)}%`, s.darknessPulse, 0, 1, 0.05, (v) => ((s.darknessPulse = v), change()))),
     el('div', { class: 'spacer' }),
     button('Done', wrapClick(host, () => host.pop())),
   );

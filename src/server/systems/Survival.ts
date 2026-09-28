@@ -38,9 +38,10 @@ export type DamageSource =
   | 'fly_into_wall'
   | 'freeze'
   | 'glitch'
+  | 'sonic_boom'
   | 'kill';
 
-const BYPASS_ARMOR = new Set<DamageSource>(['fall', 'drown', 'starve', 'void', 'magic', 'wither', 'poison', 'suffocate', 'fire', 'kill', 'freeze', 'fly_into_wall']);
+const BYPASS_ARMOR = new Set<DamageSource>(['fall', 'drown', 'starve', 'void', 'magic', 'wither', 'poison', 'suffocate', 'fire', 'kill', 'freeze', 'fly_into_wall', 'sonic_boom']);
 /** Hazards that God Mode can optionally disable (world rule godHazards = false). */
 const ENVIRONMENTAL = new Set<DamageSource>(['fall', 'lava', 'fire', 'in_fire', 'drown', 'starve', 'void', 'cactus', 'magma', 'berry_bush', 'suffocate', 'freeze', 'fly_into_wall']);
 
@@ -171,6 +172,7 @@ export class Survival {
     (p as { lastAttacker?: Entity | null }).lastAttacker = info.attacker ?? null;
     this.server.broadcastNear(p.dim, p.x, p.y, p.z, 64, { t: 'anim', id: p.id, anim: 'hurt' });
     this.server.playSound(p.dim, 'hurt.player', p.x, p.y + 1, p.z, 1, 1);
+    this.server.sculk?.vibrate(p.dim, p.x, p.y + 1, p.z, p, 'hit');
     this.exhaust(p, 0.1);
     p.statsDirty = true;
     if (amount <= 0) return 0;
@@ -572,6 +574,8 @@ function deathMessage(p: ServerPlayer, info: DamageInfo): string {
       return `${p.name} experienced kinetic energy`;
     case 'freeze':
       return `${p.name} froze to death`;
+    case 'sonic_boom':
+      return `${p.name} was obliterated by a sonic shriek${by ? ` from ${by}` : ''}`;
     case 'glitch':
       return `${p.name} was deleted by the Farlands`;
     default:

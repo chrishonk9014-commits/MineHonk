@@ -64,6 +64,8 @@ export class GameServer {
   mounts: import('./systems/Mounts').Mounts | null = null;
   /** Redstone power (installed by gameplay). */
   power: import('./systems/Power').Power | null = null;
+  sculk: import('./systems/Sculk').Sculk | null = null;
+  warden: import('./systems/Warden').WardenSystem | null = null;
   /** Hook for the hosting layer to forward player reports (e.g. to platform moderation). */
   onReport?: (from: ServerPlayer, target: ServerPlayer, reason: string) => void;
   readonly interaction: Interaction;
@@ -554,7 +556,10 @@ export class GameServer {
     // Ground truth for fall damage: check below the feet server-side.
     const groundBelow = this.hasGroundBelow(p);
     const claimedGround = m.onGround && groundBelow;
+    const wasOnGround = p.body.onGround;
+    const fell = p.body.fallDistance;
     this.interaction.survival.onMove(p, oy, claimedGround);
+    this.sculk?.onPlayerMove(p, dx, dz, wasOnGround, claimedGround, fell);
     p.body.onGround = claimedGround;
     p.lastValidX = m.x;
     p.lastValidY = m.y;
@@ -703,6 +708,7 @@ export class GameServer {
   onChunkGenerated(dim: Dimension, c: Chunk): void {
     this.blockUpdates.onChunkReady(dim, c);
     this.mobs?.onChunkGenerated(dim, c);
+    this.sculk?.onChunk(dim, c);
   }
 
   onChunkLoaded(dim: Dimension, c: Chunk, _entities: Record<string, unknown>[]): void {
@@ -710,10 +716,12 @@ export class GameServer {
     this.mobs?.onChunkLoaded(dim, c);
     this.workstations?.onChunk(dim, c);
     this.gadgets?.onChunk(dim, c);
+    this.sculk?.onChunk(dim, c);
   }
 
   onChunkUnloaded(dim: Dimension, c: Chunk): void {
     this.mobs?.onChunkUnloaded(dim, c);
+    this.sculk?.onChunkUnload(dim, c.cx, c.cz);
     const k = chunkIndex(c.cx, c.cz);
     // Entities in unloaded chunks are removed (persistent ones were saved with the chunk).
     const b = dim.buckets.get(k);

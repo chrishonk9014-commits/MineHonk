@@ -338,6 +338,9 @@ export class MobSystem {
       case 'enderman':
         if (m.age % 5 === 0 && (m.target || m.angryAt)) s.particles(m.dim, 'portal', m.x, m.y + 1.5, m.z, 1, 0.5);
         break;
+      case 'warden':
+        s.warden?.tick(m);
+        break;
       default:
         this.animalTick(m);
     }
@@ -1008,6 +1011,7 @@ export class MobSystem {
 
   // ------------------------------------------------------------------ explosions
   explode(dim: Dimension, x: number, y: number, z: number, power: number, fire: boolean, source: Entity | null, cheat = false): void {
+    this.server.sculk?.vibrate(dim, x, y, z, source, 'explosion');
     const s = this.server;
     const cheatDrops = cheat || !!source?.admin;
     const r = this.rng;
@@ -1246,7 +1250,8 @@ export class MobSystem {
     }
     if (byPlayer && !m.baby) {
       const xp = m.def.xp ?? (m.def.category === 'monster' ? 5 : m.def.category === 'boss' ? 500 : 1 + m.rng.int(3));
-      s.mining.dropXp(m.dim, m.x, m.y + 0.5, m.z, xp, m.admin);
+      // A sculk catalyst nearby drinks the experience and spreads sculk instead
+      if (!s.sculk?.onDeath(m.dim, m.x, m.y, m.z, xp)) s.mining.dropXp(m.dim, m.x, m.y + 0.5, m.z, xp, m.admin);
     }
     // Slimes split
     if (m.def.brain === 'slime') {

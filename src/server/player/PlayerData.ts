@@ -57,6 +57,7 @@ export class PlayerData {
       if (Array.isArray(bl) && bl.length === 3 && bl.every((v) => Number.isInteger(v))) p.spawnPoint.block = bl as [number, number, number];
     }
     (p as { fireTicks?: number }).fireTicks = num(raw.fire, 0);
+    if (typeof raw.wardenWarning === 'number' && raw.wardenWarning >= 0 && raw.wardenWarning <= 4) p.wardenWarning = Math.floor(raw.wardenWarning);
     const ld = raw.lastDeath as Record<string, unknown> | undefined;
     if (ld && DIMS.includes(ld.dim as DimensionId) && [ld.x, ld.y, ld.z].every((v) => typeof v === 'number' && Number.isFinite(v))) p.lastDeath = { dim: ld.dim as DimensionId, x: ld.x as number, y: ld.y as number, z: ld.z as number };
     p.cheat = loadAdminState(raw.cheat);
@@ -88,6 +89,7 @@ export class PlayerData {
       effects: [...p.effects.entries()].map(([id, e]) => ({ id, amp: e.amp, ticks: e.ticks })),
       spawnPoint: p.spawnPoint,
       lastDeath: p.lastDeath ?? undefined,
+      wardenWarning: p.wardenWarning || undefined,
       fire: (p as { fireTicks?: number }).fireTicks ?? 0,
       cheat: p.cheat,
       savedAt: Date.now(),

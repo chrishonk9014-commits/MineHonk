@@ -160,6 +160,8 @@ export class Projectile extends Entity {
     }
     if (hit) {
       this.setPos(hit.x, hit.y, hit.z);
+      // A projectile clattering against a block is a vibration where it lands
+      if (hit.block) this.dim.server.sculk?.vibrate(this.dim, hit.x, hit.y, hit.z, this.owner, 'projectile');
       const consumed = this.onHit ? this.onHit(this, hit) : true;
       if (consumed) {
         this.remove();

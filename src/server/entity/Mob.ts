@@ -434,6 +434,8 @@ export class Mob extends LivingEntity {
     if (this.dead || this.removed) return 0;
     const src = info.source;
     if (this.def.fireImmune && (src === 'fire' || src === 'lava' || src === 'in_fire' || src === 'magma')) return 0;
+    // Emerging or burrowing Wardens (and other scripted moments) can't be hurt
+    if (this.data.untouchable && src !== 'void' && src !== 'kill') return 0;
     if (this.invulnerableTicks > 10 && src !== 'void' && src !== 'kill') {
       const last = (this.data.lastHurtAmount as number) ?? 0;
       if (amount <= last) return 0;
@@ -466,11 +468,13 @@ export class Mob extends LivingEntity {
       this.revengeTicks = 200;
       this.lastAttacker = attacker;
       if (isPlayer(attacker)) this.lastHurtByPlayerTick = server.tickNo;
+      if (this.type === 'warden') server.warden?.hurtBy(this, attacker);
       this.persistenceRequired ||= this.def.category !== 'monster';
     }
     const before = this.health;
     this.health = Math.max(0, this.health - amount);
     server.playSound(this.dim, `mob.${this.soundKey()}.hurt`, this.x, this.y + this.def.height * 0.8, this.z, 1, this.baby ? 1.5 : 0.9 + this.rng.next() * 0.2);
+    if (this.type !== 'warden') server.sculk?.vibrate(this.dim, this.x, this.y + 1, this.z, this, 'hit');
     this.metaDirty = this.metaDirty || this.def.category === 'boss';
     if (this.health <= 0) this.die(info);
     return before - this.health;
@@ -498,7 +502,7 @@ export class Mob extends LivingEntity {
     if (this.owner) m.tame = true;
     if (this.fuse >= 0) m.fuse = this.fuse;
     if (this.angryAt || this.target) m.angry = true;
-    for (const k of ['color', 'sheared', 'size', 'profession', 'variant', 'charged', 'carried', 'phase', 'open', 'saddle', 'leashPos', 'puff', 'dancing', 'playDead', 'rolling', 'eating', 'trusting', 'tongue']) if (this.data[k] !== undefined) m[k] = this.data[k];
+    for (const k of ['color', 'sheared', 'size', 'profession', 'variant', 'charged', 'carried', 'phase', 'open', 'saddle', 'leashPos', 'puff', 'dancing', 'playDead', 'rolling', 'eating', 'trusting', 'tongue', 'emerge', 'dig', 'angerLevel', 'sonic', 'listen', 'sniff']) if (this.data[k] !== undefined) m[k] = this.data[k];
     if (this.data.glowTicks) m.glowing = true;
     if (this.data.leash && this.metaHolder) m.leash = this.metaHolder;
     if (this.rider) m.rider = this.rider.id;

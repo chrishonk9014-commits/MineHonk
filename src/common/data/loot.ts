@@ -41,6 +41,7 @@ export const LOOT_TABLES: Record<string, LootTable> = {
   'mob/rabbit': { xp: [1, 3], pools: [{ rolls: 1, entries: [mob('rabbit_hide', 0, 1)] }, { rolls: 1, entries: [mob('rabbit', 0, 1, { functions: [{ fn: 'smelt' }] })] }, { rolls: 1, conditions: [{ c: 'killed_by_player' }, { c: 'chance', chance: 0.1, lootingBonus: 0.03 }], entries: [{ item: 'rabbit_foot' }] }] },
   'mob/horse': { xp: [1, 3], pools: [{ rolls: 1, entries: [mob('leather', 0, 2)] }] },
   'mob/goat': { xp: [1, 3], pools: [] },
+  'mob/warden': { xp: [5, 5], pools: [{ rolls: 1, entries: [{ item: 'sculk_catalyst' }] }] },
   'mob/turtle': { xp: [1, 3], pools: [{ rolls: 1, entries: [mob('seagrass', 0, 2)] }] },
   'mob/parrot': { xp: [1, 3], pools: [{ rolls: 1, entries: [mob('feather', 1, 2)] }] },
   'mob/ocelot': { xp: [1, 3], pools: [] },

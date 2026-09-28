@@ -1309,6 +1309,93 @@ V.pufferfish = {
   },
 };
 
+// ---------------------------------------------------------------- the Warden
+/** Client-side memory of the Warden's last cues (to time twitches and sniffs). */
+const wardenCues = new WeakMap<ClientEntity, { listen: unknown; listenAt: number; sniff: unknown; sniffAt: number }>();
+V.warden = {
+  parts: () => [
+    { name: 'body', pivot: [0, 13, 0], from: [-9, 0, -5], size: [18, 20, 10], colors: { all: '#0e3a44', top: '#123f4a' }, paint: (p) => {
+      p.speckle('all', '#16505a', 0.12);
+      for (let y = 3; y < 17; y += 3) p.px('front', 3, y, '#2a7a84', 12, 1);
+      p.speckle('back', '#3ae8e8', 0.04);
+    } },
+    { name: 'heart', parent: 'body', pivot: [0, 12, 5], from: [-4, -4, 0], size: [8, 8, 1.5], colors: { all: '#2ad8e0' }, paint: (p) => p.speckle('all', '#c8ffff', 0.3) },
+    { name: 'head', pivot: [0, 33, 0], from: [-7, 0, -7], size: [14, 12, 14], colors: { all: '#0e3a44', bottom: '#082a32' }, paint: (p) => {
+      // No eyes: a jagged mouth and souls under the skin
+      p.px('front', 3, 8, '#051a20', 8, 1);
+      p.px('front', 4, 9, '#051a20', 6, 1);
+      p.speckle('front', '#16505a', 0.15);
+      p.speckle('top', '#2ad8e0', 0.05);
+    } },
+    { name: 'tendrilL', parent: 'head', pivot: [7, 9, 0], from: [0, 0, -0.5], size: [9, 7, 1], rot: [0, 0, -0.45], colors: { all: '#16767e' }, paint: (p) => {
+      p.px('front', 0, 0, '#5ad8e0', 9, 2);
+      p.px('back', 0, 0, '#5ad8e0', 9, 2);
+    } },
+    { name: 'tendrilR', parent: 'head', pivot: [-7, 9, 0], from: [-9, 0, -0.5], size: [9, 7, 1], rot: [0, 0, 0.45], colors: { all: '#16767e' }, paint: (p) => {
+      p.px('front', 0, 0, '#5ad8e0', 9, 2);
+      p.px('back', 0, 0, '#5ad8e0', 9, 2);
+    } },
+    { name: 'rightArm', pivot: [-9, 31, 0], from: [-7, -24, -4], size: [7, 26, 8], colors: { all: '#0e3a44', bottom: '#082a32' }, paint: (p) => p.speckle('all', '#16505a', 0.1) },
+    { name: 'leftArm', pivot: [9, 31, 0], from: [0, -24, -4], size: [7, 26, 8], colors: { all: '#0e3a44', bottom: '#082a32' }, paint: (p) => p.speckle('all', '#16505a', 0.1) },
+    { name: 'rightLeg', pivot: [-5, 13, 0], from: [-3, -13, -3], size: [6, 13, 6], colors: { all: '#0b323b' } },
+    { name: 'leftLeg', pivot: [5, 13, 0], from: [-3, -13, -3], size: [6, 13, 6], colors: { all: '#0b323b' } },
+  ],
+  nameY: 3.3,
+  anim: (m, e, alpha, time) => {
+    animateHumanoid(m, e, alpha);
+    const now = performance.now() / 1000;
+    let cue = wardenCues.get(e);
+    if (!cue) {
+      cue = { listen: e.meta.listen, listenAt: -9, sniff: e.meta.sniff, sniffAt: -9 };
+      wardenCues.set(e, cue);
+    }
+    if (e.meta.listen !== cue.listen) {
+      cue.listen = e.meta.listen;
+      cue.listenAt = now;
+    }
+    if (e.meta.sniff !== cue.sniff) {
+      cue.sniff = e.meta.sniff;
+      cue.sniffAt = now;
+    }
+    // Heartbeat: quicker the angrier it is
+    const lvl = Number(e.meta.angerLevel ?? 0);
+    const rate = lvl === 2 ? 2.6 : lvl === 1 ? 1.8 : 1.1;
+    const heart = m.part('heart');
+    const charging = e.meta.sonic !== undefined;
+    if (heart) heart.scale.setScalar(charging ? 1.5 + Math.sin(now * 30) * 0.15 : 1 + 0.3 * Math.pow(Math.max(0, Math.sin(now * rate * Math.PI * 2)), 6));
+    // Tendrils twitch when it hears something
+    const twitch = now - cue.listenAt < 0.8 ? Math.sin(now * 40) * 0.25 : 0;
+    const tl = m.part('tendrilL');
+    const tr = m.part('tendrilR');
+    if (tl) tl.rotation.z = -0.45 + twitch;
+    if (tr) tr.rotation.z = 0.45 - twitch;
+    const head = m.part('head');
+    // Sniffing: the head sweeps side to side
+    if (head && now - cue.sniffAt < 1.2) head.rotation.y += Math.sin((now - cue.sniffAt) * 10) * 0.5;
+    // Roar: head back, arms out
+    if (e.anim === 'roar' && e.animTime < 50) {
+      const k = Math.sin((e.animTime / 50) * Math.PI);
+      if (head) head.rotation.x = -0.7 * k;
+      const ra = m.part('rightArm');
+      const la = m.part('leftArm');
+      if (ra) ra.rotation.z = 0.8 * k;
+      if (la) la.rotation.z = -0.8 * k;
+    }
+    // Charging a sonic boom: arms braced forward
+    if (charging) {
+      const ra = m.part('rightArm');
+      const la = m.part('leftArm');
+      if (ra) ra.rotation.x = -1.1;
+      if (la) la.rotation.x = -1.1;
+    }
+    // Emerging from / digging into the ground
+    const emerge = e.meta.emerge !== undefined ? Number(e.meta.emerge) : 1;
+    const dig = e.meta.dig !== undefined ? Number(e.meta.dig) : 0;
+    m.root.position.y = -(1 - emerge) * 3 - dig * 3;
+    void time;
+  },
+};
+
 // ---------------------------------------------------------------- original mobs
 V.cave_stalker = {
   parts: () => [

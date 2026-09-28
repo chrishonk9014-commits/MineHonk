@@ -226,6 +226,21 @@ export class Game {
     return (hand === 0 ? this.invSlots[HOTBAR0 + this.selected] : this.invSlots[OFFHAND]) ?? null;
   }
 
+  /**
+   * How dark the view is: blindness is total; the Darkness effect (Warden,
+   * shriekers) pulses between dim and nearly black. The pulsing strength is
+   * an accessibility setting; with Reduce Motion it holds steady.
+   */
+  private darknessAmount(): number {
+    if (this.effectLevel('blindness') > 0) return 1;
+    if (this.effectLevel('darkness') <= 0) return 0;
+    const k = Math.max(0, Math.min(1, this.settings.darknessPulse ?? 1));
+    if (this.settings.reduceMotion || k === 0) return 0.45;
+    const t = performance.now() / 1000;
+    const pulse = Math.pow((Math.sin(t * 1.6) + 1) / 2, 2);
+    return 0.4 + 0.52 * k * pulse;
+  }
+
   private effectLevel(id: string): number {
     const e = this.stats.effects.find((x) => x.id === id);
     return e ? e.amp + 1 : 0;
@@ -514,6 +529,9 @@ export class Game {
       case 'particles':
         if (this.settings.particles === 'minimal' && m.kind !== 'explosion') break;
         this.renderer.particles.spawn(m.kind, m.x, m.y, m.z, this.settings.particles === 'decreased' ? Math.ceil(m.count / 3) : m.count, m.spread, m.data);
+        break;
+      case 'trail':
+        if (this.settings.particles !== 'minimal' || m.kind === 'sonic_boom') this.renderer.particles.trail(m.kind, m.x0, m.y0, m.z0, m.x1, m.y1, m.z1, m.ticks);
         break;
       case 'teleport':
         this.player.setPos(m.x, m.y, m.z);
@@ -1343,7 +1361,7 @@ export class Game {
       nightVision: nv,
       flash: this.flash,
       shake: this.shake,
-      darkness: this.effectLevel('darkness') > 0 || this.effectLevel('blindness') > 0 ? 1 : 0,
+      darkness: this.darknessAmount(),
       hurtTilt: this.hurtTilt,
       camDist,
       portal: this.portalFx,

@@ -28,6 +28,8 @@ export interface VisualContext {
   blockTexture(name: string): THREE.Texture;
   /** Another rendered entity by id (e.g. the dragon an end crystal beams to). */
   entity?(id: number): ClientEntity | undefined;
+  /** Where the local player's hand is (fishing lines, leads), if `id` is the local player. */
+  localHand?(id: number): [number, number, number] | null;
 }
 
 const factories = new Map<string, VisualFactory>();
@@ -138,7 +140,57 @@ export function boxVisual(model: BoxModel, animate: (m: BoxModel, e: ClientEntit
 registerVisual('player', (e) => {
   const name = typeof e.meta.name === 'string' ? e.meta.name : null;
   const m = new BoxModel(humanoidDef(), playerSkin(name));
-  return boxVisual(m, (mm, ee, a) => animateHumanoid(mm, ee, a), { name: name ?? 'Player', nameY: 2.15 });
+  // Elytra wings on the back, folded unless gliding
+  const wingMat = new THREE.MeshBasicMaterial({ color: 0x8e8aa8 });
+  const wings: THREE.Mesh[] = [];
+  const body = m.part('body');
+  if (body) {
+    for (const side of [-1, 1]) {
+      const g = new THREE.BoxGeometry(0.5, 0.95, 0.06);
+      g.translate(side * 0.25, -0.475, 0);
+      const w = new THREE.Mesh(g, wingMat);
+      w.position.set(side * 0.1, 0.75, -0.16);
+      w.visible = false;
+      body.add(w);
+      wings.push(w);
+    }
+  }
+  const v = boxVisual(
+    m,
+    (mm, ee, a) => {
+      animateHumanoid(mm, ee, a);
+      const gliding = ee.meta.glide === true;
+      const hasWings = ee.meta.elytra === true;
+      wings.forEach((w, i) => {
+        const side = i === 0 ? -1 : 1;
+        w.visible = hasWings;
+        w.rotation.set(gliding ? 0.25 : 0.1, 0, side * (gliding ? 1.2 : 0.12));
+      });
+      mm.root.rotation.order = 'YXZ';
+      if (gliding) {
+        // Body flat along the flight direction, arms back
+        mm.root.rotation.x = Math.PI / 2 - 0.25 + ee.pitch * 0.6;
+        mm.root.position.y = 0.3;
+        const ra = mm.part('rightArm');
+        const la = mm.part('leftArm');
+        if (ra) ra.rotation.set(0, 0, -0.25);
+        if (la) la.rotation.set(0, 0, 0.25);
+      } else mm.root.rotation.x = 0;
+    },
+    { name: name ?? 'Player', nameY: 2.15 },
+  );
+  const baseBright = v.setBrightness.bind(v);
+  v.setBrightness = (b) => {
+    baseBright(b);
+    wingMat.color.setHex(0x8e8aa8).multiplyScalar(b);
+  };
+  const baseDispose = v.dispose.bind(v);
+  v.dispose = () => {
+    baseDispose();
+    for (const w of wings) w.geometry.dispose();
+    wingMat.dispose();
+  };
+  return v;
 });
 
 registerVisual('item', (e, ctx) => {
@@ -270,13 +322,15 @@ export class EntityRenderer {
   private readonly visuals = new Map<number, EntityVisual>();
   private readonly known = new Map<number, ClientEntity>();
   private readonly ctx: VisualContext;
+  /** The local player (not a replicated entity): id and hand position for lines. */
+  local: { id: number; hand: () => [number, number, number] } | null = null;
 
   constructor(
     ctx: VisualContext,
     private readonly world: ClientWorld,
   ) {
     this.group.name = 'entities';
-    this.ctx = { ...ctx, entity: (id) => this.known.get(id) };
+    this.ctx = { ...ctx, entity: (id) => this.known.get(id), localHand: (id) => (this.local && this.local.id === id ? this.local.hand() : null) };
   }
 
   add(e: ClientEntity): void {

@@ -120,6 +120,8 @@ export class Game {
   private hurtTilt = 0;
   private shake = 0;
   private eyeCur = 1.62;
+  /** Interpolation factor of the frame being drawn. */
+  private lastAlpha = 1;
   private eyePrev = 1.62;
   private stepDist = 0;
   private caveMood = 0;
@@ -152,6 +154,13 @@ export class Game {
     readonly host: GameHost,
   ) {
     this.player = new LocalPlayer(this.world);
+    // Elytra in the chest slot that isn't worn down to its last point
+    this.player.canGlide = () => {
+      const c = this.invSlots[HELMET + 1];
+      if (!c) return false;
+      const it = items[c.id];
+      return it?.id === 'elytra' && (c.damage ?? 0) < (it.def.durability ?? 1) - 1;
+    };
     this.renderer = new WorldRenderer(canvas, this.world, assets, settings);
     this.interaction = new BlockInteraction(this.world, this.player, (m) => this.send(m), {
       hitParticles: (s, x, y, z, f) => this.settings.particles !== 'minimal' && this.renderer.particles.digHit(s, x, y, z, f),
@@ -578,6 +587,9 @@ export class Game {
         break;
       }
       case 'use_result':
+        break;
+      case 'boost':
+        if (this.player.gliding) this.player.boostTicks = Math.max(this.player.boostTicks, m.ticks);
         break;
       case 'cooldown': {
         this.cooldowns.set(m.item, { until: this.tickNo + m.ticks, total: m.ticks });
@@ -1124,6 +1136,8 @@ export class Game {
     if (first && held) {
       const idef = items[held.id]!.def;
       if (idef.block) return true;
+      // Launched from the block face by the server
+      if (idef.use === 'firework') return true;
       if (idef.food || idef.use === 'bow' || idef.use === 'shield' || idef.use === 'crossbow' || idef.use === 'trident') {
         this.startUsingItem();
         return true;
@@ -1232,6 +1246,26 @@ export class Game {
       nausea: this.effectLevel('nausea') > 0 && !this.settings.reduceMotion ? 1 : 0,
       portalColor: this.portalKind === 'far_portal' ? 0x2ad7c2 : 0x8a2be2,
     };
+    // Lines (fishing, leads) end at the local player's hand: lower right of the view
+    const game = this;
+    this.renderer.entities.local ??= {
+      get id() {
+        return game.player.entityId;
+      },
+      hand: () => {
+        const [ex, ey, ez] = game.eyePos(game.lastAlpha);
+        const yaw = game.player.yaw;
+        const pitch = game.player.pitch;
+        const cp = Math.cos(pitch);
+        const fx = -Math.sin(yaw) * cp;
+        const fy = -Math.sin(pitch);
+        const fz = -Math.cos(yaw) * cp;
+        const rx = -Math.cos(yaw);
+        const rz = Math.sin(yaw);
+        return [ex + fx * 0.5 - rx * 0.3, ey + fy * 0.5 - 0.25, ez + fz * 0.5 - rz * 0.3];
+      },
+    };
+    this.lastAlpha = alpha;
     // Local player model (third person)
     this.renderer.entities.update(this.entities.values(), alpha, this.tickNo + alpha, (x, y, z) => this.renderer.lightAt(x, y, z));
     this.renderer.render(fs);

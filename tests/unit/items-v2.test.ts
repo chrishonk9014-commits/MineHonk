@@ -138,3 +138,103 @@ describe('spectral arrows', () => {
     expect(cow.meta().glowing).toBe(true);
   });
 });
+
+import { stepGlide, newBody } from '../../src/common/physics/movement';
+import { FishingBobber } from '../../src/server/entity/FishingBobber';
+import { Firework } from '../../src/server/entity/Firework';
+
+describe('elytra', () => {
+  it('glides far forward for little height', () => {
+    const air = { getState: () => 0 };
+    const b = newBody(0, 200, 0);
+    b.vz = -0.5;
+    for (let i = 0; i < 100; i++) stepGlide(air, b, 0, 0.15, false);
+    const fell = 200 - b.y;
+    const went = -b.z;
+    expect(went).toBeGreaterThan(fell * 2);
+    expect(fell).toBeGreaterThan(0);
+  });
+
+  it('a rocket speeds the glider up', () => {
+    const air = { getState: () => 0 };
+    const a = newBody(0, 200, 0);
+    const b = newBody(0, 200, 0);
+    for (let i = 0; i < 20; i++) {
+      stepGlide(air, a, 0, 0, false);
+      stepGlide(air, b, 0, 0, true);
+    }
+    expect(Math.hypot(b.vx, b.vz)).toBeGreaterThan(Math.hypot(a.vx, a.vz) + 0.5);
+  });
+
+  it('the server accepts gliding only with a working Elytra and lets rockets boost it', async () => {
+    const { server } = await makeServer();
+    const { player, conn } = await join(server);
+    arena(player);
+    const move = (glide: boolean) => server.handle(conn, { t: 'move', x: player.x, y: player.y + 2, z: player.z, yaw: 0, pitch: 0, onGround: false, flying: false, sneak: false, sprint: false, seq: player.teleportSeq + 1, glide });
+    move(true);
+    expect(player.gliding).toBe(false);
+    player.inventory.set(38, stackOf('elytra', 1));
+    move(true);
+    expect(player.gliding).toBe(true);
+    expect(player.meta().glide).toBe(true);
+    player.inventory.set(0, stackOf('firework_rocket', 3));
+    player.selectedSlot = 0;
+    server.handle(conn, { t: 'use', hand: 0, action: 'start' });
+    expect(conn.of('boost').length).toBe(1);
+    expect(player.inventory.get(0)!.count).toBe(2);
+    // Worn out: stays at its last point and stops flying
+    player.inventory.set(38, stackOf('elytra', 1, { damage: itemById.get('elytra')!.def.durability! - 1 }));
+    move(true);
+    expect(player.gliding).toBe(false);
+  });
+});
+
+describe('fireworks', () => {
+  it('launch from a block and burst', async () => {
+    const { server } = await makeServer();
+    const { player, conn } = await join(server);
+    const y = arena(player);
+    player.inventory.set(player.selectedSlot, stackOf('firework_rocket', 2));
+    server.handle(conn, { t: 'use_on', x: Math.floor(player.x) + 1, y: y - 1, z: Math.floor(player.z), face: 1, hx: 0.5, hy: 1, hz: 0.5, hand: 0, yaw: 0, pitch: 0.5, seq: 1 });
+    const f = [...player.dim.entities.values()].find((e) => e instanceof Firework) as Firework;
+    expect(f).toBeTruthy();
+    expect(player.inventory.get(player.selectedSlot)!.count).toBe(1);
+    const y0 = f.y;
+    tick(server, 60);
+    expect(f.removed).toBe(true);
+    expect(conn.of('particles').some((m) => m.kind === 'firework')).toBe(true);
+    expect(f.y).toBeGreaterThan(y0 + 5);
+  });
+});
+
+describe('fishing', () => {
+  it('casts into water, waits for a bite and reels in a catch', async () => {
+    const { server } = await makeServer();
+    const { player, conn } = await join(server);
+    const y = arena(player, 10);
+    // A pool in front of the player
+    for (let x = -3; x <= 3; x++) for (let z = -8; z <= -3; z++) {
+      player.dim.setBlock(Math.floor(player.x) + x, y - 1, Math.floor(player.z) + z, S('water'));
+      player.dim.setBlock(Math.floor(player.x) + x, y - 2, Math.floor(player.z) + z, S('water'));
+      player.dim.setBlock(Math.floor(player.x) + x, y - 3, Math.floor(player.z) + z, S('stone'));
+    }
+    player.inventory.set(player.selectedSlot, stackOf('fishing_rod', 1));
+    player.yaw = 0;
+    player.pitch = 0.3;
+    server.handle(conn, { t: 'use', hand: 0, action: 'start' });
+    const b = server.gadgets!.bobberOf(player)!;
+    expect(b).toBeInstanceOf(FishingBobber);
+    for (let i = 0; i < 60; i++) tick(server, 1);
+    expect(b.state).toBe('floating');
+    // Skip the wait: a fish bites now
+    b.wait = 1;
+    for (let i = 0; i < 3 && !b.biting; i++) tick(server, 1);
+    expect(b.biting).toBe(true);
+    const before = [...player.dim.entities.values()].filter((e) => e.type === 'item').length;
+    server.handle(conn, { t: 'use', hand: 0, action: 'start' });
+    expect(b.removed).toBe(true);
+    const after = [...player.dim.entities.values()].filter((e) => e.type === 'item').length;
+    expect(after).toBeGreaterThan(before);
+    expect(player.inventory.get(player.selectedSlot)!.damage).toBe(1);
+  });
+});

@@ -691,6 +691,14 @@ export class Interaction {
     return this.using.get(p);
   }
 
+  /** Whether the player wears an Elytra with flight left in it. */
+  canGlide(p: ServerPlayer): boolean {
+    const c = p.inventory.get(ARMOR_START + 2);
+    if (!c) return false;
+    const it = items[c.id];
+    return it?.id === 'elytra' && (c.damage ?? 0) < (it.def.durability ?? 1) - 1;
+  }
+
   /** Ends any item use in progress (shield knocked aside, dismounting...). */
   stopUsing(p: ServerPlayer): void {
     this.using.delete(p);
@@ -802,7 +810,9 @@ export class Interaction {
       dmg++;
     }
     if (dmg === 0) return;
-    const nd = (s.damage ?? 0) + dmg;
+    let nd = (s.damage ?? 0) + dmg;
+    // An Elytra wears down to its last point and stops flying instead of breaking
+    if (items[s.id]!.id === 'elytra') nd = Math.min(nd, dur - 1);
     if (nd >= dur) {
       p.inventory.set(slot, null);
       this.server.playSound(p.dim, 'item.break', p.x, p.y + 1, p.z, 0.8, 0.9);

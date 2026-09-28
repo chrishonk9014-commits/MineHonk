@@ -367,6 +367,48 @@ export function stepMovement(world: BlockAccess, b: Body, input: MoveInput, ab: 
   return res;
 }
 
+/**
+ * One tick of Elytra gliding. Pitch (positive = looking down) trades height
+ * for speed; looking up bleeds speed into lift. `boost` is a firework rocket
+ * pushing along the look direction.
+ */
+export function stepGlide(world: BlockAccess, b: Body, yaw: number, pitch: number, boost: boolean): void {
+  const cp = Math.cos(pitch);
+  const lx = -Math.sin(yaw) * cp;
+  const ly = -Math.sin(pitch);
+  const lz = -Math.cos(yaw) * cp;
+  const horiz = Math.hypot(lx, lz);
+  const speedH = Math.hypot(b.vx, b.vz);
+  const lift = cp * cp;
+  b.vy += 0.08 * (-1 + lift * 0.75);
+  if (b.vy < 0 && horiz > 0) {
+    const m = b.vy * -0.1 * lift;
+    b.vx += (lx * m) / horiz;
+    b.vy += m;
+    b.vz += (lz * m) / horiz;
+  }
+  if (pitch < 0 && horiz > 0) {
+    const m = speedH * Math.sin(-pitch) * 0.04;
+    b.vx -= (lx * m) / horiz;
+    b.vy += m * 3.2;
+    b.vz -= (lz * m) / horiz;
+  }
+  if (horiz > 0) {
+    b.vx += ((lx / horiz) * speedH - b.vx) * 0.1;
+    b.vz += ((lz / horiz) * speedH - b.vz) * 0.1;
+  }
+  if (boost) {
+    b.vx += lx * 0.1 + (lx * 1.5 - b.vx) * 0.5;
+    b.vy += ly * 0.1 + (ly * 1.5 - b.vy) * 0.5;
+    b.vz += lz * 0.1 + (lz * 1.5 - b.vz) * 0.5;
+  }
+  b.vx *= 0.99;
+  b.vy *= 0.98;
+  b.vz *= 0.99;
+  moveBody(world, b, b.vx, b.vy, b.vz);
+  b.fallDistance = 0;
+}
+
 /** Whether the body's box intersects any solid collision boxes (used to reject noclip). */
 export function bodyObstructed(world: BlockAccess, b: Body, shrink = 0.01): boolean {
   const box = bodyBox(b, tmpBox).grow(-shrink);

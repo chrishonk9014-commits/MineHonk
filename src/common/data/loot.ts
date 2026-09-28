@@ -103,6 +103,27 @@ export const LOOT_TABLES: Record<string, LootTable> = {
   'mob/ender_dragon': { xp: 12000, pools: [{ rolls: 1, entries: [e('dragon_scale', 1, [3, 6])] }, { rolls: 1, entries: [e('dragon_breath', 1, [2, 4])] }] },
   'mob/wither': { xp: 50, pools: [{ rolls: 1, entries: [e('nether_star', 1)] }] },
 
+  // --- Fishing (fish, junk, treasure; Luck of the Sea shifts towards treasure) ---
+  'gameplay/fishing': {
+    pools: [
+      {
+        rolls: 1,
+        entries: [
+          { table: 'gameplay/fishing/fish', weight: 85 },
+          { table: 'gameplay/fishing/junk', weight: 10 },
+          { table: 'gameplay/fishing/treasure', weight: 5 },
+        ],
+      },
+    ],
+  },
+  'gameplay/fishing/fish': { pools: [{ rolls: 1, entries: [e('cod', 60), e('salmon', 25), e('tropical_fish', 2), e('pufferfish', 13)] }] },
+  'gameplay/fishing/junk': {
+    pools: [{ rolls: 1, entries: [e('lily_pad', 17), e('leather_boots', 10, 1, { functions: [{ fn: 'damage', min: 0, max: 0.9 }] }), e('leather', 10), e('bone', 10), e('potion', 10, 1, { functions: [{ fn: 'potion', potion: 'water' }] }), e('string', 5), e('fishing_rod', 2, 1, { functions: [{ fn: 'damage', min: 0, max: 0.9 }] }), e('bowl', 10), e('stick', 5), e('ink_sac', 10), e('rotten_flesh', 10)] }],
+  },
+  'gameplay/fishing/treasure': {
+    pools: [{ rolls: 1, entries: [ench('bow', 1, [30, 30]), book(1), ench('fishing_rod', 1, [30, 30]), e('name_tag', 1), e('nautilus_shell', 1), e('saddle', 1), e('heart_of_the_sea', 0)] }],
+  },
+
   // --- Structure chests -------------------------------------------------------------
   'chest/bonus': {
     pools: [

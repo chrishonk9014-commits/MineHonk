@@ -383,6 +383,8 @@ const EFFECTS: Record<string, { dur: number; recipe: Recipe }> = {
   'attack.weak': { dur: 0.15, recipe: (s) => s.noise({ dur: 0.12, gain: 0.5, decay: 0.03, lp: 1400, hp: 150 }) },
   'attack.crit': { dur: 0.3, recipe: (s) => (s.noise({ dur: 0.25, gain: 0.8, decay: 0.05, lp: 4000, hp: 600 }), s.bell({ f: 1500, ratios: [1, 1.5], gain: 0.25, decay: 0.07, dur: 0.25 })) },
   'attack.sweep': { dur: 0.35, recipe: (s) => s.noise({ dur: 0.3, gain: 0.8, attack: 0.05, decay: 0.08, bp: [1200, 1] }) },
+  'fishing.cast': { dur: 0.5, recipe: (s) => (s.noise({ dur: 0.45, gain: 0.5, attack: 0.05, decay: 0.12, bp: [1600, 1.2] }), s.tone({ dur: 0.35, gain: 0.25, f0: 900, f1: 400, wave: 'tri', decay: 0.1 })) },
+  'fishing.reel': { dur: 0.45, recipe: (s) => { for (let i = 0; i < 8; i++) s.knock({ start: i * 0.045, f: 900 + i * 40, gain: 0.3, decay: 0.01, noise: 0.3 }); } },
   'shield.block': { dur: 0.3, recipe: (s) => s.knock({ f: 210, gain: 1, decay: 0.05 }) },
   'shield.break': { dur: 0.5, recipe: (s) => (s.knock({ f: 160, gain: 1, decay: 0.07 }), s.noise({ start: 0.02, dur: 0.4, gain: 0.6, decay: 0.1, lp: 3000, hp: 300, grain: 3 })) },
   'trident.throw': { dur: 0.5, recipe: (s) => (s.noise({ dur: 0.45, gain: 0.7, attack: 0.03, decay: 0.12, bp: [900, 1.2] }), s.tone({ dur: 0.3, gain: 0.3, f0: 600, f1: 300, wave: 'tri', decay: 0.1 })) },

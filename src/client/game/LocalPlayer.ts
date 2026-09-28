@@ -2,7 +2,7 @@
  * The local player: client-side movement prediction using the shared physics.
  * The server validates every position; teleports correct any divergence.
  */
-import { newBody, stepMovement, type Body, updateEnvironment, bodyObstructed } from '../../common/physics/movement';
+import { newBody, stepMovement, stepGlide, type Body, updateEnvironment, bodyObstructed } from '../../common/physics/movement';
 import type { ClientWorld } from '../world/ClientWorld';
 import type { AbilitiesMsg, C2S } from '../../common/net/protocol';
 import type { GameMode } from '../../common/game/gamemode';
@@ -19,7 +19,7 @@ export class LocalPlayer {
   gamemode: GameMode = 'survival';
   entityId = 0;
   seq = 0;
-  lastSent = { x: NaN, y: NaN, z: NaN, yaw: NaN, pitch: NaN, onGround: false, sneak: false, sprint: false, flying: false, ticks: 0 };
+  lastSent = { x: NaN, y: NaN, z: NaN, yaw: NaN, pitch: NaN, onGround: false, sneak: false, sprint: false, flying: false, glide: false, ticks: 0 };
   frozen = true;
   /** Distance walked (for view bobbing). */
   walkDist = 0;
@@ -34,6 +34,12 @@ export class LocalPlayer {
   fovMod = 1;
   /** Active status effects (from the server's stats). */
   effects: { id: string; amp: number }[] = [];
+  /** Gliding on an Elytra. */
+  gliding = false;
+  /** Ticks of firework rocket boost left. */
+  boostTicks = 0;
+  /** Whether the equipped chest item is an Elytra that still flies (set by the game). */
+  canGlide: () => boolean = () => false;
 
   constructor(private readonly world: ClientWorld) {}
 
@@ -95,13 +101,27 @@ export class LocalPlayer {
       return e ? e.amp + 1 : 0;
     };
     const speedMul = Math.max(0.1, 1 + eff('speed') * 0.2 - eff('slowness') * 0.15);
-    const res = stepMovement(
-      this.world,
-      this.body,
-      { forward: input.forward, strafe: input.strafe, jump: input.jump, sneak: input.sneak, sprint: this.sprinting, yaw: this.yaw },
-      { flying: this.flying, noClip: this.abilities.noClip, walkSpeed: this.abilities.walkSpeed, flySpeed: this.abilities.flySpeed, speedMul, jumpBoost: eff('jump_boost'), levitation: this.flying ? 0 : eff('levitation'), slowFalling: eff('slow_falling') > 0 },
-      this.eyeHeight,
-    );
+    // Elytra: a jump in mid-air opens the wings; landing, water or flight folds them
+    const b0 = this.body;
+    if (!this.gliding && input.jumpPressed && !b0.onGround && !this.flying && !b0.inWater && !b0.inLava && !b0.onClimbable && this.canGlide()) this.gliding = true;
+    if (this.gliding && (b0.onGround || this.flying || b0.inWater || b0.inLava || !this.canGlide())) {
+      this.gliding = false;
+      this.boostTicks = 0;
+    }
+    let res: ReturnType<typeof stepMovement> | null = null;
+    if (this.gliding) {
+      updateEnvironment(this.world, this.body, this.eyeHeight);
+      stepGlide(this.world, this.body, this.yaw, this.pitch, this.boostTicks > 0);
+      if (this.boostTicks > 0) this.boostTicks--;
+    } else {
+      res = stepMovement(
+        this.world,
+        this.body,
+        { forward: input.forward, strafe: input.strafe, jump: input.jump, sneak: input.sneak, sprint: this.sprinting, yaw: this.yaw },
+        { flying: this.flying, noClip: this.abilities.noClip, walkSpeed: this.abilities.walkSpeed, flySpeed: this.abilities.flySpeed, speedMul, jumpBoost: eff('jump_boost'), levitation: this.flying ? 0 : eff('levitation'), slowFalling: eff('slow_falling') > 0 },
+        this.eyeHeight,
+      );
+    }
     if (this.flying && this.body.onGround && !this.abilities.noClip && this.gamemode !== 'spectator') this.flying = false;
     // The server computes fall damage itself; locally we only need a fresh count per fall
     if (this.body.onGround) this.body.fallDistance = 0;
@@ -110,7 +130,8 @@ export class LocalPlayer {
     const targetBob = this.body.onGround && !this.flying ? Math.min(0.1, moved) : 0;
     this.bob += (targetBob - this.bob) * 0.4;
     void res;
-    this.fovMod += ((this.sprinting ? 1.12 : 1) * (this.flying ? 1.05 : 1) * (1 + (speedMul - 1) * 0.5) - this.fovMod) * 0.35;
+    const glideFov = this.gliding ? 1 + Math.min(0.25, Math.hypot(this.body.vx, this.body.vy, this.body.vz) * 0.12) : 1;
+    this.fovMod += ((this.sprinting ? 1.12 : 1) * (this.flying ? 1.05 : 1) * (1 + (speedMul - 1) * 0.5) * glideFov - this.fovMod) * 0.35;
     return this.movePacket(false);
   }
 
@@ -118,7 +139,7 @@ export class LocalPlayer {
     const b = this.body;
     const ls = this.lastSent;
     ls.ticks++;
-    const changed = b.x !== ls.x || b.y !== ls.y || b.z !== ls.z || this.yaw !== ls.yaw || this.pitch !== ls.pitch || b.onGround !== ls.onGround || this.sneaking !== ls.sneak || this.sprinting !== ls.sprint || this.flying !== ls.flying;
+    const changed = b.x !== ls.x || b.y !== ls.y || b.z !== ls.z || this.yaw !== ls.yaw || this.pitch !== ls.pitch || b.onGround !== ls.onGround || this.sneaking !== ls.sneak || this.sprinting !== ls.sprint || this.flying !== ls.flying || this.gliding !== ls.glide;
     if (!changed && ls.ticks < 20 && !force) return null;
     if (force && !changed && ls.ticks < 20) return null;
     ls.x = b.x;
@@ -130,8 +151,9 @@ export class LocalPlayer {
     ls.sneak = this.sneaking;
     ls.sprint = this.sprinting;
     ls.flying = this.flying;
+    ls.glide = this.gliding;
     ls.ticks = 0;
-    return { t: 'move', x: b.x, y: b.y, z: b.z, yaw: this.yaw, pitch: this.pitch, onGround: b.onGround, flying: this.flying, sneak: this.sneaking, sprint: this.sprinting, seq: this.seq };
+    return { t: 'move', x: b.x, y: b.y, z: b.z, yaw: this.yaw, pitch: this.pitch, onGround: b.onGround, flying: this.flying, sneak: this.sneaking, sprint: this.sprinting, seq: this.seq, glide: this.gliding };
   }
 
   isUnderwater(): boolean {

@@ -323,7 +323,7 @@ export class Survival {
   onMove(p: ServerPlayer, prevY: number, onGround: boolean): void {
     updateEnvironment(p.dim, p.body, p.eyeHeight);
     const b = p.body;
-    if (p.abilities.flying || b.inWater || b.onClimbable || p.gamemode === 'spectator' || p.effects.has('slow_falling') || p.effects.has('levitation')) {
+    if (p.abilities.flying || p.gliding || b.inWater || b.onClimbable || p.gamemode === 'spectator' || p.effects.has('slow_falling') || p.effects.has('levitation')) {
       b.fallDistance = 0;
       return;
     }
@@ -489,6 +489,8 @@ export class Survival {
     } else p.foodTimer = 0;
     // Sprinting costs food
     if (p.sprinting && b.onGround) this.exhaust(p, 0.01);
+    // Gliding wears the Elytra one point a second
+    if (p.gliding && t % 20 === 0) this.server.interaction.damageStack(p, ARMOR_SLOTS.chest, 1);
     if (!isSurvivalLike(p.gamemode)) p.exhaustion = 0;
   }
 

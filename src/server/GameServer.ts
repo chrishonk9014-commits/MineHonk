@@ -58,6 +58,8 @@ export class GameServer {
   portals: import('./systems/Portals').Portals | null = null;
   theEnd: import('./systems/TheEnd').EndSystem | null = null;
   farlands: import('./systems/Farlands').FarlandsSystem | null = null;
+  /** Fireworks, fishing, compasses, jukeboxes, beacons, leads and riding (installed by gameplay). */
+  gadgets: import('./systems/Gadgets').Gadgets | null = null;
   /** Hook for the hosting layer to forward player reports (e.g. to platform moderation). */
   onReport?: (from: ServerPlayer, target: ServerPlayer, reason: string) => void;
   readonly interaction: Interaction;
@@ -501,8 +503,15 @@ export class GameServer {
     const dy = m.y - p.y;
     const dz = m.z - p.z;
     const distSq = dx * dx + dz * dz;
+    // Elytra gliding needs a working Elytra and open air
+    const glide = !!m.glide && !m.onGround && !p.abilities.flying && this.interaction.canGlide(p);
+    if (glide !== p.gliding) {
+      p.gliding = glide;
+      p.metaDirty = true;
+      if (!glide) p.glideSpeed = 0;
+    }
     // Movement budget: generous limits (client runs the same physics).
-    const maxH = p.abilities.flying ? (p.gamemode === 'spectator' ? 4 : 2.2) : p.body.inWater ? 1.0 : 1.3;
+    const maxH = p.abilities.flying ? (p.gamemode === 'spectator' ? 4 : 2.2) : p.gliding ? (this.tickNo < p.boostUntil ? 3.4 : 2.6) : p.body.inWater ? 1.0 : 1.3;
     const effSpeed = p.effects.get('speed');
     const limit = maxH * (1 + (effSpeed ? (effSpeed.amp + 1) * 0.3 : 0)) + (p.body.vy < -1 ? 0.5 : 0);
     const maxV = 5;
@@ -527,6 +536,7 @@ export class GameServer {
       this.teleport(p, ox, oy, oz);
       return;
     }
+    if (p.gliding) this.glideImpact(p, dx, dz);
     // Ground truth for fall damage: check below the feet server-side.
     const groundBelow = this.hasGroundBelow(p);
     const claimedGround = m.onGround && groundBelow;
@@ -537,6 +547,24 @@ export class GameServer {
     p.lastValidZ = m.z;
     p.dim.updateBucket(p);
     if (p.dig && p.distanceSq(p.dig.x + 0.5, p.dig.y + 0.5, p.dig.z + 0.5) > 64) p.dig = null;
+  }
+
+  /** Flying into a wall at speed hurts (like the ground does). */
+  private glideImpact(p: ServerPlayer, dx: number, dz: number): void {
+    const h = Math.hypot(dx, dz);
+    const lost = p.glideSpeed - h;
+    if (lost > 0.3 && p.glideSpeed > 0) {
+      const probe = { ...p.body, x: p.x + p.glideDirX * 0.4, z: p.z + p.glideDirZ * 0.4 };
+      if (bodyObstructed(p.dim, probe, 0.05)) {
+        const dmg = lost * 10 - 3;
+        if (dmg > 0) this.interaction.survival.damage(p, dmg, { source: 'fly_into_wall' });
+      }
+    }
+    p.glideSpeed = h;
+    if (h > 0.01) {
+      p.glideDirX = dx / h;
+      p.glideDirZ = dz / h;
+    }
   }
 
   private hasGroundBelow(p: ServerPlayer): boolean {

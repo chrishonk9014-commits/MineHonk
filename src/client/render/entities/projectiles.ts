@@ -109,6 +109,77 @@ registerVisual('trident', (ent) => {
   };
 });
 
+// A rocket climbing before it bursts
+registerVisual('firework', () =>
+  spriteVisual(
+    pixelCanvas(8, (g) => {
+      g.fillStyle = '#c83a2a';
+      g.fillRect(3, 1, 2, 5);
+      g.fillStyle = '#e8e0c8';
+      g.fillRect(3, 0, 2, 1);
+      g.fillStyle = '#6a4a2a';
+      g.fillRect(3, 6, 2, 2);
+    }),
+    0.35,
+  ),
+);
+
+// Fishing bobber plus the line back to the angler's hand
+registerVisual('fishing_bobber', (ent, ctx) => {
+  const group = new THREE.Group();
+  const bob = spriteVisual(
+    pixelCanvas(8, (g) => {
+      g.fillStyle = '#e8e8e8';
+      g.fillRect(2, 4, 4, 3);
+      g.fillStyle = '#d02020';
+      g.fillRect(2, 1, 4, 3);
+      g.fillStyle = '#202020';
+      g.fillRect(3, 0, 2, 1);
+    }),
+    0.3,
+  );
+  const SEG = 12;
+  const lineGeo = new THREE.BufferGeometry();
+  lineGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array((SEG + 1) * 3), 3));
+  const lineMat = new THREE.LineBasicMaterial({ color: 0x1a1a1a });
+  const line = new THREE.Line(lineGeo, lineMat);
+  line.frustumCulled = false;
+  group.add(bob.object, line);
+  const ownerId = Number(ent.meta.owner ?? 0);
+  return {
+    object: group,
+    update(e: ClientEntity, alpha, time) {
+      bob.update(e, alpha, time);
+      const [bx, by, bz] = e.lerp(alpha);
+      let hand: [number, number, number] | null = ctx.localHand?.(ownerId) ?? null;
+      if (!hand) {
+        const o = ctx.entity?.(ownerId);
+        if (o) {
+          const [ox, oy, oz] = o.lerp(alpha);
+          hand = [ox - Math.cos(o.yaw) * 0.35, oy + 1.2, oz + Math.sin(o.yaw) * 0.35];
+        }
+      }
+      line.visible = !!hand;
+      if (!hand) return;
+      const pos = lineGeo.getAttribute('position') as THREE.BufferAttribute;
+      const sag = Math.min(1.2, Math.hypot(bx - hand[0], bz - hand[2]) * 0.08);
+      for (let i = 0; i <= SEG; i++) {
+        const t = i / SEG;
+        pos.setXYZ(i, hand[0] + (bx - hand[0]) * t, hand[1] + (by + 0.1 - hand[1]) * t - Math.sin(t * Math.PI) * sag, hand[2] + (bz - hand[2]) * t);
+      }
+      pos.needsUpdate = true;
+    },
+    setBrightness(v) {
+      bob.setBrightness(v);
+    },
+    dispose() {
+      bob.dispose();
+      lineGeo.dispose();
+      lineMat.dispose();
+    },
+  };
+});
+
 registerVisual('snowball', () => spriteVisual(pixelCanvas(8, (g) => {
   g.fillStyle = '#ffffff';
   g.fillRect(2, 1, 4, 6);

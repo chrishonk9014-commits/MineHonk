@@ -16,7 +16,7 @@ export const PROTOCOL_VERSION = 1;
 // ---------------------------------------------------------------------------
 export type C2S =
   | { t: 'hello'; version: number; name: string; token?: string; viewDistance: number; registryHash: string }
-  | { t: 'move'; x: number; y: number; z: number; yaw: number; pitch: number; onGround: boolean; flying: boolean; sneak: boolean; sprint: boolean; seq: number }
+  | { t: 'move'; x: number; y: number; z: number; yaw: number; pitch: number; onGround: boolean; flying: boolean; sneak: boolean; sprint: boolean; seq: number; glide?: boolean }
   | { t: 'dig'; action: 'start' | 'abort' | 'finish'; x: number; y: number; z: number; face: number }
   | { t: 'use_on'; x: number; y: number; z: number; face: number; hx: number; hy: number; hz: number; hand: 0 | 1; yaw: number; pitch: number; seq: number }
   | { t: 'use'; hand: 0 | 1; action: 'start' | 'release' }
@@ -145,7 +145,9 @@ export type S2C =
   | { t: 'debug'; data: Record<string, unknown> }
   | { t: 'admin_result'; req: number; ok: boolean; text: string; data?: unknown }
   /** An item can't be used for a while (knocked-aside shield, pearl cooldown). */
-  | { t: 'cooldown'; item: number; ticks: number };
+  | { t: 'cooldown'; item: number; ticks: number }
+  /** A firework rocket pushes the gliding player for `ticks`. */
+  | { t: 'boost'; ticks: number };
 
 export interface AbilitiesMsg {
   mayFly: boolean;

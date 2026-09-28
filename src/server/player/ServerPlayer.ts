@@ -7,6 +7,11 @@ import { abilitiesFor, type Abilities, type GameMode } from '../../common/game/g
 import type { AbilitiesMsg, PlayerStats, S2C } from '../../common/net/protocol';
 import type { Slot } from '../../common/game/itemstack';
 import type { DimensionId } from '../../common/data/biomes';
+import { itemById } from '../../common/registry/items';
+
+let elytraNum = -1;
+/** Item number of the Elytra (resolved once). */
+const ELYTRA = (): number => (elytraNum >= 0 ? elytraNum : (elytraNum = itemById.get('elytra')?.num ?? 0));
 
 export const PLAYER_WIDTH = 0.6;
 export const PLAYER_HEIGHT = 1.8;
@@ -100,6 +105,14 @@ export class ServerPlayer extends Entity {
   joinedAt = Date.now();
   /** Tick until which a knocked-aside shield cannot be raised. */
   shieldDownUntil = 0;
+  /** Gliding on an Elytra (reported by the client, checked by the server). */
+  gliding = false;
+  /** Horizontal speed of the last move while gliding (for wall impacts). */
+  glideSpeed = 0;
+  glideDirX = 0;
+  glideDirZ = 0;
+  /** Tick until which a firework rocket may push the player faster. */
+  boostUntil = 0;
 
   constructor(
     readonly conn: Connection,
@@ -178,6 +191,9 @@ export class ServerPlayer extends Entity {
   override meta(): Record<string, unknown> {
     const m: Record<string, unknown> = { name: this.name, sneak: this.sneaking, held: this.heldItem()?.id ?? 0 };
     if (this.effects.has('glowing')) m.glowing = true;
+    if (this.gliding) m.glide = true;
+    const chest = this.inventory.get(38);
+    if (chest && chest.id === ELYTRA()) m.elytra = true;
     return m;
   }
 

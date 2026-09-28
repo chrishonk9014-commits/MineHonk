@@ -268,6 +268,19 @@ export class Particles {
         case 'composter':
           this.add({ x: x + ox, y: y + oy, z: z + oz, vy: 0.03, maxLife: 15, size: 0.08, r: 0.4, g: 0.7, b: 0.2 });
           break;
+        case 'firework': {
+          // Burst: sparks on a sphere, coloured by hue (data) with white highlights
+          const u = Math.random() * 2 - 1;
+          const th = Math.random() * Math.PI * 2;
+          const rr = Math.sqrt(1 - u * u);
+          const sp = 0.22 + Math.random() * 0.06;
+          const [cr, cg, cb] = Math.random() < 0.15 ? [1, 1, 1] : hueRgb(data ?? Math.random() * 360);
+          this.add({ x, y, z, vx: rr * Math.cos(th) * sp, vy: u * sp, vz: rr * Math.sin(th) * sp, maxLife: 30 + Math.random() * 18, size: 0.14, r: cr, g: cg, b: cb, gravity: 0.004, drag: 0.92, emissive: true, fade: true });
+          break;
+        }
+        case 'firework_trail':
+          this.add({ x: x + ox * 0.2, y: y + oy * 0.2, z: z + oz * 0.2, vx: ox * 0.01, vy: -0.02, vz: oz * 0.01, maxLife: 10 + Math.random() * 6, size: 0.08, r: 1, g: 0.9, b: 0.6, emissive: true, fade: true });
+          break;
         case 'rain_splash':
           this.add({ x, y, z, vx: ox * 0.05, vy: 0.06, vz: oz * 0.05, maxLife: 6, size: 0.05, r: 0.6, g: 0.7, b: 1, gravity: 0.02 });
           break;
@@ -355,4 +368,11 @@ export class Particles {
   clear(): void {
     this.list.length = 0;
   }
+}
+
+/** Saturated colour for a hue in degrees. */
+function hueRgb(h: number): [number, number, number] {
+  const k = (n: number): number => (n + h / 60) % 6;
+  const f = (n: number): number => 1 - Math.max(0, Math.min(k(n), 4 - k(n), 1));
+  return [f(5), f(3), f(1)];
 }

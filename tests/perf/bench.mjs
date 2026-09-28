@@ -11,7 +11,7 @@
  * below a real GPU. Compare runs made on the same machine, and read the main
  * thread JS time and draw calls, which carry over to real hardware.
  */
-import { spawn } from 'node:child_process';
+import { spawn, execSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { chromium } from 'playwright';
@@ -25,6 +25,32 @@ const RENDER_DISTANCE = process.env.RD ? Number(process.env.RD) : null;
 const OUT = path.resolve('tests/perf/out');
 fs.mkdirSync(OUT, { recursive: true });
 const PORT = 4190;
+
+/** Resident memory (MB) of Chromium's renderer and GPU processes, sampled from ps. */
+function processRss() {
+  let renderer = 0;
+  let gpu = 0;
+  try {
+    for (const line of execSync('ps -eo rss=,args=', { encoding: 'utf8' }).split('\n')) {
+      const m = /^\s*(\d+)\s+(.*)$/.exec(line);
+      if (!m || !m[2].includes('chrom')) continue;
+      const mb = Number(m[1]) / 1024;
+      if (m[2].includes('--type=renderer')) renderer = Math.max(renderer, mb);
+      else if (m[2].includes('--type=gpu-process')) gpu = Math.max(gpu, mb);
+    }
+  } catch {
+    /* ps missing */
+  }
+  return { renderer: Math.round(renderer), gpu: Math.round(gpu) };
+}
+// Peak renderer memory between measurements, so a runaway scenario is visible even if it crashes
+const rssPeak = { renderer: 0, gpu: 0 };
+setInterval(() => {
+  const r = processRss();
+  rssPeak.renderer = Math.max(rssPeak.renderer, r.renderer);
+  rssPeak.gpu = Math.max(rssPeak.gpu, r.gpu);
+  if (process.env.RSS_LOG && r.renderer > 4000) console.log(`  renderer rss ${r.renderer} MB`);
+}, 2000).unref();
 
 if (!fs.existsSync(path.join(DIST, 'index.html'))) {
   console.error(`No build in ${DIST}. Run: npx vite build --minify false --outDir ${DIST}`);
@@ -239,9 +265,13 @@ async function measure(name, during) {
     dim: data.dim,
     pos: data.pos,
     hot: hotFunctions(profile, 12),
+    rssMB: processRss().renderer,
+    rssPeakMB: rssPeak.renderer,
+    gpuRssMB: rssPeak.gpu,
   };
+  rssPeak.renderer = rssPeak.gpu = 0;
   console.log(
-    `${name.padEnd(16)} fps ${String(res.avgFps).padStart(5)} | frame ${res.avgFrameMs}ms p95 ${res.p95FrameMs} max ${res.maxFrameMs} | js ${res.avgJsMs}ms p95 ${res.p95JsMs} | calls ${res.avgDrawCalls} tris ${res.avgTriangles} | mesh ${res.meshJobs}x${res.avgMeshMs}ms | heap ${res.heapMB}MB (${res.heapDeltaMB >= 0 ? '+' : ''}${res.heapDeltaMB}) | chunks ${res.chunks} meshes ${res.meshes} ents ${res.entities}`,
+    `${name.padEnd(16)} fps ${String(res.avgFps).padStart(5)} | frame ${res.avgFrameMs}ms p95 ${res.p95FrameMs} max ${res.maxFrameMs} | js ${res.avgJsMs}ms p95 ${res.p95JsMs} | calls ${res.avgDrawCalls} tris ${res.avgTriangles} | mesh ${res.meshJobs}x${res.avgMeshMs}ms | heap ${res.heapMB}MB (${res.heapDeltaMB >= 0 ? '+' : ''}${res.heapDeltaMB}) | rss ${res.rssMB}MB peak ${res.rssPeakMB} gpu ${res.gpuRssMB} | chunks ${res.chunks} meshes ${res.meshes} ents ${res.entities}`,
   );
   for (const h of res.hot.slice(0, 8)) console.log(`    ${h.pct.toFixed(1).padStart(5)}%  ${h.fn}`);
   return res;

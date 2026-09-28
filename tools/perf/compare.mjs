@@ -21,6 +21,7 @@ const cols = [
   ['triangles', 'avgTriangles', 0],
   ['mesh ms', 'avgMeshMs', 2],
   ['heap MB', 'heapMB', 1],
+  ['peak RSS MB', 'rssPeakMB', 0],
 ];
 const fmt = (v, d) => (typeof v === 'number' ? v.toFixed(d) : '-');
 console.log(`| scenario | ${cols.map((c) => `${c[0]} before → after`).join(' | ')} |`);

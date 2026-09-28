@@ -1,9 +1,12 @@
 /**
  * Server tick cost with many mobs, near and far from the player.
  *   npx tsx tools/perf/server-bench.ts
+ * NO_LOD=1 treats every mob as near a player (full-rate AI everywhere).
  */
 import { makeServer, join, tick } from '../../tests/helpers/testServer';
 import { Mob } from '../../src/server/entity/Mob';
+
+if (process.env.NO_LOD) (Mob.prototype as unknown as { playerWithin(): boolean }).playerWithin = () => true;
 
 const TYPES = ['zombie', 'skeleton', 'cow', 'pig', 'sheep', 'chicken', 'spider', 'creeper'];
 

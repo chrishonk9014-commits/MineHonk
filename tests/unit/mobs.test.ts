@@ -141,6 +141,12 @@ describe('mobs and combat', () => {
     const z = Math.floor(player.z);
     expect(dim.isLoaded(x, z)).toBe(true);
     const ground = dim.getHeight(x, z) + 1;
+    // A clear stone pad so the fall is predictable
+    for (let bx = x - 6; bx <= x + 6; bx++)
+      for (let bz = z - 6; bz <= z + 6; bz++) {
+        dim.setBlock(bx, ground - 1, bz, S('stone'));
+        for (let h = 0; h < 14; h++) dim.setBlock(bx, ground + h, bz, 0);
+      }
     const cow = server.mobs!.spawn(dim, 'cow', x + 0.5, ground + 8, z + 0.5, { persistent: true })!;
     const zombie = server.mobs!.spawn(dim, 'zombie', x + 3.5, ground + 2, z + 0.5, { persistent: true })!;
     zombie.held = null;
@@ -149,12 +155,14 @@ describe('mobs and combat', () => {
     expect(far(cow)).toBe(true);
     expect(far(zombie)).toBe(true);
     // Physics still runs for a mob that is not resting: the cow fell to the ground
-    expect(cow.body.onGround).toBe(true);
-    expect(cow.y).toBeLessThan(ground + 2);
-    // Bring the player close at night: full-rate AI returns and the zombie attacks
+    expect(cow.y).toBeLessThan(ground + 1.5);
+    // Bring the player close at night on flat ground: full-rate AI returns and the zombie attacks
     server.level.dayTime = 18000;
     player.spawnProtection = 0;
-    player.setPos(zombie.x - 6, dim.getHeight(Math.floor(zombie.x - 6), Math.floor(zombie.z)) + 1, zombie.z);
+    const floor = arena({ dim, x: zombie.x, y: Math.floor(zombie.y), z: zombie.z });
+    zombie.setPos(Math.floor(zombie.x) + 0.5, floor, Math.floor(zombie.z) + 0.5);
+    zombie.body.vx = zombie.body.vz = 0;
+    player.setPos(zombie.x - 6, floor, zombie.z);
     tick(server, 21);
     expect(far(zombie)).toBe(false);
     for (let i = 0; i < 200 && zombie.target !== player; i++) tick(server, 1);

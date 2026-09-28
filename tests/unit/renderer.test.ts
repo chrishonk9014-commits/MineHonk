@@ -6,9 +6,11 @@
  */
 import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
+import * as THREE from 'three';
 import { initItems } from '../../src/common/registry/items';
 import { FACE_GROUPS, GROUP_OTHER, Mesher, PAD, padIndex, SOLID_UNKNOWN, U16_PER_VERTEX, U8_PER_VERTEX, VIS_ALL, facingGroup, visConnected, type LayerMesh, type MeshInput } from '../../src/client/render/mesher';
 import { createGenerator } from '../../src/common/gen/generator';
+import { PAGE_QUADS, RegionLayer } from '../../src/client/render/ChunkRenderer';
 import { LightEngine } from '../../src/common/world/light';
 import { chunkIndex } from '../../src/common/world/constants';
 import type { Chunk } from '../../src/common/world/chunk';
@@ -225,5 +227,53 @@ describe('facing groups', () => {
     const l = mesher.mesh({ blocks, light, tints: new Uint8Array(PAD * PAD * 9), fancyLeaves: false, smoothLighting: true }).layers[3]!;
     expect(l.groups[1]).toBeGreaterThan(0); // flat top of the lone source
     expect(l.groups[GROUP_OTHER]).toBeGreaterThan(0); // the slope between source and flow
+  });
+});
+
+describe('region buffer pages', () => {
+  const owner = {
+    ensureIndex: () => {},
+    index: new THREE.BufferAttribute(new Uint32Array(6), 1),
+    materials: [0, 1, 2, 3].map(() => new THREE.ShaderMaterial()),
+    group: new THREE.Group(),
+  };
+  const page = () => new RegionLayer(owner, { rx: 0, ry: 0, rz: 0 }, 1);
+
+  it('grows geometrically up to the page size, then refuses', () => {
+    const p = page();
+    const caps: number[] = [];
+    let got = 0;
+    for (;;) {
+      const s = p.alloc(1000);
+      if (!s) break;
+      expect(s.page).toBe(p);
+      got += 1000;
+      if (caps[caps.length - 1] !== p.capacity) caps.push(p.capacity);
+    }
+    expect(got).toBeLessThanOrEqual(PAGE_QUADS);
+    expect(got).toBeGreaterThan(PAGE_QUADS - 1000);
+    expect(p.capacity).toBe(PAGE_QUADS);
+    // Few resizes: each at least doubles
+    for (let i = 1; i < caps.length - 1; i++) expect(caps[i]!).toBeGreaterThanOrEqual(caps[i - 1]! * 2);
+    expect(caps.length).toBeLessThanOrEqual(6);
+  });
+
+  it('gives an empty page an oversized section and reuses freed ranges', () => {
+    const big = page();
+    expect(big.alloc(PAGE_QUADS + 500)).not.toBeNull();
+    const p = page();
+    const a = p.alloc(100)!;
+    const b = p.alloc(200)!;
+    const c = p.alloc(300)!;
+    p.release(a);
+    p.release(b);
+    // a and b merge into one free range at the start
+    expect(p.freeRanges[0]).toEqual({ start: 0, quads: 300 });
+    const d = p.alloc(250)!;
+    expect(d.start).toBe(0);
+    expect(p.used).toBe(550);
+    p.release(c);
+    p.release(d);
+    expect(p.used).toBe(0);
   });
 });

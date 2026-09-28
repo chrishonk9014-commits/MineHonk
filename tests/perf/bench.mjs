@@ -191,18 +191,32 @@ const sendCmd = async (text) => {
   console.log(`  command gave up: ${text}`);
   return null;
 };
+/**
+ * Waits until terrain streaming is done: nothing queued for meshing and the
+ * loaded chunk and section counts unchanged for 3 seconds. (A fast mesher
+ * empties its queue between chunk batches, so "queue empty" alone is not enough.)
+ */
+let lastSettleMs = 0;
 const settle = async (maxMs = 30000) => {
   const t0 = Date.now();
-  await page.waitForFunction(
-    () => {
-      const s = window.minehonk.game.renderer.chunks.stats();
+  let last = '';
+  let stableSince = 0;
+  while (Date.now() - t0 < maxMs) {
+    const s = await page.evaluate(() => {
+      const g = window.minehonk.game;
+      const st = g.renderer.chunks.stats();
       const l = document.querySelector('.loading');
-      return s.dirty === 0 && s.jobs === 0 && l && l.classList.contains('hidden');
-    },
-    null,
-    { timeout: maxMs, polling: 250 },
-  ).catch(() => {});
-  return Date.now() - t0;
+      return { busy: st.dirty + st.jobs, key: `${g.world.chunks.size}/${st.sections}`, loading: !(l && l.classList.contains('hidden')) };
+    });
+    const quiet = s.busy === 0 && !s.loading && s.key === last;
+    last = s.key;
+    if (!quiet) stableSince = 0;
+    else if (!stableSince) stableSince = Date.now();
+    else if (Date.now() - stableSince >= 3000) break;
+    await wait(250);
+  }
+  lastSettleMs = Date.now() - t0;
+  return lastSettleMs;
 };
 const setLook = (yaw, pitch) => page.evaluate(([y, p]) => Object.assign(window.minehonk.game.player, { yaw: y, pitch: p }), [yaw, pitch]);
 const lastChat = async () => (await chatLines()).slice(-3);
@@ -267,6 +281,7 @@ async function measure(name, during) {
     dim: data.dim,
     pos: data.pos,
     hot: hotFunctions(profile, 12),
+    settleMs: lastSettleMs,
     rssMB: processRss().renderer,
     rssPeakMB: rssPeak.renderer,
     gpuRssMB: rssPeak.gpu,
@@ -322,7 +337,7 @@ const spawn0 = await page.evaluate(() => {
 await page.evaluate(() => (window.minehonk.game.player.flying = true));
 
 await run('spawn-still', async () => {
-  const s = await settle(60000);
+  const s = await settle(120000);
   console.log(`  initial terrain settled in ${s} ms`);
   await setLook(0.6, 0.05);
   return measure('spawn-still');
@@ -330,14 +345,14 @@ await run('spawn-still', async () => {
 
 await run('overlook', async () => {
   await cmd(`/tp ${spawn0[0]} ${spawn0[1] + 45} ${spawn0[2]}`);
-  await settle(30000);
+  await settle(60000);
   await setLook(2.2, 0.35);
   return measure('overlook');
 });
 
 await run('fly', async () => {
   await cmd(`/tp ${spawn0[0]} ${spawn0[1] + 25} ${spawn0[2]}`);
-  await settle(20000);
+  await settle(30000);
   await setLook(Math.PI, 0.1);
   // Creative flight: hold forward + sprint so new chunks stream in
   return measure('fly', async () => {
@@ -351,7 +366,7 @@ await run('fly', async () => {
 
 await run('mobs', async () => {
   await cmd(`/tp ${spawn0[0]} ${spawn0[1] + 2} ${spawn0[2]}`);
-  await settle(20000);
+  await settle(30000);
   const kinds = ['zombie', 'skeleton', 'cow', 'pig', 'sheep', 'chicken', 'creeper', 'spider'];
   const N = Number(process.env.MOBS ?? 24);
   for (let i = 0; i < N; i++) {
@@ -393,7 +408,7 @@ await run('cave', async () => {
   }, [spawn0[0] + 40, spawn0[2] + 40]);
   if (spot) {
     await cmd(`/tp ${spot[0]} ${spot[1]} ${spot[2]}`);
-    await settle(15000);
+    await settle(30000);
   } else console.log('  no cave found, measuring from inside the rock');
   await setLook(1.2, 0.0);
   const r = await measure('cave');
@@ -409,7 +424,7 @@ await run('ocean', async () => {
     return { x: g.player.body.x, z: g.player.body.z };
   });
   await cmd(`/tp ${Math.round(loc.x + 600)} 90 ${Math.round(loc.z + 600)}`);
-  await settle(30000);
+  await settle(60000);
   await setLook(0.3, 0.3);
   return measure('far-terrain');
 });
@@ -424,7 +439,7 @@ for (const dim of ['nether', 'end', 'farlands']) {
     await page.evaluate(() => (window.minehonk.game.player.flying = true));
     // The End: look at the main island from its edge (far out there is only void)
     if (dim === 'end') await cmd('/tp 70 90 70');
-    await settle(45000);
+    await settle(60000);
     await setLook(dim === 'end' ? 0.785 : 0.8, dim === 'end' ? 0.35 : 0.15);
     return measure(dim);
   });

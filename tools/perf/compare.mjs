@@ -9,7 +9,7 @@ if (!a || !b) {
   console.error('usage: node tools/perf/compare.mjs before.json after.json');
   process.exit(1);
 }
-const byName = (run) => new Map(run.results.map((r) => [r.name, r]));
+const byName = (run) => new Map(run.results.map((r) => [r.name, { ...r, settleSec: r.settleMs !== undefined ? r.settleMs / 1000 : undefined }]));
 const before = byName(a);
 const after = byName(b);
 const cols = [
@@ -22,6 +22,7 @@ const cols = [
   ['mesh ms', 'avgMeshMs', 2],
   ['heap MB', 'heapMB', 1],
   ['peak RSS MB', 'rssPeakMB', 0],
+  ['settle s', 'settleSec', 1],
 ];
 const fmt = (v, d) => (typeof v === 'number' ? v.toFixed(d) : '-');
 console.log(`| scenario | ${cols.map((c) => `${c[0]} before → after`).join(' | ')} |`);

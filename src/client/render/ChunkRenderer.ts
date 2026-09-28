@@ -40,7 +40,16 @@ interface Slot {
   quads: number;
   /** Quads per facing group, in buffer order (see LayerMesh.groups). */
   groups?: number[];
+  /** The page holding the quads (unset for free-list entries). */
+  page?: RegionLayer;
 }
+
+/**
+ * A page grows geometrically up to this many quads (3 MB); after that the
+ * region layer gets another page instead, so growing never re-uploads more
+ * than one page of existing data.
+ */
+export const PAGE_QUADS = 32768;
 
 /**
  * Most ranges a section can need once back-facing groups are skipped: at most
@@ -81,7 +90,8 @@ class RegionMesh extends THREE.Mesh {
   _indirectTexture = null;
 }
 
-class RegionLayer {
+/** One page of a region's render layer: a vertex buffer with a free list (exported for tests). */
+export class RegionLayer {
   mesh: RegionMesh | null = null;
   capacity = 0;
   used = 0;
@@ -94,16 +104,22 @@ class RegionLayer {
   readonly sections = new Set<SectionEntry>();
 
   constructor(
-    readonly owner: ChunkRenderer,
-    readonly region: Region,
+    readonly owner: Pick<ChunkRenderer, 'ensureIndex' | 'index' | 'materials' | 'group'>,
+    readonly region: Pick<Region, 'rx' | 'ry' | 'rz'>,
     readonly layer: number,
   ) {}
 
-  alloc(quads: number): Slot {
+  /** Free ranges, for tests. */
+  get freeRanges(): readonly { start: number; quads: number }[] {
+    return this.free;
+  }
+
+  /** Space for `quads`, or null when this page is at its size limit. */
+  alloc(quads: number): Slot | null {
     for (let i = 0; i < this.free.length; i++) {
       const f = this.free[i]!;
       if (f.quads < quads) continue;
-      const s = { start: f.start, quads };
+      const s: Slot = { start: f.start, quads, page: this };
       f.start += quads;
       f.quads -= quads;
       if (f.quads === 0) this.free.splice(i, 1);
@@ -115,15 +131,21 @@ class RegionLayer {
     const tailFree = this.free.length && this.free[this.free.length - 1]!.start + this.free[this.free.length - 1]!.quads === old ? this.free.pop()! : null;
     const tailStart = tailFree ? tailFree.start : old;
     const need = tailStart + quads;
-    const cap = Math.max(need, Math.ceil(old * 1.5), 2048);
+    // A full page takes no more (an empty one accepts even an oversized section)
+    if (need > PAGE_QUADS && this.used > 0) {
+      if (tailFree) this.free.push(tailFree);
+      return null;
+    }
+    const cap = Math.max(need, Math.min(PAGE_QUADS, Math.max(old * 2, 2048)));
     this.resize(cap);
     if (cap > need) this.free.push({ start: need, quads: cap - need });
     this.used += quads;
-    return { start: tailStart, quads };
+    return { start: tailStart, quads, page: this };
   }
 
   release(s: Slot): void {
     this.used -= s.quads;
+    s = { start: s.start, quads: s.quads };
     // insert sorted and merge neighbours
     let i = 0;
     while (i < this.free.length && this.free[i]!.start < s.start) i++;
@@ -205,7 +227,8 @@ class RegionLayer {
 }
 
 class Region {
-  readonly layers: (RegionLayer | null)[] = [null, null, null, null];
+  /** Pages per render layer (index 0, invisible blocks, stays empty). */
+  readonly layers: RegionLayer[][] = [[], [], [], []];
   count = 0;
   constructor(
     readonly key: number,
@@ -325,7 +348,7 @@ export class ChunkRenderer implements ChunkListener {
   ensureIndex(quads: number): void {
     if (quads <= this.indexQuads) return;
     this.index = this.makeIndex(Math.max(quads, this.indexQuads * 2));
-    for (const r of this.regions.values()) for (const l of r.layers) l?.setIndex(this.index);
+    for (const r of this.regions.values()) for (const pages of r.layers) for (const l of pages) l.setIndex(this.index);
     // three.js only frees a GPU buffer through the dispose of a geometry it has
     // drawn, so the old index (at least 1.5 MB, needed only by a region layer
     // with more than 65536 quads) stays allocated until the context goes away.
@@ -392,8 +415,8 @@ export class ChunkRenderer implements ChunkListener {
       const r = e.region;
       if (--r.count <= 0) {
         for (let li = 0; li < 4; li++) {
-          r.layers[li]?.dispose();
-          r.layers[li] = null;
+          for (const l of r.layers[li]!) l.dispose();
+          r.layers[li] = [];
         }
         this.regions.delete(r.key);
       }
@@ -429,15 +452,35 @@ export class ChunkRenderer implements ChunkListener {
   }
 
   private disposeSection(e: SectionEntry): void {
-    for (let li = 1; li < 4; li++) {
-      const s = e.slots[li];
-      if (!s) continue;
-      const layer = e.region.layers[li]!;
-      layer.release(s);
-      layer.sections.delete(e);
-      this.totalQuads -= s.quads;
-      e.slots[li] = null;
+    for (let li = 1; li < 4; li++) this.freeSlot(e, li);
+  }
+
+  /** Returns a section's quads in one layer to its page; empty pages are dropped. */
+  private freeSlot(e: SectionEntry, li: number): void {
+    const s = e.slots[li];
+    if (!s) return;
+    const page = s.page!;
+    page.release(s);
+    page.sections.delete(e);
+    this.totalQuads -= s.quads;
+    e.slots[li] = null;
+    if (page.used === 0) {
+      const pages = e.region.layers[li]!;
+      pages.splice(pages.indexOf(page), 1);
+      page.dispose();
     }
+  }
+
+  /** Space for a section's quads in the region's pages for one layer. */
+  private allocSlot(r: Region, li: number, quads: number): Slot {
+    const pages = r.layers[li]!;
+    for (const page of pages) {
+      const s = page.alloc(quads);
+      if (s) return s;
+    }
+    const page = new RegionLayer(this, r, li);
+    pages.push(page);
+    return page.alloc(quads)!;
   }
 
   /** Blended biome colours for the padded 18x18 columns around a chunk. */
@@ -676,39 +719,27 @@ export class ChunkRenderer implements ChunkListener {
     const r = e.region;
     for (let li = 1; li < 4; li++) {
       const l = layers[li]!;
-      const old = e.slots[li];
-      let layer = r.layers[li];
+      let slot = e.slots[li];
       if (l.quads === 0) {
-        if (old && layer) {
-          layer.release(old);
-          layer.sections.delete(e);
-          this.totalQuads -= old.quads;
-          e.slots[li] = null;
-        }
+        this.freeSlot(e, li);
         continue;
       }
-      if (!layer) layer = r.layers[li] = new RegionLayer(this, r, li);
-      let slot = old;
-      if (slot && slot.quads !== l.quads) {
-        // Reuse the slot when the new mesh fits, returning the unused tail
+      if (slot && l.quads <= slot.quads) {
+        // The new mesh fits: reuse the slot and return the unused tail
         if (l.quads < slot.quads) {
-          layer.release({ start: slot.start + l.quads, quads: slot.quads - l.quads });
+          slot.page!.release({ start: slot.start + l.quads, quads: slot.quads - l.quads });
           this.totalQuads -= slot.quads - l.quads;
           slot.quads = l.quads;
-        } else {
-          layer.release(slot);
-          this.totalQuads -= slot.quads;
-          slot = null;
         }
-      }
-      if (!slot) {
-        slot = layer.alloc(l.quads);
+      } else {
+        this.freeSlot(e, li);
+        slot = this.allocSlot(r, li, l.quads);
         this.totalQuads += l.quads;
       }
       slot.groups = l.groups;
       e.slots[li] = slot;
-      layer.sections.add(e);
-      layer.write(slot, l);
+      slot.page!.sections.add(e);
+      slot.page!.write(slot, l);
     }
   }
 
@@ -850,10 +881,9 @@ export class ChunkRenderer implements ChunkListener {
     let drawn = 0;
     const box = this.box;
     for (const r of this.regions.values()) {
-      for (let li = 1; li < 4; li++) {
-        const layer = r.layers[li];
-        const mesh = layer?.mesh;
-        if (!layer || !mesh) continue;
+      for (let li = 1; li < 4; li++) for (const layer of r.layers[li]!) {
+        const mesh = layer.mesh;
+        if (!mesh) continue;
         const list: SectionEntry[] = [];
         for (const e of layer.sections) {
           if (!e.reachable) continue;
@@ -922,12 +952,12 @@ export class ChunkRenderer implements ChunkListener {
 
   stats(): { sections: number; dirty: number; jobs: number; meshes: number; regions: number; drawn: number; quads: number; drawnQuads: number } {
     let meshes = 0;
-    for (const r of this.regions.values()) for (const l of r.layers) if (l?.mesh) meshes++;
+    for (const r of this.regions.values()) for (const pages of r.layers) for (const l of pages) if (l.mesh) meshes++;
     return { sections: this.sections.size, dirty: this.dirty.size, jobs: this.jobs.size, meshes, regions: this.regions.size, drawn: this.drawnSections, quads: this.totalQuads, drawnQuads: this.drawnQuads };
   }
 
   dispose(): void {
-    for (const r of this.regions.values()) for (const l of r.layers) l?.dispose();
+    for (const r of this.regions.values()) for (const pages of r.layers) for (const l of pages) l.dispose();
     this.regions.clear();
     this.sections.clear();
     this.dirty.clear();

@@ -179,7 +179,19 @@ function oreState(id: string): number {
   return s;
 }
 
-/** Classic ellipsoid-along-a-segment vein. */
+// Scratch marks for vein(): one slot per block of the target chunk around the
+// vein's height, stamped with the vein's number so it never needs clearing
+const VEIN_H = 32;
+const veinMark = new Uint32Array(16 * 16 * VEIN_H);
+let veinStamp = 0;
+
+/**
+ * Classic ellipsoid-along-a-segment vein. `place` runs once for each block
+ * of the vein inside the target chunk (in x, y, z order). The spheres along
+ * the segment overlap heavily, so the union is collected first: callers only
+ * look at the block's own state, which gives the same result as placing
+ * every sphere in turn, at a fraction of the cost.
+ */
 export function vein(v: DecorView, rng: Random, x: number, y: number, z: number, size: number, place: (x: number, y: number, z: number) => void): void {
   const ang = rng.next() * Math.PI;
   // Conservative reach of the vein; skip work when it cannot touch the target chunk.
@@ -198,6 +210,20 @@ export function vein(v: DecorView, rng: Random, x: number, y: number, z: number,
   const z1 = z - Math.cos(ang) * len;
   const y0 = y + rng.int(3) - 2;
   const y1 = y + rng.int(3) - 2;
+  // Heights the vein can reach: its centre line spans y-2..y, radius < size/16 + 1
+  const yBase = y - 2 - Math.ceil(size / 16 + 1);
+  const tall = yBase + VEIN_H > y + Math.ceil(size / 16 + 1) + 1;
+  if (++veinStamp === 0xffffffff) {
+    veinMark.fill(0);
+    veinStamp = 1;
+  }
+  const stamp = veinStamp;
+  let mx0 = 16;
+  let mx1 = -1;
+  let my0 = 256;
+  let my1 = -1;
+  let mz0 = 16;
+  let mz1 = -1;
   for (let i = 0; i < size; i++) {
     const t = i / size;
     const cx = x0 + (x1 - x0) * t;
@@ -215,17 +241,39 @@ export function vein(v: DecorView, rng: Random, x: number, y: number, z: number,
     for (let bx = ix0; bx <= ix1; bx++) {
       const dx = (bx + 0.5 - cx) / r;
       if (dx * dx >= 1) continue;
+      const lx = bx - v.bx;
       for (let by = iy0; by <= iy1; by++) {
         const dy = (by + 0.5 - cy) / r;
         if (dx * dx + dy * dy >= 1) continue;
-        for (let bz = iz0; bz <= iz1; bz++) {
+        const ly = by - yBase;
+        // Only the z range the sphere can cover here (a superset; the exact test decides)
+        const half = r * Math.sqrt(1 - dx * dx - dy * dy);
+        const za = Math.max(iz0, Math.floor(cz - half - 0.5));
+        const zb = Math.min(iz1, Math.ceil(cz + half - 0.5));
+        for (let bz = za; bz <= zb; bz++) {
           const dz = (bz + 0.5 - cz) / r;
           if (dx * dx + dy * dy + dz * dz >= 1) continue;
-          place(bx, by, bz);
+          if (!tall || ly < 0 || ly >= VEIN_H) {
+            place(bx, by, bz); // outside the scratch window (never for normal sizes)
+            continue;
+          }
+          const lz = bz - v.bz;
+          veinMark[(ly << 8) | (lz << 4) | lx] = stamp;
+          if (lx < mx0) mx0 = lx;
+          if (lx > mx1) mx1 = lx;
+          if (by < my0) my0 = by;
+          if (by > my1) my1 = by;
+          if (lz < mz0) mz0 = lz;
+          if (lz > mz1) mz1 = lz;
         }
       }
     }
   }
+  for (let lx = mx0; lx <= mx1; lx++)
+    for (let by = my0; by <= my1; by++) {
+      const row = (by - yBase) << 8;
+      for (let lz = mz0; lz <= mz1; lz++) if (veinMark[row | (lz << 4) | lx] === stamp) place(v.bx + lx, by, v.bz + lz);
+    }
 }
 
 function exposedToAir(v: DecorView, x: number, y: number, z: number): boolean {

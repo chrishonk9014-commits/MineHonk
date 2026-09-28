@@ -205,7 +205,7 @@ mat('copper_ingot');
 mat('diamond');
 mat('emerald');
 mat('lapis_lazuli');
-mat('redstone');
+mat('redstone', { block: 'redstone_wire' });
 mat('quartz', { name: 'Nether Quartz' });
 mat('amethyst_shard');
 mat('netherite_scrap', { fireResistant: true });
@@ -263,6 +263,7 @@ add({ id: 'kelp', name: 'Kelp', block: 'kelp', creative: 'nature' });
 add({ id: 'sugar_cane', name: 'Sugar Cane', block: 'sugar_cane', creative: 'nature' });
 add({ id: 'torch', name: 'Torch', block: 'torch', wallBlock: 'wall_torch', creative: 'functional' });
 add({ id: 'soul_torch', name: 'Soul Torch', block: 'soul_torch', wallBlock: 'soul_wall_torch', creative: 'functional' });
+add({ id: 'redstone_torch', name: 'Redstone Torch', block: 'redstone_torch', wallBlock: 'redstone_wall_torch', creative: 'redstone' });
 
 // ---------------------------------------------------------------------------
 // Food

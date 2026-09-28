@@ -219,7 +219,8 @@ function tx(def: BlockDef, key: string, fallback?: string): string {
 }
 
 function cubeTextures(def: BlockDef, state: number): { tex: string[]; rot: number[]; tint: TintKind[] } {
-  const all = def.tex.all;
+  // Blocks with a lit look (redstone lamp)
+  const all = def.tex.on && getProp(state, 'lit') === 'true' ? def.tex.on : def.tex.all;
   const top = def.tex.top ?? all ?? def.tex.side!;
   const bottom = def.tex.bottom ?? (def.tex.top && !def.tex.all ? def.tex.top : undefined) ?? all ?? top;
   const side = def.tex.side ?? all ?? top;
@@ -597,6 +598,31 @@ function signModel(state: number, wall: boolean): ModelQuad[] {
   }));
 }
 
+/** Redstone dust: a dot with arms to connected sides, climbing walls where it goes up. */
+function wireModel(def: BlockDef, state: number): ModelQuad[] {
+  const on = parseInt(getProp(state, 'power') ?? '0', 10) > 0;
+  const line = on ? def.tex.on! : def.tex.all!;
+  const dot = on ? def.tex.on_dot! : def.tex.dot!;
+  const y = 0.25;
+  const q: ModelQuad[] = [];
+  q.push(...element([0, y, 0], [16, y, 16], { up: { tex: dot }, down: { tex: dot } }));
+  const dirs: [string, number][] = [
+    ['north', 0],
+    ['east', 90],
+    ['south', 180],
+    ['west', 270],
+  ];
+  for (const [d, deg] of dirs) {
+    const v = getProp(state, d);
+    if (v === 'none') continue;
+    // Arm from the centre to the north edge, rotated into place
+    const arm = element([0, y + 0.01, 0], [16, y + 0.01, 8], { up: { tex: line, uv: [0, 0, 16, 8], rot: 0 }, down: { tex: line, uv: [0, 0, 16, 8] } });
+    q.push(...rotY(arm, deg));
+    if (v === 'up') q.push(...rotY(element([0, 0, 0.3], [16, 16, 0.3], { south: { tex: line }, north: { tex: line } }), deg));
+  }
+  return q;
+}
+
 function custom(def: BlockDef, state: number): ModelQuad[] {
   switch (def.id) {
     case 'scaffolding':
@@ -609,6 +635,8 @@ function custom(def: BlockDef, state: number): ModelQuad[] {
       return box([5, 0, 5], [11, 6, 11], def.tex.all!);
     case 'stonecutter':
       return [...element([0, 0, 0], [16, 9, 16], { up: { tex: def.tex.top! }, down: { tex: def.tex.bottom!, cull: 'down' }, north: { tex: def.tex.side!, cull: 'north' }, south: { tex: def.tex.side!, cull: 'south' }, west: { tex: def.tex.side!, cull: 'west' }, east: { tex: def.tex.side!, cull: 'east' } })];
+    case 'redstone_wire':
+      return wireModel(def, state);
     case 'sculk_sensor':
       return element([0, 0, 0], [16, 8, 16], { up: { tex: def.tex.top! }, down: { tex: def.tex.bottom!, cull: 'down' }, north: { tex: def.tex.side!, cull: 'north' }, south: { tex: def.tex.side!, cull: 'south' }, west: { tex: def.tex.side!, cull: 'west' }, east: { tex: def.tex.side!, cull: 'east' } });
     case 'chorus_plant': {
@@ -687,9 +715,9 @@ function bakeState(state: number): BakedModel {
     case 'trapdoor':
       return quads(trapdoorModel(def, state));
     case 'torch':
-      return quads(torchModel(def.tex.all!));
+      return quads(torchModel(getProp(state, 'lit') === 'false' && def.tex.off ? def.tex.off : def.tex.all!));
     case 'wall_torch':
-      return quads(wallTorchModel(def.tex.all!, getProp(state, 'facing')!));
+      return quads(wallTorchModel(getProp(state, 'lit') === 'false' && def.tex.off ? def.tex.off : def.tex.all!, getProp(state, 'facing')!));
     case 'ladder':
       return quads(ladderModel(def.tex.all!, getProp(state, 'facing')!));
     case 'carpet':

@@ -12,6 +12,7 @@ import { EndSystem } from './systems/TheEnd';
 import { FarlandsSystem } from './systems/Farlands';
 import { Gadgets } from './systems/Gadgets';
 import { Mounts } from './systems/Mounts';
+import { Power } from './systems/Power';
 
 export function installGameplay(server: GameServer): void {
   const mobs = new MobSystem(server);
@@ -31,6 +32,8 @@ export function installGameplay(server: GameServer): void {
   server.gadgets = gadgets;
   const mounts = new Mounts(server);
   server.mounts = mounts;
+  const power = new Power(server);
+  server.power = power;
   h.useItem = (p, stack, hand) => mobs.useItem(p, stack) || end.fillBottle(p, stack) || ws.fillBottle(p, stack) || ws.throwSplash(p, stack) || end.useItem(p, stack) || far.useItem(p, stack) || gadgets.useItem(p, stack, hand);
   h.useBlock = (p, x, y, z, state) => ws.useBlock(p, x, y, z, state);
   h.windowAction = (p, m) => ws.windowAction(p, m);
@@ -68,6 +71,7 @@ export function installGameplay(server: GameServer): void {
     far.tick();
     gadgets.tick();
     mounts.tick();
+    power.tick();
     progression.tick();
   };
 }

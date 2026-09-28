@@ -655,6 +655,36 @@ export function registerDeco(r: PainterRegistry): void {
     t.set(7, 5, flame[1]!);
   };
   r.add('torch', torch([hex(0xffe066), hex(0xffae2a), hex(0xfff8d0)], hex(0x6b5433)));
+  r.add('redstone_torch', torch([hex(0xff6a4a), hex(0xe01a0a), hex(0xffc0a0)], hex(0x6b5433)));
+  r.add('redstone_torch_off', torch([hex(0x5a2a22), hex(0x4a1410), hex(0x6a3a30)], hex(0x6b5433)));
+  // Redstone dust: a dot and a line (along Z), dim when unpowered and bright when powered
+  const dust = (bright: boolean, line: boolean) => (t: Tex) => {
+    t.clear();
+    const cols = bright ? [hex(0xff2a10), hex(0xd81a08), hex(0xff7a50)] : [hex(0x5a0a06), hex(0x480604), hex(0x7a1a10)];
+    for (let y = 0; y < 16; y++)
+      for (let x = 0; x < 16; x++) {
+        const inLine = line ? x >= 6 && x <= 9 : Math.hypot(x - 7.5, y - 7.5) < 3.2;
+        if (!inLine) continue;
+        const r = t.rng.next();
+        if (line && (x === 6 || x === 9) && r < 0.35) continue;
+        t.set(x, y, r < 0.15 ? cols[2]! : r < 0.55 ? cols[0]! : cols[1]!);
+      }
+  };
+  r.add('redstone_dust_dot', dust(false, false));
+  r.add('redstone_dust_line', dust(false, true));
+  r.add('redstone_dust_dot_on', dust(true, false));
+  r.add('redstone_dust_line_on', dust(true, true));
+  // Redstone lamp: glass-framed coils, glowing amber when lit
+  const lamp = (lit: boolean) => (t: Tex) => {
+    const base = lit ? [hex(0xc8782a), hex(0xf0a840), hex(0xffe0a0)] : [hex(0x4a2a18), hex(0x6a3a20), hex(0x8a5a38)];
+    voronoi(t, 9, (x, y, c) => {
+      const e = c.d2 - c.d1;
+      t.set(x, y, e < 0.7 ? base[0]! : c.d1 < 1.5 ? base[2]! : base[1]!);
+    });
+    frame(t, lit ? hex(0x8a5a2a) : hex(0x3a2418));
+  };
+  r.add('redstone_lamp', lamp(false));
+  r.add('redstone_lamp_on', lamp(true));
   r.add('soul_torch', torch([hex(0x8af0f8), hex(0x3ac8e0), hex(0xe0ffff)], hex(0x6b5433)));
   const lantern = (glow: RGB) => (t: Tex) => {
     t.clear();

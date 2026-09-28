@@ -62,6 +62,8 @@ export class GameServer {
   gadgets: import('./systems/Gadgets').Gadgets | null = null;
   /** Riding and leads (installed by gameplay). */
   mounts: import('./systems/Mounts').Mounts | null = null;
+  /** Redstone power (installed by gameplay). */
+  power: import('./systems/Power').Power | null = null;
   /** Hook for the hosting layer to forward player reports (e.g. to platform moderation). */
   onReport?: (from: ServerPlayer, target: ServerPlayer, reason: string) => void;
   readonly interaction: Interaction;

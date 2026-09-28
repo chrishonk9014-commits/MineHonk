@@ -474,6 +474,7 @@ export function connectState(w: WorldReader, x: number, y: number, z: number, st
     return state;
   }
   if (def.model === 'stairs') return stairShape(w, x, y, z, state);
+  if (def.id === 'redstone_wire') return wireShape(w, x, y, z, state);
   if (def.model === 'fence_gate') {
     const f = getProp(state, 'facing')!;
     const axisDirs = f === 'north' || f === 'south' ? ['west', 'east'] : ['north', 'south'];
@@ -523,3 +524,4 @@ export function stairShape(w: WorldReader, x: number, y: number, z: number, stat
 }
 
 export { STATE_FLUID };
+import { wireShape } from './redstone';

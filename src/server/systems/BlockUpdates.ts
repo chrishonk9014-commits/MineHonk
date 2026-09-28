@@ -59,8 +59,7 @@ export class BlockUpdates {
     // self checks
     this.react(dim, x, y, z);
     for (let f = 0; f < 6; f++) this.react(dim, x + FACE_DX[f], y + FACE_DY[f], z + FACE_DZ[f]);
-    void old;
-    void state;
+    this.server.power?.onBlockChanged(dim, x, y, z, old, state);
   }
 
   /** Neighbour reaction for the block at (x,y,z). */

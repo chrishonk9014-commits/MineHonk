@@ -350,6 +350,8 @@ export class Interaction {
         return !!this.server.gadgets?.useRespawnAnchor(p, x, y, z, state);
       case 'bell':
         return !!this.server.gadgets?.ringBell(p, x, y, z);
+      case 'beacon':
+        return !!this.server.gadgets?.useBeacon(p, x, y, z);
       case 'enchanting':
       case 'anvil':
       case 'brewing':

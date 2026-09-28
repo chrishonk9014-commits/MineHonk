@@ -440,6 +440,45 @@ export class InventoryScreen {
         gui.append(title, body);
         break;
       }
+      case 'beacon': {
+        // Pyramid tiers unlock effects; pick one, pay with an ingot or gem, confirm
+        const levels = Number(w.props.levels ?? 0);
+        const primary = (w.props.primary as string | null) ?? null;
+        const secondary = (w.props.secondary as string | null) ?? null;
+        const names: Record<string, string> = { speed: 'Speed', haste: 'Haste', resistance: 'Resistance', jump_boost: 'Jump Boost', strength: 'Strength', regeneration: 'Regeneration' };
+        const effects: [string, number][] = [
+          ['speed', 1],
+          ['haste', 1],
+          ['resistance', 2],
+          ['jump_boost', 2],
+          ['strength', 3],
+        ];
+        const btn = (label: string, on: boolean, selected: boolean, idx: number): HTMLElement => {
+          const b = el('div', { class: 'beacon-effect' + (on ? '' : ' locked') + (selected ? ' selected' : '') }, label);
+          if (on)
+            b.addEventListener('mousedown', (e) => {
+              e.stopPropagation();
+              this.send({ t: 'trade', index: idx });
+            });
+          return b;
+        };
+        const prim = el('div', { class: 'beacon-col' }, el('div', { class: 'muted' }, 'Primary Power'));
+        effects.forEach(([id, need], i) => prim.append(btn(names[id]!, levels >= need, primary === id, i)));
+        const sec = el('div', { class: 'beacon-col' }, el('div', { class: 'muted' }, 'Secondary Power'));
+        sec.append(btn('Regeneration', levels >= 4, secondary === 'regeneration', 10), btn(primary ? `${names[primary]} II` : 'Primary II', levels >= 4 && !!primary, !!secondary && secondary === primary, 11));
+        const confirm = el('div', { class: 'beacon-confirm' + (w.props.paid && primary ? '' : ' locked') }, 'Confirm');
+        confirm.addEventListener('mousedown', (e) => {
+          e.stopPropagation();
+          if (w.props.paid && primary) this.send({ t: 'trade', index: 20 });
+        });
+        const info = el('div', { class: 'muted' }, levels > 0 ? `Pyramid level ${levels}${w.props.active ? ` - active: ${names[String(w.props.active)] ?? w.props.active}` : ''}` : 'Build a pyramid of iron, gold, diamond, emerald or netherite blocks under the beacon');
+        const pay = el('div', { class: 'stack', style: { alignItems: 'center', gap: 'calc(var(--s) * 2)' } }, el('div', { class: 'muted' }, 'Payment'), this.slot(0), confirm);
+        const top = row(prim, sec, pay);
+        top.style.alignItems = 'flex-start';
+        top.style.marginBottom = 'calc(var(--s) * 4)';
+        gui.append(title, info, top, this.invSection(1));
+        break;
+      }
       case 'smithing': {
         const top = row(this.slot(0), el('div', { class: 'muted' }, '+'), this.slot(1), this.arrow(), this.slot(2, 'slot big'));
         top.style.margin = '0 0 calc(var(--s) * 6) calc(var(--s) * 30)';
@@ -550,7 +589,7 @@ export class InventoryScreen {
   // ---------------------------------------------------------------- updates
 
   setState(win: WindowState, cursor: Slot): void {
-    const rebuild = win.id !== this.win.id || win.kind !== this.win.kind || ((win.kind === 'stonecutter' || win.kind === 'merchant' || win.kind === 'enchanting') && JSON.stringify(win.props) !== JSON.stringify(this.win.props));
+    const rebuild = win.id !== this.win.id || win.kind !== this.win.kind || ((win.kind === 'stonecutter' || win.kind === 'merchant' || win.kind === 'enchanting' || win.kind === 'beacon') && JSON.stringify(win.props) !== JSON.stringify(this.win.props));
     this.win = { ...win, props: { ...win.props } };
     this.cursor = cursor;
     if (rebuild) {
@@ -566,7 +605,7 @@ export class InventoryScreen {
 
   setProps(props: Record<string, unknown>): void {
     const merged = { ...this.win.props, ...props };
-    if ((this.win.kind === 'stonecutter' || this.win.kind === 'merchant' || this.win.kind === 'enchanting') && JSON.stringify(merged) !== JSON.stringify(this.win.props)) {
+    if ((this.win.kind === 'stonecutter' || this.win.kind === 'merchant' || this.win.kind === 'enchanting' || this.win.kind === 'beacon') && JSON.stringify(merged) !== JSON.stringify(this.win.props)) {
       this.setState({ ...this.win, props: merged }, this.cursor);
       return;
     }

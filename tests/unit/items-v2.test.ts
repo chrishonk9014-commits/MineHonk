@@ -396,3 +396,31 @@ describe('riding and leads', () => {
     expect(cow.data.leashPos).toBeUndefined();
   });
 });
+
+describe('beacon', () => {
+  it('a beacon on a pyramid gives the chosen effect once paid for', async () => {
+    const { server } = await makeServer();
+    const { player, conn } = await join(server);
+    const y = arena(player);
+    const bx = Math.floor(player.x) + 3;
+    const bz = Math.floor(player.z);
+    for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) player.dim.setBlock(bx + dx, y - 1, bz + dz, S('iron_block'));
+    player.dim.setBlock(bx, y, bz, S('beacon'));
+    // Nothing above it
+    for (let yy = y + 1; yy < 256; yy++) player.dim.setBlock(bx, yy, bz, 0);
+    server.handle(conn, { t: 'use_on', x: bx, y, z: bz, face: 1, hx: 0.5, hy: 1, hz: 0.5, hand: 0, yaw: 0, pitch: 0.5, seq: 1 });
+    const w = server.interaction.containers.windowOf(player);
+    expect(w.kind).toBe('beacon');
+    expect(w.props.levels).toBe(1);
+    w.slots[0]!.set(stackOf('iron_ingot', 1));
+    server.handle(conn, { t: 'trade', index: 0 });
+    server.handle(conn, { t: 'trade', index: 20 });
+    expect(w.slots[0]!.get()).toBeNull();
+    expect(player.effects.has('speed')).toBe(true);
+    const be = player.dim.getBlockEntity(bx, y, bz)!;
+    expect(be.beam).toBe(true);
+    // Strength needs a level 3 pyramid
+    server.handle(conn, { t: 'trade', index: 4 });
+    expect(w.props.primary).toBe('speed');
+  });
+});

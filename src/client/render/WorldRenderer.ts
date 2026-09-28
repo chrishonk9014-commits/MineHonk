@@ -17,6 +17,7 @@ import type { ItemIcons } from './ItemIcons';
 import { AtlasLookup, type AtlasMeta } from './atlasInfo';
 import type { Settings } from '../settings';
 import { selectionShape } from '../../common/physics/shapes';
+import { BeaconBeams } from './BeaconBeams';
 
 export interface GameAssets {
   blockAtlas: THREE.Texture;
@@ -72,6 +73,7 @@ export class WorldRenderer {
   readonly particles: Particles;
   readonly weather: Weather;
   readonly hand: HandRenderer;
+  readonly beams: BeaconBeams;
   readonly atlas: AtlasLookup;
   private readonly selection: THREE.LineSegments;
   private readonly crackMeshes: THREE.Mesh[] = [];
@@ -105,7 +107,8 @@ export class WorldRenderer {
     this.particles = new Particles(assets.blockAtlas, this.atlas, world);
     this.weather = new Weather(world);
     this.hand = new HandRenderer(assets.icons, (n) => this.blockTexture(n));
-    this.scene.add(this.sky.group, this.sky.cloudGroup, this.chunks.group, this.entities.group, this.particles.mesh, this.weather.mesh);
+    this.beams = new BeaconBeams(world);
+    this.scene.add(this.sky.group, this.sky.cloudGroup, this.chunks.group, this.entities.group, this.particles.mesh, this.weather.mesh, this.beams.group);
 
     const selMat = new THREE.LineBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.45 });
     this.selection = new THREE.LineSegments(new THREE.BufferGeometry(), selMat);
@@ -312,6 +315,7 @@ export class WorldRenderer {
     this.renderer.setClearColor(fog);
 
     this.chunks.update(cam, f.time);
+    this.beams.update(cam.position.x, cam.position.z, f.time);
     this.updateSelection(f.target);
     this.updateCracks(f.crack);
     this.particles.update((x, y, z) => this.lightAt(x, y, z));
@@ -348,6 +352,7 @@ export class WorldRenderer {
 
   dispose(): void {
     this.chunks.dispose();
+    this.beams.dispose();
     this.sky.dispose();
     this.entities.clear();
     this.renderer.dispose();

@@ -386,6 +386,7 @@ const EFFECTS: Record<string, { dur: number; recipe: Recipe }> = {
   'saddle.equip': { dur: 0.4, recipe: (s) => (s.noise({ dur: 0.35, gain: 0.6, attack: 0.02, decay: 0.08, lp: 1500, hp: 150, grain: 3 }), s.bell({ start: 0.15, f: 1600, ratios: [1, 2.3], gain: 0.15, decay: 0.08, dur: 0.2 })) },
   'lead.tie': { dur: 0.35, recipe: (s) => s.noise({ dur: 0.3, gain: 0.6, attack: 0.02, decay: 0.07, bp: [1400, 1.5], grain: 2 }) },
   'lead.break': { dur: 0.3, recipe: (s) => (s.knock({ f: 500, gain: 0.6, decay: 0.02 }), s.noise({ dur: 0.2, gain: 0.4, decay: 0.05, hp: 1500 })) },
+  'beacon.power': { dur: 2.5, recipe: (s) => (s.tone({ dur: 2.4, gain: 0.5, f0: 110, f1: 330, wave: 'saw', lp: 1500, attack: 0.4, decay: 1.4, vibrato: 0.02, vibratoRate: 5 }), s.bell({ start: 0.3, f: 660, ratios: [1, 1.5, 2], gain: 0.25, decay: 0.8, dur: 2 })) },
   'bell.ring': { dur: 3, recipe: (s) => s.bell({ f: 880, ratios: [1, 2.0, 2.76, 5.4, 8.9], gain: 0.8, decay: 1.2, dur: 2.9 }) },
   'respawn_anchor.charge': { dur: 0.8, recipe: (s) => (s.tone({ dur: 0.7, gain: 0.5, f0: 160, f1: 420, wave: 'saw', lp: 1200, decay: 0.3 }), s.noise({ dur: 0.5, gain: 0.3, decay: 0.15, bp: [900, 2] })) },
   'respawn_anchor.set': { dur: 1.5, recipe: (s) => (s.tone({ dur: 1.4, gain: 0.5, f0: 110, f1: 70, wave: 'saw', lp: 700, attack: 0.2, decay: 0.8, vibrato: 0.04, vibratoRate: 4 }), s.bell({ f: 330, ratios: [1, 1.5], gain: 0.3, decay: 0.6, dur: 1.2 })) },

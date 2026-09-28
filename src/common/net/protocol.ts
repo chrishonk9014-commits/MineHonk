@@ -186,7 +186,8 @@ export type WindowKind =
   | 'smithing'
   | 'creative'
   | 'merchant'
-  | 'stonecutter';
+  | 'stonecutter'
+  | 'beacon';
 
 export type { ItemStack };
 

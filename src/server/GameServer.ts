@@ -709,6 +709,7 @@ export class GameServer {
     this.blockUpdates.onChunkReady(dim, c);
     this.mobs?.onChunkLoaded(dim, c);
     this.workstations?.onChunk(dim, c);
+    this.gadgets?.onChunk(dim, c);
   }
 
   onChunkUnloaded(dim: Dimension, c: Chunk): void {

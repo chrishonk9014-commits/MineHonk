@@ -18,6 +18,21 @@ import { Random } from '../../common/math/rng';
 import { rollLoot } from '../../common/game/loot';
 import { enchantLevel } from '../../common/game/enchanting';
 import { lookDir } from './Interaction';
+import { Window } from './Containers';
+import { STATE_OPAQUE } from '../../common/registry/blocks';
+import type { Chunk } from '../../common/world/chunk';
+
+/** Blocks a beacon pyramid may be built from, and what buys an effect. */
+const BEACON_BASE = new Set(['iron_block', 'gold_block', 'diamond_block', 'emerald_block', 'netherite_block']);
+const BEACON_PAYMENT = new Set(['iron_ingot', 'gold_ingot', 'diamond', 'emerald', 'netherite_ingot']);
+/** Primary effects unlocked per pyramid level; level 4 adds a secondary (regeneration or the primary at level II). */
+export const BEACON_PRIMARY: [string, number][] = [
+  ['speed', 1],
+  ['haste', 1],
+  ['resistance', 2],
+  ['jump_boost', 2],
+  ['strength', 3],
+];
 
 export class Gadgets {
   private readonly rng = new Random();
@@ -188,6 +203,134 @@ export class Gadgets {
   }
   private readonly bellRung = new Map<string, number>();
 
+  // ------------------------------------------------------------------ beacon
+
+  private readonly beacons = new Map<string, { dim: Dimension; x: number; y: number; z: number }>();
+
+  onChunk(dim: Dimension, c: Chunk): void {
+    for (const [k, be] of c.blockEntities) {
+      if (be.type !== 'beacon') continue;
+      const x = (c.cx << 4) + (k & 15);
+      const z = (c.cz << 4) + ((k >> 4) & 15);
+      this.beacons.set(`${dim.id}|${x},${k >> 8},${z}`, { dim, x, y: k >> 8, z });
+    }
+  }
+
+  /** Pyramid levels (0-4) under a beacon. */
+  beaconLevels(dim: Dimension, x: number, y: number, z: number): number {
+    let levels = 0;
+    for (let l = 1; l <= 4; l++) {
+      const yy = y - l;
+      if (yy < 0) break;
+      for (let dx = -l; dx <= l; dx++)
+        for (let dz = -l; dz <= l; dz++) {
+          if (!BEACON_BASE.has(dim.blockId(x + dx, yy, z + dz))) return levels;
+        }
+      levels = l;
+    }
+    return levels;
+  }
+
+  /** The beam needs open sky: nothing opaque above the beacon. */
+  private beaconClear(dim: Dimension, x: number, y: number, z: number): boolean {
+    if (!dim.rules.hasSky) return true;
+    for (let yy = y + 1; yy < 256; yy++) if (STATE_OPAQUE[dim.getState(x, yy, z)]) return false;
+    return true;
+  }
+
+  useBeacon(p: ServerPlayer, x: number, y: number, z: number): boolean {
+    const s = this.server;
+    const dim = p.dim;
+    let be = dim.getBlockEntity(x, y, z);
+    if (!be || be.type !== 'beacon') {
+      be = { type: 'beacon', primary: null, secondary: null, levels: 0, beam: false };
+      dim.setBlockEntity(x, y, z, be);
+    }
+    this.beacons.set(`${dim.id}|${x},${y},${z}`, { dim, x, y, z });
+    const cont = s.interaction.containers;
+    const w = cont.allocWindow('beacon', 'Beacon', 1);
+    w.pos = { dim, x, y, z };
+    let payment: ItemStack | null = null;
+    let pickPrimary: string | null = (be.primary as string | null) ?? null;
+    let pickSecondary: string | null = (be.secondary as string | null) ?? null;
+    const refresh = (): void => {
+      const levels = this.beaconLevels(dim, x, y, z);
+      w.props = {
+        levels,
+        primary: pickPrimary,
+        secondary: pickSecondary,
+        active: be!.primary ?? null,
+        paid: !!payment && BEACON_PAYMENT.has(items[payment.id]!.id),
+      };
+    };
+    w.refresh = refresh;
+    w.slots.push({
+      get: () => payment,
+      set: (st) => {
+        payment = st;
+        refresh();
+      },
+      mayPlace: (st) => BEACON_PAYMENT.has(items[st.id]!.id),
+      max: () => 1,
+      group: 'input',
+    });
+    (w as Window & { select?: (i: number) => void }).select = (i: number) => {
+      const levels = this.beaconLevels(dim, x, y, z);
+      if (i >= 0 && i < BEACON_PRIMARY.length) {
+        const [eff, need] = BEACON_PRIMARY[i]!;
+        if (levels >= need) pickPrimary = eff;
+      } else if (i === 10 && levels >= 4) pickSecondary = 'regeneration';
+      else if (i === 11 && levels >= 4) pickSecondary = pickPrimary;
+      else if (i === 20 && payment && pickPrimary && levels > 0) {
+        // Confirm: the payment is consumed and the beacon switches effects
+        payment = null;
+        be!.primary = pickPrimary;
+        be!.secondary = levels >= 4 ? pickSecondary : null;
+        dim.setBlockEntity(x, y, z, be!);
+        s.playSound(dim, 'beacon.power', x + 0.5, y + 0.5, z + 0.5, 1.5, 1);
+        this.pulseBeacon(dim, x, y, z, true);
+      }
+      refresh();
+    };
+    cont.addPlayerSlots(w, p);
+    w.onClose = (pl) => {
+      if (payment) {
+        const rem = pl.inventory.add(payment);
+        if (rem) s.interaction.dropStack(pl, rem);
+        payment = null;
+      }
+    };
+    refresh();
+    s.interaction.openCustomWindow(p, w);
+    return true;
+  }
+
+  /** Updates a beacon's level and beam and gives its effects to players in range. */
+  private pulseBeacon(dim: Dimension, x: number, y: number, z: number, force = false): void {
+    const s = this.server;
+    const be = dim.getBlockEntity(x, y, z);
+    if (!be || be.type !== 'beacon') return;
+    const levels = this.beaconLevels(dim, x, y, z);
+    const beam = levels > 0 && this.beaconClear(dim, x, y, z);
+    if (be.levels !== levels || be.beam !== beam || force) {
+      be.levels = levels;
+      be.beam = beam;
+      dim.setBlockEntity(x, y, z, be);
+      s.sendToWatchers(dim, x, z, { t: 'block_entity', x, y, z, data: be });
+      if (beam && !force) s.playSound(dim, 'beacon.power', x + 0.5, y + 0.5, z + 0.5, 1.5, 1);
+    }
+    if (!beam || !be.primary) return;
+    const range = 10 + levels * 10;
+    const ticks = (9 + levels * 2) * 20;
+    const primary = String(be.primary);
+    const secondary = be.secondary ? String(be.secondary) : null;
+    for (const pl of s.players.values()) {
+      if (pl.dim !== dim || pl.dead || Math.abs(pl.x - x - 0.5) > range || Math.abs(pl.z - z - 0.5) > range) continue;
+      s.interaction.survival.addEffect(pl, primary, secondary === primary ? 1 : 0, ticks);
+      if (secondary && secondary !== primary) s.interaction.survival.addEffect(pl, secondary, 0, ticks);
+    }
+  }
+
   // ------------------------------------------------------------------ fireworks
 
   /** Launches a decorative rocket that bursts after about a second and a half. */
@@ -268,6 +411,17 @@ export class Gadgets {
 
   tick(): void {
     const s = this.server;
+    // Beacons pulse every four seconds
+    if (s.tickNo % 80 === 0) {
+      for (const [k, b] of this.beacons) {
+        if (!b.dim.isLoaded(b.x, b.z)) continue;
+        if (b.dim.blockId(b.x, b.y, b.z) !== 'beacon') {
+          this.beacons.delete(k);
+          continue;
+        }
+        this.pulseBeacon(b.dim, b.x, b.y, b.z);
+      }
+    }
     // Jukeboxes: tell players who come within earshot; stop when the jukebox is gone
     if (s.tickNo % 20 === 0) {
       for (const [k, r] of this.records) {

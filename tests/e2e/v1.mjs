@@ -161,13 +161,24 @@ try {
   const before = await page.evaluate(() => [window.minehonk.game.player.body.x, window.minehonk.game.player.body.z]);
   await page.locator('.admin-result').first().getByRole('button', { name: 'TELEPORT' }).click();
   await page.waitForFunction(() => !document.querySelector('.admin-panel'), null, { timeout: 90000 });
+  // The server prepares the destination chunks first, then moves the player
+  const tTp = Date.now();
+  await page.waitForFunction(
+    ([bx, bz]) => {
+      const b = window.minehonk.game.player.body;
+      return Math.hypot(b.x - bx, b.z - bz) > 30;
+    },
+    before,
+    { timeout: 120000, polling: 250 },
+  );
+  console.log(`  teleport completed ${Date.now() - tTp} ms after the panel closed`);
   await page.waitForFunction(() => {
     const l = document.querySelector('.loading');
     return !l || l.classList.contains('hidden');
   }, null, { timeout: 120000 });
   await page.waitForTimeout(4000);
   const after = await page.evaluate(() => [window.minehonk.game.player.body.x, window.minehonk.game.player.body.y, window.minehonk.game.player.body.z]);
-  check(Math.hypot(after[0] - before[0], after[2] - before[2]) > 30, `teleported to the village (${after.map(Math.round)})`);
+  check(Math.hypot(after[0] - before[0], after[2] - before[1]) > 30, `teleported to the village (${after.map(Math.round)}, from ${before.map(Math.round)})`);
   await shot('village');
 
   // Biome teleport (Nether biome from the overworld)

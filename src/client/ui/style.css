@@ -1137,6 +1137,8 @@ body {
   padding: calc(var(--s) * 6);
   color: var(--gray-text);
   pointer-events: auto;
+  /* The list and the detail shrink (and scroll) to fit short windows */
+  overflow: hidden;
 }
 .recipe-book .gtitle {
   color: #404040;
@@ -1153,8 +1155,12 @@ body {
   font-size: calc(var(--s) * 6);
   color: #555;
   white-space: nowrap;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .rb-toggle {
+  flex: none;
   height: calc(var(--s) * 12);
   min-width: 0;
   font-size: calc(var(--s) * 6);
@@ -1185,7 +1191,7 @@ body {
 }
 .rb-list {
   flex: 1 1 auto;
-  min-height: calc(var(--s) * 60);
+  min-height: calc(var(--s) * 24);
   max-height: calc(var(--s) * 110);
   overflow-y: auto;
   background: #8b8b8b;
@@ -1250,7 +1256,10 @@ body {
   display: flex;
   flex-direction: column;
   gap: calc(var(--s) * 2);
-  min-height: calc(var(--s) * 40);
+  flex: 0 1 auto;
+  min-height: calc(var(--s) * 30);
+  overflow-y: auto;
+  scrollbar-width: thin;
 }
 .rb-title {
   color: #1e1e1e;

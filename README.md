@@ -140,10 +140,15 @@ npx vite build --minify false --outDir dist-bench
 node tests/perf/bench.mjs dist-bench        # FPS, frame time, draws, memory per scenario
 node tools/perf/compare.mjs a.json b.json   # before/after table
 npx tsx tools/perf/server-bench.ts          # server tick cost with many mobs
+node tools/perf/shader-cost.mjs             # frame time by render layer and option
+node tools/perf/churn.mjs                   # server updates and re-meshing in a still scene
 ```
 
 The benchmark uses headless Chromium with software WebGL, so absolute FPS is
 far below a real GPU. Compare runs made on the same machine.
+
+On slow machines, lower the render distance (Options → Video presets) and
+set **Leaves: Fast**. Leaves are the most expensive thing to draw in forests.
 
 ### Architecture
 
@@ -163,13 +168,15 @@ tools         procedural asset generation (textures, font) and debug maps
 tests         unit, integration and end-to-end tests
 ```
 
-Chunks are meshed in worker threads. Faces with identical light and colour
-are merged (greedy meshing), and each section's faces are grouped by
-direction. Sections are packed into render regions (4x4 chunks by 8
-sections) drawn with one multi-draw call per buffer page. Each frame the
-renderer skips sections outside the view, sections hidden behind solid
-terrain (a cave visibility graph) and face groups pointing away from the
-camera.
+Chunks are meshed in worker threads into a compact vertex format, with each
+section's faces grouped by the direction they face. Sections are packed into
+render regions (4x4 chunks by 8 sections) drawn with one multi-draw call per
+buffer page. Each frame the renderer skips sections outside the view,
+sections hidden behind solid terrain (a cave visibility graph) and face
+groups pointing away from the camera, drawing solid terrain near to far.
+`tests/e2e/render-equivalence.mjs` checks that culling never changes a
+pixel. Greedy meshing is implemented but off: merged faces leave hairline
+cracks at a distance.
 
 The client only sends intentions (move, dig, use, click, chat). The server
 validates everything: reach, line of sight, break timing, inventory

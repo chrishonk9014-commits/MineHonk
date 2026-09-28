@@ -28,6 +28,7 @@ import { Interaction } from './systems/Interaction';
 import { Commands } from './commands/Commands';
 import { PlayerData } from './player/PlayerData';
 import { AdminService } from './admin/AdminService';
+import { RegistryHistory } from './world/RegistryHistory';
 
 export interface ServerOptions {
   /** Max chunks sent per player per tick. */
@@ -63,6 +64,8 @@ export class GameServer {
   readonly commands: Commands;
   readonly playerData: PlayerData;
   readonly admin: AdminService;
+  /** Block registries the world's saved chunks were written with. */
+  readonly registries: RegistryHistory;
   tickNo = 0;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private nextTickAt = 0;
@@ -92,6 +95,7 @@ export class GameServer {
       filterChat: opts.filterChat,
       canJoin: opts.canJoin,
     };
+    this.registries = new RegistryHistory(storage, (m) => this.log(m));
     this.blockUpdates = new BlockUpdates(this);
     this.mining = new Mining(this);
     this.interaction = new Interaction(this);
@@ -121,7 +125,9 @@ export class GameServer {
       level = createLevelData(create);
       await storage.writeLevel(level);
     }
-    return new GameServer(storage, level, opts);
+    const server = new GameServer(storage, level, opts);
+    await server.registries.load();
+    return server;
   }
 
   log(msg: string): void {

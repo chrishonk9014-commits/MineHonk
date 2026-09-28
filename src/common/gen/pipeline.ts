@@ -11,7 +11,16 @@ import type { Start } from './structures/manager';
 export interface GeneratorOptions {
   /** Generate villages, temples and other structures (default true). */
   structures?: boolean;
+  /**
+   * World generator version. Unmodified chunks are regenerated from the seed
+   * on every load, so a world keeps the version it was created with:
+   * 1 = V1 terrain, 2 = V2 (the Caves Update). Defaults to the latest.
+   */
+  version?: number;
 }
+
+/** Newest world generator version (new worlds use this). */
+export const LATEST_GENERATOR = 2;
 
 export interface SpawnPoint {
   x: number;

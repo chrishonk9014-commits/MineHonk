@@ -8,6 +8,7 @@ import { createGenerator } from '../../src/common/gen/generator';
 import { seedFromString, Random } from '../../src/common/math/rng';
 import { selectEnchantments } from '../../src/common/game/enchanting';
 import { rollLoot } from '../../src/common/game/loot';
+import { recipeBook } from '../../src/common/game/recipeBook';
 import { stackOf } from '../../src/common/game/itemstack';
 import { Mob } from '../../src/server/entity/Mob';
 import type { GameServer } from '../../src/server/GameServer';
@@ -190,5 +191,12 @@ describe('Silent Stride', () => {
     }
     expect(found).toBeGreaterThan(0);
     expect(itemById.get('resonance_charm')).toBeDefined();
+  });
+});
+
+describe('Recipe Book', () => {
+  it('lists the Caves Update recipes', () => {
+    const results = new Set(recipeBook().map((e) => e.result.id));
+    for (const id of ['lumen_crystal', 'music_disc_hollow', 'recovery_compass']) expect(results.has(itemById.get(id)!.num)).toBe(true);
   });
 });

@@ -58,4 +58,35 @@ describe('persistence hardening', () => {
     expect(p2.achievements.has('mine_block')).toBe(true);
     expect(s2.level.flags.dragonKilled).toBe(true);
   });
+
+  it('keeps the V2 generator, Warden warnings and visited cave biomes across restarts', async () => {
+    const storage = new MemoryStorage();
+    const { server } = await makeServer({}, storage);
+    expect(server.level.generatorVersion).toBe(2);
+    expect(server.overworld.generator.caves).toBe(true);
+    const { player } = await join(server, 'Caver');
+    player.wardenWarning = 2;
+    player.visitedCaveBiomes.add(3);
+    player.visitedCaveBiomes.add(9);
+    await server.stop();
+    const { server: s2 } = await makeServer({}, storage);
+    expect(s2.level.generatorVersion).toBe(2);
+    const { player: p2 } = await join(s2, 'Caver');
+    expect(p2.wardenWarning).toBe(2);
+    expect([...p2.visitedCaveBiomes].sort()).toEqual([3, 9]);
+  });
+
+  it('opens worlds saved before the Caves Update with the V1 generator', async () => {
+    const storage = new MemoryStorage();
+    const { server } = await makeServer({ name: 'Old' }, storage);
+    await server.stop();
+    // A V1 save has no generator version
+    delete (storage.level as { generatorVersion?: number }).generatorVersion;
+    const again = await GameServer.open(storage, null, {});
+    expect(again.level.generatorVersion).toBe(1);
+    expect(again.overworld.generator.caves).toBe(false);
+    // Saving again keeps it a V1 world
+    await again.saveAll();
+    expect((storage.level as { generatorVersion?: number }).generatorVersion).toBe(1);
+  });
 });

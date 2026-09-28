@@ -86,6 +86,24 @@ describe('sculk', () => {
     expect(warden!.data.untouchable).toBeUndefined();
   });
 
+  it('in multiplayer, everyone nearby sees the vibration and the darkness, but the warning is per player', async () => {
+    const { server } = await makeServer();
+    const a = await join(server, 'Loud');
+    const b = await join(server, 'Quiet');
+    const y = arena(a.player);
+    b.player.setPos(a.player.x - 3, y, a.player.z);
+    tick(server, 2);
+    const sx = Math.floor(a.player.x) + 3;
+    const sz = Math.floor(a.player.z) + 2;
+    a.player.dim.setBlock(sx, y, sz, S('sculk_sensor'));
+    a.player.dim.setBlock(sx + 1, y, sz, stateOf('sculk_shrieker', { can_summon: true }));
+    walk(server, a.conn, a.player, 2);
+    expect(a.player.wardenWarning).toBe(1);
+    expect(b.player.wardenWarning).toBe(0);
+    expect(b.conn.of('trail').some((m) => m.kind === 'vibration')).toBe(true);
+    expect(b.player.effects.has('darkness')).toBe(true);
+  });
+
   it('a shrieker that cannot summon only shrieks', async () => {
     const { server } = await makeServer();
     const { player } = await join(server);

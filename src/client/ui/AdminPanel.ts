@@ -434,13 +434,13 @@ export function adminScreen(host: AdminHost): Screen {
         label('Dimension'),
         dimSel,
         section('Teleport to Structure', label('Structure'), sHolder, el('div', { class: 'row' }, btn('Find nearest', () => void findS(false), 'btn half-w'), btn('Teleport', () => void findS(true), 'btn half-w')), sBox),
-        section('Underground', cHolder),
       ),
       el(
         'div',
         { class: 'admin-col' },
         section('Teleport to Biome', label('Biome'), bHolder, el('div', { class: 'row' }, btn('Find nearest', () => void findB(false), 'btn half-w'), btn('Teleport', () => void findB(true), 'btn half-w')), bBox),
         section('Players', players),
+        section('Underground', cHolder),
       ),
     );
     return wrap;

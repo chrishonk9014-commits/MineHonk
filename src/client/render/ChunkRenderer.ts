@@ -52,6 +52,14 @@ interface Slot {
 export const PAGE_QUADS = 32768;
 
 /**
+ * Greedy meshing (merging identical neighbouring faces) is off: it saves only
+ * 10-20% of quads with smooth lighting, and the merged faces form T-junctions
+ * with their neighbours that show as single-pixel cracks in distant terrain.
+ * Face-direction and cave culling remove far more without changing a pixel.
+ */
+export const GREEDY_MESHING = false;
+
+/**
  * Most ranges a section can need once back-facing groups are skipped: at most
  * one of each opposite pair is dropped, leaving at most four separate runs.
  */
@@ -298,15 +306,14 @@ export class ChunkRenderer implements ChunkListener {
       uFogColor: { value: new THREE.Color(0xc0d8ff) },
       uFogNear: { value: 100 },
       uFogFar: { value: 150 },
-      uAlphaMode: { value: 0 },
       uNightVision: { value: 0 },
       uFlicker: { value: 1 },
     };
     const mk = (mode: number): THREE.ShaderMaterial => {
       // Shared uniform objects: updating this.uniforms updates every material
-      const u: Record<string, THREE.IUniform> = { ...this.uniforms, uAlphaMode: { value: mode } };
       return new THREE.ShaderMaterial({
-        uniforms: u,
+        uniforms: { ...this.uniforms },
+        defines: { ALPHA_MODE: mode, GREEDY: GREEDY_MESHING ? 1 : 0 },
         vertexShader: CHUNK_VERT,
         fragmentShader: CHUNK_FRAG,
         transparent: mode === 2,
@@ -679,6 +686,7 @@ export class ChunkRenderer implements ChunkListener {
           tints: input.tints.slice(),
           fancyLeaves: this.settings.fancyLeaves,
           smoothLighting: this.settings.smoothLighting,
+          greedy: GREEDY_MESHING,
           ox: (e.cx - r.rx * REGION_CHUNKS) * 16,
           oy: (e.sy - r.ry * REGION_SECTIONS) * 16,
           oz: (e.cz - r.rz * REGION_CHUNKS) * 16,
@@ -892,16 +900,16 @@ export class ChunkRenderer implements ChunkListener {
           if (!this.frustum.intersectsBox(box)) continue;
           list.push(e);
         }
-        if (li === 3) {
-          // Translucent: far to near
-          for (const e of list) {
-            const dx = e.cx * 16 + 8 - cp.x;
-            const dy = e.sy * 16 + 8 - cp.y;
-            const dz = e.cz * 16 + 8 - cp.z;
-            e.dist = dx * dx + dy * dy + dz * dz;
-          }
-          list.sort((a, b) => b.dist - a.dist);
-        } else list.sort((a, b) => a.slots[li]!.start - b.slots[li]!.start);
+        for (const e of list) {
+          const dx = e.cx * 16 + 8 - cp.x;
+          const dy = e.sy * 16 + 8 - cp.y;
+          const dz = e.cz * 16 + 8 - cp.z;
+          e.dist = dx * dx + dy * dy + dz * dz;
+        }
+        // Translucent: far to near for blending. Solid layers: near to far, so
+        // the depth buffer fills early and hidden pixels are rejected unshaded.
+        if (li === 3) list.sort((a, b) => b.dist - a.dist);
+        else list.sort((a, b) => a.dist - b.dist);
         const need = list.length * MAX_RANGES_PER_SECTION;
         if (mesh._multiDrawStarts.length < need) {
           const n = Math.max(need, mesh._multiDrawStarts.length * 2);

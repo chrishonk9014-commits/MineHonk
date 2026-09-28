@@ -2,11 +2,12 @@
  * Chunk section mesher. Operates on a padded 18^3 copy of the section so that
  * neighbour lookups never cross chunk objects.
  *
- * Output is compact interleaved vertex data (see VERTEX FORMAT below). Full
- * cube faces whose four corners share the same light, ambient occlusion and
- * tint are merged into larger rectangles (greedy meshing); the texture repeats
- * across a merged face in the shader, so the result looks identical to one
- * quad per block. Each layer's quads are grouped by the direction they face
+ * Output is compact interleaved vertex data (see VERTEX FORMAT below). With
+ * greedy meshing on, full cube faces whose four corners share the same light,
+ * ambient occlusion and tint are merged into larger rectangles and the texture
+ * repeats across them in the shader. It is off in the game (see
+ * GREEDY_MESHING in ChunkRenderer): merged faces meet their neighbours in
+ * T-junctions, which leave single-pixel cracks at a distance. Each layer's quads are grouped by the direction they face
  * so the renderer can skip groups that face away from the camera. The mesher
  * also reports which faces of the section are connected through open space,
  * used for cave/occlusion culling.
@@ -39,6 +40,8 @@ export interface MeshInput {
   tints: Uint8Array;
   fancyLeaves: boolean;
   smoothLighting: boolean;
+  /** Merge uniform faces (defaults to Mesher.greedy). */
+  greedy?: boolean;
   /** Offset (blocks) of this section inside its render region. */
   ox?: number;
   oy?: number;
@@ -245,8 +248,9 @@ export class Mesher {
   private readonly keyB = new Float64Array(PLANE_CELLS);
   private readonly visQueue = new Int16Array(4096);
   private readonly visSeen = new Uint8Array(4096);
-  /** Merges uniform cube faces (can be disabled for comparisons/tests). */
+  /** Merges uniform cube faces unless a mesh input says otherwise. */
   greedy = true;
+  private useGreedy = true;
 
   constructor(meta: AtlasMeta) {
     initBlocks();
@@ -312,6 +316,7 @@ export class Mesher {
   mesh(input: MeshInput): MeshOutput {
     const { blocks } = input;
     const builders = [new Builder(16), new Builder(1024), new Builder(256), new Builder(256)];
+    this.useGreedy = input.greedy ?? this.greedy;
     const res = this.resolved;
     this.keyA.fill(0);
     let anyCube = false;
@@ -472,7 +477,7 @@ export class Mesher {
       }
       const rot = r.cubeRot![f]!;
       // Uniform faces go to the greedy planes; the rest are emitted now.
-      if (this.greedy && rot === 0 && a0 === a1 && a0 === a2 && a0 === a3 && s0 === s1 && s0 === s2 && s0 === s3 && b0 === b1 && b0 === b2 && b0 === b3) {
+      if (this.useGreedy && rot === 0 && a0 === a1 && a0 === a2 && a0 === a3 && s0 === s1 && s0 === s2 && s0 === s3 && b0 === b1 && b0 === b2 && b0 === b3) {
         const pl = PLANE[f]!;
         const cell = [x, y, z];
         const idx = ((f * 16 + cell[pl[0]]!) * 16 + cell[pl[2]]!) * 16 + cell[pl[1]]!;

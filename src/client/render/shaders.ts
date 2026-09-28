@@ -55,7 +55,8 @@ uniform float uAmbient;
 uniform vec3 uFogColor;
 uniform float uFogNear;
 uniform float uFogFar;
-uniform float uAlphaMode; // 0 opaque, 1 cutout, 2 translucent
+// ALPHA_MODE (compile-time, one program per layer): 0 opaque, 1 cutout, 2 translucent.
+// The opaque program has no discard, which keeps early depth testing on.
 uniform float uNightVision;
 uniform float uFlicker;
 
@@ -65,14 +66,21 @@ float curve(float l) {
 }
 
 void main() {
+#if GREEDY
   // Repeat the tile across merged faces; stay a hair inside the quad's own edges
   vec2 l = clamp(vLocal, vec2(0.002), vSize - 0.002);
   vec2 uv = vTile + fract(l) * uTileSize;
   // Gradients of the unwrapped coordinates keep mip selection seamless
   vec4 tex = textureGrad(uAtlas, uv, dFdx(vLocal) * uTileSize, dFdy(vLocal) * uTileSize);
-  if (uAlphaMode < 1.5) {
-    if (tex.a < 0.5) discard;
-  } else if (tex.a < 0.02) discard;
+#else
+  // One quad per block face: a plain lookup, a hair inside the tile
+  vec4 tex = texture(uAtlas, vTile + clamp(vLocal, vec2(0.002), vSize - 0.002) * uTileSize);
+#endif
+#if ALPHA_MODE == 1
+  if (tex.a < 0.5) discard;
+#elif ALPHA_MODE == 2
+  if (tex.a < 0.02) discard;
+#endif
   vec3 base = tex.rgb;
   if (tex.a < 0.999) base *= vTint;
   float sky = curve(vLight.x) * uDaylight;
@@ -83,7 +91,11 @@ void main() {
   vec3 col = base * light * vShade;
   float fog = smoothstep(uFogNear, uFogFar, vFogDepth);
   col = mix(col, uFogColor, fog);
-  float a = uAlphaMode > 1.5 ? (tex.a > 0.99 ? 1.0 : tex.a) : 1.0;
+#if ALPHA_MODE == 2
+  float a = tex.a > 0.99 ? 1.0 : tex.a;
+#else
+  float a = 1.0;
+#endif
   gl_FragColor = vec4(col, a);
 }
 `;

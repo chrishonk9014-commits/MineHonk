@@ -57,15 +57,29 @@ const cmd = async (text) => {
   await page.waitForTimeout(1500);
 };
 
-/** Renders one frame with the given culling and returns the screenshot. */
-async function frame(cull) {
-  await page.evaluate((c) => {
-    const g = window.minehonk.game;
-    g.renderer.chunks.facingCull = c;
-    g.renderer.chunks.occlusion = c;
-    g.render(0, 16);
-    g.render(0, 16);
-  }, cull);
+/**
+ * Renders one frame and returns the screenshot. `cull` switches the culling;
+ * `legacyDiscard` puts back the alpha test the opaque layer used to have (it
+ * now has none, so the GPU can reject hidden pixels before shading them).
+ */
+async function frame(cull, legacyDiscard = false) {
+  await page.evaluate(
+    ([c, legacy]) => {
+      const g = window.minehonk.game;
+      const m = g.renderer.chunks.materials[1];
+      window.__opaqueFrag ??= m.fragmentShader;
+      const src = legacy ? window.__opaqueFrag.replace('#if ALPHA_MODE == 1', '#if ALPHA_MODE <= 1') : window.__opaqueFrag;
+      if (m.fragmentShader !== src) {
+        m.fragmentShader = src;
+        m.needsUpdate = true;
+      }
+      g.renderer.chunks.facingCull = c;
+      g.renderer.chunks.occlusion = c;
+      g.render(0, 16);
+      g.render(0, 16);
+    },
+    [cull, legacyDiscard],
+  );
   return PNG.sync.read(await page.screenshot());
 }
 
@@ -104,6 +118,11 @@ async function views(label, looks) {
     const qOff = await quads();
     const frac = compare(on, off, `${label}-${i}`);
     worst = Math.max(worst, frac);
+    // Information only: distant mip levels blend tile edges with the atlas padding,
+    // so the old alpha test punched sky-coloured holes along far silhouettes
+    const legacy = await frame(true, true);
+    const alpha = compare(on, legacy, `${label}-${i}-alpha`);
+    if (alpha > 0) console.log(`  ${label} view ${i}: the old opaque alpha test would change ${(alpha * 100).toFixed(3)}% of pixels`);
     console.log(`  ${label} view ${i}: ${(frac * 100).toFixed(3)}% pixels differ | quads drawn ${qOff} -> ${qOn} with culling (${Math.round((1 - qOn / qOff) * 100)}% fewer)`);
   }
   await page.evaluate(() => {
@@ -176,8 +195,8 @@ try {
     await cmd(`/tp ${cave[0]} ${cave[1]} ${cave[2]}`);
     worst = Math.max(worst, await views('cave', [[0, 0], [1.57, -0.3], [3.14, 0.3], [4.71, 0]]));
   } else console.log('  no cave found near spawn');
-  // Culling may only remove what is hidden: allow a hair of rasterisation noise
-  if (worst > 0.001) throw new Error(`culling changed ${(worst * 100).toFixed(3)}% of a frame (see tests/e2e/out/eq-*.png)`);
+  // Culling may only remove what is hidden (a hair of slack for a mob moving between renders)
+  if (worst > 0.0002) throw new Error(`culling changed ${(worst * 100).toFixed(3)}% of a frame (see tests/e2e/out/eq-*.png)`);
   console.log('RENDER EQUIVALENCE: PASS');
 } catch (e) {
   failed = true;

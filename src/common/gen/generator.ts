@@ -14,7 +14,7 @@ import { OverworldTerrain } from './overworld';
 import { DecorView } from './decorate/view';
 import * as F from './decorate/features';
 import { StructureManager } from './structures/manager';
-import { ProtoCache, cloneChunk, addGenEntities, type DimensionGenerator, type GeneratorOptions, type SpawnPoint } from './pipeline';
+import { ProtoCache, cloneChunk, addGenEntities, LATEST_GENERATOR, type DimensionGenerator, type GeneratorOptions, type SpawnPoint } from './pipeline';
 import { VILLAGE } from './structures/village';
 import { SURFACE_STRUCTURES } from './structures/misc';
 import { MINESHAFT, STRONGHOLD } from './structures/underground';
@@ -41,7 +41,7 @@ export class OverworldGenerator implements DimensionGenerator {
     readonly seed: number,
     opts: GeneratorOptions = {},
   ) {
-    this.terrain = new OverworldTerrain(seed);
+    this.terrain = new OverworldTerrain(seed, opts.version ?? LATEST_GENERATOR);
     this.protos = new ProtoCache(600, (cx, cz) => this.terrain.generate(cx, cz));
     const ground = (x: number, z: number): { y: number; water: boolean } => {
       const c = this.protos.get(x >> 4, z >> 4);

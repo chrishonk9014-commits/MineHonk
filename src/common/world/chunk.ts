@@ -22,6 +22,8 @@ export class Chunk {
   readonly blockEntities = new Map<number, BlockEntityData>();
   /** Entities placed by world generation, spawned once when the chunk is first generated (not serialised). */
   readonly genEntities: { type: string; x: number; y: number; z: number; data?: Record<string, unknown> }[] = [];
+  /** Cave biome per 4x4x4 cell (proto chunks of V2 worlds only; not serialised). */
+  caveBiomes: Uint8Array | null = null;
   /** Non-air counts per section to free sections that become empty. */
   readonly counts = new Uint16Array(SECTIONS_PER_CHUNK);
 

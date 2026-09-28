@@ -11,6 +11,8 @@ import { S, stateOf } from '../registry/blocks';
 import { biomeOf } from '../registry/biomes';
 import { NoiseGrid } from './grid';
 import { B, OverworldClimate, newClimate, type Climate } from './climate';
+import { CaveBiomeSource } from './caves/caveBiomes';
+import { CaveCarver } from './caves/carver';
 
 interface Palette {
   stone: number;
@@ -88,7 +90,17 @@ export class OverworldTerrain {
   private readonly caveGrids = [new NoiseGrid(4, 4, 136), new NoiseGrid(4, 4, 136), new NoiseGrid(4, 4, 136), new NoiseGrid(4, 4, 136)];
   private readonly caveVals = [new Float32Array(16 * 16 * 136), new Float32Array(16 * 16 * 136), new Float32Array(16 * 16 * 136), new Float32Array(16 * 16 * 136)];
 
-  constructor(readonly seed: number) {
+  /** V2 underground (null for worlds made with the V1 generator). */
+  readonly caveBiomes: CaveBiomeSource | null;
+  readonly carver: CaveCarver | null;
+  private readonly temps = new Float32Array(256);
+
+  constructor(
+    readonly seed: number,
+    readonly version = 2,
+  ) {
+    this.caveBiomes = version >= 2 ? new CaveBiomeSource(seed) : null;
+    this.carver = this.caveBiomes ? new CaveCarver(seed, this.caveBiomes) : null;
     this.climate = new OverworldClimate(seed);
     const r = (salt: number): Random => new Random(hashInts(seed, salt, 0x7e44a1));
     this.overhang = new Octave3(r(1), 3, 90, 64);
@@ -169,8 +181,11 @@ export class OverworldTerrain {
       }
     }
 
-    // 5. Noise caves
-    this.carveCaves(chunk, bx, bz, pal);
+    // 5. Caves
+    if (this.carver) {
+      for (let i = 0; i < 256; i++) this.temps[i] = this.climates[i]!.t;
+      this.carver.carve(chunk, bx, bz, this.temps, this.carveStates(pal));
+    } else this.carveCaves(chunk, bx, bz, pal);
 
     // 6. Bedrock & deepslate
     for (let z = 0; z < 16; z++) {
@@ -181,16 +196,38 @@ export class OverworldTerrain {
         for (let y = 1; y < 5; y++) {
           if (hash3(this.seed ^ 0xbed, wx, y, wz) % 5 >= y) chunk.setRaw(x, y, z, pal.bedrock);
         }
-        for (let y = 1; y < 18; y++) {
-          const s = chunk.get(x, y, z);
-          if (s !== pal.stone) continue;
-          if (y < 8 || hash3(this.seed ^ 0xdee9, wx, y, wz) % 10 < 18 - y) chunk.setRaw(x, y, z, pal.deepslate);
-        }
+        if (this.carver) {
+          // V2: a thicker deepslate layer fading out between y 20 and 30
+          for (let y = 1; y < 30; y++) {
+            const s = chunk.get(x, y, z);
+            if (s !== pal.stone) continue;
+            if (y < 20 || hash3(this.seed ^ 0xdee9, wx, y, wz) % 10 < 30 - y) chunk.setRaw(x, y, z, pal.deepslate);
+          }
+        } else
+          for (let y = 1; y < 18; y++) {
+            const s = chunk.get(x, y, z);
+            if (s !== pal.stone) continue;
+            if (y < 8 || hash3(this.seed ^ 0xdee9, wx, y, wz) % 10 < 18 - y) chunk.setRaw(x, y, z, pal.deepslate);
+          }
       }
     }
 
     chunk.recomputeHeightmap();
     return chunk;
+  }
+
+  private carveStatesCache: import('./caves/carver').CarveStates | undefined;
+  private carveStates(pal: Palette): import('./caves/carver').CarveStates {
+    return (this.carveStatesCache ??= { water: pal.water, lava: pal.lava, caveAir: pal.caveAir, solid: (s) => isSolidTerrain(s, pal) });
+  }
+
+  /** Cave biome at a position (V2 worlds), None above the ground or in V1 worlds. */
+  caveBiomeAt(x: number, y: number, z: number): number {
+    if (!this.caveBiomes) return 0;
+    const cl = newClimate();
+    this.climate.sample(x, z, cl);
+    if (y > cl.height - 6) return 0;
+    return this.caveBiomes.at(x, y, z, cl.t);
   }
 
   private surfaceColumn(chunk: Chunk, x: number, z: number, bx: number, bz: number, pal: Palette, maxTop: number): void {

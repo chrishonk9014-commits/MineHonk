@@ -5,6 +5,7 @@
 import type { C2S, ClickMode } from './protocol';
 import { LIMITS } from './protocol';
 import { sanitizeStack } from '../game/itemstack';
+import { validateAdmin } from '../game/admin';
 
 const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 const isInt = (v: unknown): v is number => Number.isInteger(v);
@@ -97,6 +98,12 @@ export function validateC2S(raw: unknown): C2S | null {
     case 'ping':
       if (!isNum(m.time)) return null;
       return { t: 'ping', time: m.time };
+    case 'admin': {
+      if (!isInt(m.req)) return null;
+      const action = validateAdmin(m.action);
+      if (!action) return null;
+      return { t: 'admin', req: m.req, action };
+    }
     default:
       return null;
   }

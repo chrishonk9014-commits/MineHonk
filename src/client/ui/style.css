@@ -1091,3 +1091,488 @@ body {
   min-width: 0;
   font-size: calc(var(--s) * 8);
 }
+
+/* ------------------------------------------------------------ recipe book */
+.layer.with-book {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: calc(var(--s) * 4);
+}
+.layer.with-book > .gui {
+  position: relative !important;
+  left: auto;
+  top: auto;
+  transform: none;
+}
+.rb-button {
+  position: absolute;
+  right: calc(var(--s) * 4);
+  top: calc(var(--s) * 4);
+  width: calc(var(--s) * 20);
+  height: calc(var(--s) * 18);
+  background: #5f8a3a;
+  border: var(--s) solid #000;
+  box-shadow: inset var(--s) var(--s) 0 #9fcf6f, inset calc(var(--s) * -1) calc(var(--s) * -1) 0 #2f4a1a;
+  cursor: pointer;
+  pointer-events: auto;
+}
+.rb-button:hover,
+.rb-button.active {
+  background: #7aa84f;
+}
+.rb-button .item-icon {
+  left: var(--s);
+  top: 0;
+}
+.recipe-book {
+  width: calc(var(--s) * 170);
+  max-height: calc(100vh - var(--s) * 20);
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--s) * 3);
+  background: var(--panel);
+  border: var(--s) solid #000;
+  box-shadow: inset calc(var(--s) * 2) calc(var(--s) * 2) 0 var(--panel-light), inset calc(var(--s) * -2) calc(var(--s) * -2) 0 var(--panel-dark);
+  padding: calc(var(--s) * 6);
+  color: var(--gray-text);
+  pointer-events: auto;
+}
+.recipe-book .gtitle {
+  color: #404040;
+  line-height: calc(var(--s) * 9);
+}
+.recipe-book .rb-search {
+  width: 100%;
+  height: calc(var(--s) * 14);
+}
+.rb-bar {
+  justify-content: space-between;
+}
+.rb-count {
+  font-size: calc(var(--s) * 6);
+  color: #555;
+  white-space: nowrap;
+}
+.rb-toggle {
+  height: calc(var(--s) * 12);
+  min-width: 0;
+  font-size: calc(var(--s) * 6);
+  padding: 0 calc(var(--s) * 3);
+}
+.rb-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s);
+}
+.rb-tab {
+  width: calc(var(--s) * 16);
+  height: calc(var(--s) * 16);
+  background: #a0a0a0;
+  border: var(--s) solid #000;
+  position: relative;
+  cursor: pointer;
+}
+.rb-tab.active {
+  background: #f0f0f0;
+  box-shadow: 0 0 0 var(--s) #fff;
+}
+.rb-tab .item-icon {
+  left: 0;
+  top: 0;
+  width: calc(var(--s) * 14);
+  height: calc(var(--s) * 14);
+}
+.rb-list {
+  flex: 1 1 auto;
+  min-height: calc(var(--s) * 60);
+  max-height: calc(var(--s) * 110);
+  overflow-y: auto;
+  background: #8b8b8b;
+  box-shadow: inset var(--s) var(--s) 0 #373737, inset calc(var(--s) * -1) calc(var(--s) * -1) 0 #fff;
+  scrollbar-width: thin;
+  contain: content;
+}
+.rb-row {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--s) * 3);
+  padding: var(--s) calc(var(--s) * 2);
+  cursor: pointer;
+  border-left: calc(var(--s) * 2) solid transparent;
+}
+.rb-row:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+.rb-row.selected {
+  background: rgba(255, 255, 255, 0.35);
+}
+.rb-row.ready {
+  border-left-color: #3fbf3f;
+}
+.rb-row.station {
+  border-left-color: #d8b030;
+}
+.rb-row.missing {
+  border-left-color: #b03030;
+}
+.rb-row.missing .rb-icon .item-icon {
+  opacity: 0.55;
+}
+.rb-text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.rb-name {
+  color: #1e1e1e;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rb-sub {
+  font-size: calc(var(--s) * 6);
+  line-height: calc(var(--s) * 8);
+  color: #3a3a3a;
+}
+.rb-row.ready .rb-sub {
+  color: #1f6f1f;
+}
+.rb-row.station .rb-sub {
+  color: #6f5a10;
+}
+.rb-empty,
+.rb-hint {
+  padding: calc(var(--s) * 4);
+  color: #3a3a3a;
+}
+.rb-detail {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--s) * 2);
+  min-height: calc(var(--s) * 40);
+}
+.rb-title {
+  color: #1e1e1e;
+}
+.rb-layout {
+  justify-content: flex-start;
+}
+.rb-station,
+.rb-flag,
+.rb-note {
+  font-size: calc(var(--s) * 6);
+  line-height: calc(var(--s) * 8);
+  color: #3a3a3a;
+}
+.rb-status {
+  font-size: calc(var(--s) * 7);
+}
+.rb-status.ready {
+  color: #1f6f1f;
+}
+.rb-status.station {
+  color: #6f5a10;
+}
+.rb-status.missing {
+  color: #9a1f1f;
+}
+.rb-reqs {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s);
+  max-height: calc(var(--s) * 50);
+  overflow-y: auto;
+}
+.rb-req {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--s) * 3);
+  font-size: calc(var(--s) * 7);
+}
+.rb-req .slot.small {
+  width: calc(var(--s) * 12);
+  height: calc(var(--s) * 12);
+}
+.rb-req .slot.small .item-icon {
+  left: 0;
+  top: 0;
+  width: calc(var(--s) * 12);
+  height: calc(var(--s) * 12);
+}
+.rb-req-name {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rb-req.ok .rb-req-count {
+  color: #1f6f1f;
+}
+.rb-req.missing .rb-req-count,
+.rb-req.missing .rb-req-name {
+  color: #9a1f1f;
+}
+
+/* ------------------------------------------------------------ cheats indicator */
+.cheats-indicator {
+  position: absolute;
+  right: calc(var(--s) * 3);
+  bottom: calc(var(--s) * 3);
+  font-size: calc(var(--s) * 6);
+  line-height: calc(var(--s) * 8);
+  color: rgba(255, 255, 160, 0.75);
+  text-shadow: var(--s) var(--s) 0 rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+}
+
+/* ------------------------------------------------------------ admin panel */
+.admin-screen {
+  padding: calc(var(--s) * 6) 0;
+}
+.admin-panel {
+  width: min(calc(var(--s) * 330), calc(100vw - var(--s) * 8));
+  max-height: calc(100vh - var(--s) * 12);
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--s) * 3);
+  background: var(--panel);
+  border: var(--s) solid #000;
+  box-shadow: inset calc(var(--s) * 2) calc(var(--s) * 2) 0 var(--panel-light), inset calc(var(--s) * -2) calc(var(--s) * -2) 0 var(--panel-dark);
+  padding: calc(var(--s) * 6);
+  color: var(--gray-text);
+}
+.admin-head {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--s) * 4);
+}
+.admin-title {
+  color: #1e1e1e;
+  flex: 1;
+}
+.admin-badge {
+  font-size: calc(var(--s) * 6);
+  color: #fff;
+  background: #a02020;
+  border: var(--s) solid #000;
+  padding: 0 calc(var(--s) * 3);
+  line-height: calc(var(--s) * 9);
+}
+.admin-note {
+  color: #4a4a4a;
+}
+.small {
+  font-size: calc(var(--s) * 6);
+  line-height: calc(var(--s) * 8);
+}
+.admin-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s);
+}
+.admin-tab {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--s) * 2);
+  padding: var(--s) calc(var(--s) * 3) var(--s) var(--s);
+  background: #a0a0a0;
+  border: var(--s) solid #000;
+  cursor: pointer;
+  color: #202020;
+}
+.admin-tab .slot {
+  width: calc(var(--s) * 14);
+  height: calc(var(--s) * 14);
+  background: none;
+  box-shadow: none;
+}
+.admin-tab .slot .item-icon {
+  left: 0;
+  top: 0;
+  width: calc(var(--s) * 14);
+  height: calc(var(--s) * 14);
+}
+.admin-tab:hover {
+  background: #c8c8c8;
+}
+.admin-tab.active {
+  background: #f0f0f0;
+}
+.admin-body {
+  flex: 1 1 auto;
+  min-height: calc(var(--s) * 150);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.admin-items {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--s) * 3);
+  min-height: 0;
+  flex: 1;
+}
+.admin-items > .field {
+  width: 100%;
+  height: calc(var(--s) * 14);
+}
+.admin-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s);
+}
+.admin-chips .btn.chip,
+.admin-panel .btn.chip {
+  height: calc(var(--s) * 12);
+  min-width: 0;
+  font-size: calc(var(--s) * 6);
+  padding: 0 calc(var(--s) * 3);
+}
+.admin-split {
+  display: flex;
+  gap: calc(var(--s) * 4);
+  min-height: 0;
+  flex: 1;
+}
+.admin-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, calc(var(--s) * 18));
+  align-content: start;
+  flex: 1 1 60%;
+  max-height: calc(var(--s) * 150);
+  overflow-y: auto;
+  background: #8b8b8b;
+  scrollbar-width: thin;
+  contain: content;
+}
+.admin-cell {
+  cursor: pointer;
+}
+.admin-cell.selected,
+.admin-row.selected {
+  outline: var(--s) solid #fff;
+  outline-offset: calc(var(--s) * -1);
+  z-index: 1;
+}
+.admin-list {
+  flex: 1 1 55%;
+  max-height: calc(var(--s) * 150);
+  overflow-y: auto;
+  background: #8b8b8b;
+  box-shadow: inset var(--s) var(--s) 0 #373737, inset calc(var(--s) * -1) calc(var(--s) * -1) 0 #fff;
+  scrollbar-width: thin;
+}
+.admin-list.short {
+  max-height: calc(var(--s) * 70);
+}
+.admin-row {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--s) * 3);
+  padding: var(--s) calc(var(--s) * 2);
+  cursor: pointer;
+  color: #1e1e1e;
+}
+.admin-row:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+.admin-detail {
+  flex: 1 1 40%;
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--s) * 2);
+  min-width: calc(var(--s) * 110);
+}
+.admin-detail .label {
+  color: #3a3a3a;
+  text-shadow: none;
+  margin: 0;
+}
+.admin-detail-head {
+  justify-content: flex-start;
+  color: #1e1e1e;
+}
+.admin-num {
+  width: calc(var(--s) * 40);
+  height: calc(var(--s) * 14);
+}
+.admin-select {
+  width: 100%;
+  height: calc(var(--s) * 14);
+  font-family: inherit;
+}
+.btn.admin-go {
+  width: 100%;
+  background-color: #3f7f3f;
+}
+.admin-cols {
+  display: flex;
+  gap: calc(var(--s) * 6);
+  overflow-y: auto;
+  flex-wrap: wrap;
+}
+.admin-cols > * {
+  flex: 1 1 calc(var(--s) * 140);
+  min-width: 0;
+}
+.admin-col {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--s) * 3);
+}
+.admin-col .label {
+  color: #3a3a3a;
+  text-shadow: none;
+  margin: 0;
+}
+.admin-section {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--s) * 2);
+  padding: calc(var(--s) * 3);
+  background: rgba(0, 0, 0, 0.06);
+  border: var(--s) solid rgba(0, 0, 0, 0.2);
+}
+.admin-section .row {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+}
+.admin-section-title {
+  color: #1e1e1e;
+}
+.btn.half-w {
+  flex: 1;
+  min-width: 0;
+  height: calc(var(--s) * 14);
+  font-size: calc(var(--s) * 7);
+}
+.admin-result {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s);
+  min-height: calc(var(--s) * 30);
+}
+.admin-kv {
+  display: flex;
+  justify-content: space-between;
+  gap: calc(var(--s) * 4);
+  color: #1e1e1e;
+}
+.admin-stats .admin-kv {
+  border-bottom: var(--s) solid rgba(0, 0, 0, 0.1);
+}
+.admin-status {
+  min-height: calc(var(--s) * 9);
+  font-size: calc(var(--s) * 7);
+}
+.admin-status.ok {
+  color: #1f6f1f;
+}
+.admin-status.err {
+  color: #9a1f1f;
+}
+.admin-empty {
+  grid-column: 1 / -1;
+  padding: calc(var(--s) * 4);
+}

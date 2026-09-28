@@ -300,9 +300,24 @@ export class EndGenerator implements DimensionGenerator {
     return this.structures.structureAt(x, y, z);
   }
 
+  structureTypes(): string[] {
+    return [...this.structures.typeIds(), 'end_fountain'];
+  }
+
+  *locateSteps(type: string, x: number, z: number): Generator<void, { x: number; y: number; z: number } | null> {
+    if (type === 'end_fountain') return { x: 0, y: exitPortalY(this.terrain) + 1, z: 0 };
+    const s = yield* this.structures.nearestSteps(type, x, z);
+    return s ? { x: s.x, y: s.y, z: s.z } : null;
+  }
+
   locate(type: string, x: number, z: number): { x: number; y: number; z: number } | null {
     const s = this.structures.nearest(type, x, z, 12);
     return s ? { x: s.x, y: s.y, z: s.z } : null;
+  }
+
+  landAt(x: number, z: number): boolean {
+    const col = this.terrain.column(x, z);
+    return !!col && col.top - col.bottom > 2;
   }
 
   /** Finds a landing spot on the outer islands near (x, z) (for end gateways). */

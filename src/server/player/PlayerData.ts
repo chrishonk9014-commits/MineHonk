@@ -4,6 +4,7 @@ import type { ServerPlayer } from './ServerPlayer';
 import type { DimensionId } from '../../common/data/biomes';
 import { stackOf } from '../../common/game/itemstack';
 import { maxHealthFor, GAME_MODES, type GameMode } from '../../common/game/gamemode';
+import { loadAdminState } from '../admin/adminState';
 
 export const PLAYER_DATA_VERSION = 1;
 
@@ -54,6 +55,7 @@ export class PlayerData {
       p.spawnPoint = { dim: sp.dim as DimensionId, x: sp.x as number, y: sp.y as number, z: sp.z as number, forced: !!sp.forced };
     }
     (p as { fireTicks?: number }).fireTicks = num(raw.fire, 0);
+    p.cheat = loadAdminState(raw.cheat);
     this.server.interaction.survival.updateArmor(p);
     return { found: true, dim };
   }
@@ -82,6 +84,7 @@ export class PlayerData {
       effects: [...p.effects.entries()].map(([id, e]) => ({ id, amp: e.amp, ticks: e.ticks })),
       spawnPoint: p.spawnPoint,
       fire: (p as { fireTicks?: number }).fireTicks ?? 0,
+      cheat: p.cheat,
       savedAt: Date.now(),
     };
   }

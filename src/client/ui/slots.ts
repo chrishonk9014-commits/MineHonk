@@ -104,6 +104,7 @@ export function showTooltip(stack: Slot, x: number, y: number, advanced = false)
   if (d.armor) tooltipEl.append(el('div', { class: 'blue' }, `+${d.armor.defense} Armor`), ...(d.armor.toughness ? [el('div', { class: 'blue' }, `+${d.armor.toughness} Armor Toughness`)] : []));
   if (d.durability && (stack.damage ?? 0) > 0) tooltipEl.append(el('div', { class: 'dim' }, `Durability: ${d.durability - (stack.damage ?? 0)} / ${d.durability}`));
   if (it.id === 'farlands_compass') tooltipEl.append(el('div', { class: 'rarity-glitched' }, 'Points somewhere it should not.'));
+  if (stack.tag?.admin) tooltipEl.append(el('div', { class: 'dim' }, 'Cheat item: never counts for advancements'));
   if (advanced) {
     tooltipEl.append(el('div', { class: 'dim' }, `minehonk:${it.id}`));
     if (d.block && blockById.get(d.block)) tooltipEl.append(el('div', { class: 'dim' }, `hardness ${blockById.get(d.block)!.def.hardness}`));

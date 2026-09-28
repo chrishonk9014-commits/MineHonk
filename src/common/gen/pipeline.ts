@@ -27,6 +27,12 @@ export interface DimensionGenerator {
   biomeAt(x: number, z: number): number;
   /** Nearest structure of a type (e.g. 'stronghold'), if the dimension has them. */
   locate?(type: string, x: number, z: number): { x: number; y: number; z: number } | null;
+  /** Whether a column has ground to stand on (dimensions with open void). */
+  landAt?(x: number, z: number): boolean;
+  /** Structure types this dimension can generate (admin structure finder). */
+  structureTypes?(): string[];
+  /** Nearest structure, searched incrementally (yields between steps). */
+  locateSteps?(type: string, x: number, z: number): Generator<void, { x: number; y: number; z: number } | null>;
   /** Structure type whose bounds contain the position (used for structure mob spawns). */
   structureAt?(x: number, y: number, z: number): string | null;
 }

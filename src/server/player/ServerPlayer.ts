@@ -1,4 +1,5 @@
 /** Server-side player entity + connection session state. */
+import { newAdminState, type AdminPlayerState } from '../admin/adminState';
 import { Entity } from '../entity/Entity';
 import type { Connection, Identity } from '../net/Connection';
 import { Inventory, INVENTORY_SIZE } from './Inventory';
@@ -87,6 +88,8 @@ export class ServerPlayer extends Entity {
 
   spawnPoint: { dim: DimensionId; x: number; y: number; z: number; forced: boolean } | null = null;
   readonly achievements = new Set<string>();
+  /** Cheat bookkeeping that keeps admin actions advancement-neutral. */
+  cheat: AdminPlayerState = newAdminState();
   readonly statistics: Record<string, number> = {};
   /** Open container window id (0 = own inventory). */
   windowId = 0;

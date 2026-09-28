@@ -9,7 +9,7 @@ import type { Dimension } from '../world/Dimension';
 import type { ServerPlayer } from '../player/ServerPlayer';
 import type { Entity } from '../entity/Entity';
 import type { ItemStack } from '../../common/game/itemstack';
-import { stackOf } from '../../common/game/itemstack';
+import { stackOf, markAdmin } from '../../common/game/itemstack';
 import { items } from '../../common/registry/items';
 import { S, getProp, withProp, blocks, STATE_BLOCK } from '../../common/registry/blocks';
 import { Random } from '../../common/math/rng';
@@ -349,6 +349,9 @@ export class DragonFight {
     m.persistent = false;
     const hp = Number(this.flags.dragonHealth);
     if (Number.isFinite(hp) && hp > 0) m.health = Math.min(m.maxHealth, hp);
+    // A dragon summoned by a cheat stays cheat-made across reloads
+    m.admin = this.flags.dragonAdmin === true || this.server.admin.active;
+    if (m.admin) this.flags.dragonAdmin = true;
     m.setPos(0, 110, 0);
     this.dim.addEntity(m);
     this.dragon = m;
@@ -617,13 +620,18 @@ export class DragonFight {
 
   /** Called by the mob system when the dragon's health reaches zero. */
   onDeath(m: Mob, killer: ServerPlayer | null): void {
+    // A dragon summoned outside the fight: nothing to finish, nothing to award
+    if (m !== this.dragon) return;
     this.phase = 'dying';
     this.phaseTicks = 0;
     m.data.dying = true;
     m.metaDirty = true;
     this.server.playSound(m.dim, 'dragon.death', m.x, m.y, m.z, 6, 1);
-    if (killer) this.server.interaction.grant(killer, 'kill_dragon');
-    for (const p of this.players()) if (p !== killer) this.server.interaction.grant(p, 'kill_dragon');
+    // A cheat-spawned dragon's defeat is not an advancement for anyone
+    if (!m.admin) {
+      if (killer) this.server.interaction.grant(killer, 'kill_dragon');
+      for (const p of this.players()) if (p !== killer) this.server.interaction.grant(p, 'kill_dragon');
+    }
     if (this.healer) {
       this.healer.setBeam(null);
       this.healer = null;
@@ -639,25 +647,29 @@ export class DragonFight {
     const total = first ? FIRST_KILL_XP : REPEAT_KILL_XP;
     if (this.phaseTicks > 150 && this.phaseTicks % 5 === 0) {
       const share = Math.floor(total * 0.08);
-      this.server.mining.dropXp(m.dim, m.x, m.y, m.z, share);
+      this.server.mining.dropXp(m.dim, m.x, m.y, m.z, share, m.admin);
     }
     if (this.phaseTicks === 199) this.finish(m, first, total);
   }
 
   private finish(m: Mob, first: boolean, total: number): void {
     const dim = this.dim;
-    this.server.mining.dropXp(dim, 0.5, this.portalY() + 2, 0.5, Math.floor(total * 0.2));
+    this.server.mining.dropXp(dim, 0.5, this.portalY() + 2, 0.5, Math.floor(total * 0.2), m.admin);
     const py = this.portalY();
     buildExitPortal((x, y, z, s) => dim.setBlock(x, y, z, s), py, true);
-    if (first) dim.setBlock(0, py + 4, 0, S('dragon_egg'));
+    if (first) {
+      dim.setBlock(0, py + 4, 0, S('dragon_egg'));
+      this.server.admin.setBlockMark(dim, 0, py + 4, 0, m.admin);
+    }
     // Loot: dragon scales, breath and the corrupted eye that leads to the Far Lands
     const drops = rollLoot('mob/ender_dragon', { rng: this.rng, looting: 0, killedByPlayer: true, onFire: false, difficulty: this.server.level.difficulty });
     drops.push(stackOf('corrupted_eye', 1));
-    for (const st of drops) this.server.mining.dropItem(dim, 0.5, py + 5, 0.5, st);
+    for (const st of drops) this.server.mining.dropItem(dim, 0.5, py + 5, 0.5, m.admin ? markAdmin(st) : st);
     this.end.spawnGateway(dim);
     this.flags.dragonKilled = true;
     this.flags.dragonKilledOnce = true;
     this.flags.dragonAlive = false;
+    delete this.flags.dragonAdmin;
     delete this.flags.dragonHealth;
     this.clearBars();
     m.remove();

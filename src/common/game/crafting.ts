@@ -31,6 +31,12 @@ function resolve(ing: string): Set<number> {
   return out;
 }
 
+/** Forgets compiled recipes so recipes registered at runtime are picked up. */
+export function resetRecipes(): void {
+  compiled = null;
+  smeltIndex = null;
+}
+
 export function recipes(): CompiledRecipe[] {
   if (compiled) return compiled;
   initItems();

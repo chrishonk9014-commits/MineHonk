@@ -139,6 +139,37 @@ try {
   const bobInfo = await bob.evaluate(() => window.minehonk.game.worldInfo);
   if (bobInfo.joinCode) throw new Error('join code leaked to a non-operator');
   console.log('roles', JSON.stringify({ bob: bobInfo.role }));
+
+  // Admin Panel permissions are decided by the server, never the client
+  const adminAs = (page, action) => page.evaluate((a) => window.minehonk.game.adminRequest(a), action);
+  const give = { a: 'give', item: 'diamond', count: 5 };
+  let r = await adminAs(bob, give);
+  if (r.ok) throw new Error('admin give worked with cheats off');
+  r = await adminAs(bob, { a: 'set_cheats', on: true });
+  if (r.ok) throw new Error('a visitor switched cheats on: ' + r.text);
+  r = await adminAs(alice, { a: 'set_cheats', on: true });
+  if (!r.ok) throw new Error('owner could not enable cheats: ' + r.text);
+  await alice.waitForFunction(() => window.minehonk.game.worldInfo?.admin === true, null, { timeout: 10000 });
+  await alice.locator('.cheats-indicator:not(.hidden)').waitFor({ timeout: 10000 });
+  const bobAdmin = await bob.evaluate(() => window.minehonk.game.worldInfo?.admin);
+  if (bobAdmin) throw new Error('non-operator was offered the Admin Panel');
+  for (const action of [give, { a: 'gamemode', mode: 'creative' }, { a: 'time', value: 13000 }, { a: 'give', item: 'diamond', count: 5, target: 'BobMH' }]) {
+    r = await adminAs(bob, action);
+    if (r.ok) throw new Error(`non-operator ran ${action.a}: ${r.text}`);
+  }
+  const bobItems = await bob.evaluate(() => window.minehonk.game.invSlots.filter(Boolean).length);
+  if (bobItems !== 0) throw new Error(`non-operator received ${bobItems} item stacks`);
+  r = await adminAs(alice, { a: 'give', item: 'diamond', count: 3 });
+  if (!r.ok) throw new Error('owner give failed: ' + r.text);
+  await alice.waitForFunction(() => window.minehonk.game.invSlots.some((s) => s && s.count === 3 && s.tag?.admin), null, { timeout: 10000 });
+  r = await adminAs(bob, { a: 'tp_player', target: 'AliceMH' });
+  if (r.ok) throw new Error('non-operator teleported');
+  await alice.evaluate(() => window.minehonk.openAdmin());
+  await alice.locator('.admin-panel').waitFor({ timeout: 5000 });
+  await alice.waitForTimeout(800);
+  await alice.screenshot({ path: `${OUT}/mp-06-admin.png` });
+  const denied = hubLog.join('').match(/\[admin\] denied/g)?.length ?? 0;
+  console.log('admin checks passed', JSON.stringify({ denied }));
   console.log('MP E2E: PASS');
 } catch (e) {
   failed = true;

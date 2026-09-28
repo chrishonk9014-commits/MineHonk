@@ -246,11 +246,13 @@ export class Survival {
     p.statsDirty = true;
   }
 
-  giveXp(p: ServerPlayer, amount: number, fromOrb = false): void {
+  /** Adds experience; `cheat` (or a cheat context) records it as cheat experience. */
+  giveXp(p: ServerPlayer, amount: number, fromOrb = false, cheat = false): void {
     if (amount <= 0) return;
     if (fromOrb) amount = this.server.interaction.applyMending(p, amount);
     const before = p.xpLevel().level;
     p.xpTotal = Math.min(2_000_000_000, p.xpTotal + amount);
+    if (cheat || this.server.admin.inContext(p)) p.cheat.xp = Math.min(p.xpTotal, p.cheat.xp + amount);
     p.statsDirty = true;
     const after = p.xpLevel().level;
     if (after > before && after % 5 === 0) this.server.playSound(p.dim, 'levelup', p.x, p.y, p.z, 0.75, 1);
@@ -445,8 +447,9 @@ export class Survival {
       this.server.interaction.dropAll(p);
       const lvl = p.xpLevel().level;
       const xp = Math.min(100, lvl * 7);
-      if (xp > 0) this.server.mining.dropXp(p.dim, p.x, p.y + 0.5, p.z, xp);
+      if (xp > 0) this.server.mining.dropXp(p.dim, p.x, p.y + 0.5, p.z, xp, p.cheat.xp > 0);
       p.xpTotal = 0;
+      p.cheat.xp = 0;
     }
     p.effects.clear();
     p.absorption = 0;

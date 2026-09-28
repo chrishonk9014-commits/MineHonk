@@ -393,9 +393,24 @@ export function springs(v: DecorView, seed: number, ocx: number, ocz: number): v
 // ---------------------------------------------------------------------------
 const DUNGEON_MOBS = ['zombie', 'zombie', 'skeleton', 'spider'];
 
-export function dungeons(v: DecorView, seed: number, ocx: number, ocz: number): void {
+export interface DungeonSite {
+  cx: number;
+  cy: number;
+  cz: number;
+  rx: number;
+  rz: number;
+  /** Generator state after the site was chosen (drives the rest of the room). */
+  rng: Random;
+}
+
+/**
+ * The monster room an origin chunk places: the first attempt that sits in an
+ * open cave with solid floor and ceiling. Reads pure terrain only, so the
+ * locator finds exactly the rooms the decorator builds. `reaches` skips
+ * attempts that do not touch the chunk being decorated.
+ */
+export function dungeonSite(seed: number, ocx: number, ocz: number, proto: (x: number, y: number, z: number) => number, reaches?: (cx: number, cz: number, rx: number, rz: number) => boolean): DungeonSite | null {
   const rng = new Random(hashInts(seed, ocx, ocz, 0xd09e));
-  const b = states();
   for (let attempt = 0; attempt < 6; attempt++) {
     const cx = (ocx << 4) + rng.int(16);
     const cz = (ocz << 4) + rng.int(16);
@@ -403,16 +418,16 @@ export function dungeons(v: DecorView, seed: number, ocx: number, ocz: number): 
     const rx = 2 + rng.int(2);
     const rz = 2 + rng.int(2);
     if (!rng.chance(0.35)) continue;
-    // Cheap rejections: must reach the target chunk and sit in an open cave
-    if (cx + rx + 1 < v.bx || cx - rx - 1 >= v.bx + 16 || cz + rz + 1 < v.bz || cz - rz - 1 >= v.bz + 16) continue;
-    if (!isAir(v.proto(cx, cy, cz)) || !STATE_SOLID[v.proto(cx, cy - 1, cz)]) continue;
+    if (reaches && !reaches(cx, cz, rx, rz)) continue;
+    // Cheap rejections: must sit in an open cave
+    if (!isAir(proto(cx, cy, cz)) || !STATE_SOLID[proto(cx, cy - 1, cz)]) continue;
     // Validate against pure terrain: solid floor & ceiling, 1-5 openings in the walls
     let openings = 0;
     let ok = true;
     for (let x = cx - rx - 1; x <= cx + rx + 1 && ok; x++)
       for (let z = cz - rz - 1; z <= cz + rz + 1 && ok; z++)
         for (let y = cy - 1; y <= cy + 4; y++) {
-          const s = v.proto(x, y, z);
+          const s = proto(x, y, z);
           if ((y === cy - 1 || y === cy + 4) && !STATE_SOLID[s]) {
             ok = false;
             break;
@@ -422,9 +437,26 @@ export function dungeons(v: DecorView, seed: number, ocx: number, ocz: number): 
             break;
           }
           const wall = x === cx - rx - 1 || x === cx + rx + 1 || z === cz - rz - 1 || z === cz + rz + 1;
-          if (wall && y === cy && isAir(s) && isAir(v.proto(x, y + 1, z))) openings++;
+          if (wall && y === cy && isAir(s) && isAir(proto(x, y + 1, z))) openings++;
         }
     if (!ok || openings < 1 || openings > 5) continue;
+    return { cx, cy, cz, rx, rz, rng };
+  }
+  return null;
+}
+
+export function dungeons(v: DecorView, seed: number, ocx: number, ocz: number): void {
+  const site = dungeonSite(
+    seed,
+    ocx,
+    ocz,
+    (x, y, z) => v.proto(x, y, z),
+    (cx, cz, rx, rz) => !(cx + rx + 1 < v.bx || cx - rx - 1 >= v.bx + 16 || cz + rz + 1 < v.bz || cz - rz - 1 >= v.bz + 16),
+  );
+  if (!site) return;
+  const { cx, cy, cz, rx, rz, rng } = site;
+  const b = states();
+  {
     for (let x = cx - rx - 1; x <= cx + rx + 1; x++)
       for (let z = cz - rz - 1; z <= cz + rz + 1; z++)
         for (let y = cy + 3; y >= cy - 1; y--) {

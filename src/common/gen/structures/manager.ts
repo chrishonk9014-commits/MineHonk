@@ -175,6 +175,43 @@ export class StructureManager {
     return null;
   }
 
+  /** Structure type ids this manager places. */
+  typeIds(): string[] {
+    return this.types.map((t) => t.id);
+  }
+
+  /**
+   * Nearest start of a type, searched ring by ring outwards and yielding after
+   * each ring so a caller can spread the work over several ticks. Stops once
+   * no unvisited ring can hold anything closer than the best start found.
+   */
+  *nearestSteps(typeId: string, x: number, z: number, maxRegions = 24): Generator<void, Start | null> {
+    const t = this.types.find((tt) => tt.id === typeId);
+    if (!t) return null;
+    if (t.fixed) return this.nearest(typeId, x, z);
+    const rcx = Math.floor((x >> 4) / t.spacing);
+    const rcz = Math.floor((z >> 4) / t.spacing);
+    let best: Start | null = null;
+    let bestD = Infinity;
+    for (let ring = 0; ring <= maxRegions; ring++) {
+      for (let rx = rcx - ring; rx <= rcx + ring; rx++)
+        for (let rz = rcz - ring; rz <= rcz + ring; rz++) {
+          if (Math.max(Math.abs(rx - rcx), Math.abs(rz - rcz)) !== ring) continue;
+          const s = this.startAt(t, rx, rz);
+          if (!s) continue;
+          const d = (s.x - x) ** 2 + (s.z - z) ** 2;
+          if (d < bestD) {
+            bestD = d;
+            best = s;
+          }
+        }
+      // Starts in the next ring are at least `ring` whole regions away
+      if (best && ring * t.spacing * 16 > Math.sqrt(bestD)) break;
+      yield;
+    }
+    return best;
+  }
+
   /** Finds the nearest start of a type (by start chunk) within `maxRegions` regions. */
   nearest(typeId: string, x: number, z: number, maxRegions = 8): Start | null {
     const t = this.types.find((tt) => tt.id === typeId);

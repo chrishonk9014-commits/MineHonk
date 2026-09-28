@@ -10,7 +10,7 @@ import { Survival, type DamageInfo } from './Survival';
 import { Containers, type Window } from './Containers';
 import { Weather } from './Weather';
 import type { C2S } from '../../common/net/protocol';
-import { type ItemStack, type Slot, cloneStack, itemIdOf, stackOf } from '../../common/game/itemstack';
+import { type ItemStack, type Slot, cloneStack, itemIdOf, stackOf, isAdminStack } from '../../common/game/itemstack';
 import { items, itemById } from '../../common/registry/items';
 import { blocks, STATE_BLOCK, getProp, withProp, S, stateOf, STATE_FLUID, STATE_SOLID, STATE_REPLACEABLE, blockHasTag } from '../../common/registry/blocks';
 import { computePlacement, canSurvive, chestPartnerUpdate } from '../../common/game/placement';
@@ -194,6 +194,9 @@ export class Interaction {
       if (STATE_SOLID[pl.state] && this.entityObstructs(dim, pl.x, pl.y, pl.z, pl.state)) return this.resend(p, x, y, z, face);
     }
     for (const pl of placements) dim.setBlock(pl.x, pl.y, pl.z, pl.state);
+    // Blocks placed from cheat items (or in a cheat context) stay cheat-made
+    const cheat = this.isCheat(p, stack);
+    for (const pl of placements) this.server.admin.setBlockMark(dim, pl.x, pl.y, pl.z, cheat);
     const first = placements[0]!;
     const pdef = blocks[STATE_BLOCK[first.state]!]!.def;
     // Double chest partner
@@ -210,7 +213,7 @@ export class Interaction {
     this.server.playSound(dim, 'place.' + pdef.sound, first.x + 0.5, first.y + 0.5, first.z + 0.5, 1, 0.8, p);
     if (isSurvivalLike(p.gamemode)) this.consume(p, hand, 1);
     p.addStat('placed.' + blocks[STATE_BLOCK[first.state]!]!.id);
-    if (pdef.model === 'crop') this.grant(p, 'plant_seed');
+    if (pdef.model === 'crop' && !cheat) this.grant(p, 'plant_seed');
     p.send({ t: 'use_result', seq: m.seq, ok: true });
   }
 
@@ -381,7 +384,7 @@ export class Interaction {
     }
     p.spawnPoint = { dim: dim.id, x: x + 0.5, y: y + 0.6, z: z + 0.5, forced: false };
     p.send({ t: 'chat', text: 'Respawn point set', kind: 'system' });
-    this.grant(p, 'sleep_bed');
+    if (!this.server.admin.blockMarked(dim, x, y, z)) this.grant(p, 'sleep_bed');
     const dt = this.server.level.dayTime;
     const night = dt >= 12542 && dt <= 23459;
     if (!night && !this.server.level.thundering) {
@@ -508,10 +511,13 @@ export class Interaction {
         const hit = raycastBlocks(dim, ex, ey, ez, dir[0], dir[1], dir[2], 5, { fluids: true });
         if (hit && STATE_FLUID[hit.state] && getProp(hit.state, 'level') === '0') {
           const kind = STATE_FLUID[hit.state] === 1 ? 'water_bucket' : 'lava_bucket';
+          const cheatFluid = this.isCheat(p, stack) || this.server.admin.blockMarked(dim, hit.x, hit.y, hit.z);
           dim.setBlock(hit.x, hit.y, hit.z, 0);
+          this.server.admin.setBlockMark(dim, hit.x, hit.y, hit.z, false);
           this.server.playSound(dim, 'bucket.fill', hit.x + 0.5, hit.y + 0.5, hit.z + 0.5, 1, 1);
-          if (survival) this.replaceOne(p, hand, stackOf(kind));
-          else if (!p.inventory.count(itemById.get(kind)!.num)) p.inventory.add(stackOf(kind));
+          const filled = this.server.admin.mark(p, stackOf(kind), cheatFluid);
+          if (survival) this.replaceOne(p, hand, filled);
+          else if (!p.inventory.count(itemById.get(kind)!.num)) p.inventory.add(filled);
           return true;
         }
         return false;
@@ -525,13 +531,16 @@ export class Interaction {
         if (it.def.use === 'water_bucket' && dim.rules.waterEvaporates) {
           this.server.playSound(dim, 'fizz', tx + 0.5, ty + 0.5, tz + 0.5, 0.5, 2.6);
           this.server.particles(dim, 'smoke', tx + 0.5, ty + 0.5, tz + 0.5, 8);
-        } else dim.setBlock(tx, ty, tz, it.def.use === 'water_bucket' ? S('water') : S('lava'));
+        } else {
+          dim.setBlock(tx, ty, tz, it.def.use === 'water_bucket' ? S('water') : S('lava'));
+          this.server.admin.setBlockMark(dim, tx, ty, tz, this.isCheat(p, stack));
+        }
         this.server.playSound(dim, 'bucket.empty', tx + 0.5, ty + 0.5, tz + 0.5, 1, 1);
-        if (survival) this.replaceOne(p, hand, stackOf('bucket'));
+        if (survival) this.replaceOne(p, hand, this.server.admin.mark(p, stackOf('bucket'), isAdminStack(stack)));
         return true;
       }
       case 'bone_meal':
-        if (this.boneMeal(dim, x, y, z, state)) {
+        if (this.boneMeal(dim, x, y, z, state, this.isCheat(p, stack))) {
           if (survival) this.consume(p, hand, 1);
           this.server.particles(dim, 'happy', x + 0.5, y + 0.8, z + 0.5, 12, 0.4);
           return true;
@@ -553,18 +562,24 @@ export class Interaction {
   }
 
   /** Bone meal growth. Returns true if anything happened. */
-  boneMeal(dim: Dimension, x: number, y: number, z: number, state: number): boolean {
+  boneMeal(dim: Dimension, x: number, y: number, z: number, state: number, cheat = false): boolean {
     const def = blocks[STATE_BLOCK[state]!]!.def;
+    // Growth from cheat bone meal (or of a cheat-placed plant) stays cheat-made
+    const taint = cheat || this.server.admin.blockMarked(dim, x, y, z);
+    const set = (bx: number, by: number, bz: number, st: number): void => {
+      dim.setBlock(bx, by, bz, st);
+      if (taint) this.server.admin.setBlockMark(dim, bx, by, bz, true);
+    };
     const id = def.id;
     if (def.model === 'crop') {
       const age = parseInt(getProp(state, 'age')!, 10);
       const max = (def.data?.maxAge as number) ?? 7;
       if (age >= max) return false;
-      dim.setBlock(x, y, z, withProp(state, 'age', Math.min(max, age + rng.range(2, 5))));
+      set(x, y, z, withProp(state, 'age', Math.min(max, age + rng.range(2, 5))));
       return true;
     }
     if (def.tags?.includes('saplings')) {
-      if (rng.chance(0.45)) growTree(dim, x, y, z, id.replace('_sapling', ''), rng, (bx, by, bz, s) => dim.setBlock(bx, by, bz, s));
+      if (rng.chance(0.45)) growTree(dim, x, y, z, id.replace('_sapling', ''), rng, (bx, by, bz, s) => set(bx, by, bz, s));
       return true;
     }
     if (id === 'grass_block') {
@@ -575,7 +590,7 @@ export class Interaction {
           const gy = y + dy;
           if (blocks[STATE_BLOCK[dim.getState(gx, gy, gz)]!]!.id === 'grass_block' && dim.getState(gx, gy + 1, gz) === 0) {
             const flower = rng.chance(0.1) ? S(rng.pick(['dandelion', 'poppy', 'azure_bluet', 'oxeye_daisy'])) : S('short_grass');
-            dim.setBlock(gx, gy + 1, gz, flower);
+            set(gx, gy + 1, gz, flower);
             break;
           }
         }
@@ -583,14 +598,14 @@ export class Interaction {
       return true;
     }
     if (id === 'short_grass' && dim.getState(x, y + 1, z) === 0) {
-      dim.setBlock(x, y, z, stateOf('tall_grass', { half: 'lower' }));
-      dim.setBlock(x, y + 1, z, stateOf('tall_grass', { half: 'upper' }));
+      set(x, y, z, stateOf('tall_grass', { half: 'lower' }));
+      set(x, y + 1, z, stateOf('tall_grass', { half: 'upper' }));
       return true;
     }
     if (id === 'sweet_berry_bush') {
       const age = parseInt(getProp(state, 'age')!, 10);
       if (age >= 3) return false;
-      dim.setBlock(x, y, z, withProp(state, 'age', age + 1));
+      set(x, y, z, withProp(state, 'age', age + 1));
       return true;
     }
     if (id === 'brown_mushroom' || id === 'red_mushroom') {
@@ -717,7 +732,7 @@ export class Interaction {
       else this.consume(p, slot, 1);
     }
     p.addStat('eaten.' + id);
-    if (id === 'sunroot' || id === 'roasted_sunroot') this.grant(p, 'eat_sunroot');
+    if ((id === 'sunroot' || id === 'roasted_sunroot') && !isAdminStack(stack)) this.grant(p, 'eat_sunroot');
     p.statsDirty = true;
   }
 
@@ -892,7 +907,7 @@ export class Interaction {
     }
     let target = p.inventory.get(p.selectedSlot) ? p.inventory.firstEmpty(0, 9) : p.selectedSlot;
     if (target < 0) target = p.selectedSlot;
-    p.inventory.set(target, { ...item, count: items[item.id]!.maxStack });
+    p.inventory.set(target, this.server.admin.mark(p, { ...item, count: items[item.id]!.maxStack }));
     p.selectedSlot = target;
     p.send({ t: 'hotbar', slot: target });
     this.containers.syncInventory(p);
@@ -1049,7 +1064,18 @@ export class Interaction {
 
   // ------------------------------------------------------------------ achievements
 
+  /** Whether an action with this stack is cheat-made (cheat item or cheat context). */
+  isCheat(p: ServerPlayer, stack?: Slot): boolean {
+    return isAdminStack(stack) || this.server.admin.inContext(p);
+  }
+
+  /**
+   * Awards an advancement. Never while the player acts under a cheat (Admin
+   * Panel action, cheat game mode or flight, a place reached by a cheat
+   * teleport); callers also skip it for cheat-made items, mobs and blocks.
+   */
   grant(p: ServerPlayer, id: string): void {
+    if (this.server.admin.inContext(p)) return;
     if (p.achievements.has(id)) return;
     const a = ACHIEVEMENT_BY_ID.get(id);
     if (!a) return;
@@ -1058,15 +1084,17 @@ export class Interaction {
     this.server.broadcastChat(`${p.name} has made the advancement [${a.title}]`, 'achievement');
   }
 
-  onBlockMined(p: ServerPlayer, blockId: string, drops: ItemStack[]): void {
+  onBlockMined(p: ServerPlayer, blockId: string, drops: ItemStack[], cheat = false): void {
+    if (cheat) return;
     this.grant(p, 'mine_block');
     const held = p.heldItem();
     if (held && items[held.id]!.def.tool?.type === 'pickaxe' && (blockId === 'stone' || blockId === 'cobblestone' || blockId === 'deepslate')) this.grant(p, 'stone_age');
-    for (const d of drops) this.onItemPickedUp(p, itemIdOf(d), false);
+    void drops;
   }
 
-  onItemPickedUp(p: ServerPlayer, id: string, real = true): void {
-    if (!real) return;
+  onItemPickedUp(p: ServerPlayer, stack: ItemStack, real = true): void {
+    if (!real || isAdminStack(stack)) return;
+    const id = itemIdOf(stack);
     if (id === 'diamond') this.grant(p, 'mine_diamond');
     if (id === 'obsidian') this.grant(p, 'form_obsidian');
     if (id === 'ancient_debris' || id === 'netherite_scrap') this.grant(p, 'obtain_ancient_debris');
@@ -1076,7 +1104,9 @@ export class Interaction {
     if (id === 'iron_ingot') this.grant(p, 'smelt_iron');
   }
 
-  onCrafted(p: ServerPlayer, id: string): void {
+  onCrafted(p: ServerPlayer, stack: ItemStack): void {
+    if (isAdminStack(stack)) return;
+    const id = itemIdOf(stack);
     if (id === 'crafting_table') this.grant(p, 'craft_table');
     if (id.endsWith('_pickaxe') || id.endsWith('_axe') || id.endsWith('_shovel') || id.endsWith('_sword') || id.endsWith('_hoe')) this.grant(p, 'craft_tool');
     if (id === 'stone_pickaxe') this.grant(p, 'upgrade_tools');
@@ -1090,12 +1120,15 @@ export class Interaction {
     }
   }
 
-  onSmelted(p: ServerPlayer, id: string): void {
+  onSmelted(p: ServerPlayer, stack: ItemStack): void {
+    if (isAdminStack(stack)) return;
+    const id = itemIdOf(stack);
     if (id === 'iron_ingot') this.grant(p, 'smelt_iron');
   }
 
   checkXpAchievements(p: ServerPlayer, level: number): void {
-    if (level >= 30) this.grant(p, 'level_30');
+    // Only experience earned in play counts (cheat experience is tracked separately)
+    if (level >= 30 && this.server.admin.legitLevel(p) >= 30) this.grant(p, 'level_30');
   }
 }
 

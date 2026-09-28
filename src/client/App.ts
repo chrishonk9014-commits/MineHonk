@@ -2,6 +2,7 @@
  * Application shell: menu screen stack, world management and the game
  * lifecycle (start integrated server, join, save & quit).
  */
+import { adminScreen } from './ui/AdminPanel';
 import { encode, decode } from '@msgpack/msgpack';
 import { deflateSync, inflateSync } from 'fflate';
 import type { Settings, Profile } from './settings';
@@ -423,6 +424,24 @@ export class App implements GameHost, S.ScreenHost {
             this.game?.send({ t: 'request_progress' });
           },
           quit: () => void this.quitToTitle(),
+          admin: this.game.worldInfo?.admin
+            ? () => {
+                this.pop();
+                this.openAdmin();
+              }
+            : undefined,
+          cheats: this.game.worldInfo?.isOwner
+            ? {
+                on: !!this.game.worldInfo?.cheats,
+                toggle: () => {
+                  const on = !this.game?.worldInfo?.cheats;
+                  void this.game?.adminRequest({ a: 'set_cheats', on }).then((r) => {
+                    this.game?.chatMessage(r.text, r.ok ? 'system' : 'error');
+                    if (this.stack.length) this.pop();
+                  });
+                },
+              }
+            : undefined,
           invite: local
             ? undefined
             : () => {
@@ -433,6 +452,26 @@ export class App implements GameHost, S.ScreenHost {
         local,
       ),
     );
+  }
+
+  /** Opens the Admin Panel (cheats). The world keeps running while it is open. */
+  openAdmin(): void {
+    const game = this.game;
+    if (!game || !game.worldInfo?.admin || this.screenOpen) return;
+    this.setPaused(false);
+    const screen: S.Screen = adminScreen({
+      request: (a, onProgress) => game.adminRequest(a, onProgress),
+      close: () => {
+        if (this.stack[this.stack.length - 1] !== screen) return;
+        this.pop();
+        screen.onClose?.();
+      },
+      clientPerf: () => game.perfInfo(),
+      playerName: () => game.name,
+      isOwner: () => !!game.worldInfo?.isOwner,
+      cheats: () => !!game.worldInfo?.cheats,
+    });
+    this.push(screen);
   }
 
   openAchievements(): void {

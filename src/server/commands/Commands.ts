@@ -95,13 +95,7 @@ export class Commands {
         if (!GAME_MODES.includes(mode) || mode === 'hardcore') return 'Unknown game mode';
         const t = findPlayer(a[1], p);
         if (!t) return 'Player not found';
-        t.setGamemode(mode);
-        t.maxHealth = maxHealthFor(mode, s.level.godHearts);
-        if (Number.isFinite(t.maxHealth)) t.health = Math.min(t.health, t.maxHealth);
-        else t.health = 20;
-        t.statsDirty = true;
-        t.send({ t: 'gamemode', mode, abilities: t.abilitiesMsg() });
-        s.sendPlayerList();
+        s.admin.setGamemode(t, mode);
         return `Set ${t.name}'s game mode to ${mode}`;
       },
     });
@@ -117,14 +111,13 @@ export class Commands {
           const y = rel(a[1]!, p.y);
           const z = rel(a[2]!, p.z);
           if (![x, y, z].every(Number.isFinite) || Math.abs(x) > 29_999_000 || Math.abs(z) > 29_999_000) return 'Invalid coordinates';
-          s.teleport(p, x, y, z);
+          s.admin.moveTo(p, p.dim.id, x, y, z);
           return `Teleported to ${x.toFixed(1)}, ${y.toFixed(1)}, ${z.toFixed(1)}`;
         }
         const who = a.length === 2 ? findPlayer(a[0], p) : p;
         const target = findPlayer(a.length === 2 ? a[1] : a[0], p);
         if (!who || !target) return 'Player not found';
-        if (who.dim !== target.dim) s.changeDimension(who, target.dim.id, target.x, target.y, target.z);
-        else s.teleport(who, target.x, target.y, target.z);
+        s.admin.moveTo(who, target.dim.id, target.x, target.y, target.z);
         return `Teleported ${who.name} to ${target.name}`;
       },
     });
@@ -139,15 +132,7 @@ export class Commands {
         const count = Math.max(1, Math.min(64 * 36, parseInt(a[1] ?? '1', 10) || 1));
         const t = findPlayer(a[2], p);
         if (!t) return 'Player not found';
-        let left = count;
-        while (left > 0) {
-          const n = Math.min(left, it.maxStack);
-          const rem = t.inventory.add(stackOf(id, n));
-          if (rem) s.interaction.dropStack(t, rem);
-          left -= n;
-        }
-        s.interaction.syncInventory(t);
-        return `Gave ${count} ${it.def.name} to ${t.name}`;
+        return s.admin.give(t, id, count).text;
       },
     });
     this.register({
@@ -172,6 +157,7 @@ export class Commands {
         const v = named[a[1] ?? ''] ?? parseInt(a[1] ?? '', 10);
         if (!Number.isFinite(v)) return 'Usage: /time set <value>';
         s.level.dayTime = a[0] === 'add' ? (s.level.dayTime + v) % 24000 : ((v % 24000) + 24000) % 24000;
+        s.admin.markSky();
         s.sendTime();
         return `Set time to ${s.level.dayTime}`;
       },
@@ -185,6 +171,7 @@ export class Commands {
         if (!['clear', 'rain', 'thunder'].includes(k)) return 'Usage: /weather <clear|rain|thunder>';
         const secs = parseInt(a[1] ?? '', 10);
         s.interaction.weather.set(k, Number.isFinite(secs) ? secs * 20 : undefined);
+        s.admin.markSky();
         return `Weather set to ${k}`;
       },
     });
@@ -293,16 +280,19 @@ export class Commands {
         const v = a[0] ?? '';
         if (v.endsWith('L') || v.endsWith('l')) {
           const lv = parseInt(v, 10);
-          let total = 0;
-          const target = p.xpLevel().level + lv;
-          for (let l = 0; l < target; l++) total += l >= 30 ? 112 + (l - 30) * 9 : l >= 15 ? 37 + (l - 15) * 5 : 7 + l * 2;
-          p.xpTotal = Math.max(0, total);
-          p.statsDirty = true;
+          const target = Math.max(0, p.xpLevel().level + lv);
+          s.admin.setXpLevel(p, target);
           return `Set level to ${target}`;
         }
         const n = parseInt(v, 10);
         if (!Number.isFinite(n)) return 'Usage: /xp <amount>';
-        s.interaction.survival.giveXp(p, n);
+        if (n > 0) s.interaction.survival.giveXp(p, n, false, true);
+        else {
+          const before = p.xpTotal;
+          p.xpTotal = Math.max(0, p.xpTotal + n);
+          s.admin.onXpLost(p, before - p.xpTotal);
+          p.statsDirty = true;
+        }
         return `Gave ${n} experience`;
       },
     });
@@ -316,7 +306,7 @@ export class Commands {
         if (!e) return 'Unknown enchantment';
         if (!held) return 'Hold an item';
         const lvl = Math.max(1, Math.min(10, parseInt(a[1] ?? '1', 10) || 1));
-        held.tag = { ...(held.tag ?? {}), ench: { ...(held.tag?.ench ?? {}), [e.id]: lvl } };
+        held.tag = { ...(held.tag ?? {}), ench: { ...(held.tag?.ench ?? {}), [e.id]: lvl }, admin: true };
         p.inventory.set(p.selectedSlot, held);
         s.interaction.syncInventory(p);
         return `Enchanted with ${e.name} ${lvl}`;
@@ -351,7 +341,7 @@ export class Commands {
         const scale = s.dim(d).rules.scale / p.dim.rules.scale;
         const x = p.x / scale;
         const z = p.z / scale;
-        s.changeDimension(p, d, x, 128, z);
+        s.admin.moveTo(p, d, x, 128, z);
         (p as { needsSafeSpawn?: boolean }).needsSafeSpawn = true;
         return `Travelling to ${d}`;
       },
@@ -528,6 +518,7 @@ export class Commands {
               if (!p.dim.isLoaded(x, z)) continue;
               if (p.dim.getState(x, y, z) !== state) {
                 p.dim.setBlock(x, y, z, state);
+                s.admin.setBlockMark(p.dim, x, y, z, state !== 0);
                 n++;
               }
             }
@@ -547,6 +538,7 @@ export class Commands {
         const z = coord(args[3], p.z);
         if (![x, y, z].every(Number.isFinite)) return 'Invalid coordinates';
         const m = s.mobs.spawn(p.dim, type, x, y, z, { reason: 'command', persistent: true });
+        if (m) m.admin = true;
         if (m && args.includes('noai')) {
           m.noAi = true;
           // Face the summoner (handy for inspecting models)
@@ -618,6 +610,7 @@ export class Commands {
           const wz = (cz << 4) + z;
           if (p.dim.getState(wx, y, wz) !== st) p.dim.setBlock(wx, y, wz, st, { updateNeighbors: false });
         }
+        s.admin.markChunk(p.dim, cx, cz);
         return `Regenerated chunk ${cx},${cz}`;
       },
     });
@@ -653,7 +646,8 @@ export class Commands {
       return;
     }
     try {
-      const out = cmd.run(p, parts);
+      // Cheat commands run as admin actions: nothing they cause counts for advancements
+      const out = cmd.level === 'cheat' ? this.server.admin.run(() => cmd.run(p, parts)) : cmd.run(p, parts);
       if (out) for (const line of out.split('\n')) p.send({ t: 'chat', text: line, kind: 'system' });
     } catch (e) {
       p.send({ t: 'chat', text: `Command failed: ${(e as Error).message}`, kind: 'error' });

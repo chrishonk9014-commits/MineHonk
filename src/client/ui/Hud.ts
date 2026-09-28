@@ -38,6 +38,8 @@ export class Hud {
   readonly debugRight = el('div', { class: 'debug-right' });
   private readonly toastEl = el('div', { class: 'toast', style: { transform: 'translateX(120%)' } });
   private readonly subtitlesEl = el('div', { class: 'subtitles' });
+  /** Small, unobtrusive notice that cheats are on in this world. */
+  private readonly cheatsEl = el('div', { class: 'cheats-indicator hidden' });
   private itemNameTimer = 0;
   private lastSelectedName = '';
   private titleTimer = 0;
@@ -60,7 +62,7 @@ export class Hud {
     this.hotbarEl.append(this.selEl);
     this.xpbar.append(this.xpfill);
     this.bottom.append(this.hotbarEl, this.xpbar, this.xplevel, this.hearts, this.heartLabel, this.food, this.armor, this.air, this.itemName);
-    this.root.append(this.crosshair, this.bottom, this.bosses, this.title, this.debugLeft, this.debugRight, this.toastEl, this.subtitlesEl);
+    this.root.append(this.crosshair, this.bottom, this.bosses, this.title, this.debugLeft, this.debugRight, this.toastEl, this.subtitlesEl, this.cheatsEl);
     this.toastEl.append(el('div', { class: 't1' }), el('div', { class: 't2' }));
     this.title.style.opacity = '0';
   }
@@ -259,6 +261,12 @@ export class Hud {
       this.toastEl.style.transform = 'translateX(0)';
       this.toastTimer = 120;
     }
+  }
+
+  /** 'off' hides the notice; 'on' = cheats enabled; 'admin' = this player can use the Admin Panel. */
+  setCheats(state: 'off' | 'on' | 'admin', key = 'F8'): void {
+    this.cheatsEl.classList.toggle('hidden', state === 'off');
+    this.cheatsEl.textContent = state === 'admin' ? `Cheats enabled · Admin Panel: ${key}` : 'Cheats enabled';
   }
 
   setDebug(left: string[] | null, right: string[] | null): void {

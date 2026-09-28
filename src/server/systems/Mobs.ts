@@ -24,7 +24,7 @@ import { collisionShape } from '../../common/physics/shapes';
 import { Random, hashInts } from '../../common/math/rng';
 import { rollLoot } from '../../common/game/loot';
 import { enchantLevel, selectEnchantments } from '../../common/game/enchanting';
-import { stackOf, type ItemStack, cloneStack } from '../../common/game/itemstack';
+import { stackOf, type ItemStack, cloneStack, isAdminStack, markAdmin } from '../../common/game/itemstack';
 import { chunkIndex } from '../../common/world/constants';
 import { lookDir } from './Interaction';
 import { Window } from './Containers';
@@ -427,6 +427,8 @@ export class MobSystem {
       if (!this.spawnConditions(dim, def.id, sx, sy, sz, cat)) continue;
       if (!this.fits(dim, def.id, sx + 0.5, sy, sz + 0.5)) continue;
       const m = this.spawn(dim, def.id, sx + 0.5, sy, sz + 0.5, { reason: 'natural' });
+      // Spawned because a cheat set the time or weather: they count as cheat-made
+      if (m && this.server.admin.skyTainted) m.admin = true;
       if (m) {
         if (cat === 'creature') m.persistenceRequired = true;
         spawned++;
@@ -670,7 +672,10 @@ export class MobSystem {
         s.particles(dim, p.kind === 'snowball' ? 'white_ash' : 'block', hit.x, hit.y, hit.z, 8, 0.2, p.kind === 'egg' ? undefined : undefined);
         if (p.kind === 'egg' && this.rng.chance(1 / 8)) {
           const n = this.rng.chance(1 / 32) ? 4 : 1;
-          for (let i = 0; i < n; i++) this.spawn(dim, 'chicken', hit.x, hit.y, hit.z, { baby: true, persistent: true });
+          for (let i = 0; i < n; i++) {
+            const c = this.spawn(dim, 'chicken', hit.x, hit.y, hit.z, { baby: true, persistent: true });
+            if (c) c.admin = p.admin;
+          }
         }
         return true;
       case 'ender_pearl': {
@@ -707,7 +712,7 @@ export class MobSystem {
         s.particles(dim, 'splash', hit.x, hit.y, hit.z, 20, 0.6);
         s.playSound(dim, 'item.break', hit.x, hit.y, hit.z, 1, 1.4);
         if (p.kind === 'experience_bottle') {
-          s.mining.dropXp(dim, hit.x, hit.y, hit.z, 3 + this.rng.int(9));
+          s.mining.dropXp(dim, hit.x, hit.y, hit.z, 3 + this.rng.int(9), p.admin);
           return true;
         }
         const potionId = p.data?.potion as string | undefined;
@@ -768,8 +773,9 @@ export class MobSystem {
   }
 
   // ------------------------------------------------------------------ explosions
-  explode(dim: Dimension, x: number, y: number, z: number, power: number, fire: boolean, source: Entity | null): void {
+  explode(dim: Dimension, x: number, y: number, z: number, power: number, fire: boolean, source: Entity | null, cheat = false): void {
     const s = this.server;
+    const cheatDrops = cheat || !!source?.admin;
     const r = this.rng;
     const griefing = s.level.rules.mobGriefing || (source?.type !== 'creeper' && source?.type !== 'ghast' && !(source instanceof Mob));
     const destroyed = new Set<string>();
@@ -859,10 +865,10 @@ export class MobSystem {
         continue;
       }
       if (r.chance(1 / power)) {
-        s.mining.dropBlock(dim, bx, by, bz, st);
+        s.mining.dropBlock(dim, bx, by, bz, st, cheatDrops);
       }
       if (dim.getBlockEntity(bx, by, bz)) {
-        s.interaction.containers.materializeLoot(dim, bx, by, bz);
+        s.interaction.containers.materializeLoot(dim, bx, by, bz, 27, cheatDrops);
         const be = dim.getBlockEntity(bx, by, bz);
         if (be && Array.isArray((be as { items?: unknown }).items)) s.interaction.spillContainer(dim, bx, by, bz, be);
       }
@@ -911,11 +917,14 @@ export class MobSystem {
   }
 
   igniteTnt(dim: Dimension, x: number, y: number, z: number, source: Entity | null = null): void {
+    const cheat = this.server.admin.blockMarked(dim, x, y, z) || !!source?.admin || (!!source && isPlayer(source) && this.server.admin.inContext(source as ServerPlayer));
     dim.setBlock(x, y, z, 0);
+    this.server.admin.setBlockMark(dim, x, y, z, false);
     const t = new PrimedTnt();
     t.setPos(x + 0.5, y, z + 0.5);
     t.body.vy = 0.2;
     t.source = source;
+    t.admin = cheat;
     dim.addEntity(t);
     this.server.playSound(dim, 'fizz', x + 0.5, y + 0.5, z + 0.5, 1, 1);
   }
@@ -961,8 +970,13 @@ export class MobSystem {
       baby.growTicks = 0;
       if (a.data.color && b.data.color) baby.data.color = this.rng.chance(0.5) ? a.data.color : b.data.color;
       if (a.owner) baby.owner = a.owner;
-      this.server.mining.dropXp(a.dim, a.x, a.y, a.z, 1 + this.rng.int(7));
-      for (const p of this.server.players.values()) if (p.dim === a.dim && p.distanceSq(a.x, a.y, a.z) < 256) this.server.interaction.grant(p, 'breed_animals');
+      // Cheat-spawned parents or cheat food: the whole family stays cheat-made
+      const cheat = a.admin || b.admin || !!a.data.cheatLove || !!b.data.cheatLove;
+      delete a.data.cheatLove;
+      delete b.data.cheatLove;
+      baby.admin = cheat;
+      this.server.mining.dropXp(a.dim, a.x, a.y, a.z, 1 + this.rng.int(7), cheat);
+      if (!cheat) for (const p of this.server.players.values()) if (p.dim === a.dim && p.distanceSq(a.x, a.y, a.z) < 256) this.server.interaction.grant(p, 'breed_animals');
     }
   }
 
@@ -982,13 +996,14 @@ export class MobSystem {
     const looting = enchantLevel(weapon, 'looting');
     if (!m.baby && s.level.rules.doMobLoot) {
       const drops = rollLoot('mob/' + (m.type === 'sheep' || m.type === 'glitched_sheep' ? m.type : m.type), { rng: m.rng, looting, killedByPlayer: byPlayer, onFire: m.fireTicks > 0, difficulty: s.level.difficulty });
-      for (const st of drops) s.mining.dropItem(m.dim, m.x, m.y + 0.5, m.z, st);
-      if ((m.type === 'sheep' || m.type === 'glitched_sheep') && !m.data.sheared) s.mining.dropItem(m.dim, m.x, m.y + 0.5, m.z, stackOf(`${String(m.data.color ?? 'white')}_wool`, 1));
-      if (m.held && m.rng.next() < 0.085 + looting * 0.01) s.mining.dropItem(m.dim, m.x, m.y + 0.5, m.z, { ...cloneStack(m.held), damage: Math.floor(m.rng.next() * (items[m.held.id]!.def.durability ?? 0) * 0.8) || undefined });
+      if ((m.type === 'sheep' || m.type === 'glitched_sheep') && !m.data.sheared) drops.push(stackOf(`${String(m.data.color ?? 'white')}_wool`, 1));
+      if (m.held && m.rng.next() < 0.085 + looting * 0.01) drops.push({ ...cloneStack(m.held), damage: Math.floor(m.rng.next() * (items[m.held.id]!.def.durability ?? 0) * 0.8) || undefined });
+      // Loot from cheat-spawned mobs is cheat-made
+      for (const st of drops) s.mining.dropItem(m.dim, m.x, m.y + 0.5, m.z, m.admin ? markAdmin(st) : st);
     }
     if (byPlayer && !m.baby) {
       const xp = m.def.xp ?? (m.def.category === 'monster' ? 5 : m.def.category === 'boss' ? 500 : 1 + m.rng.int(3));
-      s.mining.dropXp(m.dim, m.x, m.y + 0.5, m.z, xp);
+      s.mining.dropXp(m.dim, m.x, m.y + 0.5, m.z, xp, m.admin);
     }
     // Slimes split
     if (m.def.brain === 'slime') {
@@ -998,6 +1013,7 @@ export class MobSystem {
         for (let i = 0; i < n; i++) {
           const c = this.create(m.type, { data: { size: size / 2 } });
           if (!c) continue;
+          c.admin = m.admin;
           c.data.size = size / 2;
           this.applySlimeSize(c);
           c.setPos(m.x + (m.rng.next() - 0.5) * size * 0.5, m.y + 0.5, m.z + (m.rng.next() - 0.5) * size * 0.5);
@@ -1140,13 +1156,15 @@ export class MobSystem {
           m.sitting = true;
           m.metaDirty = true;
           s.particles(m.dim, 'heart', m.x, m.y + 1, m.z, 7, 0.5);
-          if (m.type === 'wolf') s.interaction.grant(p, 'tame_wolf');
+          if (m.type === 'wolf' && !m.admin && !s.interaction.isCheat(p, held)) s.interaction.grant(p, 'tame_wolf');
         } else s.particles(m.dim, 'smoke', m.x, m.y + 1, m.z, 7, 0.5);
         return true;
       }
       if (m.breedCooldown <= 0 && m.loveTicks <= 0) {
+        const cheatFood = s.interaction.isCheat(p, held);
         consume();
         m.loveTicks = 600;
+        if (cheatFood) m.data.cheatLove = true;
         return true;
       }
     }
@@ -1158,7 +1176,7 @@ export class MobSystem {
         m.sitting = true;
         m.metaDirty = true;
         s.particles(m.dim, 'heart', m.x, m.y + 1, m.z, 7, 0.5);
-        s.interaction.grant(p, 'tame_wolf');
+        if (!m.admin && !s.interaction.isCheat(p, held)) s.interaction.grant(p, 'tame_wolf');
       } else s.particles(m.dim, 'smoke', m.x, m.y + 1, m.z, 7, 0.5);
       return true;
     }
@@ -1225,7 +1243,10 @@ export class MobSystem {
     const refresh = (): void => {
       result = null;
       const o = offers[selected];
-      if (o && o.uses < o.maxUses && matches(inputs[0]!, o.buy) && matches(inputs[1]!, o.buy2)) result = cloneStack(o.sell);
+      if (o && o.uses < o.maxUses && matches(inputs[0]!, o.buy) && matches(inputs[1]!, o.buy2)) {
+        result = cloneStack(o.sell);
+        if (m.admin || isAdminStack(inputs[0]) || isAdminStack(inputs[1]) || s.admin.inContext(p)) result = markAdmin(result);
+      }
       w.props = { offers: offers.map((o) => ({ buy: o.buy, buy2: o.buy2 ?? null, sell: o.sell, out: o.uses >= o.maxUses })), selected };
     };
     w.refresh = refresh;
@@ -1261,8 +1282,9 @@ export class MobSystem {
         take(1, o.buy2);
         o.uses++;
         p.addStat('traded');
-        s.interaction.grant(p, 'trade');
-        s.mining.dropXp(m.dim, m.x, m.y + 1, m.z, 1 + m.rng.int(3));
+        const cheat = isAdminStack(result);
+        if (!cheat) s.interaction.grant(p, 'trade');
+        s.mining.dropXp(m.dim, m.x, m.y + 1, m.z, 1 + m.rng.int(3), cheat);
         s.playSound(m.dim, 'mob.villager.idle', m.x, m.y + 1.6, m.z, 1, 1.2);
         refresh();
       },
@@ -1326,6 +1348,7 @@ export class MobSystem {
     const top = collisionShape(dim.getState(fx, fy - 1, fz)).reduce((a, b) => Math.max(a, b[4]), 0);
     const m = this.spawn(dim, def.spawns, fx + 0.5, fy + (face === 1 ? 0 : 0) + (top > 1 ? top - 1 : 0), fz + 0.5, { reason: 'egg', persistent: true });
     if (!m) return false;
+    m.admin = this.server.interaction.isCheat(p, stack);
     if (stack.tag?.name) m.customName = String(stack.tag.name);
     if (p.gamemode !== 'creative') p.inventory.set(p.selectedSlot, stack.count > 1 ? { ...stack, count: stack.count - 1 } : null);
     void getProp;
@@ -1345,6 +1368,7 @@ export class MobSystem {
     const [ex, ey, ez] = s.eyePos(p);
     const d = lookDir(p.yaw, p.pitch);
     const pr = this.projectile(p.dim, kind, ex + d[0] * 0.3, ey - 0.1 + d[1] * 0.3, ez + d[2] * 0.3, p);
+    pr.admin = s.interaction.isCheat(p, stack);
     pr.shoot(d[0], d[1] + (kind === 'experience_bottle' ? 0.2 : 0), d[2], kind === 'experience_bottle' ? 0.7 : 1.5, 1, () => this.rng.next());
     pr.vx += p.body.vx;
     pr.vz += p.body.vz;

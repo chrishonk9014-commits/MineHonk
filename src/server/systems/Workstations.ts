@@ -12,7 +12,7 @@ import { blocks, STATE_BLOCK, S, STATE_SOLID, STATE_FLUID, withProp, getProp } f
 import { Random } from '../../common/math/rng';
 import { selectEnchantments, tableCosts, canApply, compatible, enchantLevel } from '../../common/game/enchanting';
 import { ENCHANT_BY_ID } from '../../common/data/enchantments';
-import { stackOf, cloneStack, type ItemStack, type Slot, toSaved, fromSaved, type SavedStack } from '../../common/game/itemstack';
+import { stackOf, cloneStack, type ItemStack, type Slot, toSaved, fromSaved, type SavedStack, isAdminStack, markAdmin } from '../../common/game/itemstack';
 import { POTION_BY_ID, brewResult, isIngredient } from '../../common/data/potions';
 import type { C2S } from '../../common/net/protocol';
 import { raycastBlocks } from '../../common/physics/raycast';
@@ -116,7 +116,9 @@ export class Workstations {
       const lapis = inv.get(1);
       if (!creative && (p.xpLevel().level < o.cost || !lapis || lapis.count < i + 1)) return;
       const isBook = items[item.id]!.id === 'book';
-      const result: ItemStack = isBook ? { id: itemById.get('enchanted_book')!.num, count: 1, tag: { stored: { ...o.ench } } } : { ...cloneStack(item), tag: { ...(item.tag ?? {}), ench: { ...o.ench } } };
+      // Cheat items, lapis or levels make the result cheat-made too
+      const cheat = isAdminStack(item) || isAdminStack(lapis) || p.cheat.xp > 0 || this.server.admin.inContext(p);
+      const result: ItemStack = isBook ? { id: itemById.get('enchanted_book')!.num, count: 1, tag: { stored: { ...o.ench }, ...(cheat ? { admin: true } : {}) } } : { ...cloneStack(item), tag: { ...(item.tag ?? {}), ench: { ...o.ench }, ...(cheat ? { admin: true } : {}) } };
       inv.set(0, result);
       if (!creative) {
         inv.set(1, lapis!.count > i + 1 ? { ...lapis!, count: lapis!.count - (i + 1) } : null);
@@ -126,7 +128,7 @@ export class Workstations {
       this.server.playSound(dim, 'block.chime', x + 0.5, y + 0.5, z + 0.5, 1, 1);
       this.server.particles(dim, 'magic_crit', x + 0.5, y + 1.2, z + 0.5, 20, 0.5);
       p.addStat('enchanted');
-      this.server.interaction.grant(p, 'enchant_item');
+      if (!cheat) this.server.interaction.grant(p, 'enchant_item');
       refresh();
     };
     cont.addPlayerSlots(w, p);
@@ -141,7 +143,9 @@ export class Workstations {
     // Recompute total XP for the target level keeping progress at zero
     let total = 0;
     for (let l = 0; l < target; l++) total += xpForLevel(l);
+    const lost = p.xpTotal - total;
     p.xpTotal = total;
+    this.server.admin.onXpLost(p, lost);
     p.statsDirty = true;
   }
 
@@ -165,6 +169,7 @@ export class Workstations {
     let out: { stack: Slot; cost: number; material: number } = { stack: null, cost: 0, material: 0 };
     const refresh = (): void => {
       out = this.anvilResult(inv.get(0), inv.get(1), name);
+      if (out.stack && (isAdminStack(inv.get(0)) || isAdminStack(inv.get(1)) || p.cheat.xp > 0 || this.server.admin.inContext(p))) out.stack = markAdmin({ ...out.stack });
       const creative = p.gamemode === 'creative';
       w.props = { cost: out.cost, tooExpensive: !creative && out.cost >= 40, name, affordable: creative || p.xpLevel().level >= out.cost };
     };
@@ -347,6 +352,7 @@ export class Workstations {
         if (f && items[f.id]!.id === 'blaze_powder') {
           inv.set(4, f.count > 1 ? { ...f, count: f.count - 1 } : null);
           fuel = 20;
+          be.cheatFuel = isAdminStack(f) ? 1 : 0;
         }
       }
       let changed = false;
@@ -358,7 +364,7 @@ export class Workstations {
         brew--;
         changed = true;
         if (brew <= 0) {
-          this.finishBrew(inv);
+          this.finishBrew(inv, be.cheatFuel === 1);
           this.server.playSound(dim, 'drink', x + 0.5, y + 0.5, z + 0.5, 0.6, 1.4);
         }
       } else if (brew > 0) {
@@ -366,7 +372,7 @@ export class Workstations {
         changed = true;
       }
       if (changed || fuel !== (be.fuel ?? 0)) {
-        this.persistStand(dim, x, y, z, inv, { fuel, brew });
+        this.persistStand(dim, x, y, z, inv, { fuel, brew, cheatFuel: be.cheatFuel ?? 0 });
         for (const p of this.server.players.values()) {
           const w = this.server.interaction.containers.windowOf(p);
           if (w.kind === 'brewing' && w.pos && w.pos.x === x && w.pos.y === y && w.pos.z === z && w.pos.dim === dim) {
@@ -393,20 +399,22 @@ export class Workstations {
     return false;
   }
 
-  private finishBrew(inv: Inventory): void {
+  private finishBrew(inv: Inventory, cheatFuel = false): void {
     const ing = inv.get(3)!;
     const iid = items[ing.id]!.id;
+    // A cheat ingredient or fuel makes every brewed potion cheat-made
+    const cheat = cheatFuel || isAdminStack(ing);
     for (let i = 0; i < 3; i++) {
       const b = inv.get(i);
       if (!b) continue;
       const bid = items[b.id]!.id;
       if (bid === 'glass_bottle') continue;
       if (iid === 'gunpowder') {
-        if (bid === 'potion') inv.set(i, { id: itemById.get('splash_potion')!.num, count: 1, tag: { ...(b.tag ?? {}) } });
+        if (bid === 'potion') inv.set(i, { id: itemById.get('splash_potion')!.num, count: 1, tag: { ...(b.tag ?? {}), ...(cheat ? { admin: true } : {}) } });
         continue;
       }
       const r = brewResult(b.tag?.potion ?? 'water', iid);
-      if (r) inv.set(i, { ...b, tag: { ...(b.tag ?? {}), potion: r } });
+      if (r) inv.set(i, { ...b, tag: { ...(b.tag ?? {}), potion: r, ...(cheat ? { admin: true } : {}) } });
     }
     inv.set(3, ing.count > 1 ? { ...ing, count: ing.count - 1 } : null);
   }

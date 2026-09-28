@@ -368,11 +368,35 @@ function videoScreen(host: ScreenHost, inGame: boolean): Screen {
     el('div', { class: 'row' }, cycle((v: boolean) => `Clouds: ${onOff(v)}`, [true, false], s.clouds, (v) => ((s.clouds = v), change())), cycle((v: boolean) => `View Bobbing: ${onOff(v)}`, [true, false], s.viewBobbing, (v) => ((s.viewBobbing = v), change()))),
     el('div', { class: 'row' }, slider((v) => `Max Framerate: ${v === 0 ? 'Unlimited' : v + ' fps'}`, s.maxFps, 0, 240, 10, (v) => ((s.maxFps = v), change())), slider((v) => `Resolution: ${Math.round(v * 100)}%`, s.resolutionScale, 0.25, 1, 0.05, (v) => ((s.resolutionScale = v), change()))),
     el('div', { class: 'row' }, cycle((v: boolean) => `Show FPS: ${onOff(v)}`, [false, true], s.showFps, (v) => ((s.showFps = v), change()))),
+    el('div', { class: 'label', style: { marginTop: 'calc(var(--s) * 4)' } }, 'Render distance presets'),
+    el(
+      'div',
+      { class: 'row' },
+      ...RENDER_PRESETS.map((p) =>
+        button(
+          `${p.name} (${p.chunks})`,
+          wrapClick(host, () => {
+            s.renderDistance = p.chunks;
+            change();
+            host.replace(videoScreen(host, inGame));
+          }),
+          'btn chip' + (s.renderDistance === p.chunks ? ' active' : ''),
+        ),
+      ),
+    ),
     el('div', { class: 'spacer' }),
     button('Done', wrapClick(host, () => host.pop())),
   );
   return { root };
 }
+
+/** Render distance presets (chunks). */
+export const RENDER_PRESETS = [
+  { name: 'Low', chunks: 6 },
+  { name: 'Medium', chunks: 8 },
+  { name: 'High', chunks: 12 },
+  { name: 'Very High', chunks: 16 },
+];
 
 function soundScreen(host: ScreenHost, inGame: boolean): Screen {
   const s = host.settings;
@@ -413,6 +437,7 @@ const KEY_LABELS: Record<keyof KeyBinds, string> = {
   fullscreen: 'Toggle Fullscreen',
   screenshot: 'Take Screenshot',
   achievements: 'Advancements',
+  adminPanel: 'Admin Panel (cheats)',
 };
 
 export function keyName(code: string): string {
@@ -488,14 +513,29 @@ function accessibilityScreen(host: ScreenHost, inGame: boolean): Screen {
 // ---------------------------------------------------------------------------
 // In-game screens
 // ---------------------------------------------------------------------------
-export function pauseScreen(host: ScreenHost, actions: { resume: () => void; options: () => void; achievements: () => void; stats: () => void; quit: () => void; invite?: () => void }, local: boolean): Screen {
+export function pauseScreen(
+  host: ScreenHost,
+  actions: { resume: () => void; options: () => void; achievements: () => void; stats: () => void; quit: () => void; invite?: () => void; admin?: () => void; cheats?: { on: boolean; toggle: () => void } },
+  local: boolean,
+): Screen {
   const { root, body } = titled('Game Menu', 'screen dim center');
   body.append(
     button('Back to Game', wrapClick(host, actions.resume)),
     el('div', { class: 'row' }, button('Advancements', wrapClick(host, actions.achievements), 'btn half'), button('Statistics', wrapClick(host, actions.stats), 'btn half')),
     el('div', { class: 'row' }, button('Options...', wrapClick(host, actions.options), 'btn half'), actions.invite ? button('Invite Friends', wrapClick(host, actions.invite), 'btn half') : button('Invite Friends', () => {}, 'btn half', true)),
-    button(local ? 'Save and Quit to Title' : 'Disconnect', wrapClick(host, actions.quit)),
   );
+  // Cheats: the owner can switch them on or off; owners and operators get the Admin Panel
+  if (actions.admin || actions.cheats) {
+    body.append(
+      el(
+        'div',
+        { class: 'row' },
+        actions.admin ? button('Admin Panel', wrapClick(host, actions.admin), actions.cheats ? 'btn half' : 'btn wide') : null,
+        actions.cheats ? button(`Allow Cheats: ${actions.cheats.on ? 'ON' : 'OFF'}`, wrapClick(host, actions.cheats.toggle), actions.admin ? 'btn half' : 'btn wide') : null,
+      ),
+    );
+  }
+  body.append(button(local ? 'Save and Quit to Title' : 'Disconnect', wrapClick(host, actions.quit)));
   return { root };
 }
 

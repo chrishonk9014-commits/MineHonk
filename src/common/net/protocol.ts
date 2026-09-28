@@ -1,3 +1,4 @@
+import type { AdminAction } from '../game/admin';
 import type { WorldRole } from './multiplayer';
 /**
  * Client <-> server protocol. Every message is a plain object with a `t`
@@ -39,7 +40,9 @@ export type C2S =
   | { t: 'trade'; index: number }
   | { t: 'wake' }
   | { t: 'request_progress' }
-  | { t: 'ping'; time: number };
+  | { t: 'ping'; time: number }
+  /** Admin Panel request (authorised and validated by the server). */
+  | { t: 'admin'; req: number; action: AdminAction };
 
 export type ClickMode = 'pickup' | 'quick' | 'swap' | 'drop' | 'drag_start' | 'drag_add' | 'drag_end' | 'collect' | 'clone';
 
@@ -74,6 +77,8 @@ export interface WorldInfo {
   joinCode?: string;
   isOwner: boolean;
   isHost: boolean;
+  /** Whether this player may use the Admin Panel (operator in a world with cheats). */
+  admin?: boolean;
   role: WorldRole;
 }
 
@@ -137,7 +142,8 @@ export type S2C =
   | { t: 'take_item'; item: number; by: number }
   | { t: 'use_result'; seq: number; ok: boolean }
   | { t: 'progress'; achievements: string[]; stats: Record<string, number> }
-  | { t: 'debug'; data: Record<string, unknown> };
+  | { t: 'debug'; data: Record<string, unknown> }
+  | { t: 'admin_result'; req: number; ok: boolean; text: string; data?: unknown };
 
 export interface AbilitiesMsg {
   mayFly: boolean;

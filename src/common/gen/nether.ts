@@ -518,6 +518,15 @@ export class NetherGenerator implements DimensionGenerator {
     return this.structures.structureAt(x, y, z);
   }
 
+  structureTypes(): string[] {
+    return [...this.structures.typeIds()];
+  }
+
+  *locateSteps(type: string, x: number, z: number): Generator<void, { x: number; y: number; z: number } | null> {
+    const s = yield* this.structures.nearestSteps(type, x, z);
+    return s ? { x: s.x, y: s.y, z: s.z } : null;
+  }
+
   locate(type: string, x: number, z: number): { x: number; y: number; z: number } | null {
     const s = this.structures.nearest(type, x, z, 10);
     return s ? { x: s.x, y: s.y, z: s.z } : null;

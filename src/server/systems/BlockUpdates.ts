@@ -150,9 +150,12 @@ export class BlockUpdates {
     if (!blocks[STATE_BLOCK[s]!]!.def.gravity) return;
     const below = dim.getState(x, y - 1, z);
     if (!(below === 0 || STATE_REPLACEABLE[below] || STATE_FLUID[below]) || y <= 0) return;
+    const cheat = this.server.admin.blockMarked(dim, x, y, z);
     dim.setBlock(x, y, z, 0);
+    this.server.admin.setBlockMark(dim, x, y, z, false);
     const e = new FallingBlock(s);
     e.setPos(x + 0.5, y, z + 0.5);
+    e.admin = cheat;
     dim.addEntity(e);
   }
 
@@ -208,6 +211,7 @@ export class BlockUpdates {
         const n = dim.getState(x + FACE_DX[f], y + FACE_DY[f], z + FACE_DZ[f]);
         if (STATE_FLUID[n] === 1) {
           dim.setBlock(x, y, z, level === 0 ? S('obsidian') : S('cobblestone'));
+          if (this.server.admin.blockMarked(dim, x + FACE_DX[f], y + FACE_DY[f], z + FACE_DZ[f])) this.server.admin.setBlockMark(dim, x, y, z, true);
           this.server.playSound(dim, 'fizz', x + 0.5, y + 0.5, z + 0.5, 0.5, 2.6);
           return;
         }
@@ -218,9 +222,10 @@ export class BlockUpdates {
     if (y > 0 && this.canFlowInto(dim, below, kind, x, y - 1, z)) {
       if (kind === 1 && STATE_FLUID[below] === 2) {
         dim.setBlock(x, y - 1, z, this.fluidLevel(below, 2) === 0 ? S('obsidian') : S('stone'));
+        if (this.server.admin.blockMarked(dim, x, y, z)) this.server.admin.setBlockMark(dim, x, y - 1, z, true);
         return;
       }
-      this.flowInto(dim, x, y - 1, z, withProp(base, 'level', '8'), kind);
+      this.flowInto(dim, x, y - 1, z, withProp(base, 'level', '8'), kind, this.server.admin.blockMarked(dim, x, y, z));
       if (level !== 0) return; // falling fluid doesn't spread sideways unless source
     }
     // Spread sideways
@@ -236,7 +241,7 @@ export class BlockUpdates {
       if (!this.canFlowInto(dim, n, kind, nx, y, nz)) continue;
       const nl = this.fluidLevel(n, kind);
       if (nl >= 0 && (nl === 0 || nl <= next)) continue;
-      this.flowInto(dim, nx, y, nz, withProp(base, 'level', String(next)), kind);
+      this.flowInto(dim, nx, y, nz, withProp(base, 'level', String(next)), kind, this.server.admin.blockMarked(dim, x, y, z));
     }
   }
 
@@ -275,7 +280,9 @@ export class BlockUpdates {
     return STATE_REPLACEABLE[s] === 1 && !STATE_SOLID[s];
   }
 
-  private flowInto(dim: Dimension, x: number, y: number, z: number, state: number, kind: number): void {
+  /** Fluid spreading from a cheat-placed source keeps the cheat mark. */
+  private flowInto(dim: Dimension, x: number, y: number, z: number, state: number, kind: number, cheat = false): void {
+    if (cheat) this.server.admin.setBlockMark(dim, x, y, z, true);
     const cur = dim.getState(x, y, z);
     if (cur !== 0 && !STATE_FLUID[cur] && STATE_REPLACEABLE[cur]) {
       for (const st of computeBlockDrops(cur, null, rng).items) this.server.mining.dropItem(dim, x + 0.5, y + 0.3, z + 0.5, st);
@@ -395,7 +402,13 @@ export class BlockUpdates {
     if (def.tags?.includes('saplings')) {
       if (this.lightAt(dim, x, y + 1, z) < 9 || !rng.chance(1 / 7)) return;
       if (getProp(st, 'stage') === '0') dim.setBlock(x, y, z, withProp(st, 'stage', '1'));
-      else growTree(dim, x, y, z, id.replace('_sapling', ''), rng, (bx, by, bz, s) => dim.setBlock(bx, by, bz, s));
+      else {
+        const cheat = this.server.admin.blockMarked(dim, x, y, z);
+        growTree(dim, x, y, z, id.replace('_sapling', ''), rng, (bx, by, bz, s) => {
+          dim.setBlock(bx, by, bz, s);
+          if (cheat) this.server.admin.setBlockMark(dim, bx, by, bz, true);
+        });
+      }
       return;
     }
     if (id === 'sugar_cane' || id === 'cactus') {
@@ -406,7 +419,10 @@ export class BlockUpdates {
       const age = parseInt(getProp(st, 'age')!, 10);
       if (age >= 15) {
         const ns = S(id);
-        if (canSurvive(ns, { getState: (a, b, c) => (a === x && b === y + 1 && c === z ? 0 : dim.getState(a, b, c)) }, x, y + 1, z)) dim.setBlock(x, y + 1, z, ns);
+        if (canSurvive(ns, { getState: (a, b, c) => (a === x && b === y + 1 && c === z ? 0 : dim.getState(a, b, c)) }, x, y + 1, z)) {
+          dim.setBlock(x, y + 1, z, ns);
+          if (this.server.admin.blockMarked(dim, x, y, z)) this.server.admin.setBlockMark(dim, x, y + 1, z, true);
+        }
         dim.setBlock(x, y, z, withProp(st, 'age', '0'), { updateNeighbors: false });
       } else dim.setBlock(x, y, z, withProp(st, 'age', String(age + 1)), { updateNeighbors: false });
       return;

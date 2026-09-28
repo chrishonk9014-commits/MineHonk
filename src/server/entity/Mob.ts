@@ -168,6 +168,20 @@ export class Mob extends LivingEntity {
     this.wantPos = null;
   }
 
+  /** No target and no player within AI range (refreshed once a second). */
+  private far = false;
+
+  private playerWithin(r: number): boolean {
+    for (const p of this.dim.server.players.values()) if (p.dim === this.dim && (p.x - this.x) ** 2 + (p.z - this.z) ** 2 < r * r) return true;
+    return false;
+  }
+
+  /** Standing still on the ground with nothing to do: physics can wait. */
+  private resting(): boolean {
+    const b = this.body;
+    return b.onGround && !b.inWater && !b.inLava && !this.navigating && !this.target && Math.abs(b.vx) + Math.abs(b.vz) < 0.003 && Math.abs(b.vy) < 0.1 && this.hurtTime === 0;
+  }
+
   get navigating(): boolean {
     return (!!this.path && this.pathIndex < this.path.length) || !!this.wantPos;
   }
@@ -198,11 +212,13 @@ export class Mob extends LivingEntity {
     }
     if (!this.controlled) this.environment();
     if (this.dead || this.removed) return;
-    if (!this.noAi && this.age % 2 === 0) {
+    // Mobs far from every player think less often and skip physics while idle
+    if (this.age % 20 === 0 || this.age < 2) this.far = !this.target && this.def.category !== 'boss' && !this.playerWithin(Math.max(AI_NEAR, (this.def.followRange ?? 16) + 16));
+    if (!this.noAi && this.age % (this.far ? 8 : 2) === 0) {
       this.runGoals(this.targetGoals);
       this.runGoals(this.goals);
     }
-    if (!this.controlled) this.move();
+    if (!this.controlled && (!this.far || !this.resting() || this.age % 10 === 0)) this.move();
     this.idleSound();
   }
 
@@ -507,6 +523,7 @@ export class Mob extends LivingEntity {
       held: this.held ? items[this.held.id]!.id : undefined,
       name: this.customName ?? undefined,
       persist: this.persistenceRequired || undefined,
+      admin: this.admin || undefined,
       data: Object.keys(this.data).length ? this.data : undefined,
     };
   }
@@ -526,6 +543,7 @@ export class Mob extends LivingEntity {
     if (typeof data.held === 'string' && itemById.has(data.held)) m.held = { id: itemById.get(data.held)!.num, count: 1 };
     if (typeof data.name === 'string') m.customName = data.name.slice(0, 32);
     m.persistenceRequired = !!data.persist;
+    m.admin = data.admin === true;
     if (data.data && typeof data.data === 'object') m.data = { ...(data.data as Record<string, unknown>) };
     delete m.data.lastHurtAmount;
     return m;
@@ -552,6 +570,9 @@ export class Mob extends LivingEntity {
     return !!this.def.farlands;
   }
 }
+
+/** Horizontal distance within which mobs get full-rate AI. */
+export const AI_NEAR = 48;
 
 export function approachAngle(cur: number, target: number, max: number): number {
   let d = (target - cur) % (Math.PI * 2);

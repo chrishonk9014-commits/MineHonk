@@ -7,3 +7,5 @@ data/
 *.log
 .DS_Store
 tests/e2e/out/
+dist-bench*/
+tests/perf/out/

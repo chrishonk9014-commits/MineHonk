@@ -36,6 +36,8 @@ export class Progression {
     server.interaction.onMobKilled = (p, m) => {
       prev?.(p, m);
       if (!(m instanceof Mob)) return;
+      // Killing a cheat-spawned mob never counts
+      if (m.admin) return;
       if (m.def.category === 'monster' || m.def.category === 'boss') server.interaction.grant(p, 'kill_mob');
       const a = KILL_ACHIEVEMENTS[m.type];
       if (a) server.interaction.grant(p, a);

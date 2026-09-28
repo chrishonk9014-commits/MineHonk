@@ -20,6 +20,7 @@ export interface KeyBinds {
   fullscreen: string;
   screenshot: string;
   achievements: string;
+  adminPanel: string;
 }
 
 export interface Settings {
@@ -72,6 +73,7 @@ export const DEFAULT_KEYS: KeyBinds = {
   fullscreen: 'F11',
   screenshot: 'F2',
   achievements: 'KeyL',
+  adminPanel: 'F8',
 };
 
 export const DEFAULT_SETTINGS: Settings = {

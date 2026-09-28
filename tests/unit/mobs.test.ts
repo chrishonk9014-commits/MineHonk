@@ -128,4 +128,36 @@ describe('mobs and combat', () => {
     expect(back.data.color).toBe('blue');
     expect(back.customName).toBe('Bluey');
   });
+
+  it('mobs far from players think less often but still fall, and wake up when a player comes close', async () => {
+    const { server } = await makeServer();
+    const { player } = await join(server, 'Far', 'uuid-far', 6);
+    const dim = player.dim;
+    for (let i = 0; i < 40; i++) {
+      tick(server, 2);
+      await new Promise((r) => setTimeout(r, 0));
+    }
+    const x = Math.floor(player.x) + 70;
+    const z = Math.floor(player.z);
+    expect(dim.isLoaded(x, z)).toBe(true);
+    const ground = dim.getHeight(x, z) + 1;
+    const cow = server.mobs!.spawn(dim, 'cow', x + 0.5, ground + 8, z + 0.5, { persistent: true })!;
+    const zombie = server.mobs!.spawn(dim, 'zombie', x + 3.5, ground + 2, z + 0.5, { persistent: true })!;
+    zombie.held = null;
+    tick(server, 60);
+    const far = (m: Mob): boolean => (m as unknown as { far: boolean }).far;
+    expect(far(cow)).toBe(true);
+    expect(far(zombie)).toBe(true);
+    // Physics still runs for a mob that is not resting: the cow fell to the ground
+    expect(cow.body.onGround).toBe(true);
+    expect(cow.y).toBeLessThan(ground + 2);
+    // Bring the player close at night: full-rate AI returns and the zombie attacks
+    server.level.dayTime = 18000;
+    player.spawnProtection = 0;
+    player.setPos(zombie.x - 6, dim.getHeight(Math.floor(zombie.x - 6), Math.floor(zombie.z)) + 1, zombie.z);
+    tick(server, 21);
+    expect(far(zombie)).toBe(false);
+    for (let i = 0; i < 200 && zombie.target !== player; i++) tick(server, 1);
+    expect(zombie.target).toBe(player);
+  });
 });

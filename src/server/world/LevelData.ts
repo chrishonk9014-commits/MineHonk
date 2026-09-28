@@ -73,6 +73,8 @@ export interface LevelData {
   muted: Record<string, number>;
   /** Player reports for operators (most recent last). */
   reports: { from: string; target: string; reason: string; at: number }[];
+  /** Cheat bookkeeping (blocks placed by cheats, cheat-set time/weather). */
+  admin?: { sky?: boolean; blocks?: Record<string, Record<string, number[]>>; chunks?: Record<string, number[]> };
 }
 
 export interface PortalRecord {
@@ -207,5 +209,9 @@ export function sanitizeLevelData(raw: unknown, fallbackId: string): LevelData |
   out.generatorVersion = num(r.generatorVersion, GENERATOR_VERSION);
   out.bonusChest = !!r.bonusChest;
   out.generateStructures = r.generateStructures !== false;
+  if (r.admin && typeof r.admin === 'object') {
+    const a = r.admin as NonNullable<LevelData['admin']>;
+    out.admin = { sky: a.sky === true, blocks: a.blocks && typeof a.blocks === 'object' ? a.blocks : {}, chunks: a.chunks && typeof a.chunks === 'object' ? a.chunks : {} };
+  }
   return out;
 }

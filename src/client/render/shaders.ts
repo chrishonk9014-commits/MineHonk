@@ -1,35 +1,36 @@
 /** GLSL for chunk rendering (WebGL2 / GLSL ES 3.0 via three.js ShaderMaterial). */
 export const CHUNK_VERT = /* glsl */ `
 precision highp float;
-in vec3 aPos;
-in vec2 aUv;
+in vec4 aPos;    // x, y, z in 1/256 block (region relative), w = quad size in tiles (u | v << 5)
+in vec2 aLocal;  // texture coordinates in tiles * 256 (repeat across merged faces)
+in vec2 aTile;   // atlas origin of the texture tile
 in vec4 aCol;
 in vec4 aLight;
 uniform float uTime;
-uniform float uTileU;
-uniform float uWave;
-out vec2 vUv;
+uniform vec2 uTileSize;
+out vec2 vLocal;
+flat out vec2 vTile;
+flat out vec2 vSize;
 out vec3 vTint;
 out float vShade;
 out vec2 vLight;
 out float vFogDepth;
-out vec3 vWorld;
 void main() {
-  vec3 pos = aPos / 256.0;
-  vec2 uv = aUv;
+  vec3 pos = aPos.xyz / 256.0;
+  vec2 tile = aTile;
   float frames = aLight.z;
   if (frames > 1.5) {
     float ft = max(aLight.w, 1.0);
     float frame = mod(floor(uTime / ft), frames);
-    uv.x += frame * uTileU;
+    tile.x += frame * uTileSize.x;
   }
-  vUv = uv;
+  vTile = tile;
+  vSize = vec2(mod(aPos.w, 32.0), floor(aPos.w / 32.0));
+  vLocal = aLocal / 256.0;
   vTint = aCol.rgb;
   vShade = aCol.a;
   vLight = aLight.xy / 240.0;
-  vec4 world = modelMatrix * vec4(pos, 1.0);
-  vWorld = world.xyz;
-  vec4 mv = viewMatrix * world;
+  vec4 mv = viewMatrix * (modelMatrix * vec4(pos, 1.0));
   vFogDepth = length(mv.xyz);
   gl_Position = projectionMatrix * mv;
 }
@@ -37,13 +38,15 @@ void main() {
 
 export const CHUNK_FRAG = /* glsl */ `
 precision highp float;
-in vec2 vUv;
+in vec2 vLocal;
+flat in vec2 vTile;
+flat in vec2 vSize;
 in vec3 vTint;
 in float vShade;
 in vec2 vLight;
 in float vFogDepth;
-in vec3 vWorld;
 uniform sampler2D uAtlas;
+uniform vec2 uTileSize;
 uniform float uDaylight;
 uniform vec3 uSkyTint;
 uniform vec3 uBlockTint;
@@ -62,7 +65,11 @@ float curve(float l) {
 }
 
 void main() {
-  vec4 tex = texture(uAtlas, vUv);
+  // Repeat the tile across merged faces; stay a hair inside the quad's own edges
+  vec2 l = clamp(vLocal, vec2(0.002), vSize - 0.002);
+  vec2 uv = vTile + fract(l) * uTileSize;
+  // Gradients of the unwrapped coordinates keep mip selection seamless
+  vec4 tex = textureGrad(uAtlas, uv, dFdx(vLocal) * uTileSize, dFdy(vLocal) * uTileSize);
   if (uAlphaMode < 1.5) {
     if (tex.a < 0.5) discard;
   } else if (tex.a < 0.02) discard;

@@ -14,6 +14,10 @@ import { POTIONS } from '../../common/data/potions';
 import { ENCHANTMENTS } from '../../common/data/enchantments';
 import type { ItemStack } from '../../common/game/itemstack';
 import { romanNumeral } from '../../common/data/enchantments';
+import { RecipeBookPanel, recipeBookOpen, setRecipeBookOpen, playerOwnedSlots } from './RecipeBook';
+
+/** Screens that offer the Recipe Book. */
+const BOOK_KINDS = new Set(['player', 'crafting', 'furnace', 'blast_furnace', 'smoker', 'stonecutter', 'smithing', 'brewing', 'anvil', 'enchanting', 'creative']);
 
 export interface WindowState {
   id: number;
@@ -44,6 +48,8 @@ export class InventoryScreen {
   private creativeCursor: Slot = null;
   private readonly keyHandler: (e: KeyboardEvent) => void;
   private detachPreview: (() => void) | null = null;
+  private book: RecipeBookPanel | null = null;
+  private bookKind = '';
 
   constructor(
     win: WindowState,
@@ -96,6 +102,8 @@ export class InventoryScreen {
   }
 
   destroy(): void {
+    this.book?.destroy();
+    this.book = null;
     this.detachPreview?.();
     window.removeEventListener('mouseup', this.onMouseUp);
     window.removeEventListener('keydown', this.keyHandler, true);
@@ -449,7 +457,44 @@ export class InventoryScreen {
       }
     }
     this.root.append(gui);
+    if (BOOK_KINDS.has(w.kind)) {
+      const btn = el('div', { class: 'rb-button' + (recipeBookOpen() ? ' active' : ''), title: 'Recipe Book' });
+      const ic = iconEl({ id: items.find((x) => x.id === 'book')?.num ?? 0, count: 1 }, false);
+      if (ic) btn.append(ic);
+      btn.addEventListener('mousedown', (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        setRecipeBookOpen(!recipeBookOpen());
+        btn.classList.toggle('active', recipeBookOpen());
+        this.syncBook();
+      });
+      gui.append(btn);
+    }
+    this.syncBook();
     this.refresh();
+  }
+
+  /** Shows or hides the Recipe Book beside the GUI (kept open between screens). */
+  private syncBook(): void {
+    const want = recipeBookOpen() && BOOK_KINDS.has(this.win.kind);
+    if (this.book && (!want || this.bookKind !== this.win.kind)) {
+      this.book.destroy();
+      this.book = null;
+    }
+    if (want && !this.book) {
+      this.book = new RecipeBookPanel(this.win.kind, this.opts.advancedTooltips);
+      this.bookKind = this.win.kind;
+      this.book.update(this.ownedSlots());
+    }
+    const gui = this.root.querySelector(':scope > .gui');
+    if (this.book && gui && this.book.root.nextSibling !== gui) this.root.insertBefore(this.book.root, gui);
+    this.root.classList.toggle('with-book', !!this.book);
+  }
+
+  /** The player's items as seen by the current screen (for recipe availability). */
+  private ownedSlots(): Slot[] {
+    if (this.isCreative()) return playerOwnedSlots('player', this.opts.playerSlots(), 0);
+    return playerOwnedSlots(this.win.kind, this.win.slots, this.win.size);
   }
 
   private buildCreative(gui: HTMLElement): void {
@@ -575,6 +620,7 @@ export class InventoryScreen {
     // The tooltip only follows mouse moves; drop it when the hovered slot empties
     if (this.hovered >= 0 && this.hovered < 10000 && !this.slotStack(this.hovered)) hideTooltip();
     this.refreshProgress();
+    this.book?.update(this.ownedSlots());
   }
 
   private renderCursor(): void {

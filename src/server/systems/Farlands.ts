@@ -28,7 +28,7 @@ export class FarlandsSystem {
       if (s) p.inventory.set(p.selectedSlot, s.count > 1 ? { ...s, count: s.count - 1 } : null);
       this.server.interaction.syncInventory(p);
     }
-    this.server.interaction.grant(p, 'find_far_portal');
+    if (!this.server.interaction.isCheat(p, stack)) this.server.interaction.grant(p, 'find_far_portal');
     return true;
   }
 

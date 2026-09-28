@@ -28,6 +28,8 @@ export abstract class Entity {
   /** Set when metadata changed and needs broadcasting. */
   metaDirty = false;
   customName: string | null = null;
+  /** Created by cheats (Admin Panel or commands): nothing it causes counts towards advancements. */
+  admin = false;
 
   constructor(width: number, height: number) {
     this.body = newBody(0, 0, 0, width, height);

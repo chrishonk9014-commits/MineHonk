@@ -219,7 +219,7 @@ export class PrimedTnt extends Entity {
     }
     if (--this.fuse <= 0) {
       this.remove();
-      this.dim.server.mobs?.explode(this.dim, this.x, this.y + 0.49, this.z, 4, false, this.source);
+      this.dim.server.mobs?.explode(this.dim, this.x, this.y + 0.49, this.z, 4, false, this.source, this.admin);
     } else if (this.fuse % 5 === 0) this.dim.server.particles(this.dim, 'smoke', this.x, this.y + 1, this.z, 1, 0.1);
   }
 

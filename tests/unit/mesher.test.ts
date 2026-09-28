@@ -45,7 +45,7 @@ describe('mesher', () => {
       }
       const tints = new Uint8Array(PAD * PAD * 9).fill(128);
       const t0 = performance.now();
-      const layers = mesher.mesh({ blocks, light: lt, tints, fancyLeaves: true, smoothLighting: true });
+      const { layers } = mesher.mesh({ blocks, light: lt, tints, fancyLeaves: true, smoothLighting: true });
       ms += performance.now() - t0;
       total += layers.reduce((a, l) => a + l.quads, 0);
     }

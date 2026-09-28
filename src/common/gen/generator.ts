@@ -121,6 +121,42 @@ export class OverworldGenerator implements DimensionGenerator {
     return this.structures.structureAt(x, y, z);
   }
 
+  /** Nearest monster room, checking origin chunks outwards (one chunk per step). */
+  *dungeonSteps(x: number, z: number, maxChunks = 40): Generator<void, { x: number; y: number; z: number } | null> {
+    const ocx = x >> 4;
+    const ocz = z >> 4;
+    const proto = (bx: number, by: number, bz: number): number => (by < 0 || by >= 256 ? 0 : this.protos.get(bx >> 4, bz >> 4).get(bx & 15, by, bz & 15));
+    let best: { x: number; y: number; z: number } | null = null;
+    let bestD = Infinity;
+    for (let r = 0; r <= maxChunks; r++) {
+      for (let cx = ocx - r; cx <= ocx + r; cx++)
+        for (let cz = ocz - r; cz <= ocz + r; cz++) {
+          if (Math.max(Math.abs(cx - ocx), Math.abs(cz - ocz)) !== r) continue;
+          const site = F.dungeonSite(this.seed, cx, cz, proto);
+          if (site) {
+            const d = (site.cx - x) ** 2 + (site.cz - z) ** 2;
+            if (d < bestD) {
+              bestD = d;
+              best = { x: site.cx, y: site.cy, z: site.cz };
+            }
+          }
+          yield;
+        }
+      if (best && r * 16 > Math.sqrt(bestD)) break;
+    }
+    return best;
+  }
+
+  structureTypes(): string[] {
+    return [...this.structures.typeIds(), 'dungeon'];
+  }
+
+  *locateSteps(type: string, x: number, z: number): Generator<void, { x: number; y: number; z: number } | null> {
+    if (type === 'dungeon') return yield* this.dungeonSteps(x, z);
+    const s = yield* this.structures.nearestSteps(type, x, z);
+    return s ? { x: s.x, y: s.y, z: s.z } : null;
+  }
+
   locate(type: string, x: number, z: number): { x: number; y: number; z: number } | null {
     const s = this.structures.nearest(type, x, z, type === 'stronghold' ? 0 : 12);
     return s ? { x: s.x, y: s.y, z: s.z } : null;

@@ -1,4 +1,5 @@
 /** A gravity-affected block (sand, gravel, anvils...) in motion. */
+import { markAdmin } from '../../common/game/itemstack';
 import { Entity } from './Entity';
 import { moveBody } from '../../common/physics/movement';
 import { blocks, STATE_BLOCK, STATE_REPLACEABLE, STATE_FLUID, stateToString, stateFromString } from '../../common/registry/blocks';
@@ -34,6 +35,7 @@ export class FallingBlock extends Entity {
       const here = this.dim.getState(x, y, z);
       if (b.y >= -64 && (here === 0 || STATE_REPLACEABLE[here] || STATE_FLUID[here])) {
         this.dim.setBlock(x, y, z, this.state);
+        this.dim.server.admin.setBlockMark(this.dim, x, y, z, this.admin);
         const def = blocks[STATE_BLOCK[this.state]!]!.def;
         this.dim.server.playSound(this.dim, def.tags?.includes('anvil') ? 'anvil.land' : 'place.' + def.sound, x + 0.5, y + 0.5, z + 0.5, 0.6, 1);
         if (def.tags?.includes('anvil')) {
@@ -42,7 +44,7 @@ export class FallingBlock extends Entity {
           }
         }
       } else if (b.y >= -64) {
-        for (const s of computeBlockDrops(this.state, null, rng).items) this.dim.server.mining.dropItem(this.dim, b.x, b.y + 0.5, b.z, s, false);
+        for (const s of computeBlockDrops(this.state, null, rng).items) this.dim.server.mining.dropItem(this.dim, b.x, b.y + 0.5, b.z, this.admin ? markAdmin(s) : s, false);
       }
       this.remove();
     }

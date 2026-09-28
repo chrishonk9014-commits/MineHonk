@@ -1,7 +1,7 @@
 /** Dropped item stack in the world. */
 import { Entity } from './Entity';
 import { moveBody, updateEnvironment } from '../../common/physics/movement';
-import { type ItemStack, canStack, maxStack, toSaved, fromSaved, type SavedStack, itemIdOf } from '../../common/game/itemstack';
+import { type ItemStack, canStack, maxStack, toSaved, fromSaved, type SavedStack, itemIdOf, markAdmin } from '../../common/game/itemstack';
 import { items } from '../../common/registry/items';
 import type { ServerPlayer } from '../player/ServerPlayer';
 import { STATE_FLUID, blocks, STATE_BLOCK } from '../../common/registry/blocks';
@@ -81,6 +81,8 @@ export class ItemEntity extends Entity {
   tryPickup(p: ServerPlayer): boolean {
     if (this.removed || this.pickupDelay > 0) return false;
     if (this.owner && this.owner !== p.uuid && this.age < 200) return false;
+    // Items picked up under a cheat (e.g. at a place reached by a cheat teleport) are cheat-made
+    if (this.admin || this.dim.server.admin.inContext(p)) markAdmin(this.stack);
     const before = this.stack.count;
     const rem = p.inventory.add(this.stack, [[0, 9], [9, 36], [40, 41]]);
     const taken = before - (rem?.count ?? 0);
@@ -93,7 +95,7 @@ export class ItemEntity extends Entity {
       this.stack = rem;
       this.metaDirty = true;
     }
-    this.dim.server.interaction.onItemPickedUp(p, itemIdOf(this.stack));
+    this.dim.server.interaction.onItemPickedUp(p, this.stack);
     return true;
   }
 
@@ -151,7 +153,7 @@ export class XpOrb extends Entity {
         b.vz += (dz / d) * f * f * 0.1;
       }
       if (d < 1.2 && this.age > 5) {
-        this.dim.server.interaction.survival.giveXp(best, this.value, true);
+        this.dim.server.interaction.survival.giveXp(best, this.value, true, this.admin);
         this.dim.server.playSound(this.dim, 'orb', this.x, this.y, this.z, 0.2, 0.6 + Math.random() * 0.8);
         this.remove();
         return;

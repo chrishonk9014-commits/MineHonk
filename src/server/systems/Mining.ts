@@ -2,6 +2,7 @@
  * Authoritative block breaking. The client predicts progress; the server
  * validates reach, line of sight, permissions and elapsed time.
  */
+import { markAdmin } from '../../common/game/itemstack';
 import type { GameServer } from '../GameServer';
 import type { ServerPlayer } from '../player/ServerPlayer';
 import type { C2S } from '../../common/net/protocol';
@@ -161,9 +162,12 @@ export class Mining {
       if (below !== 0 && !STATE_FLUID[below]) replacement = S('water');
     }
     // Generated loot chests fill themselves before they can spill
-    if (survival) this.server.interaction.containers.materializeLoot(dim, x, y, z);
+    if (survival) this.server.interaction.containers.materializeLoot(dim, x, y, z, 27, this.server.admin.inContext(p));
     const be = dim.getBlockEntity(x, y, z);
+    // Breaking a cheat-placed block, or with a cheat tool, or under a cheat: the drops are cheat-made
+    const cheat = this.server.admin.blockMarked(dim, x, y, z) || this.server.interaction.isCheat(p, tool);
     dim.setBlock(x, y, z, replacement);
+    this.server.admin.setBlockMark(dim, x, y, z, false);
     this.removeCompanion(dim, x, y, z, state);
     this.server.particles(dim, 'block', x + 0.5, y + 0.5, z + 0.5, 30, 0.5, state);
     this.server.playSound(dim, 'break.' + def.sound, x + 0.5, y + 0.5, z + 0.5, 1, 0.8);
@@ -172,13 +176,14 @@ export class Mining {
     p.addStat('blocks_mined');
     if (survival) {
       const drops = computeBlockDrops(state, tool, rng);
+      if (cheat) for (const s of drops.items) markAdmin(s);
       for (const s of drops.items) this.dropItem(dim, x + 0.5, y + 0.3, z + 0.5, s);
-      if (drops.xp > 0) this.dropXp(dim, x + 0.5, y + 0.5, z + 0.5, drops.xp);
+      if (drops.xp > 0) this.dropXp(dim, x + 0.5, y + 0.5, z + 0.5, drops.xp, cheat);
       // Container contents spill
       if (be && Array.isArray((be as { items?: unknown }).items)) this.server.interaction.spillContainer(dim, x, y, z, be);
       if (def.hardness > 0) this.server.interaction.damageHeld(p, 1);
       this.server.interaction.survival.exhaust(p, 0.005);
-      this.server.interaction.onBlockMined(p, bt.id, drops.items);
+      this.server.interaction.onBlockMined(p, bt.id, drops.items, cheat);
     }
   }
 
@@ -224,9 +229,10 @@ export class Mining {
     return e;
   }
 
-  dropXp(dim: Dimension, x: number, y: number, z: number, amount: number): void {
+  dropXp(dim: Dimension, x: number, y: number, z: number, amount: number, cheat = false): void {
     for (const v of splitXp(amount)) {
       const o = new XpOrb(v);
+      o.admin = cheat;
       o.setPos(x, y, z);
       o.body.vx = (Math.random() - 0.5) * 0.2;
       o.body.vy = 0.2 + Math.random() * 0.1;
@@ -236,9 +242,10 @@ export class Mining {
   }
 
   /** Drops what a block yields when destroyed without a tool (explosions). */
-  dropBlock(dim: Dimension, x: number, y: number, z: number, state: number): void {
+  dropBlock(dim: Dimension, x: number, y: number, z: number, state: number, cheat = false): void {
     const drops = computeBlockDrops(state, null, this.dropRng);
-    for (const st of drops.items) this.dropItem(dim, x + 0.5, y + 0.3, z + 0.5, st);
+    const marked = cheat || this.server.admin.blockMarked(dim, x, y, z);
+    for (const st of drops.items) this.dropItem(dim, x + 0.5, y + 0.3, z + 0.5, marked ? markAdmin(st) : st);
   }
 
   private readonly dropRng = new Random();

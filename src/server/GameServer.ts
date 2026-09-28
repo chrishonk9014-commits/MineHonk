@@ -27,6 +27,7 @@ import { Mining } from './systems/Mining';
 import { Interaction } from './systems/Interaction';
 import { Commands } from './commands/Commands';
 import { PlayerData } from './player/PlayerData';
+import { AdminService } from './admin/AdminService';
 
 export interface ServerOptions {
   /** Max chunks sent per player per tick. */
@@ -61,6 +62,7 @@ export class GameServer {
   readonly interaction: Interaction;
   readonly commands: Commands;
   readonly playerData: PlayerData;
+  readonly admin: AdminService;
   tickNo = 0;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private nextTickAt = 0;
@@ -95,6 +97,7 @@ export class GameServer {
     this.interaction = new Interaction(this);
     this.commands = new Commands(this);
     this.playerData = new PlayerData(this);
+    this.admin = new AdminService(this);
     for (const id of ['overworld', 'nether', 'end', 'farlands'] as DimensionId[]) {
       this.dims.set(id, new Dimension(this, id, level.seedNum));
     }
@@ -188,6 +191,7 @@ export class GameServer {
       this.level.lastPlayed = Date.now();
       for (const p of this.players.values()) await this.playerData.save(p);
       for (const d of this.dims.values()) await d.saveAll();
+      this.admin.persist();
       await this.storage.writeLevel(this.level);
       await this.storage.writeMeta('level_backup', this.level);
       await this.storage.flush();
@@ -296,6 +300,7 @@ export class GameServer {
       joinCode: this.isOperator(p) ? (this.level.joinCode ?? undefined) : undefined,
       isOwner: this.level.owner === null || this.level.owner === p.uuid,
       isHost: this.isOperator(p),
+      admin: this.level.cheats && this.isOperator(p),
       role: this.roleOf(p),
     };
   }
@@ -424,6 +429,9 @@ export class GameServer {
         break;
       case 'request_progress':
         p.send({ t: 'progress', achievements: [...p.achievements], stats: { ...p.statistics } });
+        break;
+      case 'admin':
+        this.admin.handle(p, m.req, m.action);
         break;
       case 'hello':
         break;
@@ -737,6 +745,7 @@ export class GameServer {
     }
     this.mining.tick();
     this.interaction.tick();
+    this.admin.tick();
 
     for (const p of this.players.values()) {
       this.handlePendingSpawn(p);
@@ -882,7 +891,8 @@ export class GameServer {
   }
 
   /** Moves a player to another dimension (portal travel etc). */
-  changeDimension(p: ServerPlayer, target: DimensionId, x: number, y: number, z: number, yaw = p.yaw): void {
+  /** Moves a player to another dimension. Cheat travel (`admin`) never counts as entering it. */
+  changeDimension(p: ServerPlayer, target: DimensionId, x: number, y: number, z: number, yaw = p.yaw, opts: { admin?: boolean } = {}): void {
     const from = p.dim;
     const to = this.dim(target);
     this.interaction.closeWindow(p, p.windowId, true);
@@ -906,6 +916,8 @@ export class GameServer {
     p.awaitingTeleport = true;
     p.send({ t: 'dimension', dimension: target, x, y, z, yaw });
     p.send({ t: 'teleport', x, y, z, yaw, seq: p.teleportSeq });
+    if (opts.admin || this.admin.active) return;
+    this.admin.onNormalDimensionChange(p);
     this.interaction.onDimensionEntered(p, target);
   }
 

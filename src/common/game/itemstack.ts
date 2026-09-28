@@ -1,5 +1,7 @@
 /** Item stack representation and helpers (numeric ids in memory/wire, string ids in saves). */
 import { items, itemById } from '../registry/items';
+import { POTION_BY_ID } from '../data/potions';
+import { ENCHANT_BY_ID } from '../data/enchantments';
 
 export interface ItemTag {
   /** Enchantments id -> level. */
@@ -12,6 +14,8 @@ export interface ItemTag {
   color?: number;
   /** Written/extra free-form data (e.g. compass target). */
   data?: Record<string, unknown>;
+  /** Created by cheats (Admin Panel or commands): never counts towards advancements. */
+  admin?: boolean;
 }
 
 export interface ItemStack {
@@ -101,5 +105,34 @@ export function sanitizeStack(s: unknown): Slot {
   const out: ItemStack = { id, count };
   const dmg = Number(o.damage);
   if (Number.isFinite(dmg) && dmg > 0 && it.def.durability) out.damage = Math.min(it.def.durability - 1, Math.floor(dmg));
+  // Keep only well-formed, known tag fields (potion type, enchantments, name).
+  // The admin marker is decided by the server alone.
+  const tag = o.tag as Record<string, unknown> | undefined;
+  if (tag && typeof tag === 'object') {
+    const t: ItemTag = {};
+    if (typeof tag.potion === 'string' && POTION_BY_ID.has(tag.potion) && (it.id === 'potion' || it.id === 'splash_potion')) t.potion = tag.potion;
+    const ench = (v: unknown): Record<string, number> | undefined => {
+      if (!v || typeof v !== 'object') return undefined;
+      const r: Record<string, number> = {};
+      for (const [k, lv] of Object.entries(v as Record<string, unknown>)) if (ENCHANT_BY_ID.has(k) && Number.isInteger(lv) && (lv as number) >= 1 && (lv as number) <= 10) r[k] = lv as number;
+      return Object.keys(r).length ? r : undefined;
+    };
+    const e = ench(tag.ench);
+    if (e) t.ench = e;
+    const st = it.id === 'enchanted_book' ? ench(tag.stored) : undefined;
+    if (st) t.stored = st;
+    if (typeof tag.name === 'string' && tag.name.length > 0 && tag.name.length <= 35) t.name = tag.name;
+    if (Object.keys(t).length) out.tag = t;
+  }
   return out;
+}
+
+export function isAdminStack(s: Slot | undefined): boolean {
+  return !!s && s.tag?.admin === true;
+}
+
+/** Marks a stack as created by cheats (in place) and returns it. */
+export function markAdmin<T extends ItemStack>(s: T): T {
+  s.tag = { ...(s.tag ?? {}), admin: true };
+  return s;
 }

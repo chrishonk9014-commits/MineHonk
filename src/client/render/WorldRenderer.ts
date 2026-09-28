@@ -81,6 +81,9 @@ export class WorldRenderer {
   private readonly overlayScene = new THREE.Scene();
   private readonly overlayCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
   private selectionKey = '';
+  /** One fog object, updated in place: replacing it every frame forces three.js to re-resolve every fogged material's program. */
+  private readonly fog = new THREE.Fog(0xc0d8ff, 100, 150);
+  private readonly fogColor = new THREE.Color();
   frameCount = 0;
   lastSky: ReturnType<Sky['update']> | null = null;
 
@@ -275,7 +278,7 @@ export class WorldRenderer {
     u.uBrightness!.value = this.settings.brightness;
     u.uNightVision!.value = f.nightVision;
     u.uFlicker!.value = 0.96 + Math.sin(f.time * 0.9) * 0.02 + Math.sin(f.time * 2.3) * 0.02;
-    const fog = skyState.fog.clone();
+    const fog = this.fogColor.copy(skyState.fog);
     let fogNear = rd * 0.72;
     let fogFar = rd * 0.98;
     if (f.underwater) {
@@ -302,7 +305,10 @@ export class WorldRenderer {
     (pu.uFogColor!.value as THREE.Color).copy(fog);
     pu.uFogNear!.value = fogNear;
     pu.uFogFar!.value = fogFar;
-    this.scene.fog = new THREE.Fog(fog, fogNear, fogFar);
+    this.fog.color.copy(fog);
+    this.fog.near = fogNear;
+    this.fog.far = fogFar;
+    this.scene.fog = this.fog;
     this.renderer.setClearColor(fog);
 
     this.chunks.update(cam, f.time);

@@ -8,7 +8,7 @@
 import type { GameServer } from '../GameServer';
 import type { ServerPlayer } from '../player/ServerPlayer';
 import { Inventory, ARMOR_START, OFFHAND } from '../player/Inventory';
-import { type ItemStack, type Slot, canStack, cloneStack, maxStack, isEmpty, sameItem, toSaved, fromSaved, type SavedStack, itemIdOf } from '../../common/game/itemstack';
+import { type ItemStack, type Slot, canStack, cloneStack, maxStack, isEmpty, sameItem, toSaved, fromSaved, type SavedStack, itemIdOf, isAdminStack, markAdmin } from '../../common/game/itemstack';
 import { items, itemById } from '../../common/registry/items';
 import type { C2S, WindowKind } from '../../common/net/protocol';
 import { matchCrafting, craftingRemainder, smeltingFor, fuelTicks, stonecutterOptions, smithingResult } from '../../common/game/crafting';
@@ -124,7 +124,9 @@ export class Containers {
     const result: { stack: Slot } = { stack: null };
     const refresh = (): void => {
       const r = matchCrafting(grid.slots, gw, gw);
-      result.stack = r ? { id: r.result, count: r.count } : null;
+      // Anything crafted from cheat items (or in a cheat context) is cheat-made
+      const cheat = !!r && (grid.slots.some((s) => isAdminStack(s)) || this.server.admin.inContext(p));
+      result.stack = r ? { id: r.result, count: r.count, ...(cheat ? { tag: { admin: true } } : {}) } : null;
     };
     w.refresh = refresh;
     w.slots.push({
@@ -150,7 +152,7 @@ export class Containers {
           }
         }
         pl.addStat('crafted.' + itemIdOf(taken), taken.count);
-        this.server.interaction.onCrafted(pl, itemIdOf(taken));
+        this.server.interaction.onCrafted(pl, taken);
         refresh();
       },
     });
@@ -210,11 +212,13 @@ export class Containers {
    * loot is rolled (deterministically from the stored seed) the first time the
    * container is opened or broken.
    */
-  materializeLoot(dim: Dimension, x: number, y: number, z: number, size = 27): void {
+  materializeLoot(dim: Dimension, x: number, y: number, z: number, size = 27, cheat = false): void {
     const be = dim.getBlockEntity(x, y, z) as (Record<string, unknown> & { type: string }) | undefined;
     if (!be || typeof be.loot !== 'string') return;
     const rng = new Random(Number(be.lootSeed ?? 0) >>> 0);
     const stacks = rollLoot(be.loot, { rng, difficulty: this.server.level.difficulty });
+    // Loot first opened under a cheat (e.g. after a cheat teleport) is cheat-made
+    if (cheat || this.server.admin.blockMarked(dim, x, y, z)) for (const st of stacks) markAdmin(st);
     // Spread stacks over random slots, splitting some stacks like a hand-packed chest
     const slots: Slot[] = new Array(size).fill(null);
     const pieces: ItemStack[] = [];
@@ -240,12 +244,12 @@ export class Containers {
   }
 
   /** Live inventory for a block entity container (created on demand). */
-  containerAt(dim: Dimension, x: number, y: number, z: number, size: number, type: string): Inventory {
+  containerAt(dim: Dimension, x: number, y: number, z: number, size: number, type: string, cheat = false): Inventory {
     const key = this.keyOf(dim, x, y, z);
     let inv = this.live.get(key);
     if (inv && inv.size === size) return inv;
     inv = new Inventory(size);
-    this.materializeLoot(dim, x, y, z, size);
+    this.materializeLoot(dim, x, y, z, size, cheat);
     const be = dim.getBlockEntity(x, y, z) as { items?: (SavedStack | null)[] } | undefined;
     if (be?.items) for (let i = 0; i < Math.min(size, be.items.length); i++) inv.slots[i] = fromSaved(be.items[i]);
     else dim.setBlockEntity(x, y, z, { type, items: new Array(size).fill(null) });
@@ -286,7 +290,7 @@ export class Containers {
     const size = parts.length * 27;
     const w = new Window(this.newId(), 'chest', parts.length > 1 ? 'Large Chest' : def.name, size);
     for (const [cx, cy, cz] of parts) {
-      const inv = this.containerAt(dim, cx, cy, cz, 27, 'chest');
+      const inv = this.containerAt(dim, cx, cy, cz, 27, 'chest', this.server.admin.inContext(p));
       for (let i = 0; i < 27; i++) w.slots.push(invSlot(inv, i, 'container', () => true, 64, () => this.persist(dim, cx, cy, cz, inv)));
     }
     this.addPlayerInventory(w, p);
@@ -301,7 +305,7 @@ export class Containers {
   }
 
   openBarrel(p: ServerPlayer, dim: Dimension, x: number, y: number, z: number): void {
-    const inv = this.containerAt(dim, x, y, z, 27, 'barrel');
+    const inv = this.containerAt(dim, x, y, z, 27, 'barrel', this.server.admin.inContext(p));
     const w = new Window(this.newId(), 'chest', 'Barrel', 27);
     for (let i = 0; i < 27; i++) w.slots.push(invSlot(inv, i, 'container', () => true, 64, () => this.persist(dim, x, y, z, inv)));
     this.addPlayerInventory(w, p);
@@ -330,14 +334,15 @@ export class Containers {
       ...invSlot(inv, 2, 'result', () => false, 64, onSet),
       output: true,
       onTake: (pl, taken) => {
-        const be = dim.getBlockEntity(x, y, z) as { xp?: number } | undefined;
+        const be = dim.getBlockEntity(x, y, z) as { xp?: number; cheatXp?: number } | undefined;
         const xp = be?.xp ?? 0;
-        if (xp > 0) {
-          this.server.interaction.survival.giveXp(pl, Math.floor(xp) + (Math.random() < xp % 1 ? 1 : 0));
-          this.persist(dim, x, y, z, inv, { xp: 0 });
-        }
+        const cxp = be?.cheatXp ?? 0;
+        const round = (v: number): number => Math.floor(v) + (Math.random() < v % 1 ? 1 : 0);
+        if (xp > 0) this.server.interaction.survival.giveXp(pl, round(xp));
+        if (cxp > 0) this.server.interaction.survival.giveXp(pl, round(cxp), false, true);
+        if (xp > 0 || cxp > 0) this.persist(dim, x, y, z, inv, { xp: 0, cheatXp: 0 });
         pl.addStat('smelted.' + itemIdOf(taken), taken.count);
-        this.server.interaction.onSmelted(pl, itemIdOf(taken));
+        this.server.interaction.onSmelted(pl, taken);
       },
     });
     this.addPlayerInventory(w, p);
@@ -356,7 +361,7 @@ export class Containers {
       const opts = s ? stonecutterOptions(s.id) : [];
       w.props = { options: opts.map((o) => o.result), selected: out.sel };
       const o = opts[out.sel];
-      out.stack = o && s ? { id: o.result, count: o.count } : null;
+      out.stack = o && s ? { id: o.result, count: o.count, ...(isAdminStack(s) || this.server.admin.inContext(p) ? { tag: { admin: true } } : {}) } : null;
     };
     w.refresh = refresh;
     w.slots.push(invSlot(input, 0, 'input', (s) => stonecutterOptions(s.id).length > 0, 64, () => {
@@ -401,6 +406,7 @@ export class Containers {
       const base = inv.get(0);
       const r = smithingResult(base, inv.get(1));
       out.stack = r !== null && base ? { ...cloneStack(base), id: r, count: 1 } : null;
+      if (out.stack && (isAdminStack(inv.get(1)) || this.server.admin.inContext(p))) out.stack = markAdmin(out.stack);
     };
     w.refresh = refresh;
     w.slots.push(invSlot(inv, 0, 'input', () => true, 64, refresh));
@@ -417,7 +423,7 @@ export class Containers {
         const a = inv.get(1);
         if (a) inv.set(1, a.count > 1 ? { ...a, count: a.count - 1 } : null);
         this.server.playSound(dim, 'smithing', x + 0.5, y + 0.5, z + 0.5, 1, 1);
-        this.server.interaction.onCrafted(pl, itemIdOf(taken));
+        this.server.interaction.onCrafted(pl, taken);
         refresh();
       },
     });
@@ -774,6 +780,8 @@ export class Containers {
       this.syncInventory(p);
       return;
     }
+    // Items taken from the creative menu under a cheat (e.g. cheat Creative mode) are cheat-made
+    if (item && this.server.admin.inContext(p)) markAdmin(item);
     if (slot === -1) {
       if (item) this.server.interaction.dropStack(p, item);
       return;
@@ -830,13 +838,16 @@ export class Containers {
       let burnTotal = be.burnTotal ?? 0;
       let cook = be.cook ?? 0;
       let xp = be.xp ?? 0;
+      let cheatXp = be.cheatXp ?? 0;
       const input = inv.get(0);
       const recipe = input ? smeltingFor(input.id) : null;
       const allowed = recipe && (bid === 'furnace' || (bid === 'blast_furnace' && recipe.kind === 'ore') || (bid === 'smoker' && recipe.kind === 'food'));
       const speed = bid === 'furnace' ? 1 : 2;
       const cookTotal = Math.floor(200 / speed);
       const out = inv.get(2);
-      const canSmelt = !!(allowed && recipe && (!out || (out.id === recipe.resultNum && out.count < maxStack(out))));
+      // Cheat input or fuel makes the result cheat-made; it never mixes with normal items
+      const cheat = isAdminStack(input) || (burn > 0 ? be.cheatFuel === 1 : isAdminStack(inv.get(1)));
+      const canSmelt = !!(allowed && recipe && (!out || (out.id === recipe.resultNum && out.count < maxStack(out) && isAdminStack(out) === cheat)));
       let changed = false;
       if (burn > 0) burn--;
       if (burn <= 0 && canSmelt) {
@@ -845,8 +856,9 @@ export class Containers {
         if (ft > 0 && fuel) {
           burn = burnTotal = Math.floor(ft / speed);
           const fid = items[fuel.id]!.id;
-          if (fid === 'lava_bucket') inv.set(1, { id: itemById.get('bucket')!.num, count: 1 });
+          if (fid === 'lava_bucket') inv.set(1, { id: itemById.get('bucket')!.num, count: 1, ...(isAdminStack(fuel) ? { tag: { admin: true } } : {}) });
           else inv.set(1, fuel.count > 1 ? { ...fuel, count: fuel.count - 1 } : null);
+          be.cheatFuel = isAdminStack(fuel) ? 1 : 0;
           changed = true;
         }
       }
@@ -855,8 +867,9 @@ export class Containers {
         if (cook >= cookTotal) {
           cook = 0;
           inv.set(0, input!.count > 1 ? { ...input!, count: input!.count - 1 } : null);
-          inv.set(2, out ? { ...out, count: out.count + 1 } : { id: recipe.resultNum, count: 1 });
-          xp += recipe.xp;
+          inv.set(2, out ? { ...out, count: out.count + 1 } : { id: recipe.resultNum, count: 1, ...(cheat ? { tag: { admin: true } } : {}) });
+          if (cheat) cheatXp += recipe.xp;
+          else xp += recipe.xp;
           changed = true;
         }
       } else if (cook > 0) cook = Math.max(0, cook - 2);
@@ -864,7 +877,7 @@ export class Containers {
       if ((getProp(state, 'lit') === 'true') !== lit) {
         dim.setBlock(x, y, z, withProp(state, 'lit', lit), { keepBlockEntity: true });
       }
-      const nb = { ...be, type: 'furnace', burn, burnTotal, cook, cookTotal, xp };
+      const nb = { ...be, type: 'furnace', burn, burnTotal, cook, cookTotal, xp, cheatXp, cheatFuel: be.cheatFuel ?? 0 };
       if (changed) this.persist(dim, x, y, z, inv, nb);
       else Object.assign(be, nb);
       // Update viewers

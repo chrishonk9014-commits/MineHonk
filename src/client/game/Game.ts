@@ -31,9 +31,13 @@ import { el } from '../ui/dom';
 import { attachPlayerPreview } from '../render/PlayerPreview';
 import { chunkIndex } from '../../common/world/constants';
 import { enchantLevel } from '../../common/game/enchanting';
+import type { AdminAction } from '../../common/game/admin';
+import type { AdminReply } from '../ui/AdminPanel';
+import { keyName } from '../ui/Screens';
 
 export interface GameHost {
   openPause(): void;
+  openAdmin(): void;
   openDeath(message: string, hardcore: boolean, score: number): void;
   closeScreens(): void;
   exit(reason: string | null): void;
@@ -130,6 +134,8 @@ export class Game {
   private rafId = 0;
   private prevHealth = -1;
   private debugData: Record<string, unknown> = {};
+  private adminReq = 1;
+  private readonly adminWaiters = new Map<number, { done: (r: AdminReply) => void; progress?: (r: AdminReply) => void }>();
   private lastDebugUpdate = 0;
   private musicTimer = 0;
 
@@ -304,6 +310,7 @@ export class Game {
         this.setAbilities(m.abilities);
         this.player.flying = m.abilities.flying;
         this.worldInfo = m.world;
+        this.updateCheatsIndicator();
         this.setDimension(m.dimension);
         this.player.setPos(m.x, m.y, m.z);
         this.player.yaw = m.yaw;
@@ -547,6 +554,10 @@ export class Game {
         break;
       case 'world_info':
         this.worldInfo = m.world;
+        this.updateCheatsIndicator();
+        break;
+      case 'admin_result':
+        this.onAdminResult(m);
         break;
       case 'pong':
         this.ping = Math.round(performance.now() - m.time);
@@ -1011,6 +1022,12 @@ export class Game {
         this.input.unlock();
         this.host.openAchievements();
         break;
+      case 'adminPanel':
+        if (this.worldInfo?.admin) {
+          this.input.unlock();
+          this.host.openAdmin();
+        } else this.chat.add(this.worldInfo?.cheats ? 'Only the world owner and operators can use the Admin Panel.' : 'Cheats are disabled in this world.', 'error');
+        break;
       case 'attack':
         this.attack();
         break;
@@ -1275,6 +1292,76 @@ export class Game {
     const held = this.held();
     if (held) right.push('', `Held: ${items[held.id]!.id} x${held.count}` + (enchantLevel(held, 'efficiency') ? ' (efficiency)' : ''));
     this.hud.setDebug(left, right);
+  }
+
+  // ------------------------------------------------------------------ admin panel
+
+  get name(): string {
+    return this.playerName ?? '';
+  }
+
+  chatMessage(text: string, kind: 'system' | 'error' = 'system'): void {
+    this.chat.add(text, kind);
+  }
+
+  /** Sends an Admin Panel request; resolves with the server's final answer. */
+  adminRequest(action: AdminAction, onProgress?: (r: AdminReply) => void): Promise<AdminReply> {
+    const req = this.adminReq++;
+    this.send({ t: 'admin', req, action });
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        if (this.adminWaiters.delete(req)) resolve({ ok: false, text: 'No answer from the server.' });
+      }, 120000);
+      this.adminWaiters.set(req, {
+        done: (r) => {
+          clearTimeout(timer);
+          resolve(r);
+        },
+        progress: onProgress,
+      });
+    });
+  }
+
+  private onAdminResult(m: { req: number; ok: boolean; text: string; data?: unknown }): void {
+    const w = this.adminWaiters.get(m.req);
+    if (!w) {
+      if (m.text) this.chat.add(m.text, m.ok ? 'system' : 'error');
+      return;
+    }
+    // Teleports report progress first ("preparing a safe landing"), then the result
+    if (m.ok && (m.data as { pending?: boolean } | undefined)?.pending) {
+      w.progress?.(m);
+      return;
+    }
+    this.adminWaiters.delete(m.req);
+    w.done(m);
+  }
+
+  private updateCheatsIndicator(): void {
+    const w = this.worldInfo;
+    this.hud.setCheats(!w?.cheats ? 'off' : w.admin ? 'admin' : 'on', keyName(this.settings.keys.adminPanel));
+  }
+
+  /** Figures for the Admin Panel's performance tab. */
+  perfInfo(): Record<string, string | number> {
+    const r = this.renderer;
+    const info = r.renderer.info;
+    const cs = r.chunks.stats();
+    const mem = (performance as unknown as { memory?: { usedJSHeapSize: number } }).memory;
+    return {
+      FPS: this.fps,
+      'Draw calls': info.render.calls,
+      Triangles: info.render.triangles.toLocaleString(),
+      'Loaded chunks': this.world.chunks.size,
+      'Sections drawn': `${cs.drawn} of ${cs.sections}`,
+      'Render regions': cs.regions,
+      'Meshing queue': cs.dirty + cs.jobs,
+      'Chunk updates/s': r.chunks.meshedLastSecond,
+      Entities: this.entities.size,
+      Particles: r.particles.count,
+      'Render distance': `${this.settings.renderDistance} chunks`,
+      'JS memory': mem ? `${Math.round(mem.usedJSHeapSize / 1048576)} MB` : 'n/a',
+    };
   }
 
   // ------------------------------------------------------------------ lifecycle

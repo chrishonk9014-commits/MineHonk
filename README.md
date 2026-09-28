@@ -50,6 +50,7 @@ also connect their platform's moderation service through
 - **Mine or attack** left mouse, **use or place** right mouse, **pick block** middle mouse
 - **Inventory** E, **drop** Q, **swap hands** F, **chat** T, **commands** /
 - **Player list** Tab, **achievements** L, **debug info** F3, **camera** F5, **hide HUD** F1, **screenshot** F2
+- **Admin Panel** F8 (worlds with cheats on, owner and operators only)
 - Gamepads are supported. Every key can be rebound under Options → Controls.
 
 ### Game modes
@@ -70,6 +71,49 @@ Ender Dragon → the dragon drops a **Corrupted Eye** → awaken the frame in a
 rare **glitched ruin** in the Overworld → the **Farlands**. The Farlands have
 overflow walls, glitch ores and data spires. Farlands corruption glitches
 unprotected players; brew a Potion of Stability to resist it.
+
+### Recipe Book
+
+The book button in the top corner of the inventory and of every workstation
+screen (crafting table, furnaces, brewing stand, smithing table,
+stonecutter, anvil, enchanting table) opens the Recipe Book in every game
+mode. It is built from the recipe registries, so it
+always lists every recipe the game knows: crafting (shaped and shapeless),
+smelting, blasting, smoking, campfire cooking, brewing, smithing and
+stonecutting, plus how enchanting and the anvil work. Search by name or
+ingredient, filter by category (Building, Tools, Weapons, Armor, Food,
+Utilities, Redstone, Brewing, Other) or show only what you can make now.
+Selecting a recipe shows its grid or inputs, quantities, the station it needs
+and which ingredients are missing. It updates as your inventory changes.
+
+### Admin Panel and cheats
+
+Turn on **Allow Cheats** when you create a world, or toggle it later from the
+pause menu (world owner only). The Admin Panel (F8 or the pause menu) is
+available to the world owner in single player and to the owner and operators
+in multiplayer. Builders and visitors never get it. Every action is checked
+and carried out by the server.
+
+- **Items**: give any registered item. Search, filter by category and choose
+  a quantity (more than a stack is split across slots or dropped).
+- **Mobs**: spawn any mob, with search, categories and a quantity.
+- **Teleport**: choose a dimension and a structure or biome. The server finds
+  the nearest one without freezing the game and shows its name, distance and
+  dimension. Press TELEPORT to land on a safe spot there, never inside
+  walls, lava or the void. You can also teleport to players or bring them to you.
+- **Player**: game mode, heal, health, hunger, XP level, flight, clear inventory.
+- **World**: time, weather, difficulty, PvP, remove mobs, regenerate or reload
+  chunks.
+- **Performance**: client FPS, frame time, chunks and meshes, server TPS,
+  tick time, entities and memory.
+
+A **CHEATS ENABLED** badge is shown while cheats are on. Admin actions never
+award or progress advancements, directly or through what follows from them.
+Items the panel gives are marked as cheat items, and so is everything made
+from them, including crafting, smelting, brewing, trading and drops. Mobs it
+spawns are marked, and so are their drops and XP. Teleport arrival areas and
+cheat-set time or weather also count as cheats. Normal play in the same world
+still earns advancements as usual.
 
 ## Development
 

@@ -30,7 +30,9 @@ export type LootFunction =
   | { fn: 'fortune_binomial'; extra: number; p: number }
   | { fn: 'smelt' }
   | { fn: 'potion'; potion: string }
-  | { fn: 'name'; name: string };
+  | { fn: 'name'; name: string }
+  /** A specific enchantment (on a book: stored) at a level in the range. */
+  | { fn: 'set_enchant'; id: string; levels: Range };
 
 export interface LootEntry {
   item?: string;
@@ -128,7 +130,7 @@ function applyFns(stack: ItemStack, fns: LootFunction[] | undefined, ctx: LootCo
       }
       case 'enchant_randomly': {
         const it = itemById.get(itemIdOf(stack))!;
-        const opts = ENCHANTMENTS.filter((e) => (f.treasure || !e.treasure) && (it.id === 'book' || e.targets.length > 0));
+        const opts = ENCHANTMENTS.filter((e) => (f.treasure || !e.treasure) && !e.exclusive && (it.id === 'book' || e.targets.length > 0));
         const e = ctx.rng.pick(opts);
         const lvl = ctx.rng.range(1, e.maxLevel);
         if (it.id === 'book') {
@@ -182,6 +184,14 @@ function applyFns(stack: ItemStack, fns: LootFunction[] | undefined, ctx: LootCo
       case 'name':
         stack.tag = { ...(stack.tag ?? {}), name: f.name };
         break;
+      case 'set_enchant': {
+        const lvl = roll(f.levels, ctx.rng);
+        if (itemIdOf(stack) === 'book') {
+          stack.id = itemById.get('enchanted_book')!.num;
+          stack.tag = { ...(stack.tag ?? {}), stored: { [f.id]: lvl } };
+        } else stack.tag = { ...(stack.tag ?? {}), ench: { ...(stack.tag?.ench ?? {}), [f.id]: lvl } };
+        break;
+      }
     }
   }
   return stack.count > 0 ? stack : null;

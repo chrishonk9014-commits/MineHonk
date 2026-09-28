@@ -19,6 +19,8 @@ import { ProtoCache, cloneChunk, addGenEntities, LATEST_GENERATOR, type Dimensio
 import { VILLAGE } from './structures/village';
 import { SURFACE_STRUCTURES } from './structures/misc';
 import { MINESHAFT, STRONGHOLD } from './structures/underground';
+import { CAVE_STRUCTURES } from './structures/caves';
+import { ANCIENT_CITY } from './structures/ancientCity';
 import { biomeOf } from '../registry/biomes';
 import { STATE_FLUID } from '../registry/blocks';
 import { NetherGenerator } from './nether';
@@ -60,7 +62,8 @@ export class OverworldGenerator implements DimensionGenerator {
     };
     this.structures = new StructureManager(
       seed,
-      [VILLAGE, ...SURFACE_STRUCTURES, MINESHAFT, STRONGHOLD],
+      // V2 adds its underground structures after the V1 list, so V1 placements never move
+      [VILLAGE, ...SURFACE_STRUCTURES, MINESHAFT, STRONGHOLD, ...(this.terrain.carver ? [...CAVE_STRUCTURES, ANCIENT_CITY] : [])],
       {
         seed,
         groundY: (x, z) => ground(x, z).y,
@@ -68,6 +71,7 @@ export class OverworldGenerator implements DimensionGenerator {
         biome: (x, z) => biomeOf(this.protos.get(x >> 4, z >> 4).getBiome(x & 15, z & 15)),
         estimateHeight: (x, z) => this.terrain.estimateHeight(x, z),
         estimateBiome: (x, z) => biomeOf(this.terrain.estimateBiome(x, z)),
+        deepDark: (x, z) => this.terrain.caveBiomes?.deepDarkStrength(x, z) ?? -1,
       },
       () => opts.structures !== false,
     );

@@ -183,6 +183,7 @@ export const MUSIC_DISCS: [string, string][] = [
   ['drift', 'Drift'],
   ['skyward', 'Skyward'],
   ['echo', 'Echo'],
+  ['hollow', 'Hollow'],
 ];
 for (const [track, title] of MUSIC_DISCS) {
   add({ id: 'music_disc_' + track, name: `Music Disc - ${title}`, maxStack: 1, use: 'music_disc', rarity: 'rare', creative: 'tools', data: { track } });
@@ -235,6 +236,9 @@ mat('sugar');
 mat('wheat');
 mat('ink_sac');
 mat('lumen_shard', { name: 'Lumen Shard' });
+// Ancient City finds
+mat('disc_fragment', { name: 'Disc Fragment', rarity: 'uncommon' });
+add({ id: 'resonance_charm', name: 'Resonance Charm', maxStack: 1, rarity: 'epic', creative: 'tools' });
 mat('glow_ink_sac');
 mat('phantom_membrane');
 mat('rabbit_foot');

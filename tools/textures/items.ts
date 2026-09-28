@@ -1523,6 +1523,34 @@ export function registerItems(r: PainterRegistry): void {
   disc('music_disc_drift', 0xc8b0f0);
   disc('music_disc_skyward', 0x7ad0ff);
   disc('music_disc_echo', 0x1ab0b8);
+  disc('music_disc_hollow', 0x0a3a4a);
+  r.add('disc_fragment', (t) => {
+    // A broken wedge of a dark record
+    t.clear();
+    for (let y = 3; y < 14; y++)
+      for (let x = 3; x < 14; x++) {
+        const dx = x - 3;
+        const dy = y - 3;
+        if (dx + dy > 13 || Math.hypot(dx, dy) > 10.5) continue;
+        const ring = Math.round(Math.hypot(dx, dy)) % 3 === 0;
+        t.set(x, y, ring ? hex(0x2a2a30) : hex(0x16161c));
+      }
+    t.set(4, 4, hex(0x1ab0b8));
+    t.set(5, 4, hex(0x1ab0b8));
+    t.set(4, 5, hex(0x1ab0b8));
+  });
+  r.add('resonance_charm', (t) => {
+    // Original: a teal crystal in a bone setting on a cord; it soaks up sound
+    t.clear();
+    for (let x = 4; x < 12; x++) t.set(x, 1 + Math.round(Math.abs(x - 7.5) / 2), hex(0x5a4a3a));
+    const bone = hex(0xd8d0b8);
+    for (let y = 5; y < 15; y++)
+      for (let x = 4; x < 12; x++) {
+        const d = Math.abs(x - 7.5) + Math.abs(y - 9.5);
+        if (d > 5.5) continue;
+        t.set(x, y, d > 4.2 ? bone : d > 2.5 ? hex(0x1ab0b8) : d > 1 ? hex(0x6af0f0) : hex(0xe0ffff));
+      }
+  });
   r.add('bowl', (t) => paintMask(t, 'bowl', { o: hex(0x3a2a14), s: hex(0x5a4222), k: hex(0x6a4a24), c: hex(0x9a7a44), b: hex(0x7a5a34) }));
   const stew = (n: string, c: RGB) => r.add(n, (t) => paintMask(t, 'bowl', { o: hex(0x3a2a14), s: c, k: hex(0x6a4a24), c: hex(0x9a7a44), b: hex(0x7a5a34) }));
   stew('mushroom_stew', hex(0xc8a070));

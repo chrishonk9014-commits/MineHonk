@@ -44,6 +44,8 @@ export interface PlanContext {
   /** Cheap climate-only estimates (no chunk generation). */
   estimateHeight(x: number, z: number): number;
   estimateBiome(x: number, z: number): Biome;
+  /** How strongly a column lies in the deep dark (V2 worlds; > ~0.36 is deep dark). */
+  deepDark?(x: number, z: number): number;
 }
 
 export interface StructureType {

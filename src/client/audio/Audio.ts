@@ -440,6 +440,7 @@ const DISC_TRACKS: Record<string, { title: string; root: number; scale: number[]
   drift: { title: 'Drift', root: 50, scale: [0, 2, 5, 7, 9], beat: 0.95, wave: 'glass', bass: 'pad', density: 0.35, bars: 24 },
   skyward: { title: 'Skyward', root: 64, scale: [0, 2, 4, 6, 7, 9, 11], beat: 0.36, wave: 'piano', bass: 'glass', density: 0.65, bars: 40 },
   echo: { title: 'Echo', root: 38, scale: [0, 1, 3, 5, 7, 8], beat: 1.05, wave: 'glass', bass: 'pad', density: 0.3, bars: 26 },
+  hollow: { title: 'Hollow', root: 38, scale: [0, 1, 5, 6, 10], beat: 0.9, wave: 'glass', bass: 'pad', density: 0.35, bars: 30 },
 };
 
 export function discTitle(track: string): string {

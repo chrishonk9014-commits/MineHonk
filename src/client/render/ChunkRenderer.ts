@@ -10,7 +10,7 @@
 import * as THREE from 'three';
 import type { ClientWorld, ChunkListener } from '../world/ClientWorld';
 import type { Chunk } from '../../common/world/chunk';
-import { PAD, padIndex, SOLID_UNKNOWN, U16_PER_VERTEX, U8_PER_VERTEX, VIS_ALL, visConnected, type LayerMesh } from './mesher';
+import { FACE_GROUPS, PAD, padIndex, SOLID_UNKNOWN, U16_PER_VERTEX, U8_PER_VERTEX, VIS_ALL, visConnected, type LayerMesh } from './mesher';
 import { CHUNK_FRAG, CHUNK_VERT } from './shaders';
 import type { AtlasMeta } from './atlasInfo';
 import { biomeOf } from '../../common/registry/biomes';
@@ -38,7 +38,17 @@ const NEIGHBOURS: [number, number][] = [
 interface Slot {
   start: number;
   quads: number;
+  /** Quads per facing group, in buffer order (see LayerMesh.groups). */
+  groups?: number[];
 }
+
+/**
+ * Most ranges a section can need once back-facing groups are skipped: at most
+ * one of each opposite pair is dropped, leaving at most four separate runs.
+ */
+const MAX_RANGES_PER_SECTION = 4;
+/** Blocks of slack when deciding that a whole facing group points away. */
+const FACING_MARGIN = 1;
 
 interface SectionEntry {
   cx: number;
@@ -229,8 +239,12 @@ export class ChunkRenderer implements ChunkListener {
   private readyCount = 0;
   /** Sections drawn in the last frame. */
   drawnSections = 0;
+  /** Quads submitted in the last frame. */
+  drawnQuads = 0;
   /** Cave culling (section visibility graph); off draws everything in view. */
   occlusion = true;
+  /** Skips per-section face groups that point away from the camera. */
+  facingCull = true;
   private visDirty = true;
   private lastVisAt = 0;
   private camSection = '';
@@ -573,7 +587,9 @@ export class ChunkRenderer implements ChunkListener {
   /** Sends queued sections to idle workers (also called as results arrive). */
   private pump(): void {
     if (this.readyCount < this.workers.length || this.queue.length === 0) return;
-    const maxInFlight = this.workers.length * 3;
+    // Keep every worker's queue stocked: results are collected between frames, so
+    // with slow frames a short queue leaves the workers idle most of the time
+    const maxInFlight = this.workers.length * 8;
     let inFlight = this.jobs.size;
     while (inFlight < maxInFlight && this.queue.length) {
       const e = this.queue.shift()!;
@@ -684,6 +700,7 @@ export class ChunkRenderer implements ChunkListener {
         slot = layer.alloc(l.quads);
         this.totalQuads += l.quads;
       }
+      slot.groups = l.groups;
       e.slots[li] = slot;
       layer.sections.add(e);
       layer.write(slot, l);
@@ -796,7 +813,32 @@ export class ChunkRenderer implements ChunkListener {
   }
 
   /** Fills each region layer's multi-draw list with its visible sections. */
+  /**
+   * Facing groups of a section that can face the camera (bit per group). A
+   * face with normal +X lies on a plane x = p inside the section and is only
+   * front-facing when the camera is on its +X side, so when the camera is
+   * beyond the section's low X edge every +X face is turned away.
+   */
+  private facingMask(e: SectionEntry): number {
+    const cp = this.camPos;
+    const x0 = e.cx * 16 - FACING_MARGIN;
+    const y0 = e.sy * 16 - FACING_MARGIN;
+    const z0 = e.cz * 16 - FACING_MARGIN;
+    const x1 = e.cx * 16 + 16 + FACING_MARGIN;
+    const y1 = e.sy * 16 + 16 + FACING_MARGIN;
+    const z1 = e.cz * 16 + 16 + FACING_MARGIN;
+    let m = 0x7f;
+    if (cp.y > y1) m &= ~(1 << 0); // -Y faces
+    if (cp.y < y0) m &= ~(1 << 1); // +Y
+    if (cp.z > z1) m &= ~(1 << 2); // -Z
+    if (cp.z < z0) m &= ~(1 << 3); // +Z
+    if (cp.x > x1) m &= ~(1 << 4); // -X
+    if (cp.x < x0) m &= ~(1 << 5); // +X
+    return m;
+  }
+
   private buildDrawLists(camera: THREE.Camera): void {
+    this.drawnQuads = 0;
     this.projView.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
     this.frustum.setFromProjectionMatrix(this.projView);
     const cp = this.camPos;
@@ -825,26 +867,42 @@ export class ChunkRenderer implements ChunkListener {
           }
           list.sort((a, b) => b.dist - a.dist);
         } else list.sort((a, b) => a.slots[li]!.start - b.slots[li]!.start);
-        if (mesh._multiDrawStarts.length < list.length) {
-          const n = Math.max(list.length, mesh._multiDrawStarts.length * 2);
+        const need = list.length * MAX_RANGES_PER_SECTION;
+        if (mesh._multiDrawStarts.length < need) {
+          const n = Math.max(need, mesh._multiDrawStarts.length * 2);
           mesh._multiDrawStarts = new Int32Array(n);
           mesh._multiDrawCounts = new Int32Array(n);
         }
-        // Merge ranges that are adjacent in the buffer
+        // Single-sided layers skip facing groups that point away from the camera
+        const cullFacing = li !== 2 && this.facingCull;
+        const starts = mesh._multiDrawStarts;
+        const counts = mesh._multiDrawCounts;
         let count = 0;
         let lastEnd = -1;
+        let quads = 0;
         for (const e of list) {
           const s = e.slots[li]!;
-          if (li !== 3 && s.start === lastEnd && count > 0) {
-            mesh._multiDrawCounts[count - 1]! += s.quads * 6;
-          } else {
-            mesh._multiDrawStarts[count] = s.start * 6 * 4;
-            mesh._multiDrawCounts[count] = s.quads * 6;
-            count++;
+          const mask = cullFacing && s.groups ? this.facingMask(e) : 0x7f;
+          let at = s.start;
+          for (let g = 0; g < FACE_GROUPS; g++) {
+            const n = s.groups ? s.groups[g]! : g === 0 ? s.quads : 0;
+            if (n === 0) continue;
+            if (mask & (1 << g)) {
+              // Merge runs that are adjacent in the buffer (translucent only within a section, to keep the order)
+              if (at === lastEnd && count > 0 && (li !== 3 || at !== s.start)) counts[count - 1]! += n * 6;
+              else {
+                starts[count] = at * 6 * 4;
+                counts[count] = n * 6;
+                count++;
+              }
+              lastEnd = at + n;
+              quads += n;
+            }
+            at += n;
           }
-          lastEnd = s.start + s.quads;
         }
         mesh._multiDrawCount = count;
+        this.drawnQuads += quads;
         mesh.visible = count > 0;
         drawn += list.length;
       }
@@ -857,10 +915,10 @@ export class ChunkRenderer implements ChunkListener {
     for (const c of this.world.chunks.values()) this.onChunkLoaded(c);
   }
 
-  stats(): { sections: number; dirty: number; jobs: number; meshes: number; regions: number; drawn: number } {
+  stats(): { sections: number; dirty: number; jobs: number; meshes: number; regions: number; drawn: number; quads: number; drawnQuads: number } {
     let meshes = 0;
     for (const r of this.regions.values()) for (const l of r.layers) if (l?.mesh) meshes++;
-    return { sections: this.sections.size, dirty: this.dirty.size, jobs: this.jobs.size, meshes, regions: this.regions.size, drawn: this.drawnSections };
+    return { sections: this.sections.size, dirty: this.dirty.size, jobs: this.jobs.size, meshes, regions: this.regions.size, drawn: this.drawnSections, quads: this.totalQuads, drawnQuads: this.drawnQuads };
   }
 
   dispose(): void {

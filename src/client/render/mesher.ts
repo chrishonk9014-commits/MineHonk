@@ -6,8 +6,10 @@
  * cube faces whose four corners share the same light, ambient occlusion and
  * tint are merged into larger rectangles (greedy meshing); the texture repeats
  * across a merged face in the shader, so the result looks identical to one
- * quad per block. The mesher also reports which faces of the section are
- * connected through open space, used for cave/occlusion culling.
+ * quad per block. Each layer's quads are grouped by the direction they face
+ * so the renderer can skip groups that face away from the camera. The mesher
+ * also reports which faces of the section are connected through open space,
+ * used for cave/occlusion culling.
  */
 import { STATE_OPAQUE, STATE_LAYER, STATE_BLOCK, STATE_FLUID, getProp, initBlocks } from '../../common/registry/blocks';
 import { bakedModels, ModelKind, type BakedModel } from './models';
@@ -47,7 +49,17 @@ export interface LayerMesh {
   u16: Uint16Array;
   u8: Uint8Array;
   quads: number;
+  /**
+   * Quads per facing group, in buffer order: groups 0-5 face along one axis
+   * (the face order below: -Y, +Y, -Z, +Z, -X, +X), group 6 holds everything
+   * else (sloped fluid surfaces, diagonal plants, rotated model parts).
+   */
+  groups: number[];
 }
+
+/** Number of facing groups (six axis directions and "other"). */
+export const FACE_GROUPS = 7;
+export const GROUP_OTHER = 6;
 
 export interface MeshOutput {
   layers: LayerMesh[];
@@ -60,9 +72,34 @@ const FIXED_TINT: Record<number, [number, number, number]> = { 4: [0x80, 0xa7, 0
 const WHITE: [number, number, number] = [255, 255, 255];
 const FACE_SHADE = [0.5, 1.0, 0.8, 0.8, 0.6, 0.6];
 const AO_LEVEL = [0.45, 0.65, 0.83, 1.0];
-const DX = [0, 0, 0, 0, -1, 1];
-const DY = [-1, 1, 0, 0, 0, 0];
-const DZ = [0, 0, -1, 1, 0, 0];
+/** Face directions: 0 -Y, 1 +Y, 2 -Z, 3 +Z, 4 -X, 5 +X. */
+export const DX = [0, 0, 0, 0, -1, 1];
+export const DY = [-1, 1, 0, 0, 0, 0];
+export const DZ = [0, 0, -1, 1, 0, 0];
+
+/**
+ * Facing group of a quad from its winding: the front face normal is
+ * (p1 - p0) x (p2 - p0). Axis-aligned normals map to their face direction,
+ * anything else to GROUP_OTHER.
+ */
+export function facingGroup(p: ArrayLike<number>): number {
+  const ax = p[3]! - p[0]!;
+  const ay = p[4]! - p[1]!;
+  const az = p[5]! - p[2]!;
+  const bx = p[6]! - p[0]!;
+  const by = p[7]! - p[1]!;
+  const bz = p[8]! - p[2]!;
+  const nx = ay * bz - az * by;
+  const ny = az * bx - ax * bz;
+  const nz = ax * by - ay * bx;
+  const len = Math.hypot(nx, ny, nz);
+  if (len < 1e-9) return GROUP_OTHER;
+  const e = 1e-4 * len;
+  if (Math.abs(nx) < e && Math.abs(nz) < e) return ny > 0 ? 1 : 0;
+  if (Math.abs(nx) < e && Math.abs(ny) < e) return nz > 0 ? 3 : 2;
+  if (Math.abs(ny) < e && Math.abs(nz) < e) return nx > 0 ? 5 : 4;
+  return GROUP_OTHER;
+}
 
 /** Unit cube face corners in the same order as models.element(). */
 const CUBE_FACES: [number, number, number][][] = [
@@ -130,6 +167,7 @@ interface ResolvedQuad {
   tint: number;
   frames: number;
   ftime: number;
+  group: number;
 }
 
 interface Resolved {
@@ -146,16 +184,22 @@ interface Resolved {
   isLeaves: boolean;
 }
 
+const QUAD16 = 4 * U16_PER_VERTEX;
+const QUAD8 = 4 * U8_PER_VERTEX;
+
 class Builder {
   u16: Uint16Array;
   u8: Uint8Array;
+  /** Facing group of each quad. */
+  group: Uint8Array;
   quads = 0;
   constructor(cap = 1024) {
-    this.u16 = new Uint16Array(cap * 4 * U16_PER_VERTEX);
-    this.u8 = new Uint8Array(cap * 4 * U8_PER_VERTEX);
+    this.u16 = new Uint16Array(cap * QUAD16);
+    this.u8 = new Uint8Array(cap * QUAD8);
+    this.group = new Uint8Array(cap);
   }
   ensure(): void {
-    const cap = this.u16.length / (4 * U16_PER_VERTEX);
+    const cap = this.group.length;
     if (this.quads < cap) return;
     const a = new Uint16Array(this.u16.length * 2);
     a.set(this.u16);
@@ -163,9 +207,29 @@ class Builder {
     const b = new Uint8Array(this.u8.length * 2);
     b.set(this.u8);
     this.u8 = b;
+    const g = new Uint8Array(cap * 2);
+    g.set(this.group);
+    this.group = g;
   }
+  /** Copies the quads out, ordered by facing group (stable within a group). */
   finish(): LayerMesh {
-    return { u16: this.u16.slice(0, this.quads * 4 * U16_PER_VERTEX), u8: this.u8.slice(0, this.quads * 4 * U8_PER_VERTEX), quads: this.quads };
+    const n = this.quads;
+    const groups = new Array<number>(FACE_GROUPS).fill(0);
+    for (let q = 0; q < n; q++) groups[this.group[q]!]!++;
+    const u16 = new Uint16Array(n * QUAD16);
+    const u8 = new Uint8Array(n * QUAD8);
+    const at = new Array<number>(FACE_GROUPS);
+    let o = 0;
+    for (let g = 0; g < FACE_GROUPS; g++) {
+      at[g] = o;
+      o += groups[g]!;
+    }
+    for (let q = 0; q < n; q++) {
+      const d = at[this.group[q]!]!++;
+      u16.set(this.u16.subarray(q * QUAD16, (q + 1) * QUAD16), d * QUAD16);
+      u8.set(this.u8.subarray(q * QUAD8, (q + 1) * QUAD8), d * QUAD8);
+    }
+    return { u16, u8, quads: n, groups };
   }
 }
 
@@ -237,7 +301,7 @@ export class Mesher {
         }
         const [tu, tv] = this.tileOrigin(q.tex);
         const e = this.atlas.entry(q.tex);
-        return { pos, luv, tu, tv, face: q.face, cull: q.cull, tint: TINT_INDEX[q.tint], frames: e.n ?? 1, ftime: e.t ?? 1 };
+        return { pos, luv, tu, tv, face: q.face, cull: q.cull, tint: TINT_INDEX[q.tint], frames: e.n ?? 1, ftime: e.t ?? 1, group: facingGroup(pos) };
       });
     } else if (m.kind === ModelKind.Liquid) {
       r.layer = STATE_LAYER[state]!;
@@ -431,6 +495,7 @@ export class Mesher {
         const [lu, lv] = CUBE_UV[(k + rot) & 3]!;
         this.vertex(b, q * 4 + kk, input, x + c[0], y + c[1], z + c[2], 1 | (1 << 5), lu, lv, tu, tv, tr, tg, tb, Math.round(shade * AO_LEVEL[aos[k]!]! * 255), sky[k]!, blk[k]!, frames, ftime);
       }
+      b.group[q] = f;
       b.quads++;
     }
   }
@@ -494,6 +559,7 @@ export class Mesher {
               const [u, v] = CUBE_UV[k]!;
               this.vertex(b, q * 4 + k, input, min[0]! + c[0] * ext[0]!, min[1]! + c[1] * ext[1]!, min[2]! + c[2] * ext[2]!, su | (sv << 5), u * su, v * sv, tu, tv, tr, tg, tb, alpha, sky, blk, frames, ftime);
             }
+            b.group[q] = f;
             b.quads++;
           }
         }
@@ -529,6 +595,7 @@ export class Mesher {
       for (let k = 0; k < 4; k++) {
         this.vertex(b, q * 4 + k, input, x + qd.pos[k * 3]!, y + qd.pos[k * 3 + 1]!, z + qd.pos[k * 3 + 2]!, 1 | (1 << 5), qd.luv[k * 2]!, qd.luv[k * 2 + 1]!, qd.tu, qd.tv, tr, tg, tb, shade, (l >> 4) * 16, (l & 15) * 16, qd.frames, qd.ftime);
       }
+      b.group[q] = qd.group;
       b.quads++;
     }
   }
@@ -571,7 +638,8 @@ export class Mesher {
     const [stu, stv] = this.tileOrigin(still);
     const [ftu, ftv] = this.tileOrigin(flow);
     const own = light[padIndex(x, y, z)]!;
-    const emit = (verts: [number, number, number][], uvs: [number, number][], isStill: boolean, l: number, shade: number): void => {
+    const flat = h00 === h10 && h00 === h01 && h00 === h11;
+    const emit = (verts: [number, number, number][], uvs: [number, number][], isStill: boolean, l: number, shade: number, group: number): void => {
       b.ensure();
       const q = b.quads;
       const e = isStill ? eStill : eFlow;
@@ -579,6 +647,7 @@ export class Mesher {
         const [px, py, pz] = verts[k]!;
         this.vertex(b, q * 4 + k, input, x + px, y + py, z + pz, 1 | (1 << 5), uvs[k]![0], uvs[k]![1], isStill ? stu : ftu, isStill ? stv : ftv, tr, tg, tb, Math.round(shade * 255), (l >> 4) * 16, (l & 15) * 16, e.n ?? 1, e.t ?? 1);
       }
+      b.group[q] = group;
       b.quads++;
     };
     const cull = this.cullOpaque;
@@ -597,10 +666,11 @@ export class Mesher {
         [1, 1],
         [1, 0],
       ];
-      emit(top, uvs, true, l, 1);
+      // A sloped surface is not axis-aligned: it can face the camera from any side
+      emit(top, uvs, true, l, 1, flat ? 1 : GROUP_OTHER);
       if (water) {
         // underside of the surface visible from below
-        emit([top[3]!, top[2]!, top[1]!, top[0]!], [uvs[3]!, uvs[2]!, uvs[1]!, uvs[0]!], true, l, 0.9);
+        emit([top[3]!, top[2]!, top[1]!, top[0]!], [uvs[3]!, uvs[2]!, uvs[1]!, uvs[0]!], true, l, 0.9, flat ? 0 : GROUP_OTHER);
       }
     }
     // sides
@@ -621,11 +691,11 @@ export class Mesher {
         [1, 1],
         [1, 1 - verts[3]![1] * 0.5],
       ];
-      emit(verts, uvs, false, Math.max(l, own), shade);
+      emit(verts, uvs, false, Math.max(l, own), shade, f);
     }
     const belowS = blocks[padIndex(x, y - 1, z)]!;
     if (!sameOrOpaque(belowS)) {
-      emit([[0, 0, 1], [0, 0, 0], [1, 0, 0], [1, 0, 1]], [[0, 0], [0, 1], [1, 1], [1, 0]], true, light[padIndex(x, y - 1, z)]!, 0.5);
+      emit([[0, 0, 1], [0, 0, 0], [1, 0, 0], [1, 0, 1]], [[0, 0], [0, 1], [1, 1], [1, 0]], true, light[padIndex(x, y - 1, z)]!, 0.5, 0);
     }
     void s;
   }

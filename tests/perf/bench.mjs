@@ -77,7 +77,9 @@ await new Promise((resolve, reject) => {
 
 const browser = await chromium.launch({
   executablePath: process.env.CHROMIUM_PATH || (fs.existsSync('/opt/pw-browsers/chromium') ? '/opt/pw-browsers/chromium' : undefined),
-  args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--disable-gpu-vsync', '--disable-frame-rate-limit', '--enable-precise-memory-info'],
+  // UNCAPPED=1 renders without vsync. With software WebGL that lets the page queue
+  // frames far faster than they can be drawn, which shows up as huge stalls and memory.
+  args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--enable-precise-memory-info', ...(process.env.UNCAPPED ? ['--disable-gpu-vsync', '--disable-frame-rate-limit'] : [])],
 });
 const page = await browser.newPage({ viewport: { width: VIEW[0], height: VIEW[1] } });
 page.on('pageerror', (e) => console.log('[pageerror]', e.message));
@@ -366,6 +368,32 @@ await run('cave', async () => {
   await cmd('/gamemode spectator');
   await cmd(`/tp ${spawn0[0] + 40} 24 ${spawn0[2] + 40}`);
   await settle(20000);
+  // Stand in a real cave: an air pocket with rock above (inside solid rock nothing is culled)
+  const spot = await page.evaluate(([x0, z0]) => {
+    const w = window.minehonk.game.world;
+    // Caves are filled with cave_air, not plain air
+    const caveAir = window.minehonkState?.('cave_air') ?? -1;
+    const open = (x, y, z) => {
+      const s = w.getState(x, y, z);
+      return s === 0 || s === caveAir;
+    };
+    for (let r = 0; r <= 40; r += 2)
+      for (let a = 0; a < Math.max(1, r * 2); a++) {
+        const x = Math.round(x0 + Math.cos((a / Math.max(1, r * 2)) * Math.PI * 2) * r);
+        const z = Math.round(z0 + Math.sin((a / Math.max(1, r * 2)) * Math.PI * 2) * r);
+        for (let y = 12; y < 40; y++) {
+          if (!open(x, y, z) || !open(x, y + 1, z) || open(x, y - 1, z)) continue;
+          let roof = 0;
+          for (let h = y + 2; h < y + 40 && !roof; h++) if (!open(x, h, z)) roof = h;
+          if (roof && roof - y < 12) return [x + 0.5, y, z + 0.5];
+        }
+      }
+    return null;
+  }, [spawn0[0] + 40, spawn0[2] + 40]);
+  if (spot) {
+    await cmd(`/tp ${spot[0]} ${spot[1]} ${spot[2]}`);
+    await settle(15000);
+  } else console.log('  no cave found, measuring from inside the rock');
   await setLook(1.2, 0.0);
   const r = await measure('cave');
   await cmd('/gamemode creative');
@@ -393,8 +421,10 @@ for (const dim of ['nether', 'end', 'farlands']) {
       throw e;
     });
     await page.evaluate(() => (window.minehonk.game.player.flying = true));
+    // The End: look at the main island from its edge (far out there is only void)
+    if (dim === 'end') await cmd('/tp 70 90 70');
     await settle(45000);
-    await setLook(0.8, 0.15);
+    await setLook(dim === 'end' ? 0.785 : 0.8, dim === 'end' ? 0.35 : 0.15);
     return measure(dim);
   });
 }

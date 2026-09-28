@@ -1,12 +1,13 @@
 /**
  * Chunk meshing optimisations: greedy face merging must look identical to
- * one quad per block face, hidden faces must be skipped, and the section
- * visibility data must describe which faces are connected.
+ * one quad per block face, hidden faces must be skipped, quads must be
+ * grouped by the direction they face, and the section visibility data must
+ * describe which faces are connected.
  */
 import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
 import { initItems } from '../../src/common/registry/items';
-import { Mesher, PAD, padIndex, SOLID_UNKNOWN, U16_PER_VERTEX, U8_PER_VERTEX, VIS_ALL, visConnected, type LayerMesh, type MeshInput } from '../../src/client/render/mesher';
+import { FACE_GROUPS, GROUP_OTHER, Mesher, PAD, padIndex, SOLID_UNKNOWN, U16_PER_VERTEX, U8_PER_VERTEX, VIS_ALL, facingGroup, visConnected, type LayerMesh, type MeshInput } from '../../src/client/render/mesher';
 import { createGenerator } from '../../src/common/gen/generator';
 import { LightEngine } from '../../src/common/world/light';
 import { chunkIndex } from '../../src/common/world/constants';
@@ -173,5 +174,56 @@ describe('section visibility', () => {
     expect(visConnected(vis2, 1, 4)).toBe(true);
     expect(visConnected(vis2, 1, 5)).toBe(true);
     expect(visConnected(vis2, 0, 1)).toBe(false);
+  });
+});
+
+describe('facing groups', () => {
+  const chunks = terrain();
+  const mesher = new Mesher(atlas);
+  const quadPos = (l: LayerMesh, q: number): number[] => {
+    const p: number[] = [];
+    for (let k = 0; k < 3; k++) {
+      const o = (q * 4 + k) * U16_PER_VERTEX;
+      p.push(l.u16[o]! / 256, l.u16[o + 1]! / 256, l.u16[o + 2]! / 256);
+    }
+    return p;
+  };
+
+  it('stores quads in group order and each group matches the winding normal', () => {
+    let checked = 0;
+    let other = 0;
+    for (let sy = 0; sy < 8; sy++) {
+      const out = mesher.mesh(sectionInput(chunks, 0, sy, 0));
+      for (let li = 1; li < 4; li++) {
+        const l = out.layers[li]!;
+        expect(l.groups).toHaveLength(FACE_GROUPS);
+        expect(l.groups.reduce((a, b) => a + b, 0)).toBe(l.quads);
+        let q = 0;
+        for (let g = 0; g < FACE_GROUPS; g++)
+          for (let i = 0; i < l.groups[g]!; i++, q++) {
+            const actual = facingGroup(quadPos(l, q));
+            // Axis groups must be exact; "other" may also hold axis-aligned quads (e.g. a flat piece of a sloped model)
+            if (g !== GROUP_OTHER) expect(actual).toBe(g);
+            else other++;
+            checked++;
+          }
+      }
+    }
+    expect(checked).toBeGreaterThan(1000);
+    console.log(`facing groups: ${checked} quads checked, ${other} in "other"`);
+  });
+
+  it('puts sloped water surfaces in the "other" group and flat ones facing up', () => {
+    const water = stateFromString('water');
+    const flowing = stateFromString('water[level=3]');
+    const blocks = new Uint16Array(PAD ** 3);
+    const light = new Uint8Array(PAD ** 3).fill(0xf0);
+    blocks[padIndex(4, 4, 4)] = water;
+    blocks[padIndex(8, 4, 8)] = water;
+    blocks[padIndex(9, 4, 8)] = flowing;
+    for (let z = 0; z < 16; z++) for (let x = 0; x < 16; x++) blocks[padIndex(x, 3, z)] = stateFromString('stone');
+    const l = mesher.mesh({ blocks, light, tints: new Uint8Array(PAD * PAD * 9), fancyLeaves: false, smoothLighting: true }).layers[3]!;
+    expect(l.groups[1]).toBeGreaterThan(0); // flat top of the lone source
+    expect(l.groups[GROUP_OTHER]).toBeGreaterThan(0); // the slope between source and flow
   });
 });

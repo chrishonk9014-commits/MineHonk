@@ -2,6 +2,7 @@
 import './render/colorSetup';
 import './ui/style.css';
 import { initItems } from '../common/registry/items';
+import { stateFromString } from '../common/registry/blocks';
 import { loadSettings, loadProfile } from './settings';
 import { loadAssets, applyUiTextures } from './assets/loadAssets';
 import { setIcons } from './ui/slots';
@@ -30,7 +31,7 @@ async function boot(): Promise<void> {
     document.getElementById('boot')?.remove();
     const app = new App(canvas, ui, assets, settings, profile, audio, input);
     // Developer handle: only in development builds and automated test browsers
-    if (import.meta.env.DEV || navigator.webdriver) (window as unknown as { minehonk: App }).minehonk = app;
+    if (import.meta.env.DEV || navigator.webdriver) Object.assign(window, { minehonk: app, minehonkState: stateFromString });
   } catch (e) {
     console.error(e);
     setStatus(`Failed to start: ${(e as Error).message}`);

@@ -372,7 +372,8 @@ await run('cave', async () => {
   const spot = await page.evaluate(([x0, z0]) => {
     const w = window.minehonk.game.world;
     // Caves are filled with cave_air, not plain air
-    const caveAir = window.minehonkState?.('cave_air') ?? -1;
+    // (builds without the helper: cave_air is state 1 in the unchanged block registry)
+    const caveAir = window.minehonkState?.('cave_air') ?? 1;
     const open = (x, y, z) => {
       const s = w.getState(x, y, z);
       return s === 0 || s === caveAir;

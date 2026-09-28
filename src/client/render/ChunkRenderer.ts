@@ -249,6 +249,7 @@ export class ChunkRenderer implements ChunkListener {
   private lastVisAt = 0;
   private camSection = '';
   private readonly camPos = new THREE.Vector3();
+  private readonly camDir = new THREE.Vector3();
   private readonly frustum = new THREE.Frustum();
   private readonly projView = new THREE.Matrix4();
   private readonly box = new THREE.Box3();
@@ -545,6 +546,7 @@ export class ChunkRenderer implements ChunkListener {
     }
     camera.updateMatrixWorld();
     this.camPos.setFromMatrixPosition(camera.matrixWorld);
+    camera.getWorldDirection(this.camDir);
     this.sortQueue(now);
     this.pump();
     this.updateVisibility(now);
@@ -561,6 +563,7 @@ export class ChunkRenderer implements ChunkListener {
     const ccx = Math.floor(cp.x) >> 4;
     const ccz = Math.floor(cp.z) >> 4;
     const ccy = Math.floor(cp.y) >> 4;
+    const dir = this.camDir;
     const list: SectionEntry[] = [];
     for (const k of this.dirty) {
       const e = this.sections.get(k);
@@ -573,6 +576,8 @@ export class ChunkRenderer implements ChunkListener {
       const dz = e.cz - ccz;
       const dy = (e.sy - ccy) * 0.6;
       let d = dx * dx + dz * dz + dy * dy;
+      // What the camera looks at comes first: sections behind it count as further away
+      if (d > 2 && dx * dir.x + dy * dir.y + dz * dir.z < -0.3 * Math.sqrt(d)) d = d * 2 + 8;
       if (!this.neighboursLoaded(e.cx, e.cz)) {
         if (now - e.firstSeen < 600) continue;
         d += 50;

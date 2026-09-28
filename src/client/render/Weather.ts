@@ -94,7 +94,15 @@ export class Weather {
       n++;
     }
     this.geo.instanceCount = n;
-    (this.geo.getAttribute('aOffset') as THREE.InstancedBufferAttribute).needsUpdate = true;
-    (this.geo.getAttribute('aKind') as THREE.InstancedBufferAttribute).needsUpdate = true;
+    if (n === 0) return;
+    for (const [name, size] of [
+      ['aOffset', 3],
+      ['aKind', 1],
+    ] as const) {
+      const a = this.geo.getAttribute(name) as THREE.InstancedBufferAttribute;
+      a.clearUpdateRanges();
+      a.addUpdateRange(0, n * size);
+      a.needsUpdate = true;
+    }
   }
 }

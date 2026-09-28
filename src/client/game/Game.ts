@@ -1265,7 +1265,7 @@ export class Game {
     const mem = (performance as unknown as { memory?: { usedJSHeapSize: number; jsHeapSizeLimit: number } }).memory;
     const left = [
       `MineHonk (${this.fps} fps, ${this.renderer.chunks.meshedLastSecond} chunk updates)`,
-      `Chunks: ${this.world.chunks.size} loaded, ${cs.meshes} meshes, ${cs.dirty} pending, ${cs.jobs} building`,
+      `Chunks: ${this.world.chunks.size} loaded, ${cs.drawn}/${cs.sections} sections drawn, ${cs.dirty} pending, ${cs.jobs} building`,
       `Entities: ${this.entities.size}  Particles: ${this.renderer.particles.count}`,
       `Dimension: ${this.dimension}`,
       '',
@@ -1278,7 +1278,7 @@ export class Game {
       `Mode: ${p.gamemode}${p.flying ? ' (flying)' : ''}  Ping: ${this.ping} ms`,
     ];
     if (this.debugData && Object.keys(this.debugData).length) for (const [k, v] of Object.entries(this.debugData)) left.push(`${k}: ${String(v)}`);
-    const right: string[] = [`Mesh: ${this.renderer.chunks.lastMeshMs.toFixed(1)} ms`, `Quads: ${this.renderer.chunks.totalQuads}`];
+    const right: string[] = [`Mesh: ${this.renderer.chunks.lastMeshMs.toFixed(1)} ms`, `Quads: ${cs.drawnQuads} of ${cs.quads} drawn`];
     if (mem) right.push(`Mem: ${Math.round(mem.usedJSHeapSize / 1048576)} / ${Math.round(mem.jsHeapSizeLimit / 1048576)} MB`);
     right.push(`Renderer: ${this.renderer.renderer.info.render.calls} calls, ${this.renderer.renderer.info.render.triangles} tris`);
     const t = this.interaction.target;
@@ -1354,6 +1354,7 @@ export class Game {
       Triangles: info.render.triangles.toLocaleString(),
       'Loaded chunks': this.world.chunks.size,
       'Sections drawn': `${cs.drawn} of ${cs.sections}`,
+      'Faces drawn': `${cs.drawnQuads.toLocaleString()} of ${cs.quads.toLocaleString()}`,
       'Render regions': cs.regions,
       'Meshing queue': cs.dirty + cs.jobs,
       'Chunk updates/s': r.chunks.meshedLastSecond,

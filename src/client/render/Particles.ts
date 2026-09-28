@@ -77,6 +77,12 @@ void main() {
 }`;
 
 const MAX = 4000;
+const PARTICLE_ATTRIBUTES: [string, number][] = [
+  ['aCenter', 3],
+  ['aUvRect', 4],
+  ['aColor', 4],
+  ['aSizeTex', 2],
+];
 
 export class Particles {
   readonly mesh: THREE.Mesh;
@@ -332,7 +338,14 @@ export class Particles {
       this.sizeTex[i * 2 + 1] = p.textured ? 1 : 0;
     }
     this.geo.instanceCount = n;
-    for (const name of ['aCenter', 'aUvRect', 'aColor', 'aSizeTex']) (this.geo.getAttribute(name) as THREE.InstancedBufferAttribute).needsUpdate = true;
+    // Upload only the live particles (nothing at all when there are none)
+    if (n === 0) return;
+    for (const [name, size] of PARTICLE_ATTRIBUTES) {
+      const a = this.geo.getAttribute(name) as THREE.InstancedBufferAttribute;
+      a.clearUpdateRanges();
+      a.addUpdateRange(0, n * size);
+      a.needsUpdate = true;
+    }
   }
 
   get count(): number {

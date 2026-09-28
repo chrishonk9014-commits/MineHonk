@@ -11,6 +11,7 @@ import { initItems } from '../../src/common/registry/items';
 import { FACE_GROUPS, GROUP_OTHER, Mesher, PAD, padIndex, SOLID_UNKNOWN, U16_PER_VERTEX, U8_PER_VERTEX, VIS_ALL, facingGroup, visConnected, type LayerMesh, type MeshInput } from '../../src/client/render/mesher';
 import { createGenerator } from '../../src/common/gen/generator';
 import { PAGE_QUADS, RegionLayer } from '../../src/client/render/ChunkRenderer';
+import { lightChange } from '../../src/client/world/ClientWorld';
 import { LightEngine } from '../../src/common/world/light';
 import { chunkIndex } from '../../src/common/world/constants';
 import type { Chunk } from '../../src/common/world/chunk';
@@ -275,5 +276,25 @@ describe('region buffer pages', () => {
     p.release(c);
     p.release(d);
     expect(p.used).toBe(0);
+  });
+});
+
+describe('light change detection', () => {
+  const at = (x: number, y: number, z: number) => (y << 8) | (z << 4) | x;
+  it('ignores identical light and reports which boundaries changed', () => {
+    const a = new Uint8Array(4096).fill(0xf0);
+    expect(lightChange(a, a.slice(), 0xf0)).toBe(-1);
+    expect(lightChange(null, a, 0xf0)).toBe(-1); // null means "all default"
+    expect(lightChange(null, null, 0)).toBe(-1);
+    const inner = a.slice();
+    inner[at(5, 6, 7)] = 0x30;
+    expect(lightChange(a, inner, 0xf0)).toBe(0);
+    const east = a.slice();
+    east[at(15, 6, 7)] = 0x30;
+    expect(lightChange(a, east, 0xf0)).toBe(32);
+    const corner = a.slice();
+    corner[at(0, 0, 0)] = 0;
+    expect(lightChange(a, corner, 0xf0)).toBe(1 | 4 | 16);
+    expect(lightChange(null, corner, 0xf0)).toBe(1 | 4 | 16);
   });
 });

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { makeServer, join, tick } from '../helpers/testServer';
-import { S, blocks, STATE_BLOCK } from '../../src/common/registry/blocks';
+import { S, blocks, STATE_BLOCK, stateToString } from '../../src/common/registry/blocks';
 import { stackOf } from '../../src/common/game/itemstack';
 import { itemById } from '../../src/common/registry/items';
 import { decodeChunk } from '../../src/common/world/chunk';
@@ -140,5 +140,64 @@ describe('game server', () => {
       tick(s2, 1);
     }
     expect(blocks[STATE_BLOCK[p2.dim.getState(x, y, z)]!]!.id).toBe('gold_block');
+  });
+});
+
+describe('fluids', () => {
+  it('a deep pool keeps its sources and settles instead of flickering', async () => {
+    const { server } = await makeServer();
+    const { player } = await join(server);
+    const dim = player.dim;
+    const x0 = Math.floor(player.x) + 3;
+    const z0 = Math.floor(player.z) + 3;
+    const y0 = Math.floor(player.y) + 10;
+    const water = S('water');
+    // A stone basin, 3 deep, filled with sources
+    for (let x = -1; x <= 5; x++)
+      for (let z = -1; z <= 5; z++)
+        for (let y = -1; y <= 3; y++) {
+          const wall = x < 0 || x > 4 || z < 0 || z > 4 || y < 0;
+          dim.setBlock(x0 + x, y0 + y, z0 + z, wall ? S('stone') : y < 3 ? water : 0);
+        }
+    // Filling the basin scheduled a fluid tick for every cell
+    tick(server, 60);
+    let changes = 0;
+    const set = dim.setBlock.bind(dim);
+    dim.setBlock = ((x: number, y: number, z: number, s: number, o?: object) => {
+      const inPool = x >= x0 - 1 && x <= x0 + 5 && z >= z0 - 1 && z <= z0 + 5 && y >= y0 - 1 && y <= y0 + 3;
+      if (inPool && dim.getState(x, y, z) !== s) changes++;
+      return set(x, y, z, s, o);
+    }) as typeof dim.setBlock;
+    tick(server, 100);
+    dim.setBlock = set;
+    expect(changes).toBe(0);
+    for (let x = 0; x <= 4; x++) for (let z = 0; z <= 4; z++) for (let y = 0; y < 3; y++) expect(dim.getState(x0 + x, y0 + y, z0 + z)).toBe(water);
+  });
+
+  it('water still falls off a ledge and spreads along the floor', async () => {
+    const { server } = await makeServer();
+    const { player } = await join(server);
+    const dim = player.dim;
+    const x0 = Math.floor(player.x) + 3;
+    const z0 = Math.floor(player.z) + 3;
+    const y0 = Math.floor(player.y) + 10;
+    for (let x = -6; x <= 6; x++)
+      for (let z = -6; z <= 6; z++) {
+        dim.setBlock(x0 + x, y0 - 1, z0 + z, S('stone'));
+        for (let y = 0; y < 6; y++) dim.setBlock(x0 + x, y0 + y, z0 + z, 0);
+      }
+    dim.setBlock(x0, y0 + 3, z0, S('stone'));
+    dim.setBlock(x0, y0 + 4, z0, S('water'));
+    tick(server, 200);
+    const level = (x: number, y: number, z: number): number => {
+      const st = dim.getState(x0 + x, y0 + y, z0 + z);
+      return STATE_BLOCK[st] === STATE_BLOCK[S('water')] ? Number(/level=(\d+)/.exec(stateToString(st))?.[1] ?? 0) : -1;
+    };
+    expect(level(0, 4, 0)).toBe(0); // the source stays
+    expect(level(1, 3, 0)).toBeGreaterThanOrEqual(8); // falling down the side of the ledge
+    expect(level(1, 0, 0)).toBeGreaterThanOrEqual(8); // reached the floor
+    const floor = level(3, 0, 0);
+    expect(floor).toBeGreaterThan(0);
+    expect(floor).toBeLessThan(8); // and flows outwards along it
   });
 });

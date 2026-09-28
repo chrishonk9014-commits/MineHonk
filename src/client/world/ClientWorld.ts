@@ -13,7 +13,8 @@ export interface ChunkListener {
   onChunkLoaded(c: Chunk): void;
   onChunkUnloaded(cx: number, cz: number): void;
   onBlockChanged(x: number, y: number, z: number, old: number, state: number): void;
-  onLightChanged(cx: number, sy: number, cz: number): void;
+  /** `faces`: which boundary planes changed (bit per face: -Y, +Y, -Z, +Z, -X, +X). */
+  onLightChanged(cx: number, sy: number, cz: number, faces: number): void;
 }
 
 export class ClientWorld implements BlockAccess {
@@ -91,8 +92,12 @@ export class ClientWorld implements BlockAccess {
   setLightSection(cx: number, cz: number, sy: number, data: Uint8Array): void {
     const c = this.getChunk(cx, cz);
     if (!c) return;
-    c.light[sy] = decodeLightSection(data);
-    this.listener?.onLightChanged(cx, sy, cz);
+    const old = c.light[sy] ?? null;
+    const next = decodeLightSection(data);
+    c.light[sy] = next;
+    // Unchanged light needs no rebuild; neighbours only care about the shared boundary
+    const faces = lightChange(old, next, this.hasSky ? 0xf0 : 0);
+    if (faces >= 0) this.listener?.onLightChanged(cx, sy, cz, faces);
   }
 
   clear(): void {
@@ -100,4 +105,30 @@ export class ClientWorld implements BlockAccess {
     this.chunks.clear();
     this.lastKey = NaN;
   }
+}
+
+/**
+ * Compares two light sections (null = every cell at `fallback`). Returns -1
+ * when they are identical, otherwise a bit per boundary plane that differs
+ * (-Y, +Y, -Z, +Z, -X, +X), 0 when only the interior changed.
+ */
+export function lightChange(a: Uint8Array | null, b: Uint8Array | null, fallback: number): number {
+  if (a === b) return -1;
+  let faces = 0;
+  let any = false;
+  for (let i = 0; i < 4096; i++) {
+    if ((a ? a[i]! : fallback) === (b ? b[i]! : fallback)) continue;
+    any = true;
+    const x = i & 15;
+    const z = (i >> 4) & 15;
+    const y = i >> 8;
+    if (y === 0) faces |= 1;
+    else if (y === 15) faces |= 2;
+    if (z === 0) faces |= 4;
+    else if (z === 15) faces |= 8;
+    if (x === 0) faces |= 16;
+    else if (x === 15) faces |= 32;
+    if (faces === 63) break;
+  }
+  return any ? faces : -1;
 }

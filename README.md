@@ -126,7 +126,24 @@ npm run gen:assets     # regenerate textures, atlases and the pixel font
 ```
 
 End-to-end tests use the production build (`npx vite build`). The multiplayer
-test also needs `npm run build:server`.
+test also needs `npm run build:server`. More browser checks:
+
+```bash
+node tests/e2e/v1.mjs                   # Recipe Book, Admin Panel, cheat-free advancements
+node tests/e2e/render-equivalence.mjs   # culling never changes a pixel
+```
+
+### Performance tools
+
+```bash
+npx vite build --minify false --outDir dist-bench
+node tests/perf/bench.mjs dist-bench        # FPS, frame time, draws, memory per scenario
+node tools/perf/compare.mjs a.json b.json   # before/after table
+npx tsx tools/perf/server-bench.ts          # server tick cost with many mobs
+```
+
+The benchmark uses headless Chromium with software WebGL, so absolute FPS is
+far below a real GPU. Compare runs made on the same machine.
 
 ### Architecture
 
@@ -145,6 +162,14 @@ src/client    three.js renderer, meshing worker, UI, audio synthesis, input
 tools         procedural asset generation (textures, font) and debug maps
 tests         unit, integration and end-to-end tests
 ```
+
+Chunks are meshed in worker threads. Faces with identical light and colour
+are merged (greedy meshing), and each section's faces are grouped by
+direction. Sections are packed into render regions (4x4 chunks by 8
+sections) drawn with one multi-draw call per buffer page. Each frame the
+renderer skips sections outside the view, sections hidden behind solid
+terrain (a cave visibility graph) and face groups pointing away from the
+camera.
 
 The client only sends intentions (move, dig, use, click, chat). The server
 validates everything: reach, line of sight, break timing, inventory

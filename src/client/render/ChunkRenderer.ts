@@ -441,14 +441,14 @@ export class ChunkRenderer implements ChunkListener {
     if (ly === 15) this.markDirty(cx, sy + 1, cz);
   }
 
-  onLightChanged(cx: number, sy: number, cz: number): void {
+  onLightChanged(cx: number, sy: number, cz: number, faces = 63): void {
     this.markDirty(cx, sy, cz);
-    this.markDirty(cx, sy + 1, cz);
-    this.markDirty(cx, sy - 1, cz);
-    this.markDirty(cx + 1, sy, cz);
-    this.markDirty(cx - 1, sy, cz);
-    this.markDirty(cx, sy, cz + 1);
-    this.markDirty(cx, sy, cz - 1);
+    if (faces & 1) this.markDirty(cx, sy - 1, cz);
+    if (faces & 2) this.markDirty(cx, sy + 1, cz);
+    if (faces & 4) this.markDirty(cx, sy, cz - 1);
+    if (faces & 8) this.markDirty(cx, sy, cz + 1);
+    if (faces & 16) this.markDirty(cx - 1, sy, cz);
+    if (faces & 32) this.markDirty(cx + 1, sy, cz);
   }
 
   private disposeSection(e: SectionEntry): void {

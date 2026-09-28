@@ -240,7 +240,8 @@ export class BlockUpdates {
       const n = dim.getState(nx, y, nz);
       if (!this.canFlowInto(dim, n, kind, nx, y, nz)) continue;
       const nl = this.fluidLevel(n, kind);
-      if (nl >= 0 && (nl === 0 || nl <= next)) continue;
+      // Sources, falling fluid and cells at least as full stay as they are
+      if (nl >= 0 && (nl === 0 || nl >= 8 || nl <= next)) continue;
       this.flowInto(dim, nx, y, nz, withProp(base, 'level', String(next)), kind, this.server.admin.blockMarked(dim, x, y, z));
     }
   }
@@ -270,11 +271,19 @@ export class BlockUpdates {
     return all.filter((_, i) => scores[i] === best);
   }
 
+  /**
+   * Whether fluid of `kind` may move into a cell: air, replaceable blocks,
+   * the other fluid (they mix) or a flowing (not source) cell of its own kind.
+   * Same-kind sources are never replaced: turning a source under a source into
+   * falling water let the sideways flow of its neighbours and the source above
+   * rewrite it forever (1 -> 8 -> 1 every fluid tick).
+   */
   private canFlowInto(dim: Dimension, s: number, kind: number, x: number, y: number, z: number): boolean {
     if (s === 0) return true;
     if (STATE_FLUID[s]) {
       const def = blocks[STATE_BLOCK[s]!]!.def;
-      return def.model === 'liquid' && (STATE_FLUID[s] !== kind || true);
+      if (def.model !== 'liquid') return false;
+      return STATE_FLUID[s] !== kind || this.fluidLevel(s, kind) !== 0;
     }
     if (!dim.isLoaded(x, z)) return false;
     return STATE_REPLACEABLE[s] === 1 && !STATE_SOLID[s];

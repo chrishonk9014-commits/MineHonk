@@ -664,6 +664,16 @@ export class Gadgets {
 
   tick(): void {
     const s = this.server;
+    // Big dripleaves tip over under anyone standing on them
+    if (s.tickNo % 5 === 0) {
+      for (const p of s.players.values()) {
+        if (p.dead || p.gamemode === 'spectator' || p.sneaking) continue;
+        const bx = Math.floor(p.x);
+        const by = Math.floor(p.y - 0.2);
+        const bz = Math.floor(p.z);
+        if (p.dim.blockId(bx, by, bz) === 'big_dripleaf') s.blockUpdates.stepOnDripleaf(p.dim, bx, by, bz);
+      }
+    }
     // Beacons pulse every four seconds
     if (s.tickNo % 80 === 0) {
       for (const [k, b] of this.beacons) {

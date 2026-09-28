@@ -402,6 +402,7 @@ const EFFECTS: Record<string, { dur: number; recipe: Recipe }> = {
   'pufferfish.blow_out': { dur: 0.4, recipe: (s) => s.tone({ dur: 0.35, gain: 0.4, f0: 600, f1: 180, wave: 'sine', decay: 0.15 }) },
   'pufferfish.sting': { dur: 0.25, recipe: (s) => (s.knock({ f: 900, gain: 0.5, decay: 0.02 }), s.noise({ dur: 0.15, gain: 0.3, decay: 0.04, hp: 2500 })) },
   'panda.sneeze': { dur: 0.5, recipe: (s) => (s.noise({ dur: 0.15, gain: 0.3, attack: 0.1, decay: 0.05, bp: [900, 2] }), s.noise({ start: 0.2, dur: 0.25, gain: 0.8, attack: 0.005, decay: 0.07, lp: 3000, hp: 300 })) },
+  'dripleaf.tilt': { dur: 0.35, recipe: (s) => (s.noise({ dur: 0.3, gain: 0.5, attack: 0.02, decay: 0.08, bp: [700, 1.5], grain: 2 }), s.knock({ start: 0.05, f: 180, gain: 0.3, decay: 0.04 })) },
   ink: { dur: 0.35, recipe: (s) => s.noise({ dur: 0.3, gain: 0.5, attack: 0.02, decay: 0.08, lp: 900, hp: 80, grain: 2 }) },
   glow_ink: { dur: 0.6, recipe: (s) => (s.noise({ dur: 0.3, gain: 0.45, attack: 0.02, decay: 0.08, lp: 900, hp: 80, grain: 2 }), s.bell({ start: 0.08, f: 1760, ratios: [1, 1.5, 2.01], gain: 0.2, decay: 0.2, dur: 0.5 })) },
   'fire.extinguish': { dur: 0.5, recipe: (s) => s.noise({ dur: 0.45, gain: 0.5, attack: 0.01, decay: 0.15, hp: 2500 }) },

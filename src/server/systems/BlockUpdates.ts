@@ -20,7 +20,7 @@ interface Scheduled {
   y: number;
   z: number;
   due: number;
-  kind: 'fluid' | 'fall' | 'check';
+  kind: 'fluid' | 'fall' | 'check' | 'dripleaf';
 }
 
 export class BlockUpdates {
@@ -135,6 +135,7 @@ export class BlockUpdates {
         if (!dim.isLoaded(s.x, s.z)) continue;
         if (s.kind === 'fluid') this.tickFluid(dim, s.x, s.y, s.z);
         else if (s.kind === 'fall') this.tickFall(dim, s.x, s.y, s.z);
+        else if (s.kind === 'dripleaf') this.tickDripleaf(dim, s.x, s.y, s.z);
         else {
           const st = dim.getState(s.x, s.y, s.z);
           if (st !== 0 && !canSurvive(st, dim, s.x, s.y, s.z)) this.breakNaturally(dim, s.x, s.y, s.z);
@@ -364,10 +365,45 @@ export class BlockUpdates {
     dim.setBlock(fx, y, fz, S(fruit));
   }
 
+  /** Something is standing on a big dripleaf: it tips, then drops what is on it, then springs back. */
+  stepOnDripleaf(dim: Dimension, x: number, y: number, z: number): void {
+    const st = dim.getState(x, y, z);
+    if (blocks[STATE_BLOCK[st]!]!.id !== 'big_dripleaf' || getProp(st, 'tilt') !== 'none') return;
+    dim.setBlock(x, y, z, withProp(st, 'tilt', 'partial'));
+    this.server.playSound(dim, 'dripleaf.tilt', x + 0.5, y + 0.9, z + 0.5, 0.6, 1);
+    this.schedule(dim, x, y, z, 10, 'dripleaf');
+  }
+
+  private tickDripleaf(dim: Dimension, x: number, y: number, z: number): void {
+    const st = dim.getState(x, y, z);
+    if (blocks[STATE_BLOCK[st]!]!.id !== 'big_dripleaf') return;
+    const tilt = getProp(st, 'tilt');
+    if (tilt === 'partial') {
+      dim.setBlock(x, y, z, withProp(st, 'tilt', 'full'));
+      this.schedule(dim, x, y, z, 60, 'dripleaf');
+    } else if (tilt === 'full') {
+      dim.setBlock(x, y, z, withProp(st, 'tilt', 'none'));
+      this.server.playSound(dim, 'dripleaf.tilt', x + 0.5, y + 0.9, z + 0.5, 0.6, 1.3);
+    }
+  }
+
   private randomTick(dim: Dimension, x: number, y: number, z: number, st: number): void {
     const bt = blocks[STATE_BLOCK[st]!]!;
     const def = bt.def;
     const id = bt.id;
+    if (id === 'budding_amethyst') {
+      // Buds grow on a free face and ripen into clusters
+      if (!rng.chance(1 / 5)) return;
+      const f = rng.int(6);
+      const nx = x + FACE_DX[f];
+      const ny = y + FACE_DY[f];
+      const nz = z + FACE_DZ[f];
+      const n = dim.getState(nx, ny, nz);
+      const nid = blocks[STATE_BLOCK[n]!]!.id;
+      if (n === 0 || nid === 'cave_air') dim.setBlock(nx, ny, nz, S('amethyst_bud'));
+      else if (nid === 'amethyst_bud') dim.setBlock(nx, ny, nz, S('amethyst_cluster'));
+      return;
+    }
     if (def.model === 'crop') {
       const age = parseInt(getProp(st, 'age')!, 10);
       const max = (def.data?.maxAge as number) ?? 7;

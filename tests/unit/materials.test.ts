@@ -214,3 +214,42 @@ describe('stems, signs, rift pearl and new recipes', () => {
     expect(itemById.get('melon_seeds')!.def.block).toBe('melon_stem');
   });
 });
+
+describe('cave blocks', () => {
+  it('a big dripleaf tips under a player and drops them, then springs back', async () => {
+    const { server } = await makeServer();
+    const { player } = await join(server);
+    const y = arena(player);
+    const x = Math.floor(player.x);
+    const z = Math.floor(player.z);
+    player.dim.setBlock(x, y, z, S('big_dripleaf'));
+    player.setPos(x + 0.5, y + 15 / 16, z + 0.5);
+    tick(server, 6);
+    expect(getProp(player.dim.getState(x, y, z), 'tilt')).toBe('partial');
+    tick(server, 12);
+    expect(getProp(player.dim.getState(x, y, z), 'tilt')).toBe('full');
+    player.setPos(x + 3.5, y, z + 0.5);
+    tick(server, 62);
+    expect(getProp(player.dim.getState(x, y, z), 'tilt')).toBe('none');
+  });
+
+  it('budding amethyst grows buds that ripen into clusters', async () => {
+    const { server } = await makeServer();
+    const { player } = await join(server);
+    const y = arena(player);
+    const x = Math.floor(player.x) + 3;
+    const z = Math.floor(player.z);
+    player.dim.setBlock(x, y + 1, z, S('budding_amethyst'));
+    const bu = server.blockUpdates as unknown as { randomTick(d: unknown, x: number, y: number, z: number, st: number): void };
+    const ids = (): string[] => [
+      [1, 0, 0],
+      [-1, 0, 0],
+      [0, 1, 0],
+      [0, -1, 0],
+      [0, 0, 1],
+      [0, 0, -1],
+    ].map(([dx, dy, dz]) => player.dim.blockId(x + dx!, y + 1 + dy!, z + dz!));
+    for (let i = 0; i < 600 && !ids().includes('amethyst_cluster'); i++) bu.randomTick(player.dim, x, y + 1, z, player.dim.getState(x, y + 1, z));
+    expect(ids()).toContain('amethyst_cluster');
+  });
+});

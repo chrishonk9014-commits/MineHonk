@@ -59,6 +59,11 @@ export const PAGE_QUADS = 32768;
  */
 export const GREEDY_MESHING = false;
 
+/** Upload budget per frame for finished meshes (see applyResults). */
+const MIN_UPLOADS_PER_FRAME = 4;
+const MAX_PAGES_PER_FRAME = 8;
+const UPLOAD_BUDGET_MS = 4;
+
 /**
  * Most ranges a section can need once back-facing groups are skipped: at most
  * one of each opposite pair is dropped, leaving at most four separate runs.
@@ -260,6 +265,8 @@ export class ChunkRenderer implements ChunkListener {
   private readonly busy: number[] = [];
   private nextJob = 1;
   private readonly jobs = new Map<number, { key: number; version: number; worker: number }>();
+  /** Finished meshes waiting for the frame's upload budget, by section key. */
+  private readonly results = new Map<number, { e: SectionEntry; layers: LayerMesh[]; vis: number; d?: number }>();
   private readonly tintCache = new Map<number, { stamp: number; data: Uint8Array }>();
   meshedLastSecond = 0;
   private meshCounter = 0;
@@ -419,6 +426,7 @@ export class ChunkRenderer implements ChunkListener {
       this.disposeSection(e);
       this.sections.delete(k);
       this.dirty.delete(k);
+      this.results.delete(k);
       const r = e.region;
       if (--r.count <= 0) {
         for (let li = 0; li < 4; li++) {
@@ -599,8 +607,40 @@ export class ChunkRenderer implements ChunkListener {
     camera.getWorldDirection(this.camDir);
     this.sortQueue(now);
     this.pump();
+    this.applyResults();
     this.updateVisibility(now);
     this.buildDrawLists(camera);
+  }
+
+  /**
+   * Moves finished meshes into the region buffers, nearest first, within a
+   * per-frame budget. Every page written this frame is uploaded before
+   * drawing, and writing into a buffer the GPU is still reading can stall, so
+   * spreading uploads over frames keeps the frame time even while flying
+   * into new terrain.
+   */
+  private applyResults(): void {
+    if (this.results.size === 0) return;
+    const cp = this.camPos;
+    const list = [...this.results.values()];
+    for (const r of list) {
+      const dx = r.e.cx * 16 + 8 - cp.x;
+      const dy = r.e.sy * 16 + 8 - cp.y;
+      const dz = r.e.cz * 16 + 8 - cp.z;
+      r.d = dx * dx + dy * dy + dz * dz;
+    }
+    list.sort((a, b) => a.d! - b.d!);
+    const t0 = performance.now();
+    const pages = new Set<RegionLayer>();
+    let applied = 0;
+    for (const r of list) {
+      if (applied >= MIN_UPLOADS_PER_FRAME && (pages.size >= MAX_PAGES_PER_FRAME || performance.now() - t0 > UPLOAD_BUDGET_MS)) break;
+      this.results.delete(r.e.key);
+      if (this.sections.get(r.e.key) !== r.e) continue; // unloaded meanwhile
+      this.applyMesh(r.e, r.layers, r.vis);
+      for (const slot of r.e.slots) if (slot?.page) pages.add(slot.page);
+      applied++;
+    }
   }
 
   /** Orders dirty sections nearest first (once per frame). */
@@ -712,8 +752,9 @@ export class ChunkRenderer implements ChunkListener {
         e.building = Math.max(0, e.building - 1);
         this.lastMeshMs = m.ms;
         this.meshCounter++;
+        // Applied by the frame's upload budget (a newer result replaces an older one).
         // A stale result (section changed since) is still shown to avoid holes; it is rebuilt anyway.
-        this.applyMesh(e, m.layers, m.vis);
+        this.results.set(e.key, { e, layers: m.layers, vis: m.vis });
       }
     }
     this.pump();
@@ -961,7 +1002,7 @@ export class ChunkRenderer implements ChunkListener {
   stats(): { sections: number; dirty: number; jobs: number; meshes: number; regions: number; drawn: number; quads: number; drawnQuads: number } {
     let meshes = 0;
     for (const r of this.regions.values()) for (const pages of r.layers) for (const l of pages) if (l.mesh) meshes++;
-    return { sections: this.sections.size, dirty: this.dirty.size, jobs: this.jobs.size, meshes, regions: this.regions.size, drawn: this.drawnSections, quads: this.totalQuads, drawnQuads: this.drawnQuads };
+    return { sections: this.sections.size, dirty: this.dirty.size, jobs: this.jobs.size + this.results.size, meshes, regions: this.regions.size, drawn: this.drawnSections, quads: this.totalQuads, drawnQuads: this.drawnQuads };
   }
 
   dispose(): void {
@@ -969,6 +1010,7 @@ export class ChunkRenderer implements ChunkListener {
     this.regions.clear();
     this.sections.clear();
     this.dirty.clear();
+    this.results.clear();
     this.queue = [];
     for (const w of this.workers) w.terminate();
     for (const m of this.materials) m.dispose();

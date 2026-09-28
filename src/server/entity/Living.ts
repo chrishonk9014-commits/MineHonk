@@ -8,6 +8,10 @@ export interface HurtInfo {
   kbx?: number;
   kbz?: number;
   knockback?: number;
+  /** Knocks a raised shield aside for this many ticks. */
+  disableShield?: number;
+  /** Goes through a raised shield (at half strength). */
+  pierceShield?: boolean;
 }
 
 export abstract class LivingEntity extends Entity {

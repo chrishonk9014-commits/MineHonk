@@ -124,6 +124,8 @@ export class Game {
   private stepDist = 0;
   private caveMood = 0;
   private usingItem = false;
+  /** Item number -> client tick until which it can't be used (knocked-aside shield...). */
+  private readonly cooldowns = new Map<number, { until: number; total: number }>();
   private useRepeat = 0;
   private lastSwingSent = 0;
   private entityTarget: ClientEntity | null = null;
@@ -577,10 +579,38 @@ export class Game {
       }
       case 'use_result':
         break;
+      case 'cooldown': {
+        this.cooldowns.set(m.item, { until: this.tickNo + m.ticks, total: m.ticks });
+        const held = this.held();
+        if (this.usingItem && (held?.id === m.item || (!held && this.held(1)?.id === m.item))) {
+          this.usingItem = false;
+          this.renderer.hand.using = 0;
+          this.send({ t: 'use', hand: 0, action: 'release' });
+        }
+        break;
+      }
       case 'debug':
         this.debugData = m.data;
         break;
     }
+  }
+
+  private onCooldown(item: number): boolean {
+    const c = this.cooldowns.get(item);
+    if (!c) return false;
+    if (c.until <= this.tickNo) {
+      this.cooldowns.delete(item);
+      return false;
+    }
+    return true;
+  }
+
+  /** Remaining cooldown fraction (0..1) for a slot's item. */
+  private cooldownFraction(s: Slot): number {
+    if (!s) return 0;
+    const c = this.cooldowns.get(s.id);
+    if (!c || c.until <= this.tickNo) return 0;
+    return (c.until - this.tickNo) / Math.max(1, c.total);
   }
 
   private setAbilities(a: AbilitiesMsg): void {
@@ -787,6 +817,7 @@ export class Game {
       {
         stats: this.stats,
         hotbar: this.invSlots.slice(HOTBAR0, HOTBAR0 + 9),
+        cooldowns: this.invSlots.slice(HOTBAR0, HOTBAR0 + 9).map((st) => this.cooldownFraction(st)),
         offhand: this.invSlots[OFFHAND] ?? null,
         selected: this.selected,
         survival: this.survivalHud,
@@ -1110,6 +1141,7 @@ export class Game {
       return;
     }
     const def = items[held.id]!.def;
+    if (this.onCooldown(held.id)) return;
     this.send({ t: 'use', hand: 0, action: 'start' });
     const overTime = !!def.food || def.use === 'bow' || def.use === 'shield' || def.use === 'crossbow' || def.use === 'trident' || def.use === 'potion';
     if (overTime) {

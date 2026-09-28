@@ -143,7 +143,9 @@ export type S2C =
   | { t: 'use_result'; seq: number; ok: boolean }
   | { t: 'progress'; achievements: string[]; stats: Record<string, number> }
   | { t: 'debug'; data: Record<string, unknown> }
-  | { t: 'admin_result'; req: number; ok: boolean; text: string; data?: unknown };
+  | { t: 'admin_result'; req: number; ok: boolean; text: string; data?: unknown }
+  /** An item can't be used for a while (knocked-aside shield, pearl cooldown). */
+  | { t: 'cooldown'; item: number; ticks: number };
 
 export interface AbilitiesMsg {
   mayFly: boolean;

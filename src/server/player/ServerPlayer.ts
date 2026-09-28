@@ -98,6 +98,8 @@ export class ServerPlayer extends Entity {
   portalTicks = 0;
   portalCooldown = 0;
   joinedAt = Date.now();
+  /** Tick until which a knocked-aside shield cannot be raised. */
+  shieldDownUntil = 0;
 
   constructor(
     readonly conn: Connection,
@@ -174,7 +176,9 @@ export class ServerPlayer extends Entity {
   }
 
   override meta(): Record<string, unknown> {
-    return { name: this.name, sneak: this.sneaking, held: this.heldItem()?.id ?? 0 };
+    const m: Record<string, unknown> = { name: this.name, sneak: this.sneaking, held: this.heldItem()?.id ?? 0 };
+    if (this.effects.has('glowing')) m.glowing = true;
+    return m;
   }
 
   override trackingRange(): number {

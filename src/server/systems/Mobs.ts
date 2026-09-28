@@ -230,6 +230,13 @@ export class MobSystem {
       installBrain(m);
       return m;
     }
+    if (d.kind === 'projectile') {
+      const pr = Projectile.restoreTrident(d);
+      if (!pr) return null;
+      pr.onHit = (x, hit) => this.onProjectileHit(x, hit);
+      pr.onReturn = (x) => this.tridentReturned(x);
+      return pr;
+    }
     void dim;
     return null;
   }
@@ -293,6 +300,21 @@ export class MobSystem {
         break;
     }
     if (m.data.slowTicks && (m.data.slowTicks = (m.data.slowTicks as number) - 1) <= 0) delete m.data.slowTicks;
+    if (m.data.glowTicks && (m.data.glowTicks = (m.data.glowTicks as number) - 1) <= 0) {
+      delete m.data.glowTicks;
+      m.metaDirty = true;
+    }
+  }
+
+  /** Outlines an entity through walls for a while (spectral arrows, bells). */
+  glow(e: Entity, ticks: number): void {
+    if (isPlayer(e)) {
+      this.server.interaction.survival.addEffect(e, 'glowing', 0, ticks);
+      e.metaDirty = true;
+    } else if (e instanceof Mob) {
+      if (!e.data.glowTicks) e.metaDirty = true;
+      e.data.glowTicks = Math.max(Number(e.data.glowTicks ?? 0), ticks);
+    }
   }
 
   private tickSpawners(dim: Dimension): void {
@@ -529,7 +551,7 @@ export class MobSystem {
   damage(t: Entity, amount: number, info: HurtInfo & { kbx?: number; kbz?: number; knockback?: number }): number {
     if (isPlayer(t)) {
       if (info.attacker && isPlayer(info.attacker) && !this.server.level.pvp) return 0;
-      return this.server.interaction.survival.damage(t, amount, { source: info.source as never, attacker: info.attacker, kbx: info.kbx, kbz: info.kbz, knockback: info.knockback });
+      return this.server.interaction.survival.damage(t, amount, { source: info.source as never, attacker: info.attacker, kbx: info.kbx, kbz: info.kbz, knockback: info.knockback, disableShield: info.disableShield, pierceShield: info.pierceShield });
     }
     if (t instanceof LivingEntity) return t.hurt(amount, info);
     return 0;
@@ -636,30 +658,11 @@ export class MobSystem {
       return true;
     }
     switch (p.kind) {
+      case 'trident':
+        if (p.item) return this.thrownTridentHit(p, hit);
+        return this.arrowHit(p, hit);
       case 'arrow':
-      case 'trident': {
-        if (e) {
-          if (e === p.owner) return false;
-          const speed = Math.hypot(p.vx, p.vy, p.vz);
-          let dmg = Math.ceil(speed * p.damage);
-          if (p.crit) dmg += Math.floor(Math.random() * (Math.floor(dmg / 2) + 2));
-          const d = Math.hypot(p.vx, p.vz) || 1;
-          const dealt = this.damage(e, dmg, { source: 'arrow', attacker: p.owner, kbx: p.vx / d, kbz: p.vz / d, knockback: 0.3 + p.knockback * 0.6 });
-          if (dealt > 0) {
-            if (p.fire) this.setOnFire(e, 5);
-            if (p.data?.slow && isPlayer(e)) s.interaction.survival.addEffect(e, 'slowness', 0, 600);
-            s.playSound(dim, 'arrow.hit', e.x, e.y + 1, e.z, 1, 1.2);
-            return true;
-          }
-          // Deflected (e.g. blocked): drop
-          p.vx *= -0.1;
-          p.vy *= -0.1;
-          p.vz *= -0.1;
-          return false;
-        }
-        s.playSound(dim, 'arrow.hit', hit.x, hit.y, hit.z, 0.6, 1.2);
-        return false;
-      }
+        return this.arrowHit(p, hit);
       case 'snowball':
       case 'egg':
         if (e && e !== p.owner) {
@@ -763,6 +766,55 @@ export class MobSystem {
         return true;
     }
     return true;
+  }
+
+  /** A thrown trident: fixed damage, then it drops (and returns with Loyalty). */
+  private thrownTridentHit(p: Projectile, hit: ProjectileHit): boolean {
+    const s = this.server;
+    const e = hit.entity;
+    if (e) {
+      if (e === p.owner || p.dealt) return false;
+      const d = Math.hypot(p.vx, p.vz) || 1;
+      const item = p.item!;
+      const ench = e instanceof LivingEntity && e.isUndead() ? 2.5 * enchantLevel(item, 'smite') : 0;
+      this.damage(e, p.damage + enchantLevel(item, 'sharpness') * 0.5 + ench, { source: 'arrow', attacker: p.owner, kbx: p.vx / d, kbz: p.vz / d, knockback: 0.4 });
+      p.dealt = true;
+      p.vx *= -0.01;
+      p.vy *= -0.1;
+      p.vz *= -0.01;
+      s.playSound(p.dim, 'trident.hit', e.x, e.y + 1, e.z, 1, 1);
+      return false;
+    }
+    s.playSound(p.dim, 'trident.hit_ground', hit.x, hit.y, hit.z, 0.8, 1);
+    return false;
+  }
+
+  /** Arrows (and mob-thrown tridents): damage from speed, then stick or drop. */
+  private arrowHit(p: Projectile, hit: ProjectileHit): boolean {
+    const s = this.server;
+    const e = hit.entity;
+    if (e) {
+      if (e === p.owner) return false;
+      const speed = Math.hypot(p.vx, p.vy, p.vz);
+      let dmg = Math.ceil(speed * p.damage);
+      if (p.crit) dmg += Math.floor(Math.random() * (Math.floor(dmg / 2) + 2));
+      const d = Math.hypot(p.vx, p.vz) || 1;
+      const dealt = this.damage(e, dmg, { source: 'arrow', attacker: p.owner, kbx: p.vx / d, kbz: p.vz / d, knockback: 0.3 + p.knockback * 0.6 });
+      if (dealt > 0) {
+        if (p.fire) this.setOnFire(e, 5);
+        if (p.data?.slow && isPlayer(e)) s.interaction.survival.addEffect(e, 'slowness', 0, 600);
+        if (p.data?.spectral) this.glow(e, 200);
+        s.playSound(p.dim, 'arrow.hit', e.x, e.y + 1, e.z, 1, 1.2);
+        return true;
+      }
+      // Deflected (e.g. blocked): drop
+      p.vx *= -0.1;
+      p.vy *= -0.1;
+      p.vz *= -0.1;
+      return false;
+    }
+    s.playSound(p.dim, 'arrow.hit', hit.x, hit.y, hit.z, 0.6, 1.2);
+    return false;
   }
 
   creeperExplode(m: Mob): void {
@@ -1085,7 +1137,8 @@ export class MobSystem {
     const sprintKb = f > 0.9 && p.sprinting;
     const kbLevel = enchantLevel(held, 'knockback') + (sprintKb ? 1 : 0);
     const dl = lookDir(p.yaw, 0);
-    const dealt = this.damage(target, Math.max(0, dmg), { source: 'player', attacker: p, kbx: dl[0], kbz: dl[2], knockback: 0.4 + kbLevel * 0.5 });
+    const axe = it?.tool?.type === 'axe';
+    const dealt = this.damage(target, Math.max(0, dmg), { source: 'player', attacker: p, kbx: dl[0], kbz: dl[2], knockback: 0.4 + kbLevel * 0.5, disableShield: axe && f > 0.9 ? 100 : undefined });
     if (dealt <= 0 && !(target instanceof PrimedTnt)) {
       s.playSound(p.dim, 'attack.weak', target.x, target.y + 1, target.z, 0.6, 1);
       return;
@@ -1378,10 +1431,14 @@ export class MobSystem {
     return true;
   }
 
-  /** Bow released after `ticks` of drawing. */
-  releaseBow(p: ServerPlayer, stack: ItemStack, ticks: number): void {
+  /** Bow (or trident) released after `ticks` of drawing. */
+  releaseBow(p: ServerPlayer, stack: ItemStack, ticks: number, slot = p.selectedSlot): void {
     const s = this.server;
     const def = items[stack.id]!;
+    if (def.id === 'trident') {
+      this.throwTrident(p, stack, ticks, slot);
+      return;
+    }
     if (def.id !== 'bow' && def.id !== 'crossbow') return;
     let f = ticks / 20;
     f = (f * f + f * 2) / 3;
@@ -1390,17 +1447,18 @@ export class MobSystem {
     const infinity = enchantLevel(stack, 'infinity') > 0;
     const creative = p.gamemode === 'creative';
     let arrowSlot = -1;
-    if (!creative) {
-      const order = [40, ...Array.from({ length: 36 }, (_, i) => i)];
-      for (const i of order) {
-        const a = p.inventory.get(i);
-        if (a && items[a.id]!.id === 'arrow') {
-          arrowSlot = i;
-          break;
-        }
+    // Offhand first, then the inventory; creative players shoot plain arrows unless they carry spectral ones
+    const order = [40, ...Array.from({ length: 36 }, (_, i) => i)];
+    for (const i of order) {
+      const a = p.inventory.get(i);
+      const aid = a ? items[a.id]!.id : '';
+      if (aid === 'arrow' || aid === 'spectral_arrow') {
+        arrowSlot = i;
+        break;
       }
-      if (arrowSlot < 0) return;
     }
+    if (arrowSlot < 0 && !creative) return;
+    const spectral = arrowSlot >= 0 && items[p.inventory.get(arrowSlot)!.id]!.id === 'spectral_arrow';
     const [ex, ey, ez] = s.eyePos(p);
     const d = lookDir(p.yaw, p.pitch);
     const pr = this.projectile(p.dim, 'arrow', ex, ey - 0.1, ez, p);
@@ -1409,8 +1467,12 @@ export class MobSystem {
     pr.damage = 2 + (enchantLevel(stack, 'power') ? 0.5 * enchantLevel(stack, 'power') + 0.5 : 0);
     pr.knockback = enchantLevel(stack, 'punch');
     pr.fire = enchantLevel(stack, 'flame') > 0;
-    pr.pickup = !creative && !infinity;
-    if (!creative && !infinity && arrowSlot >= 0) {
+    pr.pickup = !creative && !(infinity && !spectral);
+    if (spectral) {
+      pr.data = { spectral: true };
+      pr.item = stackOf('spectral_arrow', 1);
+    }
+    if (!creative && !(infinity && !spectral) && arrowSlot >= 0) {
       const a = p.inventory.get(arrowSlot)!;
       p.inventory.set(arrowSlot, a.count > 1 ? { ...a, count: a.count - 1 } : null);
     }
@@ -1419,14 +1481,62 @@ export class MobSystem {
     p.addStat('used.bow');
   }
 
-  /** Players pick up arrows stuck in the ground. */
+  /** Throws a trident drawn for at least half a second. */
+  private throwTrident(p: ServerPlayer, stack: ItemStack, ticks: number, slot: number): void {
+    const s = this.server;
+    if (ticks < 10) return;
+    const creative = p.gamemode === 'creative';
+    if (!creative) s.interaction.damageStack(p, slot, 1);
+    const thrown = cloneStack(p.inventory.get(slot) ?? stack);
+    if (!thrown || items[thrown.id]!.id !== 'trident') return;
+    const [ex, ey, ez] = s.eyePos(p);
+    const d = lookDir(p.yaw, p.pitch);
+    const pr = this.projectile(p.dim, 'trident', ex, ey - 0.1, ez, p);
+    pr.shoot(d[0], d[1], d[2], 2.5, 1, () => this.rng.next());
+    pr.damage = 8;
+    pr.item = thrown;
+    pr.loyalty = enchantLevel(thrown, 'loyalty');
+    pr.pickup = !creative;
+    pr.persistent = true;
+    pr.admin = s.interaction.isCheat(p, thrown);
+    pr.onReturn = (x) => this.tridentReturned(x);
+    if (!creative) p.inventory.set(slot, null);
+    s.playSound(p.dim, 'trident.throw', p.x, p.y + 1.5, p.z, 1, 1);
+    p.addStat('used.trident');
+  }
+
+  /** A Loyalty trident reached its thrower: back into the inventory. */
+  private tridentReturned(pr: Projectile): void {
+    const o = pr.owner;
+    if (!pr.item || !o || !isPlayer(o)) return;
+    if (pr.pickup) {
+      const rem = o.inventory.add(pr.item);
+      if (rem) this.server.interaction.dropStack(o, rem);
+    }
+    this.server.playSound(o.dim, 'trident.return', o.x, o.y + 1, o.z, 1, 1);
+  }
+
+  /** Players pick up arrows and tridents stuck in the ground. */
   tickArrowPickup(): void {
     for (const p of this.server.players.values()) {
       if (p.dead || p.gamemode === 'spectator') continue;
       for (const e of p.dim.entitiesNear(p.x, p.y + 1, p.z, 2)) {
-        if (!(e instanceof Projectile) || e.kind !== 'arrow' || !e.stuck || e.removed) continue;
+        if (!(e instanceof Projectile) || !e.stuck || e.removed || e.returning) continue;
+        if (e.kind === 'trident') {
+          // Only the thrower may pick up a Loyalty trident; mob tridents can't be picked up
+          if (!e.item || (e.loyalty > 0 && e.ownerUuid !== p.uuid)) continue;
+          if (e.pickup) {
+            const rem = p.inventory.add(e.item);
+            if (rem) continue;
+          }
+          e.remove();
+          this.server.broadcastNear(p.dim, e.x, e.y, e.z, 32, { t: 'take_item', item: e.id, by: p.id });
+          this.server.playSound(p.dim, 'pop', e.x, e.y, e.z, 0.2, 1.8);
+          continue;
+        }
+        if (e.kind !== 'arrow') continue;
         if (e.pickup && p.gamemode !== 'creative') {
-          const rem = p.inventory.add(stackOf('arrow', 1));
+          const rem = p.inventory.add(e.item ? cloneStack(e.item) : stackOf('arrow', 1));
           if (rem) continue;
         }
         e.remove();

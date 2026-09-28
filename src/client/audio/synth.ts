@@ -384,6 +384,11 @@ const EFFECTS: Record<string, { dur: number; recipe: Recipe }> = {
   'attack.crit': { dur: 0.3, recipe: (s) => (s.noise({ dur: 0.25, gain: 0.8, decay: 0.05, lp: 4000, hp: 600 }), s.bell({ f: 1500, ratios: [1, 1.5], gain: 0.25, decay: 0.07, dur: 0.25 })) },
   'attack.sweep': { dur: 0.35, recipe: (s) => s.noise({ dur: 0.3, gain: 0.8, attack: 0.05, decay: 0.08, bp: [1200, 1] }) },
   'shield.block': { dur: 0.3, recipe: (s) => s.knock({ f: 210, gain: 1, decay: 0.05 }) },
+  'shield.break': { dur: 0.5, recipe: (s) => (s.knock({ f: 160, gain: 1, decay: 0.07 }), s.noise({ start: 0.02, dur: 0.4, gain: 0.6, decay: 0.1, lp: 3000, hp: 300, grain: 3 })) },
+  'trident.throw': { dur: 0.5, recipe: (s) => (s.noise({ dur: 0.45, gain: 0.7, attack: 0.03, decay: 0.12, bp: [900, 1.2] }), s.tone({ dur: 0.3, gain: 0.3, f0: 600, f1: 300, wave: 'tri', decay: 0.1 })) },
+  'trident.hit': { dur: 0.35, recipe: (s) => (s.knock({ f: 260, gain: 0.9, decay: 0.04 }), s.bell({ f: 1400, ratios: [1, 2.3], gain: 0.2, decay: 0.08, dur: 0.3 })) },
+  'trident.hit_ground': { dur: 0.3, recipe: (s) => s.knock({ f: 320, gain: 0.8, decay: 0.03 }) },
+  'trident.return': { dur: 0.8, recipe: (s) => (s.tone({ dur: 0.7, gain: 0.4, f0: 300, f1: 900, wave: 'tri', decay: 0.3, vibrato: 0.03, vibratoRate: 12 }), s.noise({ dur: 0.6, gain: 0.25, attack: 0.1, decay: 0.2, bp: [2400, 3] })) },
   'portal.ambient': { dur: 3, recipe: (s) => (s.tone({ dur: 3, gain: 0.3, f0: 90, f1: 110, wave: 'saw', vibrato: 0.04, vibratoRate: 3, lp: 600, decay: 3 }), s.noise({ dur: 3, gain: 0.2, attack: 0.5, decay: 2, bp: [700, 3] })) },
   'portal.travel': {
     dur: 3.5,

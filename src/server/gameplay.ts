@@ -39,7 +39,7 @@ export function installGameplay(server: GameServer): void {
   mobs.onBossDeath = (m, killer) => {
     if (m.type === 'ender_dragon') end.fight.onDeath(m, killer);
   };
-  h.releaseItem = (p, stack, ticks) => mobs.releaseBow(p, stack, ticks);
+  h.releaseItem = (p, stack, ticks, slot) => mobs.releaseBow(p, stack, ticks, slot);
   h.igniteTnt = (dim, x, y, z) => mobs.igniteTnt(dim, x, y, z);
   it.explode = (dim, x, y, z, power, fire, source) => mobs.explode(dim, x, y, z, power, fire, source);
   const portals = new Portals(server);

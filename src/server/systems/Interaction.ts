@@ -55,7 +55,7 @@ export class Interaction {
     hurtEntity?: (e: Entity, amount: number, source: string, attacker: Entity | null) => void;
     useItem?: (p: ServerPlayer, stack: ItemStack, hand: 0 | 1) => boolean;
     useItemOnBlock?: (p: ServerPlayer, stack: ItemStack, x: number, y: number, z: number, face: number) => boolean;
-    releaseItem?: (p: ServerPlayer, stack: ItemStack, ticks: number) => void;
+    releaseItem?: (p: ServerPlayer, stack: ItemStack, ticks: number, slot: number) => void;
     useBlock?: (p: ServerPlayer, x: number, y: number, z: number, state: number) => boolean;
     restore?: (dim: Dimension, data: Record<string, unknown>) => Entity | null;
     onDimension?: (p: ServerPlayer, dim: string) => void;
@@ -642,7 +642,7 @@ export class Interaction {
       if (u) {
         this.using.delete(p);
         const held = p.inventory.get(u.slot);
-        if (held && held.id === u.item && u.kind === 'bow') this.hooks.releaseItem?.(p, held, this.server.tickNo - u.start);
+        if (held && held.id === u.item && u.kind === 'bow') this.hooks.releaseItem?.(p, held, this.server.tickNo - u.start, u.slot);
       }
       return;
     }
@@ -663,6 +663,7 @@ export class Interaction {
       return;
     }
     if (def.use === 'shield') {
+      if (this.server.tickNo < p.shieldDownUntil) return;
       this.using.set(p, { slot: hand, hand: m.hand, item: stack.id, start: this.server.tickNo, duration: 72000, kind: 'block' });
       return;
     }
@@ -688,6 +689,11 @@ export class Interaction {
 
   isUsing(p: ServerPlayer): UsingState | undefined {
     return this.using.get(p);
+  }
+
+  /** Ends any item use in progress (shield knocked aside, dismounting...). */
+  stopUsing(p: ServerPlayer): void {
+    this.using.delete(p);
   }
 
   private tickUsing(p: ServerPlayer): void {

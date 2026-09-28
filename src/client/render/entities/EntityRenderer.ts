@@ -290,6 +290,7 @@ export class EntityRenderer {
 
   remove(id: number): void {
     const v = this.visuals.get(id);
+    this.glowing.delete(id);
     if (!v) return;
     this.group.remove(v.object);
     v.dispose();
@@ -307,11 +308,28 @@ export class EntityRenderer {
     for (const e of entities) {
       const v = this.visuals.get(e.id);
       if (!v) continue;
-      v.setBrightness(lightAt(e.x, e.y + 0.5, e.z));
+      const glowing = e.meta.glowing === true;
+      v.setBrightness(glowing ? 1 : lightAt(e.x, e.y + 0.5, e.z));
       v.update(e, alpha, time);
       if (v.nameTag) v.nameTag.visible = !(e.meta.sneak === true);
+      if (glowing !== this.glowing.has(e.id)) this.setGlowing(e.id, v, glowing);
     }
     void this.world;
+  }
+
+  /** Entity ids currently drawn through walls (the Glowing effect). */
+  private readonly glowing = new Set<number>();
+
+  /** Glowing entities are drawn over the terrain so they can be spotted behind walls. */
+  private setGlowing(id: number, v: EntityVisual, on: boolean): void {
+    if (on) this.glowing.add(id);
+    else this.glowing.delete(id);
+    v.object.traverse((o) => {
+      const mat = (o as THREE.Mesh).material as THREE.Material | THREE.Material[] | undefined;
+      if (!mat) return;
+      for (const m of Array.isArray(mat) ? mat : [mat]) m.depthTest = !on;
+      o.renderOrder = on ? 8 : 0;
+    });
   }
 
   clear(): void {

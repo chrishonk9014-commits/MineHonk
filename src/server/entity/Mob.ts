@@ -490,6 +490,7 @@ export class Mob extends LivingEntity {
     if (this.fuse >= 0) m.fuse = this.fuse;
     if (this.angryAt || this.target) m.angry = true;
     for (const k of ['color', 'sheared', 'size', 'profession', 'variant', 'charged', 'carried', 'phase', 'open']) if (this.data[k] !== undefined) m[k] = this.data[k];
+    if (this.data.glowTicks) m.glowing = true;
     if (this.def.category === 'boss') {
       m.hp = this.health;
       m.maxHp = this.maxHealth;

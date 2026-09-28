@@ -5,7 +5,8 @@
 import type { GameServer } from '../GameServer';
 import type { ServerPlayer } from '../player/ServerPlayer';
 import { ARMOR_SLOTS, ARMOR_START } from '../player/Inventory';
-import { items } from '../../common/registry/items';
+import { items, itemById } from '../../common/registry/items';
+import { LivingEntity } from '../entity/Living';
 import { blocks, STATE_BLOCK, STATE_OPAQUE, STATE_FLUID } from '../../common/registry/blocks';
 import { enchantLevel } from '../../common/game/enchanting';
 import { updateEnvironment } from '../../common/physics/movement';
@@ -50,7 +51,14 @@ export interface DamageInfo {
   kbx?: number;
   kbz?: number;
   knockback?: number;
+  /** A raised shield is knocked aside for this many ticks (axes, the Warden). */
+  disableShield?: number;
+  /** Heavy blows go through a raised shield (it still softens and absorbs part of the hit). */
+  pierceShield?: boolean;
 }
+
+/** Sources a raised shield can stop when facing them. */
+const SHIELDABLE = new Set<DamageSource>(['mob', 'player', 'arrow', 'explosion']);
 
 export class Survival {
   constructor(private readonly server: GameServer) {}
@@ -117,6 +125,10 @@ export class Survival {
       if (p.gamemode === 'god' && !this.server.level.rules.godHazards && ENVIRONMENTAL.has(src)) return 0;
       if ((src === 'fire' || src === 'lava' || src === 'in_fire') && p.effects.has('fire_resistance')) return 0;
     }
+    if (SHIELDABLE.has(src) && this.shieldBlocks(p, amount, info)) {
+      if (!info.pierceShield) return 0;
+      amount *= 0.5;
+    }
     if (src === 'mob' || src === 'arrow' || src === 'explosion') {
       const d = this.server.level.difficulty;
       if (info.attacker?.type !== 'player') amount = d === 'easy' ? Math.min(amount / 2 + 1, amount) : d === 'hard' ? amount * 1.5 : amount;
@@ -172,6 +184,54 @@ export class Survival {
       this.die(p, info);
     }
     return before - p.health;
+  }
+
+  /**
+   * A raised shield (held for at least 5 ticks) stops hits from the front.
+   * Blocking wears the shield; axes and the Warden knock it aside for a while.
+   */
+  private shieldBlocks(p: ServerPlayer, amount: number, info: DamageInfo): boolean {
+    const it = this.server.interaction;
+    const u = it.isUsing(p);
+    if (!u || u.kind !== 'block' || this.server.tickNo - u.start < 5) return false;
+    // Direction the hit comes from: the arrow's flight, else the attacker's position
+    let dx: number;
+    let dz: number;
+    if (info.source === 'arrow' && info.kbx !== undefined && info.kbz !== undefined) {
+      dx = -info.kbx;
+      dz = -info.kbz;
+    } else if (info.attacker) {
+      dx = info.attacker.x - p.x;
+      dz = info.attacker.z - p.z;
+    } else if (info.kbx !== undefined && info.kbz !== undefined) {
+      dx = -info.kbx;
+      dz = -info.kbz;
+    } else return false;
+    const f = Math.sin(p.yaw);
+    const c = Math.cos(p.yaw);
+    // Look direction is (-sin yaw, -cos yaw)
+    if (-f * dx - c * dz <= 0) return false;
+    if (amount >= 3) it.damageStack(p, u.slot, 1 + Math.floor(amount));
+    this.server.playSound(p.dim, 'shield.block', p.x, p.y + 1, p.z, 1, 0.8 + Math.random() * 0.4);
+    if (info.disableShield) this.disableShield(p, info.disableShield);
+    // Melee attackers bounce off
+    const a = info.attacker;
+    if (a && info.source === 'mob' && a instanceof LivingEntity && !info.pierceShield) {
+      const d = Math.hypot(dx, dz) || 1;
+      a.body.vx += (dx / d) * 0.5;
+      a.body.vz += (dz / d) * 0.5;
+    }
+    return true;
+  }
+
+  /** Lowers the player's shield and keeps it down for `ticks`. */
+  disableShield(p: ServerPlayer, ticks: number): void {
+    const it = this.server.interaction;
+    p.shieldDownUntil = Math.max(p.shieldDownUntil, this.server.tickNo + ticks);
+    it.stopUsing(p);
+    const shield = itemById.get('shield');
+    if (shield) p.send({ t: 'cooldown', item: shield.num, ticks });
+    this.server.playSound(p.dim, 'shield.break', p.x, p.y + 1, p.z, 1, 0.9);
   }
 
   private tryTotem(p: ServerPlayer): boolean {
@@ -313,6 +373,7 @@ export class Survival {
       if (e.ticks <= 0) {
         p.effects.delete(id);
         if (id === 'absorption') p.absorption = 0;
+        if (id === 'glowing') p.metaDirty = true;
         p.statsDirty = true;
       }
     }

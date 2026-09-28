@@ -37,12 +37,13 @@ function pixelCanvas(size: number, draw: (g: CanvasRenderingContext2D) => void):
   return c;
 }
 
-registerVisual('arrow', () => {
+registerVisual('arrow', (ent) => {
+  const spectral = ent.meta.spectral === true;
   const group = new THREE.Group();
-  const shaft = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.04, 0.5), new THREE.MeshBasicMaterial({ color: 0x8a6a3a }));
-  const head = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.1), new THREE.MeshBasicMaterial({ color: 0xa0a0a0 }));
+  const shaft = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.04, 0.5), new THREE.MeshBasicMaterial({ color: spectral ? 0xc8a040 : 0x8a6a3a }));
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.1), new THREE.MeshBasicMaterial({ color: spectral ? 0xf8e070 : 0xa0a0a0 }));
   head.position.z = -0.28;
-  const fl = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.02, 0.12), new THREE.MeshBasicMaterial({ color: 0xe8e8e8 }));
+  const fl = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.02, 0.12), new THREE.MeshBasicMaterial({ color: spectral ? 0xfff0a0 : 0xe8e8e8 }));
   fl.position.z = 0.22;
   const fl2 = fl.clone();
   fl2.rotation.z = Math.PI / 2;
@@ -61,6 +62,43 @@ registerVisual('arrow', () => {
     },
     setBrightness(v) {
       mats.forEach((m, i) => m.color.copy(base[i]!).multiplyScalar(v));
+    },
+    dispose() {
+      group.traverse((o) => {
+        if (o instanceof THREE.Mesh) o.geometry.dispose();
+      });
+      mats.forEach((m) => m.dispose());
+    },
+  };
+});
+
+// A thrown trident: shaft with three prongs, pointing along its flight
+registerVisual('trident', (ent) => {
+  const group = new THREE.Group();
+  const shaftMat = new THREE.MeshBasicMaterial({ color: 0x3f7f78 });
+  const metalMat = new THREE.MeshBasicMaterial({ color: ent.meta.glint === true ? 0xb8a0ff : 0x9ec8c0 });
+  const shaft = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.9), shaftMat);
+  shaft.position.z = 0.1;
+  const cross = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.05, 0.05), metalMat);
+  cross.position.z = -0.35;
+  group.add(shaft, cross);
+  for (const x of [-0.09, 0, 0.09]) {
+    const prong = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.04, x === 0 ? 0.24 : 0.18), metalMat);
+    prong.position.set(x, 0, x === 0 ? -0.48 : -0.45);
+    group.add(prong);
+  }
+  const mats = [shaftMat, metalMat];
+  const base = mats.map((m) => m.color.clone());
+  return {
+    object: group,
+    update(e: ClientEntity, alpha) {
+      const [x, y, z] = e.lerp(alpha);
+      group.position.set(x, y + 0.1, z);
+      group.rotation.order = 'YXZ';
+      group.rotation.set(-e.pitch, e.yaw, 0);
+    },
+    setBrightness(v) {
+      mats.forEach((m, i) => m.color.copy(base[i]!).multiplyScalar(Math.max(v, 0.3)));
     },
     dispose() {
       group.traverse((o) => {

@@ -155,8 +155,9 @@ add({ id: 'water_bucket', name: 'Water Bucket', maxStack: 1, use: 'water_bucket'
 add({ id: 'lava_bucket', name: 'Lava Bucket', maxStack: 1, use: 'lava_bucket', fuel: 20000, creative: 'tools' });
 add({ id: 'milk_bucket', name: 'Milk Bucket', maxStack: 1, use: 'milk_bucket', food: { hunger: 0, saturation: 0, alwaysEdible: true, special: 'milk', remainder: 'bucket' }, creative: 'food' });
 add({ id: 'compass', name: 'Compass', use: 'compass', creative: 'tools' });
-add({ id: 'clock', name: 'Clock', creative: 'tools' });
-add({ id: 'spyglass', name: 'Spyglass', maxStack: 1, creative: 'tools' });
+add({ id: 'recovery_compass', name: 'Recovery Compass', use: 'recovery_compass', rarity: 'uncommon', creative: 'tools' });
+add({ id: 'clock', name: 'Clock', use: 'clock', creative: 'tools' });
+add({ id: 'spyglass', name: 'Spyglass', maxStack: 1, use: 'spyglass', creative: 'tools' });
 add({ id: 'ender_pearl', name: 'Ender Pearl', maxStack: 16, use: 'ender_pearl', creative: 'tools' });
 add({ id: 'ender_eye', name: 'Eye of Ender', use: 'ender_eye', creative: 'tools' });
 add({ id: 'end_crystal', name: 'End Crystal', creative: 'tools', rarity: 'rare' });
@@ -172,8 +173,18 @@ add({ id: 'name_tag', name: 'Name Tag', creative: 'tools' });
 add({ id: 'saddle', name: 'Saddle', maxStack: 1, creative: 'tools' });
 add({ id: 'lead', name: 'Lead', creative: 'tools' });
 add({ id: 'firework_rocket', name: 'Firework Rocket', use: 'firework', creative: 'tools' });
-for (const d of ['disc_meadow', 'disc_deepcave', 'disc_overflow']) {
-  add({ id: 'music_' + d, name: 'Music Disc', maxStack: 1, use: 'music_disc', rarity: 'rare', creative: 'tools', data: { track: d } });
+/** Music discs: each plays its own procedurally composed piece in a jukebox. */
+export const MUSIC_DISCS: [string, string][] = [
+  ['meadow', 'Meadow'],
+  ['deepcave', 'Deep Cave'],
+  ['overflow', 'Overflow'],
+  ['ember', 'Ember'],
+  ['drift', 'Drift'],
+  ['skyward', 'Skyward'],
+  ['echo', 'Echo'],
+];
+for (const [track, title] of MUSIC_DISCS) {
+  add({ id: 'music_disc_' + track, name: `Music Disc - ${title}`, maxStack: 1, use: 'music_disc', rarity: 'rare', creative: 'tools', data: { track } });
 }
 
 // ---------------------------------------------------------------------------

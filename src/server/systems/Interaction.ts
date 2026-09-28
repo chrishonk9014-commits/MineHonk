@@ -343,9 +343,11 @@ export class Interaction {
         return false;
       }
       case 'jukebox':
-        return false;
+        return !!this.server.gadgets?.useJukebox(p, x, y, z, state);
       case 'respawn_anchor':
-        return false;
+        return !!this.server.gadgets?.useRespawnAnchor(p, x, y, z, state);
+      case 'bell':
+        return !!this.server.gadgets?.ringBell(p, x, y, z);
       case 'enchanting':
       case 'anvil':
       case 'brewing':
@@ -382,7 +384,7 @@ export class Interaction {
       this.server.interaction.explode?.(dim, x + 0.5, y + 0.5, z + 0.5, 5, true, null);
       return true;
     }
-    p.spawnPoint = { dim: dim.id, x: x + 0.5, y: y + 0.6, z: z + 0.5, forced: false };
+    p.spawnPoint = { dim: dim.id, x: x + 0.5, y: y + 0.6, z: z + 0.5, forced: false, block: [x, y, z] };
     p.send({ t: 'chat', text: 'Respawn point set', kind: 'system' });
     if (!this.server.admin.blockMarked(dim, x, y, z)) this.grant(p, 'sleep_bed');
     const dt = this.server.level.dayTime;
@@ -1042,13 +1044,14 @@ export class Interaction {
   /** Moves a player to their respawn point (bed/anchor) or the world spawn. */
   sendToSpawn(p: ServerPlayer): void {
     const level = this.server.level;
+    // A bed or anchor that was broken (or an anchor without charge) no longer holds the spawn
+    if (p.spawnPoint?.block && !this.server.gadgets?.claimSpawnBlock(p)) {
+      p.spawnPoint = null;
+      p.send({ t: 'chat', text: 'You have no home bed or charged respawn anchor, or it was obstructed', kind: 'system' });
+    }
     let dimId = p.spawnPoint?.dim ?? 'overworld';
     let pos: [number, number, number] | null = null;
-    if (p.spawnPoint) {
-      const d = this.server.dim(p.spawnPoint.dim);
-      pos = [p.spawnPoint.x, p.spawnPoint.y, p.spawnPoint.z];
-      void d;
-    }
+    if (p.spawnPoint) pos = [p.spawnPoint.x, p.spawnPoint.y, p.spawnPoint.z];
     if (!pos) {
       const s = level.spawn ?? [0, 80, 0];
       const r = level.rules.spawnRadius;

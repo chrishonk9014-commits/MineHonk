@@ -147,7 +147,11 @@ export type S2C =
   /** An item can't be used for a while (knocked-aside shield, pearl cooldown). */
   | { t: 'cooldown'; item: number; ticks: number }
   /** A firework rocket pushes the gliding player for `ticks`. */
-  | { t: 'boost'; ticks: number };
+  | { t: 'boost'; ticks: number }
+  /** A jukebox starts (track) or stops (null) playing. */
+  | { t: 'record'; x: number; y: number; z: number; track: string | null }
+  /** Where the player last died (Recovery Compass), or null. */
+  | { t: 'death_pos'; pos: { dim: DimensionId; x: number; y: number; z: number } | null };
 
 export interface AbilitiesMsg {
   mayFly: boolean;

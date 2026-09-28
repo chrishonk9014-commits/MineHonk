@@ -238,3 +238,78 @@ describe('fishing', () => {
     expect(player.inventory.get(player.selectedSlot)!.damage).toBe(1);
   });
 });
+
+describe('jukebox, respawn anchor, bell and compasses', () => {
+  it('plays a disc for nearby players and ejects it again', async () => {
+    const { server } = await makeServer();
+    const { player, conn } = await join(server);
+    const y = arena(player);
+    const jx = Math.floor(player.x) + 2;
+    const jz = Math.floor(player.z);
+    player.dim.setBlock(jx, y, jz, S('jukebox'));
+    player.inventory.set(player.selectedSlot, stackOf('music_disc_echo', 1));
+    server.handle(conn, { t: 'use_on', x: jx, y, z: jz, face: 1, hx: 0.5, hy: 1, hz: 0.5, hand: 0, yaw: 0, pitch: 0.5, seq: 1 });
+    expect(player.inventory.get(player.selectedSlot)).toBeNull();
+    tick(server, 21);
+    expect(conn.of('record').some((m) => m.track === 'echo')).toBe(true);
+    server.handle(conn, { t: 'use_on', x: jx, y, z: jz, face: 1, hx: 0.5, hy: 1, hz: 0.5, hand: 0, yaw: 0, pitch: 0.5, seq: 2 });
+    expect(conn.last('record')!.track).toBeNull();
+    expect([...player.dim.entities.values()].some((e) => e.type === 'item')).toBe(true);
+  });
+
+  it('a charged respawn anchor holds the spawn in the Nether and explodes elsewhere', async () => {
+    const { server } = await makeServer();
+    const { player, conn } = await join(server);
+    const y = arena(player);
+    const ax = Math.floor(player.x) + 3;
+    const az = Math.floor(player.z);
+    player.dim.setBlock(ax, y, az, S('respawn_anchor'));
+    player.inventory.set(player.selectedSlot, stackOf('glowstone', 4));
+    server.handle(conn, { t: 'use_on', x: ax, y, z: az, face: 1, hx: 0.5, hy: 1, hz: 0.5, hand: 0, yaw: 0, pitch: 0.5, seq: 1 });
+    expect(player.dim.blockId(ax, y, az)).toBe('respawn_anchor');
+    expect(player.inventory.get(player.selectedSlot)!.count).toBe(3);
+    // Overworld: using it again (without glowstone) blows it up
+    player.inventory.set(player.selectedSlot, null);
+    server.handle(conn, { t: 'use_on', x: ax, y, z: az, face: 1, hx: 0.5, hy: 1, hz: 0.5, hand: 0, yaw: 0, pitch: 0.5, seq: 2 });
+    expect(player.dim.blockId(ax, y, az)).not.toBe('respawn_anchor');
+    expect(player.spawnPoint).toBeNull();
+  });
+
+  it('a bed that is gone no longer holds the spawn', async () => {
+    const { server } = await makeServer();
+    const { player } = await join(server);
+    player.spawnPoint = { dim: 'overworld', x: player.x + 5.5, y: player.y, z: player.z, forced: false, block: [Math.floor(player.x) + 5, Math.floor(player.y), Math.floor(player.z)] };
+    player.dim.setBlock(Math.floor(player.x) + 5, Math.floor(player.y), Math.floor(player.z), 0);
+    expect(server.gadgets!.claimSpawnBlock(player)).toBe(false);
+  });
+
+  it('a bell reveals nearby monsters', async () => {
+    const { server } = await makeServer();
+    const { player, conn } = await join(server);
+    const y = arena(player);
+    const bx = Math.floor(player.x) + 2;
+    const bz = Math.floor(player.z);
+    player.dim.setBlock(bx, y, bz, S('bell'));
+    const z = server.mobs!.spawn(player.dim, 'zombie', player.x + 8, y, player.z)!;
+    server.handle(conn, { t: 'use_on', x: bx, y, z: bz, face: 2, hx: 0.5, hy: 0.5, hz: 0, hand: 0, yaw: 0, pitch: 0, seq: 1 });
+    expect(z.meta().glowing).toBe(true);
+  });
+
+  it('a compass links to a lodestone and remembers where the player died', async () => {
+    const { server } = await makeServer();
+    const { player, conn } = await join(server);
+    const y = arena(player);
+    const lx = Math.floor(player.x) + 2;
+    const lz = Math.floor(player.z);
+    player.dim.setBlock(lx, y, lz, S('lodestone'));
+    player.inventory.set(player.selectedSlot, stackOf('compass', 1));
+    server.handle(conn, { t: 'use_on', x: lx, y, z: lz, face: 1, hx: 0.5, hy: 1, hz: 0.5, hand: 0, yaw: 0, pitch: 0.5, seq: 1 });
+    expect(player.inventory.get(player.selectedSlot)!.tag?.data?.lodestone).toEqual([lx, y, lz]);
+    player.spawnProtection = 0;
+    server.interaction.survival.damage(player, 1000, { source: 'kill' });
+    expect(player.lastDeath).toBeTruthy();
+    expect(conn.last('death_pos')!.pos).toEqual(player.lastDeath);
+    const saved = server.playerData.serialize(player);
+    expect(saved.lastDeath).toEqual(player.lastDeath);
+  });
+});

@@ -286,6 +286,7 @@ export class GameServer {
       spawn: this.level.spawn ?? [0, 64, 0],
     });
     this.sendTime(p);
+    p.send({ t: 'death_pos', pos: p.lastDeath });
     this.interaction.syncInventory(p);
     p.statsDirty = true;
     this.broadcastChat(`${p.name} joined the world`, 'join');

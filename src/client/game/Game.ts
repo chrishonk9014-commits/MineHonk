@@ -18,7 +18,7 @@ import { SignEditor, PlayerList } from '../ui/Overlays';
 import type { Input } from '../input/Input';
 import type { Settings } from '../settings';
 import type { AudioEngine } from '../audio/Audio';
-import { MusicPlayer } from '../audio/Audio';
+import { MusicPlayer, discTitle } from '../audio/Audio';
 import type { Slot, ItemStack } from '../../common/game/itemstack';
 import type { GameMode } from '../../common/game/gamemode';
 import type { DimensionId } from '../../common/data/biomes';
@@ -34,6 +34,7 @@ import { enchantLevel } from '../../common/game/enchanting';
 import type { AdminAction } from '../../common/game/admin';
 import type { AdminReply } from '../ui/AdminPanel';
 import { keyName } from '../ui/Screens';
+import { Navigator, type Instrument } from '../ui/Navigator';
 
 export interface GameHost {
   openPause(): void;
@@ -70,6 +71,15 @@ export class Game {
   readonly interaction: BlockInteraction;
   readonly renderer: WorldRenderer;
   readonly hud = new Hud();
+  /** Compass needles and the clock dial for held instruments. */
+  private readonly navigator = new Navigator();
+  /** Dark vignette with a round view while looking through a spyglass. */
+  private readonly scopeOverlay = el('div', { class: 'spyglass-overlay hidden' });
+  private scoping = false;
+  private scopeZoom = 1;
+  /** World spawn (compasses) and the last death (Recovery Compass). */
+  private worldSpawn: [number, number, number] = [0, 64, 0];
+  private deathPos: { dim: DimensionId; x: number; y: number; z: number } | null = null;
   readonly chat = new Chat();
   readonly entities = new Map<number, ClientEntity>();
   readonly root = el('div', { class: 'layer' });
@@ -172,7 +182,8 @@ export class Game {
       sound: (n, x, y, z, v, p) => this.audio.play(n, x, y, z, v, p),
       swing: () => this.swing(),
     });
-    this.root.append(this.hud.root, this.chat.root, this.chat.input, this.playerList.root);
+    this.root.append(this.scopeOverlay, this.hud.root, this.chat.root, this.chat.input, this.playerList.root);
+    this.hud.root.append(this.navigator.root);
     ui.append(this.root);
     this.chat.onSend = (text) => this.send({ t: 'chat', text });
     this.chat.onClose = () => {
@@ -328,6 +339,7 @@ export class Game {
         this.player.pitch = m.pitch;
         this.time = m.time;
         this.dayTime = m.dayTime;
+        this.worldSpawn = m.spawn;
         this.loadingTerrain = true;
         this.loadingSince = performance.now();
         this.host.setLoading('Loading terrain...');
@@ -588,6 +600,15 @@ export class Game {
       }
       case 'use_result':
         break;
+      case 'record':
+        if (m.track) {
+          this.audio.discs.play(m.x, m.y, m.z, m.track);
+          this.hud.showTitle('', `Now Playing: MineHonk - ${discTitle(m.track)}`, 60);
+        } else this.audio.discs.stop(m.x, m.y, m.z);
+        break;
+      case 'death_pos':
+        this.deathPos = m.pos;
+        break;
       case 'boost':
         if (this.player.gliding) this.player.boostTicks = Math.max(this.player.boostTicks, m.ticks);
         break;
@@ -638,6 +659,7 @@ export class Game {
 
   private clearWorld(): void {
     this.world.clear();
+    this.audio.discs.stopAll();
     for (const id of [...this.entities.keys()]) this.removeEntity(id);
     this.otherDigs.clear();
     this.blockEntities.clear();
@@ -801,7 +823,8 @@ export class Game {
       if (!useHeld && this.usingItem) {
         this.usingItem = false;
         this.renderer.hand.using = 0;
-        this.send({ t: 'use', hand: 0, action: 'release' });
+        if (this.scoping) this.scoping = false;
+        else this.send({ t: 'use', hand: 0, action: 'release' });
       }
       if (!useHeld) this.useRepeat = 0;
     } else if (this.interaction.dig) this.interaction.tickMining(null, false, false, 0, 0, false);
@@ -838,7 +861,28 @@ export class Game {
       },
       this.tickNo,
     );
+    this.navigator.update(this.instrument(), this.player.body.x, this.player.body.z, this.player.yaw, this.tickNo);
     this.checkLoading();
+  }
+
+  /** The instrument for the held compass or clock (main hand first). */
+  private instrument(): Instrument | null {
+    for (const st of [this.held(), this.held(1)]) {
+      if (!st) continue;
+      const id = items[st.id]?.id;
+      const overworldLike = this.dimension === 'overworld' || this.dimension === 'farlands';
+      if (id === 'clock') return { kind: 'clock', dayTime: overworldLike ? this.dayTime : null };
+      if (id === 'compass') {
+        const lode = st.tag?.data?.lodestone as number[] | undefined;
+        if (lode) return { kind: 'needle', target: st.tag?.data?.dim === this.dimension ? [lode[0]! + 0.5, lode[2]! + 0.5] : null, colors: { face: '#d8d8d8', rim: '#6a6a6a', tip: '#c02020' } };
+        return { kind: 'needle', target: this.dimension === 'overworld' ? [this.worldSpawn[0] + 0.5, this.worldSpawn[2] + 0.5] : null, colors: { face: '#d8d8d8', rim: '#8a8a8a', tip: '#d02020' } };
+      }
+      if (id === 'recovery_compass') {
+        const d = this.deathPos;
+        return { kind: 'needle', target: d && d.dim === this.dimension ? [d.x + 0.5, d.z + 0.5] : null, colors: { face: '#0e2a30', rim: '#1f4a52', tip: '#3ae0d0' } };
+      }
+    }
+    return null;
   }
 
   private wasForward = false;
@@ -1087,6 +1131,7 @@ export class Game {
     if (i < 0 || i > 8 || i === this.selected) return;
     this.selected = i;
     this.send({ t: 'hotbar', slot: i });
+    this.scoping = false;
     if (this.usingItem) {
       this.usingItem = false;
       this.renderer.hand.using = 0;
@@ -1156,6 +1201,12 @@ export class Game {
     }
     const def = items[held.id]!.def;
     if (this.onCooldown(held.id)) return;
+    if (def.use === 'spyglass') {
+      this.usingItem = true;
+      this.scoping = true;
+      this.audio.play('spyglass.use', NaN, NaN, NaN, 0.6, 1, 'ui');
+      return;
+    }
     this.send({ t: 'use', hand: 0, action: 'start' });
     const overTime = !!def.food || def.use === 'bow' || def.use === 'shield' || def.use === 'crossbow' || def.use === 'trident' || def.use === 'potion';
     if (overTime) {
@@ -1215,13 +1266,15 @@ export class Game {
       if (hit) camDist = Math.max(0.3, Math.hypot(hit.px - ex, hit.py - ey, hit.pz - ez) - 0.3);
     }
     const nv = this.effectLevel('night_vision') > 0 ? 1 : 0;
+    this.scopeZoom += ((this.scoping ? 0.1 : 1) - this.scopeZoom) * Math.min(1, dt / 60);
+    this.scopeOverlay.classList.toggle('hidden', !this.scoping);
     const fs: FrameState = {
       x: ex,
       y: ey,
       z: ez,
       yaw: p.yaw,
       pitch: p.pitch,
-      fovMod: p.fovMod,
+      fovMod: p.fovMod * this.scopeZoom,
       bobPhase: walk,
       bobAmount: bob,
       dayTime: this.dayTime + alpha,
@@ -1235,7 +1288,7 @@ export class Game {
       target: t && !this.hudHidden ? { x: t.x, y: t.y, z: t.z, state: t.state } : null,
       crack,
       thirdPerson: this.thirdPerson,
-      showHand: !this.hudHidden && p.gamemode !== 'spectator',
+      showHand: !this.hudHidden && p.gamemode !== 'spectator' && !this.scoping,
       nightVision: nv,
       flash: this.flash,
       shake: this.shake,

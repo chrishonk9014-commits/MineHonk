@@ -113,7 +113,8 @@ export type BlockEntityKind =
   | 'jukebox'
   | 'campfire'
   | 'barrel'
-  | 'ender_chest';
+  | 'ender_chest'
+  | 'beacon';
 
 /** What happens when the player uses (right clicks) the block. */
 export type InteractKind =
@@ -140,7 +141,11 @@ export type InteractKind =
   | 'cake'
   | 'composter'
   | 'respawn_anchor'
-  | 'stonecutter';
+  | 'stonecutter'
+  | 'bell'
+  | 'beacon'
+  | 'cauldron'
+  | 'flower_pot';
 
 export type TintKind = 'none' | 'grass' | 'foliage' | 'water' | 'birch' | 'spruce' | 'stem' | 'lily';
 

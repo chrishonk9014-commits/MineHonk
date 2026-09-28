@@ -53,8 +53,12 @@ export class PlayerData {
     const sp = raw.spawnPoint as Record<string, unknown> | undefined;
     if (sp && DIMS.includes(sp.dim as DimensionId) && [sp.x, sp.y, sp.z].every((v) => typeof v === 'number')) {
       p.spawnPoint = { dim: sp.dim as DimensionId, x: sp.x as number, y: sp.y as number, z: sp.z as number, forced: !!sp.forced };
+      const bl = sp.block;
+      if (Array.isArray(bl) && bl.length === 3 && bl.every((v) => Number.isInteger(v))) p.spawnPoint.block = bl as [number, number, number];
     }
     (p as { fireTicks?: number }).fireTicks = num(raw.fire, 0);
+    const ld = raw.lastDeath as Record<string, unknown> | undefined;
+    if (ld && DIMS.includes(ld.dim as DimensionId) && [ld.x, ld.y, ld.z].every((v) => typeof v === 'number' && Number.isFinite(v))) p.lastDeath = { dim: ld.dim as DimensionId, x: ld.x as number, y: ld.y as number, z: ld.z as number };
     p.cheat = loadAdminState(raw.cheat);
     this.server.interaction.survival.updateArmor(p);
     return { found: true, dim };
@@ -83,6 +87,7 @@ export class PlayerData {
       stats: p.statistics,
       effects: [...p.effects.entries()].map(([id, e]) => ({ id, amp: e.amp, ticks: e.ticks })),
       spawnPoint: p.spawnPoint,
+      lastDeath: p.lastDeath ?? undefined,
       fire: (p as { fireTicks?: number }).fireTicks ?? 0,
       cheat: p.cheat,
       savedAt: Date.now(),

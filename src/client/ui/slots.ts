@@ -54,6 +54,7 @@ export function itemDisplayName(stack: Slot): string {
   if (!stack) return '';
   if (stack.tag?.name) return stack.tag.name;
   const it = items[stack.id];
+  if (it?.id === 'compass' && stack.tag?.data?.lodestone) return 'Lodestone Compass';
   if (stack.tag?.potion && (it?.id === 'potion' || it?.id === 'splash_potion')) {
     const p = POTION_BY_ID.get(stack.tag.potion);
     if (p) return (it.id === 'splash_potion' ? 'Splash ' : '') + p.name;

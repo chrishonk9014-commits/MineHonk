@@ -1455,6 +1455,7 @@ export function registerItems(r: PainterRegistry): void {
     paintMask(t, 'compass', { ...matPal(hex(0x5a2a7a)), r: hex(0xff40ff), w: hex(0x00ffff) });
     glitchify(t);
   });
+  r.add('recovery_compass', (t) => paintMask(t, 'compass', { ...matPal(hex(0x1f4a52)), r: hex(0x3ae0d0), w: hex(0x0a1418) }));
   r.add('clock', (t) => paintMask(t, 'clock', { ...matPal(hex(0xf0c040)), w: hex(0x2a2a2a) }));
   r.add('spyglass', (t) => paintMask(t, 'spyglass', matPal(hex(0xc87a4a))));
   r.add('bow', (t) => paintMask(t, 'bow', { s: hex(0xe0e0e0) }));
@@ -1486,6 +1487,10 @@ export function registerItems(r: PainterRegistry): void {
   disc('music_disc_meadow', 0x4ac050);
   disc('music_disc_deepcave', 0x2a6ad0);
   disc('music_disc_overflow', 0xd040ff);
+  disc('music_disc_ember', 0xf06a20);
+  disc('music_disc_drift', 0xc8b0f0);
+  disc('music_disc_skyward', 0x7ad0ff);
+  disc('music_disc_echo', 0x1ab0b8);
   r.add('bowl', (t) => paintMask(t, 'bowl', { o: hex(0x3a2a14), s: hex(0x5a4222), k: hex(0x6a4a24), c: hex(0x9a7a44), b: hex(0x7a5a34) }));
   const stew = (n: string, c: RGB) => r.add(n, (t) => paintMask(t, 'bowl', { o: hex(0x3a2a14), s: c, k: hex(0x6a4a24), c: hex(0x9a7a44), b: hex(0x7a5a34) }));
   stew('mushroom_stew', hex(0xc8a070));

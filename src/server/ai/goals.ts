@@ -155,7 +155,8 @@ export class PanicGoal implements Goal {
   flags: GoalFlag[] = ['move'];
   constructor(private readonly speed = 1.8) {}
   canUse(m: Mob): boolean {
-    if (m.dim.server.tickNo - m.lastHurtTick > 100 && m.fireTicks <= 0) return false;
+    // Hurt, burning, or alarmed by a ringing bell
+    if (m.dim.server.tickNo - m.lastHurtTick > 100 && m.fireTicks <= 0 && !m.data.alarmTicks) return false;
     const t = m.pathfinder.randomTarget(m.x, m.y, m.z, 6, 3, m.pathOptions(), () => m.rng.next());
     return !!t && m.navigateTo(t.x + 0.5, t.y, t.z + 0.5, this.speed);
   }

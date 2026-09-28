@@ -300,6 +300,7 @@ export class MobSystem {
         break;
     }
     if (m.data.slowTicks && (m.data.slowTicks = (m.data.slowTicks as number) - 1) <= 0) delete m.data.slowTicks;
+    if (m.data.alarmTicks && (m.data.alarmTicks = (m.data.alarmTicks as number) - 1) <= 0) delete m.data.alarmTicks;
     if (m.data.glowTicks && (m.data.glowTicks = (m.data.glowTicks as number) - 1) <= 0) {
       delete m.data.glowTicks;
       m.metaDirty = true;

@@ -504,6 +504,8 @@ export class Survival {
     this.server.broadcastChat(msg, 'death');
     this.server.broadcastNear(p.dim, p.x, p.y, p.z, 64, { t: 'anim', id: p.id, anim: 'death' }, p);
     p.addStat('deaths');
+    p.lastDeath = { dim: p.dim.id, x: Math.floor(p.x), y: Math.floor(p.y), z: Math.floor(p.z) };
+    p.send({ t: 'death_pos', pos: p.lastDeath });
     const level = this.server.level;
     const score = p.xpTotal;
     if (!level.rules.keepInventory) {

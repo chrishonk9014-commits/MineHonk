@@ -91,7 +91,8 @@ export class ServerPlayer extends Entity {
   msgBudget = 0;
   chatBudget = 0;
 
-  spawnPoint: { dim: DimensionId; x: number; y: number; z: number; forced: boolean } | null = null;
+  /** Bed or respawn anchor spawn; `block` is the bed/anchor it depends on. */
+  spawnPoint: { dim: DimensionId; x: number; y: number; z: number; forced: boolean; block?: [number, number, number] } | null = null;
   readonly achievements = new Set<string>();
   /** Cheat bookkeeping that keeps admin actions advancement-neutral. */
   cheat: AdminPlayerState = newAdminState();
@@ -113,6 +114,8 @@ export class ServerPlayer extends Entity {
   glideDirZ = 0;
   /** Tick until which a firework rocket may push the player faster. */
   boostUntil = 0;
+  /** Where the player last died (the Recovery Compass points there). */
+  lastDeath: { dim: DimensionId; x: number; y: number; z: number } | null = null;
 
   constructor(
     readonly conn: Connection,

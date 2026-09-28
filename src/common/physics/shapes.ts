@@ -195,6 +195,18 @@ function computeShape(state: number, collision: boolean): Shape {
           return [box(0, 0, 0, 16, 8, 16)];
         case 'chorus_plant':
           return [box(3, 3, 3, 13, 13, 13)];
+        case 'candle':
+          return [box(4, 0, 4, 12, 7, 12)];
+        case 'conduit':
+          return [box(5, 5, 5, 11, 11, 11)];
+        case 'sculk_shrieker':
+          return [box(0, 0, 0, 16, 8, 16)];
+        case 'big_dripleaf': {
+          // The leaf gives way once it tilts all the way
+          const tilt = getProp(state, 'tilt');
+          if (collision && tilt === 'full') return EMPTY;
+          return [box(0, 11, 0, 16, 15, 16)];
+        }
         default:
           return FULL;
       }

@@ -152,6 +152,22 @@ const ORE_RULES: OreRule[] = [
   { block: 'sunstone_ore', size: 5, count: 3, minY: 30, maxY: 110, categories: ['desert', 'badlands', 'savanna'] },
 ];
 
+/** V2 ore table: follows the thicker deepslate layer and the bigger caves. */
+const ORE_RULES_V2: OreRule[] = ORE_RULES.map((r) => {
+  switch (r.block) {
+    case 'tuff':
+      return { ...r, count: 3, maxY: 26 };
+    case 'diamond_ore':
+      return { ...r, count: 7, maxY: 22 };
+    case 'redstone_ore':
+      return { ...r, count: 9, maxY: 24 };
+    case 'lapis_ore':
+      return r.categories ? r : { ...r, count: 3, maxY: 40 };
+    default:
+      return r;
+  }
+});
+
 let ORE_STATES: Map<string, number> | undefined;
 function oreState(id: string): number {
   ORE_STATES ??= new Map();
@@ -229,13 +245,21 @@ function oreHost(): Uint8Array {
 }
 
 export function ores(v: DecorView, seed: number, ocx: number, ocz: number): void {
+  oresWith(ORE_RULES, v, seed, ocx, ocz);
+}
+
+export function oresV2(v: DecorView, seed: number, ocx: number, ocz: number): void {
+  oresWith(ORE_RULES_V2, v, seed, ocx, ocz);
+}
+
+function oresWith(rules: OreRule[], v: DecorView, seed: number, ocx: number, ocz: number): void {
   const bx = ocx << 4;
   const bz = ocz << 4;
   // Veins reach at most ~6 blocks from their origin chunk
   if (bx - 8 >= v.bx + 16 || bx + 24 <= v.bx || bz - 8 >= v.bz + 16 || bz + 24 <= v.bz) return;
   const category = biomeOf(v.biome(bx + 8, bz + 8)).category;
   const host = oreHost();
-  ORE_RULES.forEach((rule, ri) => {
+  rules.forEach((rule, ri) => {
     if (rule.categories && !rule.categories.includes(category)) return;
     const rng = new Random(hashInts(seed, ocx, ocz, 0x0e5 + ri));
     const main = oreState(rule.block);
@@ -494,6 +518,15 @@ export function dungeons(v: DecorView, seed: number, ocx: number, ocz: number): 
 // Geodes
 // ---------------------------------------------------------------------------
 export function geodes(v: DecorView, seed: number, ocx: number, ocz: number): void {
+  geodesWith(false, v, seed, ocx, ocz);
+}
+
+/** V2: geodes only form inside rock, so a cave cuts them open instead of leaving a shell in the air. */
+export function geodesV2(v: DecorView, seed: number, ocx: number, ocz: number): void {
+  geodesWith(true, v, seed, ocx, ocz);
+}
+
+function geodesWith(rockOnly: boolean, v: DecorView, seed: number, ocx: number, ocz: number): void {
   const rng = new Random(hashInts(seed, ocx, ocz, 0x6e0d));
   if (!rng.chance(1 / 24)) return;
   const b = states();
@@ -513,7 +546,9 @@ export function geodes(v: DecorView, seed: number, ocx: number, ocz: number): vo
         const n = ((hashInts(seed, wx, wy, wz) & 255) / 255) * 0.4;
         const d = Math.sqrt(x * x + y * y + z * z) + n;
         if (d > r + 2) continue;
-        if (STATE_FLUID[v.proto(wx, wy, wz)]) continue;
+        const here = v.proto(wx, wy, wz);
+        if (STATE_FLUID[here]) continue;
+        if (rockOnly && (here === 0 || here === b.caveAir)) continue;
         let s: number;
         if (d > r + 1.2) s = b.smoothBasalt;
         else if (d > r + 0.4) s = b.calcite;

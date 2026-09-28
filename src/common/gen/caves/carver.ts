@@ -23,13 +23,14 @@ import { Octave2, Octave3, smoothstep } from '../../math/noise';
 import { Random, hashInts } from '../../math/rng';
 import { NoiseGrid } from '../grid';
 import { CaveBiome, type CaveBiomeSource } from './caveBiomes';
+import { S } from '../../registry/blocks';
 
 /** Everything at or below this height that is carved becomes lava. */
-export const LAVA_SEA = 9;
+export const LAVA_SEA = 7;
 /** Water level shared by all underground rivers. */
 export const RIVER_LEVEL = 24;
 /** Lava caves flood their lowest chambers up to here. */
-export const LAVA_LAKE = 15;
+export const LAVA_LAKE = 13;
 /** Carving happens below this height. */
 const H = 136;
 /** Cave biome cells: 4x4 per chunk horizontally, 4 blocks tall. */
@@ -72,7 +73,13 @@ interface Ravine {
   maxZ: number;
 }
 
+let VEIN_STATES: Record<string, number> | undefined;
+
 const MEGA_REGION = 288;
+/** Noodle tunnels stay below this height. */
+const NOODLE_TOP = 72;
+/** Large ore veins stay below this height. */
+const VEIN_TOP = 60;
 const SHAFT_CELL = 44;
 const RAVINE_REGION = 112;
 const AQUIFER_REGION = 72;
@@ -92,9 +99,14 @@ export class CaveCarver {
   private readonly riverRoof: Octave2;
   private readonly warpX: Octave2;
   private readonly warpZ: Octave2;
+  private readonly veinToggle: Octave3;
+  private readonly veinA: Octave3;
+  private readonly veinB: Octave3;
+  private readonly veinGrids = [new NoiseGrid(4, 4, VEIN_TOP), new NoiseGrid(4, 4, VEIN_TOP), new NoiseGrid(4, 4, VEIN_TOP)];
+  private readonly veinVals = [new Float32Array(16 * 16 * VEIN_TOP), new Float32Array(16 * 16 * VEIN_TOP), new Float32Array(16 * 16 * VEIN_TOP)];
 
-  private readonly grids = Array.from({ length: 6 }, () => new NoiseGrid(4, 4, H));
-  private readonly vals = Array.from({ length: 6 }, () => new Float32Array(16 * 16 * H));
+  private readonly grids = [0, 1, 2, 3, 4, 5].map((i) => new NoiseGrid(4, 4, i < 4 ? H : NOODLE_TOP));
+  private readonly vals = [0, 1, 2, 3, 4, 5].map((i) => new Float32Array(16 * 16 * (i < 4 ? H : NOODLE_TOP)));
   private readonly tops = new Int16Array(256);
 
   private readonly megaCache = new Map<number, Mega | null>();
@@ -121,6 +133,9 @@ export class CaveCarver {
     this.riverRoof = new Octave2(r(12), 1, 30);
     this.warpX = new Octave2(r(13), 1, 60);
     this.warpZ = new Octave2(r(14), 1, 60);
+    this.veinToggle = new Octave3(r(15), 1, 90, 70);
+    this.veinA = new Octave3(r(16), 1, 30, 22);
+    this.veinB = new Octave3(r(17), 1, 30, 22);
   }
 
   // ------------------------------------------------------------------ regional features
@@ -273,15 +288,15 @@ export class CaveCarver {
     ga.fill(bx, bz, 4, yMax, (x, y, z) => this.spagA.sample(x, y, z), 1);
     gb.fill(bx, bz, 4, yMax, (x, y, z) => this.spagB.sample(x, y, z), 1);
     gw.fill(bx, bz, 4, yMax, (x, y, z) => this.spagWidth.sample(x, y, z), 0);
-    gna.fill(bx, bz, 4, Math.min(yMax, 72), (x, y, z) => this.noodleA.sample(x, y, z), 1);
-    gnb.fill(bx, bz, 4, Math.min(yMax, 72), (x, y, z) => this.noodleB.sample(x, y, z), 1);
+    gna.fill(bx, bz, 4, Math.min(yMax, NOODLE_TOP - 4), (x, y, z) => this.noodleA.sample(x, y, z), 1);
+    gnb.fill(bx, bz, 4, Math.min(yMax, NOODLE_TOP - 4), (x, y, z) => this.noodleB.sample(x, y, z), 1);
     const [vc, va, vb, vw, vna, vnb] = this.vals as [Float32Array, Float32Array, Float32Array, Float32Array, Float32Array, Float32Array];
-    gc.expand(vc);
-    ga.expand(va);
-    gb.expand(vb);
-    gw.expand(vw);
-    gna.expand(vna);
-    gnb.expand(vnb);
+    gc.expand(vc, yMax);
+    ga.expand(va, yMax);
+    gb.expand(vb, yMax);
+    gw.expand(vw, yMax);
+    gna.expand(vna, yMax);
+    gnb.expand(vnb, yMax);
 
     const biomes = this.fillBiomes(chunk, bx, bz, temps, tops);
     chunk.caveBiomes = biomes;
@@ -316,9 +331,10 @@ export class CaveCarver {
         const above = chunk.get(x, top + 1, z);
         const wet = above === st.water || above === st.lava;
         const allowSurface = this.entrance.sample(wx, wz) > 0.2;
-        const pillar = this.pillar.sample(wx, wz);
-        const bigPillar = this.bigPillar.sample(wx, wz);
-        this.aquifer(wx, wz, aq);
+        // Sampled on first need: most columns never carve a pillar or a fluid
+        let pillar = NaN;
+        const bigPillar = megas.length ? this.bigPillar.sample(wx, wz) : 1;
+        let aqReady = false;
 
         // Ravine: distance from this column to the nearest centre line
         let rvFloor = 999;
@@ -353,9 +369,9 @@ export class CaveCarver {
         }
 
         // Underground river channel
-        const rv = Math.abs(this.river.sample(wx, wz));
         const riverW = 0.03;
-        const isRiver = rv < riverW && this.riverMask.sample(wx, wz) > -0.15 && !wet;
+        const rv = top > RIVER_LEVEL + 12 && !wet ? Math.abs(this.river.sample(wx, wz)) : 1;
+        const isRiver = rv < riverW && this.riverMask.sample(wx, wz) > -0.15;
         let riverFloor = 999;
         let riverRoof = -1;
         if (isRiver) {
@@ -388,14 +404,17 @@ export class CaveCarver {
             const nearTop = smoothstep(top - 20, top, y);
             // Cheese caverns grow with depth; stone pillars stand in the bigger ones
             const cheeseT = 0.05 + 0.22 * smoothstep(14, 64, y) + 0.32 * nearTop;
-            if (vc[i]! > cheeseT) carve = pillar < 0.7;
+            if (vc[i]! > cheeseT) {
+              if (pillar !== pillar) pillar = this.pillar.sample(wx, wz);
+              carve = pillar < 0.7;
+            }
             if (!carve) {
               const a = va[i]!;
               const b = vb[i]!;
               const width = 0.005 + 0.005 * (vw[i]! + 0.5);
               carve = a * a + b * b < width * (1 - 0.6 * nearTop * (allowSurface ? 0 : 1));
             }
-            if (!carve && y < 72 && y < top - 12) {
+            if (!carve && y < NOODLE_TOP - 4 && y < top - 12) {
               const a = vna[i]!;
               const b = vnb[i]!;
               carve = a * a + b * b < 0.0014;
@@ -435,6 +454,10 @@ export class CaveCarver {
           if (y <= LAVA_SEA) fill = st.lava;
           else if (river) fill = y <= RIVER_LEVEL ? st.water : st.caveAir;
           else {
+            if (!aqReady) {
+              this.aquifer(wx, wz, aq);
+              aqReady = true;
+            }
             if (aq.barrier >= 0 && y <= aq.barrier) continue;
             const cb = biomes[((y >> 2) * 4 + (z >> 2)) * 4 + (x >> 2)]!;
             if (cb === CaveBiome.Lava && y <= LAVA_LAKE) fill = st.lava;
@@ -454,6 +477,55 @@ export class CaveCarver {
         }
       }
     }
+  }
+
+  /**
+   * Large ore veins: long ribbons where two ridged noises cross. Copper veins
+   * run through granite higher up, iron veins through tuff deep down; both
+   * are studded with ore and the odd raw ore block.
+   */
+  veins(chunk: Chunk, bx: number, bz: number): void {
+    const [gt, ga, gb] = this.veinGrids as [NoiseGrid, NoiseGrid, NoiseGrid];
+    const [vt, va, vb] = this.veinVals as [Float32Array, Float32Array, Float32Array];
+    gt.fill(bx, bz, 5, VEIN_TOP - 4, (x, y, z) => this.veinToggle.sample(x, y, z), 0);
+    ga.fill(bx, bz, 5, VEIN_TOP - 4, (x, y, z) => this.veinA.sample(x, y, z), 1);
+    gb.fill(bx, bz, 5, VEIN_TOP - 4, (x, y, z) => this.veinB.sample(x, y, z), 1);
+    gt.expand(vt);
+    ga.expand(va);
+    gb.expand(vb);
+    const st = (VEIN_STATES ??= {
+      stone: S('stone'),
+      deepslate: S('deepslate'),
+      granite: S('granite'),
+      tuff: S('tuff'),
+      copper: S('copper_ore'),
+      deepCopper: S('deepslate_copper_ore'),
+      iron: S('iron_ore'),
+      deepIron: S('deepslate_iron_ore'),
+      rawCopper: S('raw_copper_block'),
+      rawIron: S('raw_iron_block'),
+    });
+    for (let y = 5; y < VEIN_TOP - 4; y++)
+      for (let z = 0; z < 16; z++)
+        for (let x = 0; x < 16; x++) {
+          const i = (y * 16 + z) * 16 + x;
+          const t = vt[i]!;
+          const copper = t > 0;
+          const strength = Math.abs(t);
+          if (strength < 0.3) continue;
+          if (copper ? y < 12 : y > 26) continue;
+          if (Math.max(Math.abs(va[i]!), Math.abs(vb[i]!)) > 0.09) continue;
+          const s = chunk.get(x, y, z);
+          if (s !== st.stone && s !== st.deepslate) continue;
+          const h = (hashInts(this.seed, bx + x, y, bz + z) >>> 0) % 1000;
+          const deep = s === st.deepslate || y < 24;
+          const oreChance = 120 + Math.min(250, (strength - 0.3) * 900);
+          let out: number;
+          if (h < 12) out = copper ? st.rawCopper : st.rawIron;
+          else if (h < oreChance) out = copper ? (deep ? st.deepCopper : st.copper) : deep ? st.deepIron : st.iron;
+          else out = copper ? st.granite : st.tuff;
+          chunk.setRaw(x, y, z, out);
+        }
   }
 
   /** Nearest mega-cavern centre (admin locate). */

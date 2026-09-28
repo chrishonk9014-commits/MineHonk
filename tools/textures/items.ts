@@ -1356,6 +1356,7 @@ export function registerItems(r: PainterRegistry): void {
   r.add('lapis_lazuli', (t) => paintMask(t, 'lump', matPal(hex(0x2552c6))));
   r.add('quartz', (t) => paintMask(t, 'gem', matPal(hex(0xeae4dc))));
   r.add('amethyst_shard', (t) => paintMask(t, 'shard', matPal(hex(0xa070e8))));
+  r.add('lumen_shard', (t) => paintMask(t, 'shard', matPal(hex(0x6ae8f0))));
   r.add('echo_shard', (t) => paintMask(t, 'shard', matPal(hex(0x0f6a7a))));
   r.add('prismarine_shard', (t) => paintMask(t, 'shard', matPal(hex(0x5aa090))));
   r.add('prismarine_crystals', (t) => paintMask(t, 'gem', matPal(hex(0xb8e8d8))));

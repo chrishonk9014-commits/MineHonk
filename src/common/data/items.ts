@@ -234,6 +234,7 @@ mat('book');
 mat('sugar');
 mat('wheat');
 mat('ink_sac');
+mat('lumen_shard', { name: 'Lumen Shard' });
 mat('glow_ink_sac');
 mat('phantom_membrane');
 mat('rabbit_foot');

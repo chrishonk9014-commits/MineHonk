@@ -670,6 +670,21 @@ function custom(def: BlockDef, state: number): ModelQuad[] {
       }
       return out;
     }
+    case 'big_dripleaf': {
+      // A stem up to a wide leaf that droops as it tilts
+      const tilt = getProp(state, 'tilt');
+      const drop = tilt === 'full' ? 4 : tilt === 'partial' ? 2 : 0;
+      const leaf = element([0, 15 - drop, 0], [16, 15 - drop, 16], { up: { tex: def.tex.top! }, down: { tex: def.tex.top! } });
+      const rim = element([0, 13 - drop, 0], [16, 15 - drop, 16], { north: { tex: def.tex.side! }, south: { tex: def.tex.side! }, west: { tex: def.tex.side! }, east: { tex: def.tex.side! } });
+      const stem = cross(def.tex.stem!, 'none', 0.85, 0.3);
+      return [...rotY([...leaf, ...rim], facingDeg(getProp(state, 'facing'))), ...stem];
+    }
+    case 'sculk_shrieker': {
+      // A sculk base with a bony, open-mouthed top
+      const base = element([0, 0, 0], [16, 8, 16], { up: { tex: def.tex.top! }, down: { tex: def.tex.bottom!, cull: 'down' }, north: { tex: def.tex.side!, cull: 'north' }, south: { tex: def.tex.side!, cull: 'south' }, west: { tex: def.tex.side!, cull: 'west' }, east: { tex: def.tex.side!, cull: 'east' } });
+      const inner = element([1, 8, 1], [15, 15, 15], { north: { tex: def.tex.inner! }, south: { tex: def.tex.inner! }, west: { tex: def.tex.inner! }, east: { tex: def.tex.inner! } });
+      return [...base, ...inner];
+    }
     case 'conduit': {
       // A small cage floating in the middle of the block
       const t = def.tex.all!;

@@ -19,7 +19,7 @@ const mesher = new Mesher(meta);
 mesher.greedy = process.env.GREEDY !== '0';
 
 for (const dim of ['overworld', 'nether', 'end', 'farlands'] as const) {
-  const gen = createGenerator(dim, seedFromString('bench-seed'));
+  const gen = createGenerator(dim, seedFromString('bench-seed'), process.env.GEN_VERSION ? { version: Number(process.env.GEN_VERSION) } : {});
   const chunks = new Map<number, Chunk>();
   const base = dim === 'end' ? 0 : dim === 'farlands' ? 0 : 0;
   const t0 = performance.now();

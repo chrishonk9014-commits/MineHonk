@@ -106,6 +106,25 @@ describe('V2 caves', () => {
     expect(RIVER_LEVEL).toBeLessThan(40);
   });
 
+  it('the runtime cave biome lookup agrees with world generation', () => {
+    const gen = new OverworldGenerator(seedFromString('biome-agree'));
+    let checked = 0;
+    for (let cx = 0; cx < 3; cx++) {
+      const proto = gen.terrain.generate(cx * 7, 3);
+      const grid = proto.caveBiomes!;
+      for (let cy = 2; cy < 14; cy++)
+        for (let gz = 0; gz < 4; gz++)
+          for (let gx = 0; gx < 4; gx++) {
+            const want = grid[(cy * 4 + gz) * 4 + gx]!;
+            const got = gen.terrain.caveBiomeAt(cx * 7 * 16 + gx * 4 + 1, cy * 4 + 3, 3 * 16 + gz * 4);
+            if (!want || !got) continue;
+            expect(got).toBe(want);
+            checked++;
+          }
+    }
+    expect(checked).toBeGreaterThan(100);
+  });
+
   it('assigns every cave biome somewhere', () => {
     const gen = new OverworldGenerator(seedFromString('biomes'));
     const seen = new Set<number>();

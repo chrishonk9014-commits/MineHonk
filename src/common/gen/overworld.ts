@@ -187,7 +187,7 @@ export class OverworldTerrain {
       this.carver.carve(chunk, bx, bz, this.temps, this.carveStates(pal));
     } else this.carveCaves(chunk, bx, bz, pal);
 
-    // 6. Bedrock & deepslate
+    // 6. Bedrock & deepslate (V2: then the large ore veins)
     for (let z = 0; z < 16; z++) {
       for (let x = 0; x < 16; x++) {
         const wx = bx + x;
@@ -212,6 +212,8 @@ export class OverworldTerrain {
       }
     }
 
+    if (this.carver) this.carver.veins(chunk, bx, bz);
+
     chunk.recomputeHeightmap();
     return chunk;
   }
@@ -224,10 +226,14 @@ export class OverworldTerrain {
   /** Cave biome at a position (V2 worlds), None above the ground or in V1 worlds. */
   caveBiomeAt(x: number, y: number, z: number): number {
     if (!this.caveBiomes) return 0;
+    // Same sample points as world generation: the centre of the 4x4x4 cell
+    const cx = (Math.floor(x) & ~3) + 2;
+    const cy = (Math.floor(y) & ~3) + 2;
+    const cz = (Math.floor(z) & ~3) + 2;
     const cl = newClimate();
-    this.climate.sample(x, z, cl);
-    if (y > cl.height - 6) return 0;
-    return this.caveBiomes.at(x, y, z, cl.t);
+    this.climate.sample(cx, cz, cl);
+    if (cy > cl.height - 6) return 0;
+    return this.caveBiomes.at(cx, cy, cz, cl.t);
   }
 
   private surfaceColumn(chunk: Chunk, x: number, z: number, bx: number, bz: number, pal: Palette, maxTop: number): void {

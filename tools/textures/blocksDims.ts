@@ -345,6 +345,38 @@ export function registerDims(r: PainterRegistry): void {
     t.rect(0, 0, 16, 8, hex(0x163c48));
   });
   r.add('sculk_sensor_bottom', (t) => blotchy(t, [hex(0x0b1e26), hex(0x0f2a33)], 1, 1));
+  // Shrieker: bone-white jaws around a dark throat on a sculk base
+  r.add('sculk_shrieker_side', (t) => {
+    blotchy(t, [hex(0x0b1e26), hex(0x0f2a33)], 1, 1);
+    t.rect(0, 0, 16, 5, hex(0xd8d0b8));
+    for (let x = 0; x < 16; x += 3) t.set(x, 5, hex(0xb8b098));
+    for (let i = 0; i < 5; i++) t.set(t.rng.int(16), 7 + t.rng.int(9), hex(0x1ec8c8));
+  });
+  r.add('sculk_shrieker_top', (t) => {
+    t.fill(hex(0xd8d0b8));
+    frame(t, hex(0xb8b098));
+    t.rect(3, 3, 10, 10, hex(0x0b1e26));
+    t.rect(5, 5, 6, 6, hex(0x06141a));
+    for (const [x, y] of [[4, 4], [11, 4], [4, 11], [11, 11]] as const) t.set(x, y, hex(0x1ec8c8));
+  });
+  r.add('sculk_shrieker_bottom', (t) => blotchy(t, [hex(0x0b1e26), hex(0x0f2a33)], 1, 1));
+  r.add('sculk_shrieker_inner', (t) => blotchy(t, [hex(0x06141a), hex(0x0b1e26)], 1, 1));
+  // Catalyst: a bony block veined with sculk; blooms bright when something dies nearby
+  const catalystSide = (t: Tex): void => {
+    blotchy(t, [hex(0x0b1e26), hex(0x0f2a33), hex(0x133540)], 1, 1);
+    t.rect(0, 0, 16, 4, hex(0xd8d0b8));
+    for (let x = 1; x < 16; x += 4) t.rect(x, 4, 2, 2, hex(0xb8b098));
+  };
+  r.add('sculk_catalyst_side', catalystSide);
+  r.add('sculk_catalyst_bottom', (t) => blotchy(t, [hex(0x0b1e26), hex(0x0f2a33)], 1, 1));
+  const catalystTop = (bloom: boolean) => (t: Tex): void => {
+    t.fill(hex(0xd8d0b8));
+    frame(t, hex(0xb8b098));
+    t.rect(4, 4, 8, 8, bloom ? hex(0x2af0f0) : hex(0x0f2a33));
+    t.rect(6, 6, 4, 4, bloom ? hex(0xc8ffff) : hex(0x1ec8c8));
+  };
+  r.add('sculk_catalyst_top', catalystTop(false));
+  r.add('sculk_catalyst_top_bloom', catalystTop(true));
 
   // Farlands
   r.add('farstone', (t) => farstone(t));

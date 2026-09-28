@@ -144,6 +144,7 @@ shaped('clock', 1, [' G ', 'GRG', ' G '], { G: 'gold_ingot', R: 'redstone' });
 shaped('spyglass', 1, [' A ', ' C ', ' C '], { A: 'amethyst_shard', C: 'copper_ingot' });
 shaped('leather', 1, ['HH', 'HH'], { H: 'rabbit_hide' });
 shaped('candle', 1, ['S', 'H'], { S: 'string', H: 'honeycomb' });
+shaped('lumen_crystal', 1, ['LL', 'LL'], { L: 'lumen_shard' });
 shaped('honeycomb_block', 1, ['HH', 'HH'], { H: 'honeycomb' });
 shaped('shulker_box', 1, ['S', 'C', 'S'], { S: 'shulker_shell', C: 'chest' });
 shaped('conduit', 1, ['NNN', 'NHN', 'NNN'], { N: 'nautilus_shell', H: 'heart_of_the_sea' });

@@ -46,9 +46,16 @@ export interface DimensionGenerator {
   structureAt?(x: number, y: number, z: number): string | null;
 }
 
-/** Small LRU cache for proto chunks. */
+/**
+ * Small LRU cache for proto chunks. Lookups are hot (every block a feature
+ * reads), so recency is an access stamp rather than re-inserting into the map;
+ * the least recently used entry is found only when an insert overflows.
+ */
 export class ProtoCache {
-  private readonly map = new Map<number, Chunk>();
+  private readonly map = new Map<number, { c: Chunk; t: number }>();
+  private clock = 0;
+  private lastKey = NaN;
+  private lastChunk: Chunk | null = null;
 
   constructor(
     private readonly capacity: number,
@@ -57,23 +64,31 @@ export class ProtoCache {
 
   get(cx: number, cz: number): Chunk {
     const k = chunkIndex(cx, cz);
-    let c = this.map.get(k);
-    if (c) {
-      this.map.delete(k);
-      this.map.set(k, c);
-      return c;
+    if (k === this.lastKey && this.lastChunk) return this.lastChunk;
+    let e = this.map.get(k);
+    if (e) e.t = ++this.clock;
+    else {
+      e = { c: this.make(cx, cz), t: ++this.clock };
+      this.map.set(k, e);
+      if (this.map.size > this.capacity) this.evict();
     }
-    c = this.make(cx, cz);
-    this.map.set(k, c);
-    if (this.map.size > this.capacity) {
-      const first = this.map.keys().next().value as number;
-      this.map.delete(first);
-    }
-    return c;
+    this.lastKey = k;
+    this.lastChunk = e.c;
+    return e.c;
+  }
+
+  private evict(): void {
+    // Drop the oldest eighth in one pass so overflow scans stay rare
+    const n = Math.max(1, this.map.size - this.capacity + (this.capacity >> 3));
+    const stamps = [...this.map.values()].map((e) => e.t).sort((a, b) => a - b);
+    const cut = stamps[n - 1]!;
+    for (const [k, e] of this.map) if (e.t <= cut && e.c !== this.lastChunk) this.map.delete(k);
   }
 
   clear(): void {
     this.map.clear();
+    this.lastKey = NaN;
+    this.lastChunk = null;
   }
 }
 

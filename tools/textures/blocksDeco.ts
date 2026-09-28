@@ -436,6 +436,39 @@ export function registerDeco(r: PainterRegistry): void {
       }
     }
   });
+  r.add('big_dripleaf_top', (t) => {
+    t.clear();
+    for (let y = 1; y < 15; y++) for (let x = 1; x < 15; x++) {
+      const edge = x === 1 || y === 1 || x === 14 || y === 14;
+      t.set(x, y, edge ? hex(0x4a8a2a) : (x + y) % 5 === 0 ? hex(0x5aa034) : hex(0x6ab83e));
+    }
+    for (let i = 2; i < 14; i++) t.set(7, i, hex(0x4a8a2a));
+  });
+  r.add('big_dripleaf_side', (t) => {
+    t.clear();
+    t.rect(0, 0, 16, 2, hex(0x4a8a2a));
+  });
+  r.add('big_dripleaf_stem', (t) => {
+    t.clear();
+    for (let y = 0; y < 16; y++) t.set(7 + (y % 6 === 0 ? 1 : 0), y, hex(0x5a9a30));
+  });
+  r.add('small_dripleaf', (t) => {
+    t.clear();
+    for (let y = 6; y < 16; y++) t.set(7, y, hex(0x5a9a30));
+    t.mask(['..aaaa....', '.abbbba...', 'abbbbbba..', '.aaaaaa...'], { a: hex(0x4a8a2a), b: hex(0x6ab83e) }, 2, 3);
+    t.mask(['....aaa', '...abba', '....aaa'], { a: hex(0x4a8a2a), b: hex(0x6ab83e) }, 7, 8);
+  });
+  r.add('glowshroom', (t) => {
+    // Original: a pale stalk under a glowing teal cap
+    t.clear();
+    for (let y = 9; y < 16; y++) t.set(7, y, hex(0xd8d0c0));
+    t.set(8, 12, hex(0xc8c0b0));
+    t.mask(['...aaaa...', '.abbbbba..', 'abbccbbba.', 'aaaaaaaaa.'], { a: hex(0x2a8a9a), b: hex(0x4ae8e0), c: hex(0xc8fff8) }, 3, 5);
+  });
+  r.add('glowshroom_block', (t) => {
+    blotchy(t, [hex(0x2a8a9a), hex(0x3ab8c0), hex(0x4ae8e0)], 1, 1);
+    for (let i = 0; i < 9; i++) t.set(t.rng.int(16), t.rng.int(16), hex(0xc8fff8));
+  });
   r.add('spore_blossom', (t) => {
     t.clear();
     for (let a = 0; a < 8; a++) {

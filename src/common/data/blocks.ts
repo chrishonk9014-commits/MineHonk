@@ -193,6 +193,12 @@ add({
   contactDamage: 0,
 });
 cube('amethyst_block', 1.5, 'glass', { tool: 'pickaxe' });
+// Crystal caves: budding blocks grow buds; lumen crystals are an original glowing crystal
+cube('budding_amethyst', 1.5, 'glass', { tool: 'pickaxe', drops: 'none', randomTicks: true });
+add({ id: 'amethyst_bud', name: 'Amethyst Bud', hardness: 1.5, sound: 'glass', model: 'cross', tex: { all: 'amethyst_bud' }, light: 2, tool: 'pickaxe', drops: { item: 'none', silkTouch: true } });
+add({ id: 'lumen_crystal', name: 'Lumen Crystal', hardness: 1, sound: 'glass', model: 'cross', tex: { all: 'lumen_crystal' }, light: 12, tool: 'pickaxe', drops: { item: 'lumen_shard', min: 1, max: 3, fortune: true, silkTouch: true } });
+// Frozen caves: icicles hang like dripstone and break when something lands on them
+add({ id: 'icicle', name: 'Icicle', hardness: 0.5, sound: 'glass', model: 'dripstone', props: { vertical_direction: ['up', 'down'], thickness: ['tip', 'frustum', 'middle', 'base'] }, tex: { all: 'icicle' }, layer: 'translucent', collide: true, drops: { item: 'none', silkTouch: true } });
 add({ id: 'amethyst_cluster', name: 'Amethyst Cluster', hardness: 1.5, sound: 'glass', model: 'cross', tex: { all: 'amethyst_cluster' }, light: 5, tool: 'pickaxe', drops: { item: 'amethyst_shard', min: 2, max: 4 } });
 
 // ---------------------------------------------------------------------------
@@ -658,6 +664,13 @@ add({ id: 'sweet_berry_bush', name: 'Sweet Berry Bush', hardness: 0, sound: 'pla
 add({ id: 'azalea', name: 'Azalea', hardness: 0, sound: 'plant', model: 'cross', tex: { all: 'azalea' }, place: 'needs_soil' });
 add({ id: 'cave_vines', name: 'Cave Vines', hardness: 0, sound: 'plant', model: 'hanging_plant', props: { berries: BOOL }, tex: { all: 'cave_vines', lit: 'cave_vines_lit' }, climbable: true, drops: { item: 'glow_berries', min: 0, max: 1 }, item: false });
 add({ id: 'hanging_roots', name: 'Hanging Roots', hardness: 0, sound: 'plant', model: 'hanging_plant', tex: { all: 'hanging_roots' }, replaceable: true, drops: { item: 'none', silkTouch: true } });
+// Lush caves: dripleaves grow out of water-side clay and moss
+add({ id: 'big_dripleaf', name: 'Big Dripleaf', hardness: 0.1, sound: 'plant', model: 'custom', props: { facing: FACING4, tilt: ['none', 'partial', 'full'] }, tex: { top: 'big_dripleaf_top', side: 'big_dripleaf_side', stem: 'big_dripleaf_stem' }, collide: true, layer: 'cutout', tool: 'axe', place: 'needs_solid_below' });
+add({ id: 'big_dripleaf_stem', name: 'Big Dripleaf Stem', hardness: 0.1, sound: 'plant', model: 'cross', tex: { all: 'big_dripleaf_stem' }, drops: { item: 'big_dripleaf' }, item: false });
+add({ id: 'small_dripleaf', name: 'Small Dripleaf', hardness: 0, sound: 'plant', model: 'cross', tex: { all: 'small_dripleaf' }, place: 'needs_solid_below', drops: { item: 'none', silkTouch: true } });
+// Mushroom caves (original): glowing mushrooms, small and giant
+add({ id: 'glowshroom', name: 'Glowshroom', hardness: 0, sound: 'plant', model: 'cross', tex: { all: 'glowshroom' }, light: 10, place: 'needs_solid_below' });
+cube('glowshroom_block', 0.2, 'wood', { light: 13, tool: 'axe', drops: { item: 'glowshroom', min: 0, max: 2, silkTouch: true } });
 add({ id: 'spore_blossom', name: 'Spore Blossom', hardness: 0, sound: 'plant', model: 'hanging_plant', tex: { all: 'spore_blossom' }, light: 0 });
 add({ id: 'weeping_vines', name: 'Weeping Vines', hardness: 0, sound: 'plant', model: 'hanging_plant', tex: { all: 'weeping_vines' }, climbable: true });
 add({ id: 'twisting_vines', name: 'Twisting Vines', hardness: 0, sound: 'plant', model: 'cross', tex: { all: 'twisting_vines' }, climbable: true });
@@ -933,9 +946,12 @@ cube('missing_block', 1, 'glitch', { tool: 'pickaxe', name: 'Missing Block' });
 add({ id: 'far_tall_grass', name: 'Warped Tallgrass', hardness: 0, sound: 'plant', model: 'cross', tex: { all: 'far_tall_grass' }, replaceable: true, place: 'needs_soil', drops: { item: 'none', silkTouch: true } });
 
 // Sculk (deep dark)
-cube('sculk', 0.2, 'moss', { tool: 'hoe', light: 1, drops: { item: 'sculk', xp: [1, 1], silkTouch: true } });
+cube('sculk', 0.2, 'moss', { tool: 'hoe', drops: { item: 'sculk', xp: [1, 1], silkTouch: true } });
 add({ id: 'sculk_vein', name: 'Sculk Vein', hardness: 0.2, sound: 'moss', model: 'vine', props: { north: BOOL, south: BOOL, west: BOOL, east: BOOL, up: BOOL, down: BOOL }, tex: { all: 'sculk_vein' }, replaceable: true, drops: { item: 'none', silkTouch: true } });
 add({ id: 'sculk_sensor', name: 'Sculk Sensor', hardness: 1.5, sound: 'moss', model: 'custom', tex: { top: 'sculk_sensor_top', side: 'sculk_sensor_side', bottom: 'sculk_sensor_bottom' }, light: 1, tool: 'hoe', collide: true, layer: 'cutout' });
+// Sensors switch between phases when they hear a vibration; shriekers call the Warden
+add({ id: 'sculk_shrieker', name: 'Sculk Shrieker', hardness: 3, sound: 'moss', model: 'custom', props: { can_summon: BOOL, shrieking: BOOL }, tex: { top: 'sculk_shrieker_top', side: 'sculk_shrieker_side', bottom: 'sculk_shrieker_bottom', inner: 'sculk_shrieker_inner' }, tool: 'hoe', collide: true, layer: 'cutout', drops: { item: 'none', xp: [5, 5], silkTouch: true } });
+add({ id: 'sculk_catalyst', name: 'Sculk Catalyst', hardness: 3, sound: 'moss', model: 'cube', props: { bloom: BOOL }, tex: { top: 'sculk_catalyst_top', side: 'sculk_catalyst_side', bottom: 'sculk_catalyst_bottom', on: 'sculk_catalyst_top_bloom' }, light: 6, tool: 'hoe', drops: { item: 'none', xp: [5, 5], silkTouch: true } });
 stoneLike('reinforced_deepslate', 55, { harvestLevel: 99, drops: 'none', sound: 'deepslate', tex: { top: 'reinforced_deepslate_top', side: 'reinforced_deepslate_side', bottom: 'reinforced_deepslate_bottom' } });
 
 export const BLOCK_DEFS: readonly BlockDef[] = defs;

@@ -14,6 +14,7 @@ import { OverworldTerrain } from './overworld';
 import { DecorView } from './decorate/view';
 import * as F from './decorate/features';
 import { StructureManager } from './structures/manager';
+import { caveDecorV2 } from './caves/decor';
 import { ProtoCache, cloneChunk, addGenEntities, LATEST_GENERATOR, type DimensionGenerator, type GeneratorOptions, type SpawnPoint } from './pipeline';
 import { VILLAGE } from './structures/village';
 import { SURFACE_STRUCTURES } from './structures/misc';
@@ -30,6 +31,8 @@ type Stage = (v: DecorView, seed: number, ocx: number, ocz: number) => void;
 
 /** Stages replayed over the 3x3 neighbourhood, in this global order. */
 const NEIGHBOUR_STAGES: Stage[] = [F.lakes, F.geodes, F.ores, F.dungeons, F.springs, F.disks, F.iceFeatures, F.boulders, F.trees];
+/** V2 swaps in the V2 ore table and geodes that stay inside rock. */
+const NEIGHBOUR_STAGES_V2: Stage[] = NEIGHBOUR_STAGES.map((s) => (s === F.ores ? F.oresV2 : s === F.geodes ? F.geodesV2 : s));
 
 export class OverworldGenerator implements DimensionGenerator {
   readonly dimension = 'overworld' as const;
@@ -75,13 +78,15 @@ export class OverworldGenerator implements DimensionGenerator {
     const c = cloneChunk(proto);
     const v = new DecorView(c, (x, z) => this.protos.get(x, z));
     const seed = this.seed;
-    for (const stage of NEIGHBOUR_STAGES) {
+    for (const stage of this.terrain.carver ? NEIGHBOUR_STAGES_V2 : NEIGHBOUR_STAGES) {
       for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) stage(v, seed, cx + dx, cz + dz);
     }
-    F.caveDecor(v, seed, cx, cz, (x, z) => {
-      const cl = this.terrain.climate.sample(x, z, this.climateScratch);
-      return { humidity: cl.h, continentalness: cl.c, weirdness: cl.w };
-    });
+    if (this.terrain.carver) caveDecorV2(v, seed, cx, cz);
+    else
+      F.caveDecor(v, seed, cx, cz, (x, z) => {
+        const cl = this.terrain.climate.sample(x, z, this.climateScratch);
+        return { humidity: cl.h, continentalness: cl.c, weirdness: cl.w };
+      });
     const starts = this.structures.build(v);
     F.vegetation(v, seed, cx, cz);
     F.freeze(v);

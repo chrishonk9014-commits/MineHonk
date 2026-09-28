@@ -142,6 +142,7 @@ shaped('bucket', 1, ['I I', ' I '], { I: 'iron_ingot' });
 shaped('compass', 1, [' I ', 'IRI', ' I '], { I: 'iron_ingot', R: 'redstone' });
 shaped('clock', 1, [' G ', 'GRG', ' G '], { G: 'gold_ingot', R: 'redstone' });
 shaped('spyglass', 1, [' A ', ' C ', ' C '], { A: 'amethyst_shard', C: 'copper_ingot' });
+shaped('carrot_on_a_stick', 1, ['F ', ' C'], { F: 'fishing_rod', C: 'carrot' });
 shaped('recovery_compass', 1, ['EEE', 'ECE', 'EEE'], { E: 'echo_shard', C: 'compass' });
 shaped('lead', 2, ['XX ', 'XB ', '  X'], { X: 'string', B: 'slime_ball' });
 shapeless('fire_charge', 3, 'gunpowder', 'blaze_powder', '#coals');

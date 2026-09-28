@@ -40,6 +40,13 @@ export class LocalPlayer {
   boostTicks = 0;
   /** Whether the equipped chest item is an Elytra that still flies (set by the game). */
   canGlide: () => boolean = () => false;
+  /**
+   * The mob being ridden. With `control` this client simulates the mount's
+   * body and steers it; otherwise the player sits wherever the server moves it.
+   */
+  vehicle: { id: number; control: boolean; seat: number; speed: number; jump: number; body: Body; yaw: number } | null = null;
+  /** Position of the ridden (uncontrolled) mount's entity, from the game. */
+  vehiclePos: () => [number, number, number] | null = () => null;
 
   constructor(private readonly world: ClientWorld) {}
 
@@ -72,6 +79,7 @@ export class LocalPlayer {
     this.prevWalkDist = this.walkDist;
     this.prevBob = this.bob;
     const loaded = this.world.isLoaded(this.body.x, this.body.z);
+    if (this.vehicle && loaded && !this.dead) return this.tickRiding(input);
     if (!loaded || this.dead || this.sleeping) {
       this.frozen = !loaded;
       return this.dead ? null : this.movePacket(true);
@@ -132,6 +140,41 @@ export class LocalPlayer {
     void res;
     const glideFov = this.gliding ? 1 + Math.min(0.25, Math.hypot(this.body.vx, this.body.vy, this.body.vz) * 0.12) : 1;
     this.fovMod += ((this.sprinting ? 1.12 : 1) * (this.flying ? 1.05 : 1) * (1 + (speedMul - 1) * 0.5) * glideFov - this.fovMod) * 0.35;
+    return this.movePacket(false);
+  }
+
+  /** Riding: steer the mount (controlled) or sit where it is. The rider's feet are on the seat. */
+  private tickRiding(input: { forward: number; strafe: number; jump: boolean; jumpPressed: boolean }): C2S | null {
+    const v = this.vehicle!;
+    this.flying = false;
+    this.gliding = false;
+    this.sprinting = false;
+    this.sneaking = false;
+    if (v.control) {
+      const vb = v.body;
+      // Mounts turn with the camera; they walk forward and sideways, never backwards fast
+      v.yaw = this.yaw;
+      const jump = input.jumpPressed && vb.onGround && v.jump > 0;
+      stepMovement(this.world, vb, { forward: Math.max(-0.3, input.forward), strafe: input.strafe * 0.6, jump: false, sneak: false, sprint: false, yaw: this.yaw }, { flying: false, noClip: false, walkSpeed: v.speed, flySpeed: 0 }, 1);
+      if (jump) vb.vy = v.jump;
+      vb.fallDistance = 0;
+      this.body.x = vb.x;
+      this.body.y = vb.y + v.seat;
+      this.body.z = vb.z;
+    } else {
+      const pos = this.vehiclePos();
+      if (pos) {
+        this.body.x = pos[0];
+        this.body.y = pos[1] + v.seat;
+        this.body.z = pos[2];
+      }
+    }
+    this.body.vx = this.body.vy = this.body.vz = 0;
+    this.body.fallDistance = 0;
+    this.body.onGround = true;
+    const moved = Math.hypot(this.body.x - this.prev.x, this.body.z - this.prev.z);
+    this.bob += (Math.min(0.06, moved) - this.bob) * 0.4;
+    this.fovMod += (1 - this.fovMod) * 0.35;
     return this.movePacket(false);
   }
 

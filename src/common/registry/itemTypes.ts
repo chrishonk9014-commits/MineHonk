@@ -43,6 +43,7 @@ export type UseKind =
   | 'shield'
   | 'trident'
   | 'fishing_rod'
+  | 'carrot_on_a_stick'
   | 'compass'
   | 'recovery_compass'
   | 'clock'

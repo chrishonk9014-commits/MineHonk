@@ -35,6 +35,8 @@ export class Gadgets {
         return this.boost(p, stack, hand);
       case 'fishing_rod':
         return this.fish(p, stack, hand);
+      case 'carrot_on_a_stick':
+        return !!this.server.mounts?.boostPig(p);
     }
     return false;
   }

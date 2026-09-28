@@ -1479,6 +1479,15 @@ export function registerItems(r: PainterRegistry): void {
     for (let y = 4; y < 14; y++) t.set(13, y, hex(0xe0e0e0));
     t.set(13, 14, hex(0x6a6a6a));
   });
+  r.add('carrot_on_a_stick', (t) => {
+    paintMask(t, 'stick', {});
+    for (let y = 4; y < 11; y++) t.set(13, y, hex(0xe0e0e0));
+    // A carrot dangling from the line
+    t.rect(12, 11, 3, 3, hex(0xf08a1a));
+    t.set(13, 14, hex(0xc86a10));
+    t.set(12, 10, hex(0x4a9a2a));
+    t.set(14, 10, hex(0x4a9a2a));
+  });
   r.add('name_tag', (t) => paintMask(t, 'tag', { ...matPal(hex(0xe8dcc0)), k: hex(0x6a6a6a) }));
   r.add('saddle', (t) => paintMask(t, 'saddle', { ...matPal(hex(0x8a4a24)), g: hex(0xa8a8a8) }));
   r.add('lead', (t) => paintMask(t, 'string', matPal(hex(0xc8a070))));

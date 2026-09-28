@@ -104,6 +104,11 @@ export function validateC2S(raw: unknown): C2S | null {
       if (!action) return null;
       return { t: 'admin', req: m.req, action };
     }
+    case 'vehicle_move':
+      if (!inRange(m.x, -COORD, COORD) || !inRange(m.y, -512, 1024) || !inRange(m.z, -COORD, COORD) || !isNum(m.yaw)) return null;
+      return { t: 'vehicle_move', x: m.x, y: m.y, z: m.z, yaw: m.yaw };
+    case 'dismount':
+      return { t: 'dismount' };
     default:
       return null;
   }

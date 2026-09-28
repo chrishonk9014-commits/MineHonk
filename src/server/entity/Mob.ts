@@ -68,6 +68,11 @@ export class Mob extends LivingEntity {
   noAi = false;
   /** Movement and environment are driven externally (the Ender Dragon's fight controller). */
   controlled = false;
+  /** Player riding this mob, and whether their client steers it (AI and physics pause). */
+  rider: Entity | null = null;
+  riderControl = false;
+  /** Entity id of the player holding this mob's lead (for clients drawing it). */
+  metaHolder = 0;
   /** Ticks the corpse stays before removal. */
   deathDuration = 20;
   persistenceRequired = false;
@@ -214,11 +219,11 @@ export class Mob extends LivingEntity {
     if (this.dead || this.removed) return;
     // Mobs far from every player think less often and skip physics while idle
     if (this.age % 20 === 0 || this.age < 2) this.far = !this.target && this.def.category !== 'boss' && !this.playerWithin(Math.max(AI_NEAR, (this.def.followRange ?? 16) + 16));
-    if (!this.noAi && this.age % (this.far ? 8 : 2) === 0) {
+    if (!this.noAi && !this.riderControl && this.age % (this.far ? 8 : 2) === 0) {
       this.runGoals(this.targetGoals);
       this.runGoals(this.goals);
     }
-    if (!this.controlled && (!this.far || !this.resting() || this.age % 10 === 0)) this.move();
+    if (!this.controlled && !this.riderControl && (!this.far || !this.resting() || this.age % 10 === 0)) this.move();
     this.idleSound();
   }
 
@@ -489,8 +494,10 @@ export class Mob extends LivingEntity {
     if (this.owner) m.tame = true;
     if (this.fuse >= 0) m.fuse = this.fuse;
     if (this.angryAt || this.target) m.angry = true;
-    for (const k of ['color', 'sheared', 'size', 'profession', 'variant', 'charged', 'carried', 'phase', 'open']) if (this.data[k] !== undefined) m[k] = this.data[k];
+    for (const k of ['color', 'sheared', 'size', 'profession', 'variant', 'charged', 'carried', 'phase', 'open', 'saddle', 'leashPos']) if (this.data[k] !== undefined) m[k] = this.data[k];
     if (this.data.glowTicks) m.glowing = true;
+    if (this.data.leash && this.metaHolder) m.leash = this.metaHolder;
+    if (this.rider) m.rider = this.rider.id;
     if (this.def.category === 'boss') {
       m.hp = this.health;
       m.maxHp = this.maxHealth;

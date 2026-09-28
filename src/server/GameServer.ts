@@ -58,8 +58,10 @@ export class GameServer {
   portals: import('./systems/Portals').Portals | null = null;
   theEnd: import('./systems/TheEnd').EndSystem | null = null;
   farlands: import('./systems/Farlands').FarlandsSystem | null = null;
-  /** Fireworks, fishing, compasses, jukeboxes, beacons, leads and riding (installed by gameplay). */
+  /** Fireworks, fishing, compasses, jukeboxes, beacons (installed by gameplay). */
   gadgets: import('./systems/Gadgets').Gadgets | null = null;
+  /** Riding and leads (installed by gameplay). */
+  mounts: import('./systems/Mounts').Mounts | null = null;
   /** Hook for the hosting layer to forward player reports (e.g. to platform moderation). */
   onReport?: (from: ServerPlayer, target: ServerPlayer, reason: string) => void;
   readonly interaction: Interaction;
@@ -442,6 +444,12 @@ export class GameServer {
       case 'admin':
         this.admin.handle(p, m.req, m.action);
         break;
+      case 'vehicle_move':
+        this.mounts?.vehicleMove(p, m.x, m.y, m.z, m.yaw);
+        break;
+      case 'dismount':
+        this.mounts?.dismount(p);
+        break;
       case 'hello':
         break;
     }
@@ -462,6 +470,7 @@ export class GameServer {
   private async removePlayer(p: ServerPlayer, announce: boolean): Promise<void> {
     if (!this.players.has(p.conn.id)) return;
     this.players.delete(p.conn.id);
+    this.mounts?.dismount(p, true);
     this.interaction.closeWindow(p, p.windowId, true);
     p.dim.removeEntity(p);
     if (announce) {
@@ -491,6 +500,8 @@ export class GameServer {
     p.yaw = m.yaw;
     p.pitch = m.pitch;
     p.headYaw = m.yaw;
+    // Riders sit on their mount: only the look direction comes from the client
+    if (p.vehicle) return;
     if (p.sneaking !== m.sneak) {
       p.sneaking = m.sneak;
       p.metaDirty = true;
@@ -930,6 +941,7 @@ export class GameServer {
   changeDimension(p: ServerPlayer, target: DimensionId, x: number, y: number, z: number, yaw = p.yaw, opts: { admin?: boolean } = {}): void {
     const from = p.dim;
     const to = this.dim(target);
+    this.mounts?.dismount(p, true);
     this.interaction.closeWindow(p, p.windowId, true);
     from.removeEntity(p);
     for (const id of p.tracked) void id;

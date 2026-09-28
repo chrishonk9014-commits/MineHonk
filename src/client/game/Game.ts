@@ -27,6 +27,7 @@ import { blocks, blockOf, STATE_BLOCK, STATE_FLUID } from '../../common/registry
 import { lookDirection, rayBox } from './look';
 import { entityInfo } from '../../common/data/entities';
 import { raycastBlocks } from '../../common/physics/raycast';
+import { newBody } from '../../common/physics/movement';
 import { el } from '../ui/dom';
 import { attachPlayerPreview } from '../render/PlayerPreview';
 import { chunkIndex } from '../../common/world/constants';
@@ -136,6 +137,7 @@ export class Game {
   private stepDist = 0;
   private caveMood = 0;
   private usingItem = false;
+  private wasSneak = false;
   /** Item number -> client tick until which it can't be used (knocked-aside shield...). */
   private readonly cooldowns = new Map<number, { until: number; total: number }>();
   private useRepeat = 0;
@@ -164,6 +166,11 @@ export class Game {
     readonly host: GameHost,
   ) {
     this.player = new LocalPlayer(this.world);
+    this.player.vehiclePos = () => {
+      const v = this.player.vehicle;
+      const e = v ? this.entities.get(v.id) : undefined;
+      return e ? [e.x, e.y, e.z] : null;
+    };
     // Elytra in the chest slot that isn't worn down to its last point
     this.player.canGlide = () => {
       const c = this.invSlots[HELMET + 1];
@@ -394,7 +401,9 @@ export class Game {
         break;
       case 'moves': {
         const l = m.list;
+        const steered = this.player.vehicle?.control ? this.player.vehicle.id : -1;
         for (let i = 0; i + 6 < l.length; i += 7) {
+          if (l[i] === steered) continue;
           const e = this.entities.get(l[i]!);
           if (e) e.setTarget(l[i + 1]!, l[i + 2]!, l[i + 3]!, l[i + 4]!, l[i + 5]!, l[i + 6]!);
         }
@@ -606,6 +615,25 @@ export class Game {
           this.hud.showTitle('', `Now Playing: MineHonk - ${discTitle(m.track)}`, 60);
         } else this.audio.discs.stop(m.x, m.y, m.z);
         break;
+      case 'mount':
+        if (m.id === null) {
+          this.player.vehicle = null;
+        } else {
+          const body = newBody(m.x ?? 0, m.y ?? 0, m.z ?? 0, m.width ?? 1, m.height ?? 1);
+          body.stepHeight = 1.1;
+          this.player.vehicle = { id: m.id, control: !!m.control, seat: m.seat ?? 0.7, speed: m.speed ?? 0.1, jump: m.jump ?? 0, body, yaw: m.yaw ?? 0 };
+        }
+        break;
+      case 'vehicle_pos': {
+        const v = this.player.vehicle;
+        if (v) {
+          v.body.x = m.x;
+          v.body.y = m.y;
+          v.body.z = m.z;
+          v.body.vx = v.body.vy = v.body.vz = 0;
+        }
+        break;
+      }
       case 'death_pos':
         this.deathPos = m.pos;
         break;
@@ -794,7 +822,14 @@ export class Game {
     // Hunger prevents sprinting
     if (this.survivalHud && this.stats.food <= 6 && !p.abilities.mayFly) sprint = false;
     const wasFlying = p.flying;
+    // Sneak gets off a mount
+    const sneakPressed = sneak && !this.wasSneak;
+    this.wasSneak = sneak;
+    if (p.vehicle && sneakPressed) this.send({ t: 'dismount' });
+    if (p.vehicle) sneak = false;
     const move = p.tick({ forward, strafe, jump, sneak, sprint: sprint && !(this.survivalHud && this.stats.food <= 6), jumpPressed, forwardPressed });
+    const v = p.vehicle;
+    if (v?.control) this.send({ t: 'vehicle_move', x: v.body.x, y: v.body.y, z: v.body.z, yaw: v.yaw });
     if (this.survivalHud && this.stats.food <= 6 && !p.abilities.mayFly) p.sprinting = false;
     if (p.flying !== wasFlying) this.send({ t: 'set_flying', flying: p.flying });
     if (move) this.send(move);
@@ -835,6 +870,20 @@ export class Game {
     this.time++;
     // Entities & effects
     for (const e of this.entities.values()) e.tick();
+    // The mount this client steers is drawn where the local simulation has it
+    if (v?.control) {
+      const e = this.entities.get(v.id);
+      if (e) {
+        e.px = e.x;
+        e.py = e.y;
+        e.pz = e.z;
+        e.x = e.tx = v.body.x;
+        e.y = e.ty = v.body.y;
+        e.z = e.tz = v.body.z;
+        e.yaw = e.tyaw = e.headYaw = e.theadYaw = v.yaw;
+        e.steps = 0;
+      }
+    }
     this.renderer.particles.tick();
     this.renderer.hand.tick();
     this.renderer.hand.setItem(this.held()?.id ?? 0);

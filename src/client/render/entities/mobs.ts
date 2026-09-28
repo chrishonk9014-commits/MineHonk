@@ -8,7 +8,7 @@ import { BoxModel } from './BoxModel';
 import { registerVisual, boxVisual, animateHumanoid, type EntityVisual, type VisualContext } from './EntityRenderer';
 import { kitModel, humanoidParts, quadParts, eyes, type KitPart, type FacePainter } from './modelKit';
 import type { ClientEntity } from '../../game/ClientEntity';
-import { MOB_DEFS } from '../../../common/data/mobs';
+import { MOB_DEFS, MOB_BY_ID } from '../../../common/data/mobs';
 import { items } from '../../../common/registry/items';
 
 type Anim = (m: BoxModel, e: ClientEntity, alpha: number, time: number) => void;
@@ -141,6 +141,22 @@ const animSwim: Anim = (m, e, alpha, time) => {
   void alpha;
 };
 
+/** A leather saddle strapped over a body of the given size (pixels). */
+function saddlePart(bw: number, bh: number, len: number, z: number): KitPart {
+  return {
+    name: 'saddle',
+    parent: 'body',
+    pivot: [0, bh / 2, z],
+    from: [-bw / 2 - 0.5, -2, -len / 2],
+    size: [bw + 1, 3, len],
+    colors: { all: '#7a3a18', top: '#8a4a24' },
+    paint: (p) => {
+      p.px('left', 0, 1, '#b0b0b0', 1, 2);
+      p.px('right', 0, 1, '#b0b0b0', 1, 2);
+    },
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Model registry
 // ---------------------------------------------------------------------------
@@ -214,7 +230,8 @@ V.mooshroom = {
   anim: animQuad,
 };
 V.pig = {
-  parts: () =>
+  variant: (e) => (e.meta.saddle ? 'saddle' : 'plain'),
+  parts: (e) =>
     quadParts({
       body: [10, 8, 16],
       legH: 6,
@@ -232,7 +249,7 @@ V.pig = {
       },
       snout: { size: [4, 3, 1], colors: { all: '#e87a8a' } },
       ears: { size: [2, 2, 1], colors: { all: '#e08888' } },
-    }),
+    }).concat(e.meta.saddle ? [saddlePart(10, 8, 10, 0)] : []),
   anim: animQuad,
 };
 V.sheep = {
@@ -310,24 +327,36 @@ V.rabbit = {
     m.root.position.y = e.limbSpeed > 0.1 ? Math.abs(Math.sin(walkPhase(e, alpha) * 0.8)) * 0.25 : 0;
   },
 };
+const HORSE_COATS: Record<string, [string, string]> = {
+  chestnut: ['#8a5a30', '#2a1a10'],
+  bay: ['#6a3a1a', '#1a1008'],
+  black: ['#2a2626', '#121010'],
+  white: ['#e8e4dc', '#b8b0a4'],
+  gray: ['#7a7470', '#3a3634'],
+  creamy: ['#d8b88a', '#8a6a44'],
+  dark_brown: ['#3e2a1a', '#1a100a'],
+};
 V.horse = {
-  parts: () =>
-    quadParts({
+  variant: (e) => `${String(e.meta.variant ?? 'chestnut')}:${e.meta.saddle ? 1 : 0}`,
+  parts: (e) => {
+    const [coat, mane] = HORSE_COATS[String(e.meta.variant ?? 'chestnut')] ?? HORSE_COATS.chestnut!;
+    return quadParts({
       body: [10, 10, 22],
       legH: 14,
       legW: 4,
       head: [6, 8, 12],
       headOffset: [12, -2],
-      bodyColors: { all: '#8a5a30' },
-      legColors: { all: '#7a4a28', bottom: '#2a2a2a' },
-      headColors: { all: '#8a5a30' },
+      bodyColors: { all: coat },
+      legColors: { all: coat, bottom: '#2a2a2a' },
+      headColors: { all: coat },
       face: (p) => {
         p.px('left', 2, 2, '#111111');
         p.px('right', 2, 2, '#111111');
       },
-      tail: { size: [3, 12, 3], colors: { all: '#2a1a10' }, rot: 0.6 },
-      ears: { size: [2, 3, 1], colors: { all: '#8a5a30' } },
-    }).concat([{ name: 'mane', parent: 'head', pivot: [0, 4, -1], from: [-1, -2, -4], size: [2, 10, 6], colors: { all: '#2a1a10' } }]),
+      tail: { size: [3, 12, 3], colors: { all: mane }, rot: 0.6 },
+      ears: { size: [2, 3, 1], colors: { all: coat } },
+    }).concat([{ name: 'mane', parent: 'head', pivot: [0, 4, -1], from: [-1, -2, -4], size: [2, 10, 6], colors: { all: mane } }], e.meta.saddle ? [saddlePart(10, 10, 8, 2)] : []);
+  },
   anim: animQuad,
 };
 V.goat = {
@@ -1229,11 +1258,52 @@ function makeVisual(def: MobVisualDef, e: ClientEntity, ctx: VisualContext): Ent
     baseSet(b);
     heldMat?.color.setScalar(b);
   };
+  // Lead: a sagging rope to the holder's hand or a fence post
+  const SEG = 10;
+  const leadGeo = new THREE.BufferGeometry();
+  leadGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array((SEG + 1) * 3), 3));
+  const leadMat = new THREE.LineBasicMaterial({ color: 0x8a6a3a });
+  const lead = new THREE.Line(leadGeo, leadMat);
+  lead.frustumCulled = false;
+  lead.visible = false;
+  // The rope lives in world space: keep it out of the moving holder
+  const leadRoot = new THREE.Group();
+  leadRoot.add(lead);
+  visual.object.add(leadRoot);
+  const baseUpdate = visual.update.bind(visual);
+  visual.update = (ent, alpha, time) => {
+    baseUpdate(ent, alpha, time);
+    let to: [number, number, number] | null = null;
+    const pos = ent.meta.leashPos as number[] | undefined;
+    if (Array.isArray(pos)) to = [pos[0]! + 0.5, pos[1]! + 0.5, pos[2]! + 0.5];
+    else if (typeof ent.meta.leash === 'number') {
+      to = ctx.localHand?.(ent.meta.leash) ?? null;
+      const h = to ? null : ctx.entity?.(ent.meta.leash);
+      if (h) {
+        const [hx, hy, hz] = h.lerp(alpha);
+        to = [hx, hy + 1.1, hz];
+      }
+    }
+    lead.visible = !!to;
+    if (!to) return;
+    const [x, y, z] = ent.lerp(alpha);
+    leadRoot.position.set(-x, -y, -z);
+    const fy = y + (MOB_BY_ID.get(ent.type)?.height ?? 1) * 0.75;
+    const p = leadGeo.getAttribute('position') as THREE.BufferAttribute;
+    const sag = Math.min(1, Math.hypot(to[0] - x, to[2] - z) * 0.08);
+    for (let i = 0; i <= SEG; i++) {
+      const t = i / SEG;
+      p.setXYZ(i, x + (to[0] - x) * t, fy + (to[1] - fy) * t - Math.sin(t * Math.PI) * sag, z + (to[2] - z) * t);
+    }
+    p.needsUpdate = true;
+  };
   const baseDispose = visual.dispose.bind(visual);
   visual.dispose = () => {
     baseDispose();
     heldMat?.map?.dispose();
     heldMat?.dispose();
+    leadGeo.dispose();
+    leadMat.dispose();
   };
   return visual;
 }

@@ -108,6 +108,12 @@ export class MobSystem {
         m.persistenceRequired = def.brain === 'golem';
         break;
     }
+    if (def.id === 'horse') {
+      // Each horse is its own: speed and jump strength (averaged, so extremes are rare) and coat
+      m.data.hspeed = 0.1125 + ((r.next() + r.next() + r.next()) / 3) * 0.225;
+      m.data.hjump = 0.4 + ((r.next() + r.next() + r.next()) / 3) * 0.6;
+      m.data.variant = ['chestnut', 'bay', 'black', 'white', 'gray', 'creamy', 'dark_brown'][r.int(7)];
+    }
     if (def.id === 'creeper' && r.chance(0.02)) m.data.charged = true;
     if (opts.data) for (const [k, v] of Object.entries(opts.data)) if (k !== 'profession') m.data[k] = v;
     if (def.category === 'boss') {
@@ -1074,6 +1080,8 @@ export class MobSystem {
         }
       }
     }
+    if (m.data.saddle) s.mining.dropItem(m.dim, m.x, m.y + 0.5, m.z, stackOf('saddle', 1));
+    s.mounts?.unleash(m, true);
     if (killer) {
       killer.addStat('killed.' + m.type);
       killer.addStat('mob_kills');
@@ -1189,6 +1197,8 @@ export class MobSystem {
       const rem = p.inventory.add(st);
       if (rem) s.interaction.dropStack(p, rem);
     };
+    // Riding, saddles and leads
+    if (s.mounts?.interact(p, m, held, slot)) return true;
     // Name tags
     if (id === 'name_tag' && held?.tag?.name) {
       m.customName = String(held.tag.name).slice(0, 32);

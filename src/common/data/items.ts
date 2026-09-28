@@ -150,6 +150,7 @@ add({ id: 'flint_and_steel', name: 'Flint and Steel', maxStack: 1, durability: 6
 add({ id: 'fire_charge', name: 'Fire Charge', use: 'fire_charge', creative: 'tools' });
 add({ id: 'shears', name: 'Shears', maxStack: 1, durability: 238, use: 'shears', tool: { type: 'shears', tier: 2, speed: 5 }, creative: 'tools' });
 add({ id: 'fishing_rod', name: 'Fishing Rod', maxStack: 1, durability: 64, use: 'fishing_rod', creative: 'tools' });
+add({ id: 'carrot_on_a_stick', name: 'Carrot on a Stick', maxStack: 1, durability: 25, use: 'carrot_on_a_stick', creative: 'tools' });
 add({ id: 'bucket', name: 'Bucket', maxStack: 16, use: 'bucket', creative: 'tools' });
 add({ id: 'water_bucket', name: 'Water Bucket', maxStack: 1, use: 'water_bucket', creative: 'tools' });
 add({ id: 'lava_bucket', name: 'Lava Bucket', maxStack: 1, use: 'lava_bucket', fuel: 20000, creative: 'tools' });

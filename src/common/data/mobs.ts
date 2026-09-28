@@ -82,6 +82,8 @@ export interface MobDef {
   /** Plays idle sounds every ~N ticks (average). */
   idleInterval?: number;
   xp?: number;
+  /** Rideable: rider feet height above the mob, who steers ('client': the rider; 'carrot': a Carrot on a Stick), and whether it must be tamed first. */
+  mount?: { seat: number; control: 'client' | 'carrot'; tame: boolean };
 }
 
 const M: MobDef[] = [];
@@ -92,11 +94,11 @@ function mob(d: MobDef): void {
 // --- Passive / farm ----------------------------------------------------------
 mob({ id: 'cow', name: 'Cow', category: 'creature', width: 0.9, height: 1.4, health: 10, speed: 0.1, brain: 'passive', model: 'cow', egg: [0x443626, 0xa1a1a1], breedItems: ['wheat'], babyChance: 0 });
 mob({ id: 'mooshroom', name: 'Mooshroom', category: 'creature', width: 0.9, height: 1.4, health: 10, speed: 0.1, brain: 'passive', model: 'mooshroom', egg: [0xa00f10, 0xb7b7b7], breedItems: ['wheat'] });
-mob({ id: 'pig', name: 'Pig', category: 'creature', width: 0.9, height: 0.9, health: 10, speed: 0.1, brain: 'passive', model: 'pig', egg: [0xf0a5a2, 0xdb635f], breedItems: ['carrot', 'potato', 'beetroot'] });
+mob({ id: 'pig', name: 'Pig', category: 'creature', width: 0.9, height: 0.9, health: 10, speed: 0.1, brain: 'passive', model: 'pig', egg: [0xf0a5a2, 0xdb635f], breedItems: ['carrot', 'potato', 'beetroot'], mount: { seat: 0.3, control: 'carrot', tame: false } });
 mob({ id: 'sheep', name: 'Sheep', category: 'creature', width: 0.9, height: 1.3, health: 8, speed: 0.1, brain: 'sheep', model: 'sheep', egg: [0xe7e7e7, 0xffb5b5], breedItems: ['wheat'] });
 mob({ id: 'chicken', name: 'Chicken', category: 'creature', width: 0.4, height: 0.7, health: 4, speed: 0.1, brain: 'chicken', model: 'chicken', egg: [0xa1a1a1, 0xff0000], breedItems: ['wheat_seeds', 'beetroot_seeds', 'melon_seeds', 'pumpkin_seeds'] });
 mob({ id: 'rabbit', name: 'Rabbit', category: 'creature', width: 0.4, height: 0.5, health: 3, speed: 0.13, brain: 'passive', model: 'rabbit', egg: [0x995f40, 0x734831], breedItems: ['carrot', 'golden_carrot', 'dandelion'] });
-mob({ id: 'horse', name: 'Horse', category: 'creature', width: 1.4, height: 1.6, health: 22, speed: 0.17, brain: 'passive', model: 'horse', egg: [0xc09e7d, 0xeee500], breedItems: ['golden_apple', 'golden_carrot'] });
+mob({ id: 'horse', name: 'Horse', category: 'creature', width: 1.4, height: 1.6, health: 22, speed: 0.17, brain: 'passive', model: 'horse', egg: [0xc09e7d, 0xeee500], breedItems: ['golden_apple', 'golden_carrot'], mount: { seat: 0.7, control: 'client', tame: true } });
 mob({ id: 'goat', name: 'Goat', category: 'creature', width: 0.9, height: 1.3, health: 10, speed: 0.1, damage: 2, brain: 'goat', model: 'goat', egg: [0xa5947c, 0x55493e], breedItems: ['wheat'] });
 mob({ id: 'fox', name: 'Fox', category: 'creature', width: 0.6, height: 0.7, health: 10, speed: 0.15, damage: 2, brain: 'fox', model: 'fox', egg: [0xd5b69f, 0xcc6920], breedItems: ['sweet_berries'] });
 mob({ id: 'wolf', name: 'Wolf', category: 'creature', width: 0.6, height: 0.85, health: 8, speed: 0.15, damage: 4, brain: 'wolf', model: 'wolf', egg: [0xd7d3d3, 0xceaf96], breedItems: ['beef', 'cooked_beef', 'porkchop', 'cooked_porkchop', 'chicken', 'cooked_chicken', 'mutton', 'cooked_mutton', 'rotten_flesh'] });

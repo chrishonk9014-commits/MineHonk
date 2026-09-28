@@ -10,6 +10,7 @@ import type { ItemIcons } from '../ItemIcons';
 import { items } from '../../../common/registry/items';
 import { blocks, STATE_BLOCK } from '../../../common/registry/blocks';
 import type { ClientWorld } from '../../world/ClientWorld';
+import { MOB_BY_ID } from '../../../common/data/mobs';
 
 export interface EntityVisual {
   object: THREE.Object3D;
@@ -137,7 +138,7 @@ export function boxVisual(model: BoxModel, animate: (m: BoxModel, e: ClientEntit
 
 // ------------------------------------------------------------------ built-in visuals
 
-registerVisual('player', (e) => {
+registerVisual('player', (e, ctx) => {
   const name = typeof e.meta.name === 'string' ? e.meta.name : null;
   const m = new BoxModel(humanoidDef(), playerSkin(name));
   // Elytra wings on the back, folded unless gliding
@@ -167,6 +168,22 @@ registerVisual('player', (e) => {
         w.rotation.set(gliding ? 0.25 : 0.1, 0, side * (gliding ? 1.2 : 0.12));
       });
       mm.root.rotation.order = 'YXZ';
+      // Riding: sit on the mount's seat (drawn from the mount's own position so the two never drift apart)
+      const vehicle = typeof ee.meta.riding === 'number' ? ctx.entity?.(ee.meta.riding) : undefined;
+      if (vehicle) {
+        const seat = MOB_BY_ID.get(vehicle.type)?.mount?.seat ?? 0.7;
+        const [vx, vy, vz] = vehicle.lerp(a);
+        const [px, py, pz] = ee.lerp(a);
+        mm.root.position.set(vx - px, vy + seat - py - 0.3, vz - pz);
+        const rl = mm.part('rightLeg');
+        const ll = mm.part('leftLeg');
+        if (rl) rl.rotation.set(-1.4, 0.2, 0);
+        if (ll) ll.rotation.set(-1.4, -0.2, 0);
+        mm.root.rotation.x = 0;
+        return;
+      }
+      mm.root.position.x = 0;
+      mm.root.position.z = 0;
       if (gliding) {
         // Body flat along the flight direction, arms back
         mm.root.rotation.x = Math.PI / 2 - 0.25 + ee.pitch * 0.6;

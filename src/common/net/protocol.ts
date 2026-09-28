@@ -42,7 +42,10 @@ export type C2S =
   | { t: 'request_progress' }
   | { t: 'ping'; time: number }
   /** Admin Panel request (authorised and validated by the server). */
-  | { t: 'admin'; req: number; action: AdminAction };
+  | { t: 'admin'; req: number; action: AdminAction }
+  /** Position of the mount the player steers (horses). */
+  | { t: 'vehicle_move'; x: number; y: number; z: number; yaw: number }
+  | { t: 'dismount' };
 
 export type ClickMode = 'pickup' | 'quick' | 'swap' | 'drop' | 'drag_start' | 'drag_add' | 'drag_end' | 'collect' | 'clone';
 
@@ -148,6 +151,10 @@ export type S2C =
   | { t: 'cooldown'; item: number; ticks: number }
   /** A firework rocket pushes the gliding player for `ticks`. */
   | { t: 'boost'; ticks: number }
+  /** Started (id) or stopped (null) riding; `control`: the client steers the mount. */
+  | { t: 'mount'; id: number | null; control?: boolean; seat?: number; width?: number; height?: number; speed?: number; jump?: number; x?: number; y?: number; z?: number; yaw?: number }
+  /** The server corrected the steered mount's position. */
+  | { t: 'vehicle_pos'; x: number; y: number; z: number }
   /** A jukebox starts (track) or stops (null) playing. */
   | { t: 'record'; x: number; y: number; z: number; track: string | null }
   /** Where the player last died (Recovery Compass), or null. */

@@ -238,6 +238,8 @@ export class Interaction {
       p.send({ t: 'chat', text: 'Visitors cannot use that in this world.', kind: 'error' });
       return true;
     }
+    // Tie leashed animals to fences
+    if ((bt.tags.has('fences') || bt.tags.has('walls')) && this.server.mounts?.useFence(p, x, y, z)) return true;
     if (this.hooks.useBlock?.(p, x, y, z, state)) return true;
     const adventureOk = p.gamemode !== 'spectator';
     if (!adventureOk) return false;
@@ -1070,6 +1072,7 @@ export class Interaction {
 
   onPlayerDied(p: ServerPlayer, info: DamageInfo): void {
     this.using.delete(p);
+    this.server.mounts?.dismount(p, true);
     this.hooks.onDeath?.(p, info);
   }
 

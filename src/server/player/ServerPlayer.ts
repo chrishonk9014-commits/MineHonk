@@ -114,6 +114,8 @@ export class ServerPlayer extends Entity {
   glideDirZ = 0;
   /** Tick until which a firework rocket may push the player faster. */
   boostUntil = 0;
+  /** The mob this player is riding. */
+  vehicle: Entity | null = null;
   /** Where the player last died (the Recovery Compass points there). */
   lastDeath: { dim: DimensionId; x: number; y: number; z: number } | null = null;
 
@@ -195,6 +197,7 @@ export class ServerPlayer extends Entity {
     const m: Record<string, unknown> = { name: this.name, sneak: this.sneaking, held: this.heldItem()?.id ?? 0 };
     if (this.effects.has('glowing')) m.glowing = true;
     if (this.gliding) m.glide = true;
+    if (this.vehicle) m.riding = this.vehicle.id;
     const chest = this.inventory.get(38);
     if (chest && chest.id === ELYTRA()) m.elytra = true;
     return m;

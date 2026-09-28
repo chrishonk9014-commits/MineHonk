@@ -313,3 +313,86 @@ describe('jukebox, respawn anchor, bell and compasses', () => {
     expect(saved.lastDeath).toEqual(player.lastDeath);
   });
 });
+
+describe('riding and leads', () => {
+  it('a saddled pig can be ridden and steered with a Carrot on a Stick', async () => {
+    const { server } = await makeServer();
+    const { player, conn } = await join(server);
+    const y = arena(player, 20);
+    const pig = server.mobs!.spawn(player.dim, 'pig', player.x + 1.5, y, player.z)!;
+    player.inventory.set(player.selectedSlot, stackOf('saddle', 1));
+    server.handle(conn, { t: 'interact', id: pig.id, hand: 0 });
+    expect(pig.data.saddle).toBe(true);
+    player.inventory.set(player.selectedSlot, stackOf('carrot_on_a_stick', 1));
+    server.handle(conn, { t: 'interact', id: pig.id, hand: 0 });
+    expect(player.vehicle).toBe(pig);
+    expect(conn.last('mount')!.id).toBe(pig.id);
+    player.yaw = 0;
+    const z0 = pig.z;
+    tick(server, 60);
+    expect(pig.z).toBeLessThan(z0 - 2);
+    // The rider sits on the pig
+    expect(Math.abs(player.x - pig.x)).toBeLessThan(0.01);
+    expect(player.y).toBeCloseTo(pig.y + 0.3, 1);
+    server.handle(conn, { t: 'dismount' });
+    expect(player.vehicle).toBeNull();
+    expect(pig.rider).toBeNull();
+  });
+
+  it('a tamed, saddled horse is steered by the rider and checked by the server', async () => {
+    const { server } = await makeServer();
+    const { player, conn } = await join(server);
+    const y = arena(player, 20);
+    const horse = server.mobs!.spawn(player.dim, 'horse', player.x + 2, y, player.z)!;
+    horse.owner = player.uuid;
+    horse.data.saddle = true;
+    server.handle(conn, { t: 'interact', id: horse.id, hand: 0 });
+    expect(player.vehicle).toBe(horse);
+    expect(conn.last('mount')!.control).toBe(true);
+    server.handle(conn, { t: 'vehicle_move', x: horse.x, y: horse.y, z: horse.z - 0.6, yaw: 0 });
+    expect(horse.z).toBeCloseTo(player.z, 3);
+    // Too far in one step: corrected
+    const zBefore = horse.z;
+    server.handle(conn, { t: 'vehicle_move', x: horse.x, y: horse.y, z: horse.z - 20, yaw: 0 });
+    expect(horse.z).toBe(zBefore);
+    expect(conn.of('vehicle_pos').length).toBe(1);
+  });
+
+  it('untamed horses buck until they accept the rider', async () => {
+    const { server } = await makeServer();
+    const { player, conn } = await join(server);
+    const y = arena(player, 20);
+    const horse = server.mobs!.spawn(player.dim, 'horse', player.x + 2, y, player.z)!;
+    horse.data.temper = 100;
+    server.handle(conn, { t: 'interact', id: horse.id, hand: 0 });
+    expect(player.vehicle).toBe(horse);
+    expect(conn.last('mount')!.control).toBe(false);
+    tick(server, 25);
+    expect(horse.owner).toBe(player.uuid);
+  });
+
+  it('a lead ties an animal to the player and to a fence', async () => {
+    const { server } = await makeServer();
+    const { player, conn } = await join(server);
+    const y = arena(player, 20);
+    const cow = server.mobs!.spawn(player.dim, 'cow', player.x + 2, y, player.z)!;
+    player.inventory.set(player.selectedSlot, stackOf('lead', 1));
+    server.handle(conn, { t: 'interact', id: cow.id, hand: 0 });
+    expect(cow.data.leash).toBe(player.uuid);
+    // Walk away: the cow is pulled along
+    player.setPos(player.x + 8, y, player.z);
+    player.dim.updateBucket(player);
+    tick(server, 80);
+    expect(Math.hypot(cow.x - player.x, cow.z - player.z)).toBeLessThan(8);
+    // Tie it to a fence
+    const fx = Math.floor(player.x) + 1;
+    const fz = Math.floor(player.z) + 1;
+    player.dim.setBlock(fx, y, fz, S('oak_fence'));
+    server.handle(conn, { t: 'use_on', x: fx, y, z: fz, face: 1, hx: 0.5, hy: 1, hz: 0.5, hand: 0, yaw: 0, pitch: 0.5, seq: 1 });
+    expect(cow.data.leashPos).toEqual([fx, y, fz]);
+    // Breaking the fence frees it and drops the lead
+    player.dim.setBlock(fx, y, fz, 0);
+    tick(server, 4);
+    expect(cow.data.leashPos).toBeUndefined();
+  });
+});

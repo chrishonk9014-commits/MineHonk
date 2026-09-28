@@ -1309,6 +1309,81 @@ V.pufferfish = {
   },
 };
 
+// ---------------------------------------------------------------- cave mobs
+V.glow_squid = {
+  parts: () => {
+    const parts: KitPart[] = [{ name: 'body', pivot: [0, 8, 0], from: [-6, 0, -6], size: [12, 16, 12], colors: { all: '#0a5a5e' }, paint: (p) => {
+      p.speckle('all', '#3ae0c0', 0.25);
+      p.px('front', 3, 12, '#c8fff0', 2, 2);
+      p.px('front', 7, 12, '#c8fff0', 2, 2);
+    } }];
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      parts.push({ name: 'arm' + i, pivot: [Math.cos(a) * 5, 8, Math.sin(a) * 5], from: [-1, -18, -1], size: [2, 18, 2], colors: { all: '#0e6a6e' }, paint: (p) => p.speckle('all', '#5af0d0', 0.3) });
+    }
+    return parts;
+  },
+  anim: (m, e, alpha, time) => {
+    for (let i = 0; i < 8; i++) {
+      const a = m.part('arm' + i);
+      if (a) a.rotation.x = Math.sin(time * 0.15 + i) * 0.25;
+    }
+    void alpha;
+    void e;
+  },
+  scale: 0.6,
+  glow: true,
+};
+V.crystal_mite = {
+  parts: () => [
+    { name: 'body', pivot: [0, 2, 0], from: [-2.5, -1.5, -4], size: [5, 3, 8], colors: { all: '#4a3a6a' }, paint: (p) => p.speckle('all', '#6a4a9a', 0.3) },
+    { name: 'shard1', parent: 'body', pivot: [-1, 1.5, 1], from: [-0.5, 0, -0.5], size: [1, 4, 1], rot: [0.3, 0, -0.3], colors: { all: '#a583e8', top: '#e0ccff' } },
+    { name: 'shard2', parent: 'body', pivot: [1, 1.5, -1], from: [-0.5, 0, -0.5], size: [1, 5, 1], rot: [-0.2, 0, 0.25], colors: { all: '#c6a8ff', top: '#f0e8ff' } },
+    { name: 'shard3', parent: 'body', pivot: [0, 1.5, -3], from: [-0.5, 0, -0.5], size: [1, 3, 1], rot: [-0.4, 0, 0], colors: { all: '#8d68d4', top: '#e0ccff' } },
+    { name: 'head', pivot: [0, 2, 4], from: [-2, -1, 0], size: [4, 2, 2], colors: { all: '#3a2a5a' }, paint: (p) => {
+      p.px('front', 0, 0, '#e0ccff');
+      p.px('front', 3, 0, '#e0ccff');
+    } },
+    { name: 'leg0', pivot: [-2.5, 1, 2], from: [-2, -1, -0.5], size: [2, 1, 1], colors: { all: '#2a1a4a' } },
+    { name: 'leg1', pivot: [2.5, 1, 2], from: [0, -1, -0.5], size: [2, 1, 1], colors: { all: '#2a1a4a' } },
+    { name: 'leg2', pivot: [-2.5, 1, -2], from: [-2, -1, -0.5], size: [2, 1, 1], colors: { all: '#2a1a4a' } },
+    { name: 'leg3', pivot: [2.5, 1, -2], from: [0, -1, -0.5], size: [2, 1, 1], colors: { all: '#2a1a4a' } },
+  ],
+  anim: (m, e, alpha, time) => {
+    const w = walkPhase(e, alpha);
+    for (const [n, k] of [['leg0', 1], ['leg1', -1], ['leg2', -1], ['leg3', 1]] as const) {
+      const p = m.part(n);
+      if (p) p.rotation.y = Math.sin(w * 1.4) * 0.6 * e.limbSpeed * k;
+    }
+    const b = m.part('body');
+    if (b) b.rotation.z = Math.sin(time * 0.5) * 0.05 * e.limbSpeed;
+  },
+};
+V.sporeling = {
+  parts: () => [
+    { name: 'body', pivot: [0, 5, 0], from: [-2.5, 0, -2.5], size: [5, 8, 5], colors: { all: '#d8d0c0', bottom: '#b8b0a0' }, paint: (p) => {
+      p.px('front', 1, 2, '#1a1a1a');
+      p.px('front', 3, 2, '#1a1a1a');
+      p.px('front', 2, 4, '#8a7a6a');
+    } },
+    { name: 'head', parent: 'body', pivot: [0, 8, 0], from: [-6, 0, -6], size: [12, 5, 12], colors: { all: '#2a8a9a', bottom: '#d8e8e0', top: '#3ab8c0' }, paint: (p) => p.speckle('top', '#c8fff8', 0.18) },
+    { name: 'cap2', parent: 'head', pivot: [0, 5, 0], from: [-4, 0, -4], size: [8, 2, 8], colors: { all: '#3ab8c0' }, paint: (p) => p.speckle('top', '#c8fff8', 0.2) },
+    { name: 'leg0', pivot: [-1.5, 5, 0], from: [-1, -5, -1], size: [2, 5, 2], colors: { all: '#c8c0b0' } },
+    { name: 'leg1', pivot: [1.5, 5, 0], from: [-1, -5, -1], size: [2, 5, 2], colors: { all: '#c8c0b0' } },
+  ],
+  anim: (m, e, alpha, time) => {
+    const w = walkPhase(e, alpha);
+    const s = Math.sin(w * 0.8) * 0.8 * e.limbSpeed;
+    const l0 = m.part('leg0');
+    const l1 = m.part('leg1');
+    if (l0) l0.rotation.x = s;
+    if (l1) l1.rotation.x = -s;
+    const b = m.part('body');
+    if (b) b.rotation.z = Math.sin(time * 0.1 + e.id) * 0.05;
+  },
+  glow: true,
+};
+
 // ---------------------------------------------------------------- the Warden
 /** Client-side memory of the Warden's last cues (to time twitches and sniffs). */
 const wardenCues = new WeakMap<ClientEntity, { listen: unknown; listenAt: number; sniff: unknown; sniffAt: number }>();

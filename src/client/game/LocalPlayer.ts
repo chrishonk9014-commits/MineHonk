@@ -40,6 +40,8 @@ export class LocalPlayer {
   boostTicks = 0;
   /** Whether the equipped chest item is an Elytra that still flies (set by the game). */
   canGlide: () => boolean = () => false;
+  /** Sneaking speed factor (Silent Stride on the leggings raises it). */
+  sneakSpeed: () => number = () => 0.3;
   /**
    * The mob being ridden. With `control` this client simulates the mount's
    * body and steers it; otherwise the player sits wherever the server moves it.
@@ -126,7 +128,7 @@ export class LocalPlayer {
         this.world,
         this.body,
         { forward: input.forward, strafe: input.strafe, jump: input.jump, sneak: input.sneak, sprint: this.sprinting, yaw: this.yaw },
-        { flying: this.flying, noClip: this.abilities.noClip, walkSpeed: this.abilities.walkSpeed, flySpeed: this.abilities.flySpeed, speedMul, jumpBoost: eff('jump_boost'), levitation: this.flying ? 0 : eff('levitation'), slowFalling: eff('slow_falling') > 0 },
+        { flying: this.flying, noClip: this.abilities.noClip, walkSpeed: this.abilities.walkSpeed, flySpeed: this.abilities.flySpeed, speedMul, sneakSpeed: this.sneakSpeed(), jumpBoost: eff('jump_boost'), levitation: this.flying ? 0 : eff('levitation'), slowFalling: eff('slow_falling') > 0 },
         this.eyeHeight,
       );
     }

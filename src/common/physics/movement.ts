@@ -221,6 +221,8 @@ export interface MoveAbilities {
   flySpeed: number;
   /** Multiplier from potion effects etc. */
   speedMul?: number;
+  /** Fraction of walking speed kept while sneaking (0.3; Silent Stride raises it). */
+  sneakSpeed?: number;
   jumpBoost?: number;
   /** Levitation level (effect amplifier + 1): floats upwards. */
   levitation?: number;
@@ -269,8 +271,9 @@ export function stepMovement(world: BlockAccess, b: Body, input: MoveInput, ab: 
     str /= len;
   }
   if (input.sneak && !ab.flying) {
-    fwd *= 0.3;
-    str *= 0.3;
+    const k = ab.sneakSpeed ?? 0.3;
+    fwd *= k;
+    str *= k;
   }
   const sprinting = input.sprint && fwd > 0.8 && !input.sneak;
   res.sprinting = sprinting;

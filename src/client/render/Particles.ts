@@ -287,11 +287,32 @@ export class Particles {
           this.add({ x: x + Math.cos(a) * 0.3, y: y + (i % 3) * 0.3, z: z + Math.sin(a) * 0.3, vx: Math.cos(a) * 0.06, vy: 0.05, vz: Math.sin(a) * 0.06, maxLife: 30, size: 0.18, r: 0.35, g: 0.95, b: 1, emissive: true, fade: true, drag: 0.95 });
           break;
         }
+        case 'spore_cloud':
+          this.add({ x: x + ox, y: y + oy, z: z + oz, vx: ox * 0.03, vy: 0.01, vz: oz * 0.03, maxLife: 50 + Math.random() * 30, size: 0.3, grow: 0.01, r: 0.55, g: 0.9, b: 0.85, a: 0.7, fade: true, drag: 0.94 });
+          break;
         case 'sculk_soul':
           this.add({ x: x + ox, y: y + oy, z: z + oz, vy: 0.03, vx: ox * 0.01, vz: oz * 0.01, maxLife: 40 + Math.random() * 20, size: 0.14, r: 0.3, g: 0.9, b: 1, emissive: true, fade: true, drag: 0.98 });
           break;
         case 'sculk_charge':
           this.add({ x: x + ox, y: y + oy * 0.3, z: z + oz, vy: 0.01, maxLife: 25 + Math.random() * 15, size: 0.08, r: 0.1, g: 0.8, b: 0.85, emissive: true, fade: true });
+          break;
+        case 'spore':
+          // Lush caves: slow greenish pollen drifting down
+          this.add({ x: x + ox, y: y + oy, z: z + oz, vx: (Math.random() - 0.5) * 0.008, vy: -0.004, vz: (Math.random() - 0.5) * 0.008, maxLife: 90 + Math.random() * 60, size: 0.05, r: 0.6, g: 0.85, b: 0.35, drag: 0.99, fade: true });
+          break;
+        case 'spore_glow':
+          // Mushroom grottos: faint blue motes rising and bobbing
+          this.add({ x: x + ox, y: y + oy, z: z + oz, vx: (Math.random() - 0.5) * 0.01, vy: 0.006, vz: (Math.random() - 0.5) * 0.01, maxLife: 70 + Math.random() * 50, size: 0.06, r: 0.4, g: 0.75, b: 1, emissive: true, fade: true, drag: 0.99 });
+          break;
+        case 'crystal_glint':
+          // Crystal hollows: short sparkles that barely move
+          this.add({ x: x + ox, y: y + oy, z: z + oz, maxLife: 12 + Math.random() * 10, size: 0.07, r: 0.85, g: 0.7, b: 1, emissive: true, fade: true, grow: -0.003, drag: 1 });
+          break;
+        case 'dust':
+          this.add({ x: x + ox, y: y + oy, z: z + oz, vx: (Math.random() - 0.5) * 0.004, vy: -0.002, vz: (Math.random() - 0.5) * 0.004, maxLife: 100 + Math.random() * 60, size: 0.035, r: 0.62, g: 0.52, b: 0.42, drag: 0.99, fade: true });
+          break;
+        case 'snowflake':
+          this.add({ x: x + ox, y: y + oy, z: z + oz, vx: (Math.random() - 0.5) * 0.012, vy: -0.012, vz: (Math.random() - 0.5) * 0.012, maxLife: 80 + Math.random() * 40, size: 0.05, r: 0.92, g: 0.96, b: 1, drag: 0.99, collide: true, fade: true });
           break;
         case 'rain_splash':
           this.add({ x, y, z, vx: ox * 0.05, vy: 0.06, vz: oz * 0.05, maxLife: 6, size: 0.05, r: 0.6, g: 0.7, b: 1, gravity: 0.02 });

@@ -41,6 +41,8 @@ interface Mind {
   sniffAt: number;
   roared: boolean;
   stuckSince: number;
+  /** Players it has hunted (anger reached 80): if they outlive its anger they escaped. */
+  hunted: Set<Entity>;
 }
 
 export class WardenSystem {
@@ -54,7 +56,7 @@ export class WardenSystem {
   mind(w: Mob): Mind {
     let m = this.minds.get(w);
     if (!m) {
-      m = { anger: new Map(), investigate: null, heardAt: this.server.tickNo, emerge: 0, dig: 0, sonic: null, sonicReadyAt: 0, sniffAt: this.server.tickNo + 100, roared: false, stuckSince: -1 };
+      m = { anger: new Map(), investigate: null, heardAt: this.server.tickNo, emerge: 0, dig: 0, sonic: null, sonicReadyAt: 0, sniffAt: this.server.tickNo + 100, roared: false, stuckSince: -1, hunted: new Set() };
       this.minds.set(w, m);
     }
     this.active.add(w);
@@ -118,6 +120,7 @@ export class WardenSystem {
     const before = m.anger.get(e) ?? 0;
     const after = Math.min(MAX_ANGER, before + amount);
     m.anger.set(e, after);
+    if (after >= ANGRY && isPlayer(e)) m.hunted.add(e);
     if (before < ANGRY && after >= ANGRY && !m.roared) {
       m.roared = true;
       this.server.playSound(w.dim, 'warden.roar', w.x, w.y + 2, w.z, 4, 1);
@@ -252,12 +255,20 @@ export class WardenSystem {
       w.metaDirty = true;
       w.stopNavigation();
       s.playSound(w.dim, 'warden.dig', w.x, w.y, w.z, 3, 1);
+      for (const e of m.hunted) this.escaped(w, e);
+      m.hunted.clear();
       return;
     }
     if (!w.navigating && this.rng.chance(0.02)) {
       const a = this.rng.next() * Math.PI * 2;
       w.navigateTo(w.x + Math.cos(a) * 6, w.y, w.z + Math.sin(a) * 6, 0.6);
     }
+  }
+
+  /** A player it hunted is still alive after its anger ran out. */
+  private escaped(w: Mob, e: Entity): void {
+    if (w.admin || !isPlayer(e) || e.dead || e.dim !== w.dim) return;
+    this.server.interaction.grant(e, 'escape_warden');
   }
 
   private strike(w: Mob, t: Entity): void {
@@ -353,6 +364,7 @@ export class WardenSystem {
         const gone = !isAlive(e as never) || e.dim !== w.dim || (isPlayer(e) && (e.gamemode === 'creative' || e.gamemode === 'spectator'));
         if (gone || a <= 1) m.anger.delete(e);
         else m.anger.set(e, a - 1);
+        if ((gone || a <= 1) && m.hunted.delete(e)) this.escaped(w, e);
       }
       const lvl = this.angerLevel(w);
       if (w.data.angerLevel !== lvl) {

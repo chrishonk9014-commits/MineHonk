@@ -31,6 +31,7 @@ import { STATE_SOLID, STATE_FLUID, STATE_BLOCK, blocks } from '../../common/regi
 import { chunkIndex } from '../../common/world/constants';
 import type { DimensionId } from '../../common/data/biomes';
 import { ADMIN_ZONE_RADIUS, MAX_ADMIN_ZONES } from './adminState';
+import { CAVE_BIOMES } from '../../common/gen/caves/caveBiomes';
 
 /** Work budget for searches per server tick (ms). */
 const SEARCH_BUDGET_MS = 6;
@@ -41,7 +42,7 @@ const HAZARD = /lava|magma|fire|cactus|campfire|sweet_berry|powder_snow|wither_r
 interface Search {
   p: ServerPlayer;
   req: number;
-  kind: 'structure' | 'biome';
+  kind: 'structure' | 'biome' | 'cave';
   dim: DimensionId;
   id: string;
   teleport: boolean;
@@ -501,6 +502,16 @@ export class AdminService {
     }
     const dir = [-Math.sin(p.yaw), -Math.cos(p.yaw)];
     let n = 0;
+    if (type === 'warden' && s.warden) {
+      // Wardens climb out of the ground like a summoned one, marked as admin
+      // (never counts for advancements); capped so the panel can't flood a world
+      count = Math.min(count, 3);
+      for (let i = 0; i < count; i++) {
+        const w = s.warden.summon(p.dim, p.x + dir[0]! * 6, p.y, p.z + dir[1]! * 6, null, { admin: true });
+        if (w) n++;
+      }
+      return { ok: n > 0, text: n > 0 ? `Summoned ${n} admin Warden${n === 1 ? '' : 's'} (it will not count for advancements).` : 'No room for a Warden to emerge here.' };
+    }
     for (let i = 0; i < count; i++) {
       const d = 3 + Math.min(4, def.width) + Math.random() * 2;
       const x = p.x + dir[0]! * d + (Math.random() - 0.5) * 3;
@@ -578,6 +589,13 @@ export class AdminService {
       const g = dim.generator;
       if (!g.structureTypes?.().includes(id) || !g.locateSteps) return { ok: false, text: `${structureName(id)} does not generate in the ${a.dim}.` };
       steps = g.locateSteps(id, Math.floor(ox), Math.floor(oz));
+    } else if (a.biome.startsWith('cave:')) {
+      // V2 underground: cave biomes, mega-caverns and ravines
+      id = a.biome.slice(5);
+      if (!dim.generator.caveSteps || !dim.generator.caves || !caveFeatures().some((f) => f.id === id)) return { ok: false, text: `${caveFeatureName(id)} does not generate in the ${a.dim}${a.dim === 'overworld' ? ' of this world (created before the Caves Update)' : ''}.` };
+      steps = dim.generator.caveSteps(id, Math.floor(ox), Math.floor(oz));
+      this.searches.push({ p, req, kind: 'cave', dim: a.dim, id, teleport: a.a.startsWith('tp_'), steps, started: this.server.tickNo });
+      return null;
     } else {
       id = a.biome;
       const b = biomes.find((bb) => bb.id === id);
@@ -626,7 +644,7 @@ export class AdminService {
 
   private finishSearch(q: Search, pos: { x: number; y: number; z: number } | null): void {
     const p = q.p;
-    const label = q.kind === 'structure' ? structureName(q.id) : biomes.find((b) => b.id === q.id)?.name ?? q.id;
+    const label = q.kind === 'structure' ? structureName(q.id) : q.kind === 'cave' ? caveFeatureName(q.id) : biomes.find((b) => b.id === q.id)?.name ?? q.id;
     if (!pos) {
       p.send({ t: 'admin_result', req: q.req, ok: false, text: `No ${label} found within range in the ${q.dim}.` });
       return;
@@ -743,8 +761,10 @@ export class AdminService {
     const s = this.server;
     const structures: Record<string, string[]> = {};
     const bl: AdminCatalog['biomes'] = {};
+    const caves: NonNullable<AdminCatalog['caves']> = {};
     for (const d of ADMIN_DIMENSIONS) {
       structures[d] = s.dim(d).generator.structureTypes?.() ?? [];
+      if (s.dim(d).generator.caves) caves[d] = caveFeatures();
       bl[d] = biomes.filter((b) => b.dimension === d).map((b) => ({ id: b.id, name: b.name }));
     }
     return {
@@ -752,6 +772,7 @@ export class AdminService {
       biomes: bl,
       mobs: MOB_DEFS.map((m) => ({ id: m.id, name: m.name, category: m.category })),
       players: [...s.players.values()].map((o) => o.name),
+      caves,
     };
   }
 
@@ -853,3 +874,12 @@ function* biomeSteps(dim: Dimension, biome: number, x: number, z: number): Gener
 void items;
 void biomeOf;
 void stackOf;
+
+/** Cave features the admin cave finder knows (V2 overworld). */
+function caveFeatures(): { id: string; name: string }[] {
+  return [...CAVE_BIOMES.slice(1).map((b) => ({ id: b.id, name: b.name })), { id: 'mega_cavern', name: 'Mega-Cavern' }, { id: 'ravine', name: 'Ravine' }];
+}
+
+function caveFeatureName(id: string): string {
+  return caveFeatures().find((f) => f.id === id)?.name ?? id;
+}

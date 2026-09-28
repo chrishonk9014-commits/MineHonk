@@ -528,6 +528,16 @@ export class CaveCarver {
         }
   }
 
+  /** The mega-cavern whose inner part contains a position, if any. */
+  megaAt(x: number, y: number, z: number): Mega | null {
+    const m = this.mega(Math.floor(x / MEGA_REGION), Math.floor(z / MEGA_REGION));
+    if (!m) return null;
+    const dx = (x - m.x) / m.rh;
+    const dz = (z - m.z) / m.rh;
+    const dy = (y - m.y) / m.rv;
+    return dx * dx + dy * dy + dz * dz < 0.6 ? m : null;
+  }
+
   /** Nearest mega-cavern centre (admin locate). */
   nearestMega(x: number, z: number, maxRegions = 12): { x: number; y: number; z: number } | null {
     const rx0 = Math.floor(x / MEGA_REGION);

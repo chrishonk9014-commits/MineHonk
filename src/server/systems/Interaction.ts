@@ -1156,6 +1156,9 @@ export class Interaction {
     if (id === 'elytra') this.grant(p, 'elytra');
     if (id === 'corrupted_eye') this.grant(p, 'corrupted_eye');
     if (id === 'iron_ingot') this.grant(p, 'smelt_iron');
+    if (id.endsWith('_froglight')) this.grant(p, 'froglight');
+    if (id === 'resonance_charm') this.grant(p, 'vault_reward');
+    if (id === 'enchanted_book' && stack.tag?.stored?.silent_stride) this.grant(p, 'silent_stride');
   }
 
   onCrafted(p: ServerPlayer, stack: ItemStack): void {
@@ -1167,6 +1170,8 @@ export class Interaction {
     if (id === 'iron_pickaxe') this.grant(p, 'iron_tools');
     if (id.startsWith('iron_') && ['helmet', 'chestplate', 'leggings', 'boots'].some((a) => id.endsWith(a))) this.grant(p, 'obtain_armor');
     if (id === 'bread') this.grant(p, 'bake_bread');
+    if (id === 'recovery_compass') this.grant(p, 'recovery_compass');
+    if (id === 'music_disc_hollow') this.grant(p, 'hollow_disc');
     if (id.startsWith('glitched_')) this.grant(p, 'glitched_gear');
     if (id.startsWith('netherite_')) {
       const all = [36, 37, 38, 39].every((i) => items[p.inventory.get(i)?.id ?? 0]?.id.startsWith('netherite_'));

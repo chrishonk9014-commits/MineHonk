@@ -53,7 +53,8 @@ export type Brain =
   | 'camel'
   | 'frog'
   | 'axolotl'
-  | 'warden';
+  | 'warden'
+  | 'sporeling';
 
 export interface MobDef {
   id: string;
@@ -172,6 +173,12 @@ mob({ id: 'farlands_wanderer', name: 'Farlands Wanderer', category: 'monster', w
 mob({ id: 'glitch_zombie', name: 'Glitched Zombie', category: 'monster', width: 0.6, height: 1.95, health: 24, speed: 0.11, damage: 4, armor: 2, brain: 'zombie', model: 'glitch_zombie', egg: [0x00afaf, 0xff00ff], undead: true, farlands: true, maxSpawnLight: 7 });
 mob({ id: 'glitch_skeleton', name: 'Glitched Skeleton', category: 'monster', width: 0.6, height: 1.99, health: 22, speed: 0.1, damage: 3, brain: 'skeleton', model: 'glitch_skeleton', egg: [0xc1c1c1, 0xff00ff], undead: true, farlands: true, equipment: [['bow', 1]], maxSpawnLight: 7 });
 mob({ id: 'void_wisp', name: 'Void Wisp', category: 'monster', width: 0.5, height: 0.5, health: 8, speed: 0.12, damage: 3, brain: 'void_wisp', model: 'void_wisp', egg: [0x05030a, 0x9a4dff], flying: true, farlands: true, maxSpawnLight: 15 });
+// --- Cave mobs (V2) ---------------------------------------------------------------
+mob({ id: 'glow_squid', name: 'Glow Squid', category: 'water', width: 0.8, height: 0.8, health: 10, speed: 0.05, brain: 'squid', model: 'glow_squid', egg: [0x095656, 0x85f1bc], aquatic: true, idleInterval: 400 });
+/** Crystal caves: small crystal-backed critters that swarm when one is hit. */
+mob({ id: 'crystal_mite', name: 'Crystal Mite', category: 'monster', width: 0.5, height: 0.4, health: 8, speed: 0.13, damage: 2, brain: 'silverfish', model: 'crystal_mite', egg: [0x5c3f99, 0xc6a8ff], arthropod: true, maxSpawnLight: 12 });
+/** Mushroom caves: a shy walking mushroom that puffs a dizzying spore cloud when hurt. */
+mob({ id: 'sporeling', name: 'Sporeling', category: 'creature', width: 0.6, height: 1.1, health: 14, speed: 0.08, damage: 3, brain: 'sporeling', model: 'sporeling', egg: [0xd8d0c0, 0x2a8a9a], idleInterval: 300 });
 /** Blind guardian of the deep dark, called up by sculk shriekers. */
 mob({ id: 'warden', name: 'Warden', category: 'monster', width: 0.9, height: 2.9, eye: 2.6, health: 500, speed: 0.13, damage: 30, knockbackRes: 1, followRange: 48, brain: 'warden', model: 'warden', egg: [0x0f4649, 0x39d6e0], idleInterval: 160, xp: 5 });
 /** The Farlands' corrupted guardian. */

@@ -4,6 +4,7 @@
  * into client state. The server stays authoritative for everything; the
  * client only predicts movement, mining progress and placements.
  */
+import { CAVE_BIOMES } from '../../common/gen/caves/caveBiomes';
 import type { ClientConnection } from '../net/ClientConnection';
 import type { C2S, S2C, PlayerStats, WorldInfo, AbilitiesMsg, WindowKind } from '../../common/net/protocol';
 import { ClientWorld } from '../world/ClientWorld';
@@ -23,7 +24,7 @@ import type { Slot, ItemStack } from '../../common/game/itemstack';
 import type { GameMode } from '../../common/game/gamemode';
 import type { DimensionId } from '../../common/data/biomes';
 import { items, itemById } from '../../common/registry/items';
-import { blocks, blockOf, STATE_BLOCK, STATE_FLUID } from '../../common/registry/blocks';
+import { blocks, blockOf, STATE_BLOCK, STATE_FLUID, STATE_SOLID } from '../../common/registry/blocks';
 import { lookDirection, rayBox } from './look';
 import { entityInfo } from '../../common/data/entities';
 import { raycastBlocks } from '../../common/physics/raycast';
@@ -154,6 +155,9 @@ export class Game {
   private readonly adminWaiters = new Map<number, { done: (r: AdminReply) => void; progress?: (r: AdminReply) => void }>();
   private lastDebugUpdate = 0;
   private musicTimer = 0;
+  /** Cave biome the server says we are in (0 = none) and how far the view has blended into it. */
+  caveBiome = 0;
+  private caveBlend = 0;
 
   constructor(
     readonly canvas: HTMLCanvasElement,
@@ -172,6 +176,11 @@ export class Game {
       return e ? [e.x, e.y, e.z] : null;
     };
     // Elytra in the chest slot that isn't worn down to its last point
+    this.player.sneakSpeed = () => {
+      const legs = this.invSlots[HELMET + 2];
+      const lvl = legs?.tag?.ench?.silent_stride ?? 0;
+      return Math.min(1, 0.3 + 0.15 * lvl);
+    };
     this.player.canGlide = () => {
       const c = this.invSlots[HELMET + 1];
       if (!c) return false;
@@ -529,6 +538,9 @@ export class Game {
       case 'particles':
         if (this.settings.particles === 'minimal' && m.kind !== 'explosion') break;
         this.renderer.particles.spawn(m.kind, m.x, m.y, m.z, this.settings.particles === 'decreased' ? Math.ceil(m.count / 3) : m.count, m.spread, m.data);
+        break;
+      case 'cave_biome':
+        this.caveBiome = m.id;
         break;
       case 'trail':
         if (this.settings.particles !== 'minimal' || m.kind === 'sonic_boom') this.renderer.particles.trail(m.kind, m.x0, m.y0, m.z0, m.x1, m.y1, m.z1, m.ticks);
@@ -1050,9 +1062,37 @@ export class Game {
     }
   }
 
+  /** Cave biome ambience: drifting particles and biome sounds around the player. */
+  private caveAmbience(): void {
+    const cb = this.dimension === 'overworld' ? this.caveBiome : 0;
+    this.caveBlend += ((cb ? 1 : 0) - this.caveBlend) * 0.04;
+    if (!cb) return;
+    const info = CAVE_BIOMES[cb];
+    const b = this.player.body;
+    if (info?.particle && this.settings.particles !== 'minimal' && this.tickNo % (this.settings.particles === 'decreased' ? 6 : 2) === 0) {
+      const x = b.x + (Math.random() - 0.5) * 16;
+      const y = b.y + (Math.random() - 0.3) * 8;
+      const z = b.z + (Math.random() - 0.5) * 16;
+      if (!STATE_SOLID[this.world.getState(Math.floor(x), Math.floor(y), Math.floor(z))]) this.renderer.particles.spawn(info.particle, x, y, z, 1, 0.2);
+    }
+    // Each biome has its own sounds
+    if (this.tickNo % 40 === 0 && Math.random() < 0.35) {
+      const snd = ['', 'cave.drip', 'cave.rumble', 'lush.chirp', 'mushroom.pop', 'crystal.chime', 'cave.drip', 'lava.pop', 'frozen.wind', 'deep_dark.hum'][cb];
+      if (snd) this.audio.play(snd, b.x + (Math.random() - 0.5) * 20, b.y + (Math.random() - 0.5) * 6, b.z + (Math.random() - 0.5) * 20, 0.6, 0.85 + Math.random() * 0.3, 'ambient');
+    }
+  }
+
+  /** Cave fog for the renderer: colour, how thick, and how far we are into it. */
+  caveFog(): { color: number; density: number; amount: number } | undefined {
+    if (this.caveBlend < 0.01) return undefined;
+    const info = CAVE_BIOMES[this.caveBiome] ?? CAVE_BIOMES[1]!;
+    return { color: info.fog, density: info.fogDensity, amount: this.caveBlend };
+  }
+
   private ambience(): void {
     const p = this.player;
     const b = p.body;
+    this.caveAmbience();
     const light = this.world.getLight(Math.floor(b.x), Math.floor(b.y + 1.6), Math.floor(b.z));
     const skyLight = light >> 4;
     if (this.dimension === 'overworld') {
@@ -1076,7 +1116,7 @@ export class Game {
     if (++this.musicTimer >= 20) {
       this.musicTimer = 0;
       const boss = this.hud.hasBoss();
-      this.audio.music.update(MusicPlayer.moodFor(this.dimension, this.player.gamemode === 'creative', p.body.eyesInWater, boss));
+      this.audio.music.update(MusicPlayer.moodFor(this.dimension, this.player.gamemode === 'creative', p.body.eyesInWater, boss, this.caveBiome));
     }
   }
 
@@ -1362,6 +1402,7 @@ export class Game {
       flash: this.flash,
       shake: this.shake,
       darkness: this.darknessAmount(),
+      cave: this.caveFog(),
       hurtTilt: this.hurtTilt,
       camDist,
       portal: this.portalFx,

@@ -145,6 +145,14 @@ export function installBrain(m: Mob): void {
       // Hunts other swimmers (and drowned), but only in the water
       m.addTargetGoal(2, new G.NearestTargetGoal(G.nearestEntityTarget(12, (e) => ['cod', 'salmon', 'tropical_fish', 'pufferfish', 'squid', 'drowned'].includes(e.type) && (e as Mob).body.inWater), false, 0.05));
       break;
+    case 'sporeling':
+      m.addGoal(0, new G.FloatGoal());
+      m.addGoal(1, new G.MeleeAttackGoal(1.1));
+      m.addGoal(5, new G.WanderGoal(0.7, 1 / 100));
+      m.addGoal(6, new G.LookAtPlayerGoal(6));
+      m.addGoal(7, new G.LookRandomGoal());
+      m.addTargetGoal(1, new G.HurtByTargetGoal(true));
+      break;
     case 'warden':
       m.addGoal(0, new G.FloatGoal());
       m.addGoal(1, new G.WardenGoal());

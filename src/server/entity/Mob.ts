@@ -469,6 +469,7 @@ export class Mob extends LivingEntity {
       this.lastAttacker = attacker;
       if (isPlayer(attacker)) this.lastHurtByPlayerTick = server.tickNo;
       if (this.type === 'warden') server.warden?.hurtBy(this, attacker);
+      if (this.type === 'sporeling' || this.type === 'crystal_mite') server.mobs?.onCaveMobHurt(this, attacker);
       this.persistenceRequired ||= this.def.category !== 'monster';
     }
     const before = this.health;

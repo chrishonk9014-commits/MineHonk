@@ -44,6 +44,24 @@ export interface Offer {
 }
 
 /** Monster spawn lists that replace the biome's inside certain structures. */
+/** V2: who lives in each cave biome (by CaveBiome number). The deep dark stays empty. */
+const CAVE_MONSTERS: Record<number, SpawnEntry[]> = {
+  1: [{ mob: 'zombie', weight: 90, min: 2, max: 4 }, { mob: 'skeleton', weight: 90, min: 2, max: 4 }, { mob: 'creeper', weight: 80, min: 1, max: 2 }, { mob: 'spider', weight: 60, min: 1, max: 2 }],
+  2: [{ mob: 'skeleton', weight: 80, min: 2, max: 4 }, { mob: 'zombie', weight: 60, min: 2, max: 3 }, { mob: 'cave_spider', weight: 40, min: 2, max: 3 }, { mob: 'creeper', weight: 40, min: 1, max: 1 }, { mob: 'cave_stalker', weight: 20, min: 1, max: 1 }],
+  3: [{ mob: 'zombie', weight: 60, min: 1, max: 3 }, { mob: 'skeleton', weight: 60, min: 1, max: 3 }, { mob: 'creeper', weight: 40, min: 1, max: 1 }],
+  4: [{ mob: 'spider', weight: 40, min: 1, max: 2 }, { mob: 'zombie', weight: 30, min: 1, max: 2 }],
+  5: [{ mob: 'crystal_mite', weight: 100, min: 2, max: 5 }, { mob: 'skeleton', weight: 30, min: 1, max: 2 }],
+  6: [{ mob: 'zombie', weight: 60, min: 2, max: 4 }, { mob: 'husk', weight: 30, min: 1, max: 3 }, { mob: 'skeleton', weight: 60, min: 2, max: 3 }, { mob: 'drowned', weight: 20, min: 1, max: 2 }],
+  7: [{ mob: 'magma_cube', weight: 80, min: 1, max: 3 }, { mob: 'skeleton', weight: 40, min: 1, max: 2 }, { mob: 'blaze', weight: 5, min: 1, max: 1 }],
+  8: [{ mob: 'stray', weight: 100, min: 2, max: 4 }, { mob: 'skeleton', weight: 30, min: 1, max: 2 }, { mob: 'zombie', weight: 30, min: 1, max: 2 }],
+};
+const CAVE_WATER: Record<number, SpawnEntry[]> = {
+  1: [{ mob: 'glow_squid', weight: 10, min: 1, max: 3 }],
+  2: [{ mob: 'glow_squid', weight: 10, min: 1, max: 3 }],
+  3: [{ mob: 'axolotl', weight: 10, min: 2, max: 4 }, { mob: 'glow_squid', weight: 6, min: 1, max: 3 }, { mob: 'tropical_fish', weight: 8, min: 3, max: 6 }],
+  6: [{ mob: 'glow_squid', weight: 10, min: 1, max: 2 }],
+};
+
 const STRUCTURE_SPAWNS: Record<string, SpawnEntry[]> = {
   nether_fortress: [
     { mob: 'blaze', weight: 10, min: 2, max: 3 },
@@ -471,6 +489,28 @@ export class MobSystem {
     }
   }
 
+  /** Cave mob reactions to being hurt: sporelings puff spores, crystal mites call the swarm. */
+  onCaveMobHurt(m: Mob, attacker: Entity): void {
+    const s = this.server;
+    if (m.type === 'sporeling') {
+      if (m.age - Number(m.data.puffedAt ?? -100) < 60) return;
+      m.data.puffedAt = m.age;
+      s.particles(m.dim, 'spore_cloud', m.x, m.y + 0.8, m.z, 30, 1.2);
+      s.playSound(m.dim, 'sporeling.puff', m.x, m.y + 0.8, m.z, 1, 1);
+      for (const p of s.players.values()) {
+        if (p.dim !== m.dim || p.dead || p.distanceSq(m.x, m.y, m.z) > 9) continue;
+        s.interaction.survival.addEffect(p, 'nausea', 0, 160);
+        s.interaction.survival.addEffect(p, 'slowness', 0, 60);
+      }
+      return;
+    }
+    // Crystal mites: the rest of the nest joins in
+    for (const e of m.dim.entitiesNear(m.x, m.y, m.z, 10, (en) => en instanceof Mob && en.type === 'crystal_mite' && !en.dead && en !== m)) {
+      const other = e as Mob;
+      if (!other.target) other.target = attacker as Target;
+    }
+  }
+
   /** Outlines an entity through walls for a while (spectral arrows, bells). */
   glow(e: Entity, ticks: number): void {
     if (isPlayer(e)) {
@@ -569,8 +609,13 @@ export class MobSystem {
     if (!dim.isLoaded(x, z)) return;
     const top = dim.getHeight(x, z);
     let y: number;
-    if (cat === 'creature') y = top;
-    else if (cat === 'water') y = Math.max(1, top - 1 - r.int(8));
+    // V2 overworld: part of the creature and water spawning happens in the caves
+    const caves = dim.id === 'overworld' && !!dim.generator.caves;
+    const underCreature = caves && cat === 'creature' && r.chance(0.3);
+    const underWater = caves && cat === 'water' && r.chance(0.4);
+    if (cat === 'creature' && !underCreature) y = top;
+    else if (cat === 'water' && !underWater) y = Math.max(1, top - 1 - r.int(8));
+    else if (underCreature || underWater) y = 8 + r.int(Math.max(1, Math.min(52, top - 12) - 8));
     else if (!dim.rules.hasSky) {
       // Cavern dimensions: pick one of the column's floors instead of a random height
       const floors: number[] = [];
@@ -587,6 +632,14 @@ export class MobSystem {
       const sl = st ? STRUCTURE_SPAWNS[st] : undefined;
       if (sl) entry = weighted(sl, r);
     }
+    // Cave biomes decide who lives underground (V2)
+    const cb = caves && cat !== 'ambient' && (cat !== 'creature' || underCreature) && (cat !== 'water' || underWater) ? dim.generator.caveBiomeAt!(x, y, z) : 0;
+    if (cb === 9) return; // the deep dark: nothing spawns there
+    if (cb) {
+      if (cat === 'monster' && CAVE_MONSTERS[cb] && r.chance(0.6)) entry = weighted(CAVE_MONSTERS[cb]!, r);
+      else if (cat === 'water') entry = CAVE_WATER[cb] ? weighted(CAVE_WATER[cb]!, r) : null;
+      else if (cat === 'creature') entry = cb === 4 ? { mob: 'sporeling', weight: 1, min: 1, max: 3 } : null;
+    } else if (underCreature || underWater) entry = null;
     // Underground-only spawns
     if (cat === 'ambient' && dim.id === 'overworld' && y < 60) entry = { mob: 'bat', weight: 1, min: 1, max: 2 };
     if (cat === 'monster' && dim.id === 'overworld' && y < 40 && r.chance(0.12)) entry = { mob: 'cave_stalker', weight: 1, min: 1, max: 1 };
@@ -646,6 +699,8 @@ export class MobSystem {
         const id = blocks[STATE_BLOCK[below]!]!.id;
         // Jungle animals also live up in the canopy
         const canopy = (type === 'parrot' || type === 'ocelot') && id.endsWith('_leaves');
+        // Sporelings live on the mycelium of dark mushroom caves
+        if (type === 'sporeling') return id === 'mycelium' || id === 'moss_block' || STATE_OPAQUE[below] === 1;
         return (canopy || id === 'grass_block' || id === 'snow_block' || id === 'sand' || id === 'mycelium' || id === 'podzol' || id === 'far_grass_block' || id === 'moss_block') && Math.max(sky, blk) > 8;
       }
       case 'water':
@@ -1244,6 +1299,7 @@ export class MobSystem {
       for (const a of m.dim.entitiesNear(m.x, m.y, m.z, 16, (e) => e instanceof Mob && e.type === 'axolotl' && e.target === m)) {
         void a;
         s.interaction.survival.addEffect(killer, 'regeneration', 0, 100);
+        if (!m.admin) s.interaction.grant(killer, 'axolotl_help');
         killer.effects.delete('mining_fatigue');
         break;
       }
@@ -1252,6 +1308,7 @@ export class MobSystem {
       const xp = m.def.xp ?? (m.def.category === 'monster' ? 5 : m.def.category === 'boss' ? 500 : 1 + m.rng.int(3));
       // A sculk catalyst nearby drinks the experience and spreads sculk instead
       if (!s.sculk?.onDeath(m.dim, m.x, m.y, m.z, xp)) s.mining.dropXp(m.dim, m.x, m.y + 0.5, m.z, xp, m.admin);
+      else if (killer && !m.admin) s.interaction.grant(killer, 'catalyst_spread');
     }
     // Slimes split
     if (m.def.brain === 'slime') {

@@ -282,7 +282,10 @@ export class Sculk {
     const cue = ['', 'warden.warning1', 'warden.warning2', 'warden.warning3', 'warden.emerge'][p.wardenWarning]!;
     if (cue) s.playSound(dim, cue, x + 0.5, y, z + 0.5, 2.5, 1);
     if (p.wardenWarning >= WARNINGS_TO_SUMMON) {
-      if (s.warden?.summon(dim, x, y, z, p)) p.wardenWarning = 2;
+      if (s.warden?.summon(dim, x, y, z, p)) {
+        p.wardenWarning = 2;
+        s.interaction.grant(p, 'warden_summoned');
+      }
     }
     return true;
   }
@@ -359,6 +362,8 @@ export class Sculk {
       this.vibrate(p.dim, p.x, p.y, p.z, p, 'land');
       return;
     }
+    // Sneaking right past a listening sensor
+    if (onGround && p.sneaking && this.near(p.dim, p.x, p.y, p.z, 2.5, 1).length) this.server.interaction.grant(p, 'sneak_sensor');
     if (!onGround || p.sneaking || soft) return;
     p.stepDistance += Math.hypot(dx, dz);
     if (p.stepDistance >= 1.6) {

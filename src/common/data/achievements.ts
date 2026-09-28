@@ -7,7 +7,7 @@ export interface AchievementDef {
   /** Parent achievement shown as prerequisite in the UI tree. */
   parent?: string;
   secret?: boolean;
-  category: 'story' | 'nether' | 'end' | 'adventure' | 'farlands' | 'husbandry';
+  category: 'story' | 'nether' | 'end' | 'adventure' | 'farlands' | 'husbandry' | 'caves';
 }
 
 export const ACHIEVEMENTS: AchievementDef[] = [
@@ -53,6 +53,23 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: 'eat_sunroot', title: 'Sun Snack', description: 'Eat a Sunroot', icon: 'sunroot', parent: 'plant_seed', category: 'husbandry' },
   { id: 'breed_animals', title: 'The Parrots and the Bats', description: 'Breed two animals together', icon: 'wheat', parent: 'root', category: 'husbandry' },
   { id: 'tame_wolf', title: 'Best Friends Forever', description: 'Tame a wolf', icon: 'bone', parent: 'root', category: 'husbandry' },
+  { id: 'froglight', title: 'Glow Frog Glow', description: 'Get a Froglight from a frog', icon: 'ochre_froglight', parent: 'root', category: 'husbandry' },
+  { id: 'axolotl_help', title: 'The Healing Power of Friends', description: 'Team up with an axolotl and win a fight', icon: 'tropical_fish', parent: 'root', category: 'husbandry' },
+  // --- V2: the Caves Update ---------------------------------------------------
+  { id: 'enter_cave_biome', title: 'Spelunker', description: 'Enter a cave biome', icon: 'pointed_dripstone', parent: 'root', category: 'caves' },
+  { id: 'all_cave_biomes', title: 'Cave Cartographer', description: 'Visit all nine cave biomes', icon: 'lumen_crystal', parent: 'enter_cave_biome', category: 'caves' },
+  { id: 'find_mega_cavern', title: 'Hollow Earth', description: 'Stand in a mega-cavern', icon: 'dripstone_block', parent: 'enter_cave_biome', category: 'caves' },
+  { id: 'find_underground_structure', title: 'Buried Secrets', description: 'Find a ruin, temple, lab, shrine or hidden room underground', icon: 'cracked_stone_bricks', parent: 'enter_cave_biome', category: 'caves' },
+  { id: 'find_treasure_room', title: 'Sealed Away', description: 'Break into a sealed treasure room', icon: 'gold_block', parent: 'find_underground_structure', category: 'caves', secret: true },
+  { id: 'sneak_sensor', title: 'Quiet Steps', description: 'Sneak right past a Sculk Sensor without it hearing you', icon: 'sculk_sensor', parent: 'enter_cave_biome', category: 'caves' },
+  { id: 'catalyst_spread', title: 'It Spreads', description: 'Kill a creature near a Sculk Catalyst', icon: 'sculk', parent: 'sneak_sensor', category: 'caves' },
+  { id: 'find_ancient_city', title: 'Hush', description: 'Enter an Ancient City', icon: 'reinforced_deepslate', parent: 'sneak_sensor', category: 'caves' },
+  { id: 'warden_summoned', title: 'Something Stirs', description: 'Wake the Warden', icon: 'sculk_shrieker', parent: 'find_ancient_city', category: 'caves' },
+  { id: 'escape_warden', title: 'Out of Its Mind', description: 'Be hunted by the Warden and live to tell of it', icon: 'echo_shard', parent: 'warden_summoned', category: 'caves' },
+  { id: 'silent_stride', title: 'Soft Soles', description: 'Find a book of Silent Stride', icon: 'enchanted_book', parent: 'find_ancient_city', category: 'caves' },
+  { id: 'vault_reward', title: 'Hollow Heart', description: 'Take the Resonance Charm from the vault beneath the Hollow Gate', icon: 'resonance_charm', parent: 'find_ancient_city', category: 'caves', secret: true },
+  { id: 'recovery_compass', title: 'Way Back', description: 'Craft a Recovery Compass', icon: 'recovery_compass', parent: 'find_ancient_city', category: 'caves' },
+  { id: 'hollow_disc', title: 'The Sound of Nothing', description: 'Assemble the disc Hollow from its fragments', icon: 'music_disc_hollow', parent: 'find_ancient_city', category: 'caves' },
 ];
 
 export const ACHIEVEMENT_BY_ID = new Map(ACHIEVEMENTS.map((a) => [a.id, a]));

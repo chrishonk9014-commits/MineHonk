@@ -42,6 +42,14 @@ export interface DimensionGenerator {
   structureTypes?(): string[];
   /** Nearest structure, searched incrementally (yields between steps). */
   locateSteps?(type: string, x: number, z: number): Generator<void, { x: number; y: number; z: number } | null>;
+  /** Admin locate for cave features (cave biome id, 'mega_cavern', 'ravine'). */
+  caveSteps?(kind: string, x: number, z: number): Generator<void, { x: number; y: number; z: number } | null>;
+  /** True when the dimension has the V2 underground (cave biomes, cave spawning). */
+  readonly caves?: boolean;
+  /** Cave biome at a position (V2 overworld; 0 = none). */
+  caveBiomeAt?(x: number, y: number, z: number): number;
+  /** Whether a position lies inside a mega-cavern (V2 overworld). */
+  inMegaCavern?(x: number, y: number, z: number): boolean;
   /** Structure type whose bounds contain the position (used for structure mob spawns). */
   structureAt?(x: number, y: number, z: number): string | null;
 }

@@ -22,6 +22,14 @@ const STRUCTURE_ACHIEVEMENTS: Record<string, string> = {
   stronghold: 'follow_ender_eye',
   end_city: 'find_end_city',
   glitched_ruin: 'find_far_portal',
+  underground_ruins: 'find_underground_structure',
+  buried_temple: 'find_underground_structure',
+  hidden_chamber: 'find_underground_structure',
+  abandoned_lab: 'find_underground_structure',
+  cave_shrine: 'find_underground_structure',
+  monster_chamber: 'find_underground_structure',
+  treasure_room: 'find_treasure_room',
+  ancient_city: 'find_ancient_city',
 };
 
 const DIMENSION_ACHIEVEMENTS: Record<string, string> = {
@@ -51,12 +59,40 @@ export class Progression {
   }
 
   tick(): void {
+    if (this.server.tickNo % 20 === 0) for (const p of this.server.players.values()) this.caves(p);
     if (this.server.tickNo % 40 !== 0) return;
     for (const p of this.server.players.values()) {
       if (p.dead || p.gamemode === 'spectator') continue;
       const at = p.dim.generator.structureAt?.(Math.floor(p.x), Math.floor(p.y), Math.floor(p.z));
       const a = at ? STRUCTURE_ACHIEVEMENTS[at] : undefined;
-      if (a) this.server.interaction.grant(p, a);
+      if (a) {
+        this.server.interaction.grant(p, a);
+        if (at === 'treasure_room') this.server.interaction.grant(p, 'find_underground_structure');
+      }
     }
+  }
+
+  /** Which cave biome a player is in: tells their client (fog, ambience) and counts visits. */
+  private caves(p: ServerPlayer): void {
+    const g = p.dim.generator;
+    let cb = 0;
+    if (g.caves && g.caveBiomeAt && !p.dead) {
+      // Underground means out of the sky's reach as well as below the surface
+      const head = p.dim.getLight(Math.floor(p.x), Math.floor(p.y + 1.6), Math.floor(p.z)) >> 4;
+      cb = head < 15 || p.y < 50 ? g.caveBiomeAt(Math.floor(p.x), Math.floor(p.y + 1), Math.floor(p.z)) : 0;
+    }
+    if (cb !== p.caveBiome) {
+      p.caveBiome = cb;
+      p.send({ t: 'cave_biome', id: cb });
+    }
+    // Cheat arrivals (admin teleports) never count as a visit
+    if (!cb || p.gamemode === 'spectator' || this.server.admin.inContext(p)) return;
+    const it = this.server.interaction;
+    if (!p.visitedCaveBiomes.has(cb)) {
+      p.visitedCaveBiomes.add(cb);
+      it.grant(p, 'enter_cave_biome');
+      if (p.visitedCaveBiomes.size >= 9) it.grant(p, 'all_cave_biomes');
+    }
+    if (g.inMegaCavern?.(p.x, p.y, p.z)) it.grant(p, 'find_mega_cavern');
   }
 }

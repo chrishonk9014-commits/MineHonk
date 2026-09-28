@@ -62,6 +62,8 @@ export interface FrameState {
   /** Nausea strength 0..1. */
   nausea?: number;
   portalColor?: number;
+  /** Underground in a cave biome: fog colour/thickness and how far the view has blended in (0..1). */
+  cave?: { color: number; density: number; amount: number };
 }
 
 export class WorldRenderer {
@@ -76,6 +78,7 @@ export class WorldRenderer {
   readonly hand: HandRenderer;
   readonly beams: BeaconBeams;
   readonly signs: SignText;
+  private readonly caveColor = new THREE.Color();
   readonly atlas: AtlasLookup;
   private readonly selection: THREE.LineSegments;
   private readonly crackMeshes: THREE.Mesh[] = [];
@@ -299,6 +302,17 @@ export class WorldRenderer {
       fogFar = Math.min(fogFar, 110);
     }
     if (f.rain > 0 && !f.underwater) fogNear *= 1 - f.rain * 0.4;
+    // Caves: the fog turns the cave biome's colour and the sky disappears
+    const cave = f.cave && !f.underwater && !f.inLava ? f.cave : null;
+    if (cave) {
+      this.caveColor.setHex(cave.color);
+      fog.lerp(this.caveColor, cave.amount);
+      const far = Math.min(fogFar, 40 + 90 * cave.density);
+      fogFar = fogFar + (far - fogFar) * cave.amount;
+      fogNear = Math.min(fogNear, fogFar * 0.45);
+    }
+    this.sky.group.visible = !cave || cave.amount < 0.9;
+    this.sky.cloudGroup.visible = this.sky.group.visible && this.settings.clouds;
     if (f.darkness > 0) {
       fog.multiplyScalar(1 - f.darkness);
       fogFar = fogFar * (1 - f.darkness) + 12 * f.darkness;

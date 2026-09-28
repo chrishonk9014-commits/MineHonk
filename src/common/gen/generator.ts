@@ -22,7 +22,8 @@ import { MINESHAFT, STRONGHOLD } from './structures/underground';
 import { CAVE_STRUCTURES } from './structures/caves';
 import { ANCIENT_CITY } from './structures/ancientCity';
 import { biomeOf } from '../registry/biomes';
-import { STATE_FLUID } from '../registry/blocks';
+import { STATE_FLUID, STATE_SOLID } from '../registry/blocks';
+import { CAVE_BIOMES } from './caves/caveBiomes';
 import { NetherGenerator } from './nether';
 import { EndGenerator } from './end';
 import { FarlandsGenerator } from './farlands';
@@ -126,6 +127,18 @@ export class OverworldGenerator implements DimensionGenerator {
     return this.terrain.estimateBiome(x, z);
   }
 
+  get caves(): boolean {
+    return !!this.terrain.carver;
+  }
+
+  caveBiomeAt(x: number, y: number, z: number): number {
+    return this.terrain.caveBiomeAt(x, y, z);
+  }
+
+  inMegaCavern(x: number, y: number, z: number): boolean {
+    return !!this.terrain.carver?.megaAt(x, y, z);
+  }
+
   structureAt(x: number, y: number, z: number): string | null {
     return this.structures.structureAt(x, y, z);
   }
@@ -164,6 +177,87 @@ export class OverworldGenerator implements DimensionGenerator {
     if (type === 'dungeon') return yield* this.dungeonSteps(x, z);
     const s = yield* this.structures.nearestSteps(type, x, z);
     return s ? { x: s.x, y: s.y, z: s.z } : null;
+  }
+
+  /**
+   * Admin locate for cave features: a cave biome id (see CAVE_BIOMES),
+   * 'mega_cavern' or 'ravine'. Returns an open spot with a floor inside it
+   * (checked against the proto chunk), or null.
+   */
+  *caveSteps(kind: string, x: number, z: number, maxRadius = 3072): Generator<void, { x: number; y: number; z: number } | null> {
+    const carver = this.terrain.carver;
+    if (!carver) return null;
+    if (kind === 'mega_cavern') {
+      const m = carver.nearestMega(x, z);
+      if (!m) return null;
+      yield;
+      return this.caveLanding(m.x, m.y, m.z, 4, 200, (bx, by, bz) => !!carver.megaAt(bx, by + 1, bz), 24) ?? { x: m.x, y: m.y, z: m.z };
+    }
+    if (kind === 'ravine') {
+      const r = carver.nearestRavine(x, z);
+      if (!r) return null;
+      yield;
+      return this.caveLanding(r.x, r.floor + 1, r.z, r.floor - 4, 200) ?? { x: r.x, y: r.floor + 1, z: r.z };
+    }
+    const id = CAVE_BIOMES.findIndex((b) => b.id === kind);
+    if (id <= 0) return null;
+    const ys = [10, 18, 26, 34, 42, 50];
+    const probe = (px: number, pz: number): { x: number; y: number; z: number } | null => {
+      for (const y of ys) {
+        if (this.terrain.caveBiomeAt(px, y, pz) !== id) continue;
+        const spot = this.caveLanding(px, y, pz, y - 10, y + 10, (bx, by, bz) => this.terrain.caveBiomeAt(bx, by, bz) === id);
+        if (spot) return spot;
+      }
+      return null;
+    };
+    const first = probe(x, z);
+    if (first) return first;
+    for (let r = 16; r <= maxRadius; ) {
+      const step = r < 512 ? 16 : 32;
+      for (let i = -r; i < r; i += step) {
+        for (const [px, pz] of [
+          [x + i, z - r],
+          [x + r, z + i],
+          [x - i, z + r],
+          [x - r, z - i],
+        ] as const) {
+          const s = probe(px, pz);
+          if (s) return s;
+          yield;
+        }
+      }
+      r += step;
+    }
+    return null;
+  }
+
+  /**
+   * Air with a solid floor near (x, y, z) in the carved terrain, within
+   * `reach` blocks sideways, optionally only where `accept` agrees.
+   */
+  private caveLanding(x: number, y: number, z: number, yMin: number, yMax: number, accept?: (x: number, y: number, z: number) => boolean, reach = 8): { x: number; y: number; z: number } | null {
+    const lo = Math.max(2, yMin);
+    const hi = Math.min(250, yMax);
+    const at = (bx: number, by: number, bz: number): number => this.protos.get(bx >> 4, bz >> 4).get(bx & 15, by, bz & 15);
+    for (let r = 0; r <= reach; r += 2) {
+      for (let dx = -r; dx <= r; dx += 2)
+        for (let dz = -r; dz <= r; dz += 2) {
+          if (Math.max(Math.abs(dx), Math.abs(dz)) !== r) continue;
+          const bx = Math.floor(x) + dx;
+          const bz = Math.floor(z) + dz;
+          for (let d = 0; d <= 2 * (hi - lo) + 1; d++) {
+            const by = Math.floor(y) + (d & 1 ? -(d + 1) / 2 : d / 2);
+            if (by < lo || by > hi) continue;
+            const f = at(bx, by - 1, bz);
+            const a = at(bx, by, bz);
+            const b = at(bx, by + 1, bz);
+            if (!STATE_SOLID[f] || STATE_FLUID[f] || STATE_SOLID[a] || STATE_FLUID[a] || STATE_SOLID[b] || STATE_FLUID[b]) continue;
+            if (accept && !accept(bx, by, bz)) continue;
+            return { x: bx, y: by, z: bz };
+          }
+        }
+    }
+    return null;
   }
 
   locate(type: string, x: number, z: number): { x: number; y: number; z: number } | null {

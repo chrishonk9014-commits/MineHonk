@@ -125,6 +125,9 @@ export class ServerPlayer extends Entity {
   shriekCooldownUntil = 0;
   /** Distance walked since the last footstep vibration. */
   stepDistance = 0;
+  /** Cave biome the player is in (0 = none) and every cave biome visited so far. */
+  caveBiome = 0;
+  visitedCaveBiomes = new Set<number>();
 
   constructor(
     readonly conn: Connection,

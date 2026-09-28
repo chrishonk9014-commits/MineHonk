@@ -43,7 +43,7 @@ const DIM_NAMES: Record<string, string> = { overworld: 'Overworld', nether: 'Net
 const MOB_CATEGORY_NAMES: Record<string, string> = { monster: 'Hostile', creature: 'Animals', water: 'Water', ambient: 'Ambient', npc: 'Villagers', boss: 'Bosses' };
 
 /** Remembered between openings during a session. */
-const memory: { tab: Tab; itemQuery: string; itemTab: string; mobQuery: string; mobCat: string; dim: DimensionId; structure: string; biome: string; count: number } = {
+const memory: { tab: Tab; itemQuery: string; itemTab: string; mobQuery: string; mobCat: string; dim: DimensionId; structure: string; biome: string; cave: string; count: number } = {
   tab: 'items',
   itemQuery: '',
   itemTab: 'all',
@@ -52,6 +52,7 @@ const memory: { tab: Tab; itemQuery: string; itemTab: string; mobQuery: string; 
   dim: 'overworld',
   structure: 'village',
   biome: 'plains',
+  cave: 'deep_dark',
   count: 1,
 };
 
@@ -360,8 +361,56 @@ export function adminScreen(host: AdminHost): Screen {
       }
       showResult(bBox, r, () => void findB(true));
     };
+    // Underground (V2 worlds): cave biomes, mega-caverns, ravines, the Ancient City
+    const cBox = resultBox();
+    const cavesFor = (): { value: string; label: string }[] => (catalog?.caves?.[memory.dim] ?? []).map((c) => ({ value: c.id, label: c.name }));
+    let cSel = select(cavesFor(), memory.cave, (v) => (memory.cave = v));
+    const cHolder = el('div', {});
+    const findC = async (tp: boolean, what?: { a: 'structure' | 'cave'; id: string }): Promise<void> => {
+      const target = what ?? { a: 'cave', id: cSel.value };
+      if (!target.id) return;
+      clear(cBox);
+      cBox.append(el('div', { class: 'muted' }, tp ? 'Finding a safe landing...' : 'Searching underground...'));
+      const r =
+        target.a === 'structure'
+          ? await send({ a: tp ? 'tp_structure' : 'locate_structure', dim: memory.dim, structure: target.id })
+          : await send({ a: tp ? 'tp_biome' : 'locate_biome', dim: memory.dim, biome: `cave:${target.id}` });
+      if (destroyed) return;
+      if (tp && r.ok) {
+        host.close();
+        return;
+      }
+      showResult(cBox, r, () => void findC(true, target));
+    };
+    const fillCaves = (): void => {
+      clear(cHolder);
+      clear(cBox);
+      if (!cavesFor().length) {
+        cHolder.append(el('div', { class: 'muted small' }, memory.dim === 'overworld' ? 'This world was created before the Caves Update, so it has no cave biomes.' : 'No cave biomes in this dimension.'));
+        return;
+      }
+      cSel = select(cavesFor(), memory.cave, (v) => (memory.cave = v));
+      const hasCity = (catalog?.structures[memory.dim] ?? []).includes('ancient_city');
+      cHolder.append(
+        label('Cave biome or feature'),
+        cSel,
+        el('div', { class: 'row' }, btn('Find nearest', () => void findC(false), 'btn half-w'), btn('Teleport', () => void findC(true), 'btn half-w')),
+        el(
+          'div',
+          { class: 'admin-chips' },
+          hasCity ? btn('Find Ancient City', () => void findC(false, { a: 'structure', id: 'ancient_city' }), 'btn chip') : null,
+          btn('Find Deep Dark', () => void findC(false, { a: 'cave', id: 'deep_dark' }), 'btn chip'),
+          btn('Find Mega-Cavern', () => void findC(false, { a: 'cave', id: 'mega_cavern' }), 'btn chip'),
+          btn('Spawn Warden (admin)', () => void send({ a: 'spawn', mob: 'warden', count: 1 }), 'btn chip'),
+        ),
+        el('div', { class: 'muted small' }, 'An admin Warden never counts for advancements or the Escape achievement.'),
+        cBox,
+      );
+    };
+    fillCaves();
     const dimSel = select(dimOptions, memory.dim, (v) => {
       memory.dim = v as DimensionId;
+      fillCaves();
       sSel = select(structures(), memory.structure, (x) => (memory.structure = x));
       bSel = select(biomesFor(), memory.biome, (x) => (memory.biome = x));
       clear(sHolder);
@@ -385,6 +434,7 @@ export function adminScreen(host: AdminHost): Screen {
         label('Dimension'),
         dimSel,
         section('Teleport to Structure', label('Structure'), sHolder, el('div', { class: 'row' }, btn('Find nearest', () => void findS(false), 'btn half-w'), btn('Teleport', () => void findS(true), 'btn half-w')), sBox),
+        section('Underground', cHolder),
       ),
       el(
         'div',

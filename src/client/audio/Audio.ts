@@ -269,7 +269,7 @@ function subtitleFor(name: string): string {
 // ---------------------------------------------------------------------------
 // Generative music
 // ---------------------------------------------------------------------------
-type Mood = 'calm' | 'creative' | 'nether' | 'end' | 'farlands' | 'menu' | 'underwater' | 'boss';
+type Mood = 'calm' | 'creative' | 'nether' | 'end' | 'farlands' | 'menu' | 'underwater' | 'boss' | 'caves' | 'lush' | 'crystal' | 'mushroom' | 'lava_caves' | 'frozen' | 'deep_dark';
 
 const SCALES: Record<Mood, { root: number; scale: number[]; tempo: number; density: number; wave: 'piano' | 'pad' | 'glass' | 'square' }> = {
   calm: { root: 57, scale: [0, 2, 4, 7, 9], tempo: 0.9, density: 0.55, wave: 'piano' },
@@ -280,7 +280,18 @@ const SCALES: Record<Mood, { root: number; scale: number[]; tempo: number; densi
   end: { root: 50, scale: [0, 2, 5, 7, 9], tempo: 1.6, density: 0.35, wave: 'glass' },
   farlands: { root: 48, scale: [0, 1, 4, 6, 7, 11], tempo: 0.8, density: 0.6, wave: 'square' },
   boss: { root: 45, scale: [0, 1, 3, 5, 7, 8], tempo: 0.45, density: 0.85, wave: 'pad' },
+  // Cave biomes (V2)
+  caves: { root: 45, scale: [0, 2, 3, 7, 8], tempo: 1.3, density: 0.4, wave: 'glass' },
+  lush: { root: 57, scale: [0, 2, 4, 7, 9, 11], tempo: 1.0, density: 0.55, wave: 'glass' },
+  crystal: { root: 62, scale: [0, 2, 6, 7, 11], tempo: 1.2, density: 0.45, wave: 'glass' },
+  mushroom: { root: 50, scale: [0, 1, 4, 5, 8], tempo: 1.3, density: 0.4, wave: 'pad' },
+  lava_caves: { root: 40, scale: [0, 1, 3, 6, 7], tempo: 1.1, density: 0.45, wave: 'pad' },
+  frozen: { root: 60, scale: [0, 2, 3, 7, 10], tempo: 1.6, density: 0.3, wave: 'glass' },
+  deep_dark: { root: 33, scale: [0, 1, 6, 7], tempo: 2.2, density: 0.2, wave: 'pad' },
 };
+
+/** Music for each cave biome number (see CaveBiome). */
+const CAVE_MOODS: Mood[] = ['calm', 'caves', 'caves', 'lush', 'mushroom', 'crystal', 'caves', 'lava_caves', 'frozen', 'deep_dark'];
 
 export class MusicPlayer {
   private playingUntil = 0;
@@ -291,8 +302,9 @@ export class MusicPlayer {
   constructor(private readonly engine: AudioEngine) {}
 
   /** Chooses a mood from the game state. */
-  static moodFor(dim: DimensionId, creative: boolean, underwater: boolean, boss: boolean): Mood {
+  static moodFor(dim: DimensionId, creative: boolean, underwater: boolean, boss: boolean, caveBiome = 0): Mood {
     if (boss) return 'boss';
+    if (dim === 'overworld' && caveBiome > 0 && !underwater) return CAVE_MOODS[caveBiome] ?? 'caves';
     if (dim === 'nether') return 'nether';
     if (dim === 'end') return 'end';
     if (dim === 'farlands') return 'farlands';

@@ -418,6 +418,7 @@ const EFFECTS: Record<string, { dur: number; recipe: Recipe }> = {
   'warden.warning1': { dur: 2, recipe: (s) => s.tone({ dur: 1.9, gain: 0.3, f0: 50, f1: 45, wave: 'sine', attack: 0.5, decay: 1.2 }) },
   'warden.warning2': { dur: 2.5, recipe: (s) => (s.tone({ dur: 2.4, gain: 0.45, f0: 48, f1: 40, wave: 'sine', attack: 0.4, decay: 1.4 }), s.noise({ dur: 2, gain: 0.2, attack: 0.6, decay: 1, lp: 250 })) },
   'warden.warning3': { dur: 3, recipe: (s) => (s.voice({ dur: 2.8, gain: 0.5, f0: 55, f1: 45, formants: [300, 700], rough: 0.7 }), s.noise({ dur: 2.6, gain: 0.35, attack: 0.5, decay: 1.4, lp: 300 })) },
+  'sporeling.puff': { dur: 0.6, recipe: (s) => s.noise({ dur: 0.55, gain: 0.6, attack: 0.02, decay: 0.2, bp: [700, 0.8] }) },
   ink: { dur: 0.35, recipe: (s) => s.noise({ dur: 0.3, gain: 0.5, attack: 0.02, decay: 0.08, lp: 900, hp: 80, grain: 2 }) },
   glow_ink: { dur: 0.6, recipe: (s) => (s.noise({ dur: 0.3, gain: 0.45, attack: 0.02, decay: 0.08, lp: 900, hp: 80, grain: 2 }), s.bell({ start: 0.08, f: 1760, ratios: [1, 1.5, 2.01], gain: 0.2, decay: 0.2, dur: 0.5 })) },
   'fire.extinguish': { dur: 0.5, recipe: (s) => s.noise({ dur: 0.45, gain: 0.5, attack: 0.01, decay: 0.15, hp: 2500 }) },
@@ -508,6 +509,28 @@ const EFFECTS: Record<string, { dur: number; recipe: Recipe }> = {
       s.tone({ dur: 5.5, gain: 0.3, f0: 49, f1: 44, wave: 'saw', attack: 1.5, decay: 3, lp: 300 });
     },
   },
+  // Cave biome ambience: one-shots scattered around the listener
+  'cave.drip': { dur: 0.7, recipe: (s) => (s.tone({ dur: 0.09, gain: 0.5, f0: 1400 + s.rng.next() * 900, f1: 2600, wave: 'sine', decay: 0.03 }), s.bell({ start: 0.08, f: 900 + s.rng.next() * 500, ratios: [1, 2.4], gain: 0.12, decay: 0.25, dur: 0.6 })) },
+  'cave.rumble': { dur: 3.5, recipe: (s) => (s.noise({ dur: 3.3, gain: 0.55, attack: 0.8, decay: 2, lp: 160, hp: 20 }), s.knock({ start: 0.4 + s.rng.next(), f: 70, gain: 0.4, decay: 0.2 })) },
+  'lush.chirp': {
+    dur: 0.9,
+    recipe: (s) => {
+      const f = 2400 + s.rng.next() * 1400;
+      const n = 2 + s.rng.int(3);
+      for (let i = 0; i < n; i++) s.tone({ start: i * 0.13, dur: 0.08, gain: 0.25, f0: f, f1: f * 1.25, wave: 'sine', decay: 0.04 });
+    },
+  },
+  'mushroom.pop': { dur: 0.5, recipe: (s) => (s.tone({ dur: 0.08, gain: 0.45, f0: 380, f1: 820, wave: 'sine', decay: 0.03 }), s.noise({ start: 0.05, dur: 0.4, gain: 0.18, attack: 0.02, decay: 0.2, bp: [600, 1] })) },
+  'crystal.chime': {
+    dur: 2.4,
+    recipe: (s) => {
+      const base = [880, 988, 1175, 1319, 1568][s.rng.int(5)]!;
+      s.bell({ f: base, ratios: [1, 2.76, 5.4], gain: 0.25, decay: 0.9, dur: 2.2 });
+      s.bell({ start: 0.35, f: base * 1.5, ratios: [1, 2.76], gain: 0.12, decay: 0.7, dur: 1.8 });
+    },
+  },
+  'frozen.wind': { dur: 4, recipe: (s) => s.noise({ dur: 3.8, gain: 0.35, attack: 1.4, decay: 2, bp: [700 + s.rng.next() * 900, 6] }) },
+  'deep_dark.hum': { dur: 5, recipe: (s) => (s.tone({ dur: 4.8, gain: 0.35, f0: 41, f1: 38, wave: 'sine', attack: 1.6, decay: 2.8 }), s.noise({ dur: 4.6, gain: 0.15, attack: 1.8, decay: 2.2, lp: 220 }), s.knock({ start: 1.5 + s.rng.next() * 2, f: 1300, gain: 0.08, decay: 0.01, noise: 0.5 })) },
   'lava.pop': { dur: 0.15, recipe: (s) => s.tone({ dur: 0.12, gain: 0.8, f0: 200, f1: 700, decay: 0.03 }) },
   'fire.crackle': { dur: 0.6, recipe: (s) => (s.noise({ dur: 0.55, gain: 0.3, attack: 0.1, decay: 0.2, lp: 1200, hp: 200 }), s.noise({ start: 0.1 + s.rng.next() * 0.3, dur: 0.02, gain: 0.6, decay: 0.004, lp: 6000 })) },
   'block.chime': { dur: 1.5, recipe: (s) => s.bell({ f: 1200 + s.rng.next() * 800, ratios: [1, 2.76, 5.4], gain: 0.3, decay: 0.5, dur: 1.4 }) },
@@ -541,6 +564,9 @@ const VOICES: Record<string, { f: number; formants: [number, number]; rough: num
   rift_walker: { f: 200, formants: [800, 2000], rough: 0.3, dur: 0.9, crush: true },
   glitch_beast: { f: 130, formants: [1000, 3000], rough: 0.8, dur: 0.8, crush: true },
   farlands_wanderer: { f: 110, formants: [600, 1500], rough: 0.15, dur: 1.2, crush: true },
+  glow_squid: { f: 200, formants: [500, 1100], rough: 0.2, dur: 0.5, gain: 0.4 },
+  crystal_mite: { f: 1400, formants: [2400, 4200], rough: 0.7, dur: 0.2, bell: true },
+  sporeling: { f: 320, formants: [700, 1500], rough: 0.1, dur: 0.4, gain: 0.5 },
   warden: { f: 60, formants: [300, 760], rough: 0.85, dur: 1.2, gain: 1 },
   ender_dragon: { f: 70, formants: [380, 900], rough: 0.5, dur: 1.8, gain: 1 },
   turtle: { f: 160, formants: [400, 900], rough: 0.4, dur: 0.4, gain: 0.5 },

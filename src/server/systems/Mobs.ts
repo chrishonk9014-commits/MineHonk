@@ -6,6 +6,7 @@
 import type { GameServer } from '../GameServer';
 import type { Dimension } from '../world/Dimension';
 import { Mob, isPlayer, isAlive, type Target } from '../entity/Mob';
+import { ItemEntity } from '../entity/ItemEntity';
 import { LivingEntity, type HurtInfo } from '../entity/Living';
 import type { Entity } from '../entity/Entity';
 import { Projectile, PrimedTnt, type ProjectileKind, type ProjectileHit } from '../entity/Projectile';
@@ -58,6 +59,9 @@ const STRUCTURE_SPAWNS: Record<string, SpawnEntry[]> = {
   witch_hut: [{ mob: 'witch', weight: 1, min: 1, max: 1 }],
   pillager_outpost: [{ mob: 'pillager', weight: 1, min: 1, max: 3 }],
 };
+
+/** The froglight a frog of each kind makes from a magma cube. */
+const FROGLIGHT: Record<string, string> = { temperate: 'ochre', warm: 'pearlescent', cold: 'verdant' };
 
 export class MobSystem {
   private readonly rng = new Random();
@@ -115,6 +119,31 @@ export class MobSystem {
       m.data.variant = ['chestnut', 'bay', 'black', 'white', 'gray', 'creamy', 'dark_brown'][r.int(7)];
     }
     if (def.id === 'creeper' && r.chance(0.02)) m.data.charged = true;
+    switch (def.id) {
+      case 'parrot':
+        m.data.variant = ['red', 'blue', 'green', 'cyan', 'gray'][r.int(5)];
+        break;
+      case 'llama':
+        m.data.variant = ['creamy', 'white', 'brown', 'gray'][r.int(4)];
+        break;
+      case 'panda': {
+        // Personalities: brown pandas are rare, aggressive ones fight back
+        const roll = r.next();
+        m.data.variant = roll < 0.02 ? 'brown' : roll < 0.12 ? 'aggressive' : roll < 0.3 ? 'lazy' : roll < 0.45 ? 'playful' : 'normal';
+        break;
+      }
+      case 'axolotl':
+        m.data.variant = r.chance(1 / 1200) ? 'blue' : ['lucy', 'wild', 'gold', 'cyan'][r.int(4)];
+        break;
+      case 'tropical_fish': {
+        const cols = ['white', 'orange', 'magenta', 'light_blue', 'yellow', 'lime', 'pink', 'gray', 'cyan', 'purple', 'blue', 'red', 'black'];
+        m.data.variant = `${['kob', 'stripey', 'flopper', 'sunstreak', 'dasher', 'spotty'][r.int(6)]}:${cols[r.int(cols.length)]}:${cols[r.int(cols.length)]}`;
+        break;
+      }
+      case 'pufferfish':
+        m.data.puff = 0;
+        break;
+    }
     if (opts.data) for (const [k, v] of Object.entries(opts.data)) if (k !== 'profession') m.data[k] = v;
     if (def.category === 'boss') {
       m.persistenceRequired = true;
@@ -131,6 +160,11 @@ export class MobSystem {
     m.setPos(x, y, z);
     m.yaw = this.rng.next() * Math.PI * 2;
     if (opts.persistent) m.persistenceRequired = true;
+    // Frogs take their colour from the climate they hatch in
+    if (type === 'frog' && !m.data.variant) {
+      const t = biomeOf(dim.getBiome(Math.floor(x), Math.floor(z))).temperature;
+      m.data.variant = t < 0.4 ? 'cold' : t > 1 ? 'warm' : 'temperate';
+    }
     dim.addEntity(m);
     return m;
   }
@@ -304,12 +338,133 @@ export class MobSystem {
       case 'enderman':
         if (m.age % 5 === 0 && (m.target || m.angryAt)) s.particles(m.dim, 'portal', m.x, m.y + 1.5, m.z, 1, 0.5);
         break;
+      default:
+        this.animalTick(m);
     }
     if (m.data.slowTicks && (m.data.slowTicks = (m.data.slowTicks as number) - 1) <= 0) delete m.data.slowTicks;
     if (m.data.alarmTicks && (m.data.alarmTicks = (m.data.alarmTicks as number) - 1) <= 0) delete m.data.alarmTicks;
     if (m.data.glowTicks && (m.data.glowTicks = (m.data.glowTicks as number) - 1) <= 0) {
       delete m.data.glowTicks;
       m.metaDirty = true;
+    }
+  }
+
+  /** The newer animals' own habits (parrots, pufferfish, axolotls, pandas, frogs, camels). */
+  private animalTick(m: Mob): void {
+    const s = this.server;
+    switch (m.type) {
+      case 'parrot': {
+        if (m.age % 20 === 0) {
+          // Dances while a record plays nearby
+          const dancing = !!s.gadgets?.recordNear(m.dim, m.x, m.y, m.z, 4);
+          if (!!m.data.dancing !== dancing) {
+            m.data.dancing = dancing || undefined;
+            m.metaDirty = true;
+          }
+        }
+        // Imitates a monster it can hear
+        if (m.age % 40 === 0 && m.rng.chance(1 / 12)) {
+          const near = m.dim.entitiesNear(m.x, m.y, m.z, 20, (e) => e instanceof Mob && !e.dead && e.def.category === 'monster');
+          const pick = near[m.rng.int(Math.max(1, near.length))] as Mob | undefined;
+          if (pick) s.playSound(m.dim, `mob.${pick.soundKey()}.idle`, m.x, m.y + 0.5, m.z, 0.7, 1.7);
+        }
+        break;
+      }
+      case 'pufferfish': {
+        if (m.age % 5 !== 0) break;
+        // Puffs up when something big swims close, and stings what touches it
+        const threat = m.dim.entitiesNear(m.x, m.y, m.z, 2.5, (e) => e !== m && (isPlayer(e) ? !e.dead && e.gamemode !== 'creative' && e.gamemode !== 'spectator' : e instanceof Mob && !e.dead && !e.def.aquatic && e.type !== 'axolotl')).length > 0;
+        const puff = Number(m.data.puff ?? 0);
+        const next = threat ? Math.min(2, puff + 1) : m.age % 40 === 0 ? Math.max(0, puff - 1) : puff;
+        if (next !== puff) {
+          m.data.puff = next;
+          m.body.width = m.body.height = [0.35, 0.5, 0.7][next]!;
+          m.metaDirty = true;
+          s.playSound(m.dim, next > puff ? 'pufferfish.blow_up' : 'pufferfish.blow_out', m.x, m.y, m.z, 0.6, 1);
+        }
+        if (next > 0) {
+          for (const e of m.dim.entitiesNear(m.x, m.y, m.z, 0.8 + next * 0.3, (e) => e !== m && (isPlayer(e) || (e instanceof Mob && !e.def.aquatic && e.type !== 'axolotl')))) {
+            if (isPlayer(e) && (e.dead || e.gamemode === 'creative' || e.gamemode === 'spectator')) continue;
+            if (this.damage(e, 1 + next, { source: 'mob', attacker: m }) > 0) {
+              if (isPlayer(e)) s.interaction.survival.addEffect(e, 'poison', 0, 60 * next);
+              s.playSound(m.dim, 'pufferfish.sting', m.x, m.y, m.z, 1, 1);
+            }
+          }
+        }
+        break;
+      }
+      case 'axolotl': {
+        // Plays dead when badly hurt, healing while it lies still
+        const pd = Number(m.data.playDead ?? 0);
+        if (pd > 0) {
+          m.data.playDead = pd - 1;
+          m.target = null;
+          m.stopNavigation();
+          if (m.age % 20 === 0) m.health = Math.min(m.maxHealth, m.health + 1);
+          if (pd - 1 <= 0) {
+            delete m.data.playDead;
+            m.metaDirty = true;
+          }
+        } else if (s.tickNo - m.lastHurtTick < 2 && m.health < m.maxHealth / 2 && m.body.inWater && m.rng.chance(1 / 3)) {
+          m.data.playDead = 200;
+          m.revengeTarget = null;
+          m.metaDirty = true;
+        }
+        break;
+      }
+      case 'panda': {
+        if (m.age % 20 !== 0) break;
+        // Pandas pick up bamboo and sit down to eat it
+        const eating = Number(m.data.eating ?? 0);
+        if (eating > 0) {
+          m.data.eating = eating - 20;
+          m.stopNavigation();
+          if (m.data.eating as number <= 0) {
+            delete m.data.eating;
+            m.sitting = false;
+            m.metaDirty = true;
+          }
+        } else {
+          const food = m.dim.entitiesNear(m.x, m.y, m.z, 3, (e) => e instanceof ItemEntity && !e.removed && items[e.stack.id]?.id === 'bamboo')[0] as ItemEntity | undefined;
+          if (food) {
+            food.stack.count > 1 ? (food.stack = { ...food.stack, count: food.stack.count - 1 }) : food.remove();
+            m.data.eating = 200;
+            m.sitting = true;
+            m.metaDirty = true;
+            s.playSound(m.dim, 'eat', m.x, m.y + 1, m.z, 0.6, 0.8);
+          } else if (m.data.variant === 'playful' && !m.data.rolling && m.rng.chance(1 / 30)) {
+            m.data.rolling = 30;
+            m.metaDirty = true;
+          } else if (m.data.variant === 'lazy' && m.rng.chance(1 / 20)) {
+            m.sitting = !m.sitting;
+            m.metaDirty = true;
+          }
+        }
+        if (m.data.rolling && (m.data.rolling = (m.data.rolling as number) - 20) <= 0) {
+          delete m.data.rolling;
+          m.metaDirty = true;
+        }
+        // Baby pandas sneeze now and then
+        if (m.baby && m.rng.chance(1 / 300)) {
+          s.playSound(m.dim, 'panda.sneeze', m.x, m.y + 0.5, m.z, 1, 1.4);
+          s.mining.dropItem(m.dim, m.x, m.y + 0.5, m.z, stackOf('slime_ball', 1));
+        }
+        break;
+      }
+      case 'camel':
+        // Camels settle down for long rests
+        if (m.age % 100 === 0 && !m.rider && m.rng.chance(1 / 12)) {
+          m.sitting = !m.sitting;
+          m.stopNavigation();
+          m.metaDirty = true;
+        }
+        break;
+      case 'frog':
+        if (m.data.tongue && (m.data.tongue = (m.data.tongue as number) - 1) <= 0) {
+          delete m.data.tongue;
+          m.metaDirty = true;
+        }
+        break;
     }
   }
 
@@ -486,7 +641,9 @@ export class MobSystem {
       }
       case 'creature': {
         const id = blocks[STATE_BLOCK[below]!]!.id;
-        return (id === 'grass_block' || id === 'snow_block' || id === 'sand' || id === 'mycelium' || id === 'podzol' || id === 'far_grass_block' || id === 'moss_block') && Math.max(sky, blk) > 8;
+        // Jungle animals also live up in the canopy
+        const canopy = (type === 'parrot' || type === 'ocelot') && id.endsWith('_leaves');
+        return (canopy || id === 'grass_block' || id === 'snow_block' || id === 'sand' || id === 'mycelium' || id === 'podzol' || id === 'far_grass_block' || id === 'moss_block') && Math.max(sky, blk) > 8;
       }
       case 'water':
         return STATE_FLUID[dim.getState(x, y, z)] === 1 && STATE_FLUID[dim.getState(x, y + 1, z)] === 1;
@@ -502,6 +659,17 @@ export class MobSystem {
     const s = this.server;
     if (!isAlive(t)) return;
     s.broadcastNear(m.dim, m.x, m.y, m.z, 64, { t: 'anim', id: m.id, anim: 'swing' });
+    // Frogs swallow small slimes whole: slime balls from slimes, froglights from magma cubes
+    if (m.type === 'frog' && t instanceof Mob && (t.type === 'slime' || t.type === 'magma_cube')) {
+      m.data.tongue = 6;
+      m.metaDirty = true;
+      const drop = t.type === 'slime' ? 'slime_ball' : `${FROGLIGHT[String(m.data.variant ?? 'temperate')] ?? 'ochre'}_froglight`;
+      t.remove();
+      s.mining.dropItem(m.dim, m.x, m.y + 0.3, m.z, m.admin || t.admin ? markAdmin(stackOf(drop, 1)) : stackOf(drop, 1));
+      s.playSound(m.dim, 'frog.eat', m.x, m.y, m.z, 1, 1);
+      m.target = null;
+      return;
+    }
     let dmg = m.def.damage ?? 2;
     if (m.def.brain === 'slime') dmg = Math.max(0, Number(m.data.size ?? 1) - (m.type === 'slime' ? 0 : -1)) * (m.type === 'magma_cube' ? 1.5 : 1);
     if (m.held) {
@@ -597,6 +765,13 @@ export class MobSystem {
         s.playSound(m.dim, 'bow.shoot', m.x, m.y + 1.5, m.z, 1, 1 / (0.8 + m.rng.next() * 0.4));
         break;
       }
+      case 'llama_spit': {
+        const p = this.projectile(m.dim, 'snowball', ex, ey - 0.1, ez, m);
+        p.shoot(dx, ty - ey + hd * 0.1, dz, 1.5, inacc, () => m.rng.next());
+        p.data = { spit: true };
+        s.playSound(m.dim, 'llama.spit', m.x, m.y + 1.5, m.z, 1, 0.9 + m.rng.next() * 0.2);
+        break;
+      }
       case 'small_fireball':
         for (let i = 0; i < 3; i++) {
           const p = this.projectile(m.dim, 'small_fireball', ex, ey, ez, m);
@@ -673,7 +848,7 @@ export class MobSystem {
       case 'snowball':
       case 'egg':
         if (e && e !== p.owner) {
-          const dmg = p.kind === 'snowball' && (e.type === 'blaze' || e.type === 'ember_beast') ? 3 : 0;
+          const dmg = p.data?.spit ? 1 : p.kind === 'snowball' && (e.type === 'blaze' || e.type === 'ember_beast') ? 3 : 0;
           const d = Math.hypot(p.vx, p.vz) || 1;
           if (dmg > 0) this.damage(e, dmg, { source: 'arrow', attacker: p.owner, kbx: p.vx / d, kbz: p.vz / d, knockback: 0.2 });
           else if (isPlayer(e)) e.send({ t: 'velocity', id: e.id, vx: (p.vx / d) * 0.1, vy: 0.1, vz: (p.vz / d) * 0.1 });
@@ -1060,6 +1235,15 @@ export class MobSystem {
       // Loot from cheat-spawned mobs is cheat-made
       for (const st of drops) s.mining.dropItem(m.dim, m.x, m.y + 0.5, m.z, m.admin ? markAdmin(st) : st);
     }
+    // Fighting alongside an axolotl: it rewards the player who lands the killing blow
+    if (killer) {
+      for (const a of m.dim.entitiesNear(m.x, m.y, m.z, 16, (e) => e instanceof Mob && e.type === 'axolotl' && e.target === m)) {
+        void a;
+        s.interaction.survival.addEffect(killer, 'regeneration', 0, 100);
+        killer.effects.delete('mining_fatigue');
+        break;
+      }
+    }
     if (byPlayer && !m.baby) {
       const xp = m.def.xp ?? (m.def.category === 'monster' ? 5 : m.def.category === 'boss' ? 500 : 1 + m.rng.int(3));
       s.mining.dropXp(m.dim, m.x, m.y + 0.5, m.z, xp, m.admin);
@@ -1208,8 +1392,19 @@ export class MobSystem {
       return true;
     }
     // Breeding / taming
+    // Ocelots learn to trust a player who feeds them fish
+    if (m.type === 'ocelot' && !m.data.trusting && m.def.breedItems?.includes(id)) {
+      consume();
+      if (m.rng.chance(1 / 3)) {
+        m.data.trusting = true;
+        m.persistenceRequired = true;
+        m.metaDirty = true;
+        s.particles(m.dim, 'heart', m.x, m.y + 1, m.z, 7, 0.5);
+      } else s.particles(m.dim, 'smoke', m.x, m.y + 1, m.z, 7, 0.5);
+      return true;
+    }
     if (m.def.breedItems?.includes(id) && !m.baby) {
-      if ((m.type === 'wolf' || m.type === 'cat') && !m.owner) {
+      if ((m.type === 'wolf' || m.type === 'cat' || m.type === 'parrot') && !m.owner) {
         if (m.type === 'wolf' && id !== 'bone') return false;
         consume();
         if (m.rng.chance(1 / 3)) {
@@ -1245,7 +1440,7 @@ export class MobSystem {
       return true;
     }
     // Owner toggles sitting
-    if (m.owner === p.uuid && (m.type === 'wolf' || m.type === 'cat')) {
+    if (m.owner === p.uuid && (m.type === 'wolf' || m.type === 'cat' || m.type === 'parrot')) {
       m.sitting = !m.sitting;
       m.stopNavigation();
       m.target = null;

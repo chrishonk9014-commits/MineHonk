@@ -44,7 +44,15 @@ export type Brain =
   | 'wanderer'
   | 'void_wisp'
   | 'glitch_beast'
-  | 'dragon';
+  | 'dragon'
+  | 'turtle'
+  | 'parrot'
+  | 'ocelot'
+  | 'panda'
+  | 'llama'
+  | 'camel'
+  | 'frog'
+  | 'axolotl';
 
 export interface MobDef {
   id: string;
@@ -71,6 +79,8 @@ export interface MobDef {
   fireImmune?: boolean;
   flying?: boolean;
   aquatic?: boolean;
+  /** Breathes air and water: walks on land and swims freely in water. */
+  amphibious?: boolean;
   /** Can be bred with these items (and tempted by them). */
   breedItems?: string[];
   /** Held item given at spawn: [item id, chance]. */
@@ -112,6 +122,16 @@ mob({ id: 'villager', name: 'Villager', category: 'npc', width: 0.6, height: 1.9
 mob({ id: 'iron_golem', name: 'Iron Golem', category: 'npc', width: 1.4, height: 2.7, health: 100, speed: 0.08, damage: 12, knockbackRes: 1, brain: 'golem', model: 'iron_golem', egg: [0xdbcdc1, 0x74a332] });
 mob({ id: 'glitched_cow', name: 'Glitched Cow', category: 'creature', width: 0.9, height: 1.4, health: 12, speed: 0.1, brain: 'passive', model: 'cow', egg: [0x2a9d8f, 0xff00ff], farlands: true, breedItems: ['glitch_berry'] });
 mob({ id: 'glitched_sheep', name: 'Glitched Sheep', category: 'creature', width: 0.9, height: 1.3, health: 10, speed: 0.1, brain: 'sheep', model: 'sheep', egg: [0x7a3fe4, 0x00ffcc], farlands: true, breedItems: ['glitch_berry'] });
+mob({ id: 'turtle', name: 'Turtle', category: 'creature', width: 1.2, height: 0.4, health: 30, speed: 0.05, brain: 'turtle', model: 'turtle', egg: [0xe7e7e7, 0x00afaf], amphibious: true, breedItems: ['seagrass'], idleInterval: 400 });
+mob({ id: 'parrot', name: 'Parrot', category: 'creature', width: 0.5, height: 0.9, health: 6, speed: 0.2, brain: 'parrot', model: 'parrot', egg: [0x0da70b, 0xff0000], flying: true, breedItems: ['wheat_seeds', 'melon_seeds', 'pumpkin_seeds', 'beetroot_seeds'] });
+mob({ id: 'ocelot', name: 'Ocelot', category: 'creature', width: 0.6, height: 0.7, health: 10, speed: 0.2, damage: 3, brain: 'ocelot', model: 'ocelot', egg: [0xefde7d, 0x564434], breedItems: ['cod', 'salmon'] });
+mob({ id: 'panda', name: 'Panda', category: 'creature', width: 1.3, height: 1.25, health: 20, speed: 0.1, damage: 6, brain: 'panda', model: 'panda', egg: [0xe7e7e7, 0x1b1b22], breedItems: ['bamboo'], idleInterval: 300 });
+mob({ id: 'llama', name: 'Llama', category: 'creature', width: 0.9, height: 1.87, health: 22, speed: 0.12, damage: 1, brain: 'llama', model: 'llama', egg: [0xc09e7d, 0x995f40], breedItems: ['hay_block', 'wheat'] });
+mob({ id: 'camel', name: 'Camel', category: 'creature', width: 1.7, height: 2.375, health: 32, speed: 0.09, brain: 'camel', model: 'camel', egg: [0xfcc369, 0xcb9337], breedItems: ['cactus'], mount: { seat: 1.6, control: 'client', tame: false }, idleInterval: 400 });
+mob({ id: 'frog', name: 'Frog', category: 'creature', width: 0.5, height: 0.5, health: 10, speed: 0.1, brain: 'frog', model: 'frog', egg: [0xd07444, 0xffc77c], amphibious: true, breedItems: ['slime_ball'] });
+mob({ id: 'axolotl', name: 'Axolotl', category: 'water', width: 0.75, height: 0.42, health: 14, speed: 0.1, damage: 2, brain: 'axolotl', model: 'axolotl', egg: [0xfbc1e3, 0xa62d74], amphibious: true, breedItems: ['tropical_fish'] });
+mob({ id: 'tropical_fish', name: 'Tropical Fish', category: 'water', width: 0.5, height: 0.4, health: 3, speed: 0.08, brain: 'fish', model: 'tropical_fish', egg: [0xef6915, 0xfff9ef], aquatic: true });
+mob({ id: 'pufferfish', name: 'Pufferfish', category: 'water', width: 0.7, height: 0.7, health: 3, speed: 0.06, brain: 'fish', model: 'pufferfish', egg: [0xf6b201, 0x37c3f2], aquatic: true });
 
 // --- Hostile --------------------------------------------------------------------
 mob({ id: 'zombie', name: 'Zombie', category: 'monster', width: 0.6, height: 1.95, health: 20, speed: 0.1, damage: 3, armor: 2, followRange: 35, brain: 'zombie', model: 'zombie', egg: [0x00afaf, 0x799c65], undead: true, burnsInDay: true, babyChance: 0.05, equipment: [['iron_shovel', 0.02], ['iron_sword', 0.01]], maxSpawnLight: 0 });

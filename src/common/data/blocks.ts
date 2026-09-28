@@ -805,6 +805,8 @@ add({ id: 'cake', name: 'Cake', hardness: 0.5, sound: 'wool', model: 'custom', p
 // Candles: up to four on one block, lit with flint and steel
 add({ id: 'candle', name: 'Candle', hardness: 0.1, sound: 'wool', model: 'custom', props: { candles: ['1', '2', '3', '4'], lit: BOOL }, tex: { all: 'candle', lit: 'candle_lit' }, light: 12, collide: true, layer: 'cutout', place: 'needs_solid_below', interact: 'candle' });
 cube('honeycomb_block', 0.6, 'wool', { tex: { all: 'honeycomb_block' } });
+// Froglights: what a frog makes of a small magma cube, a colour for each kind of frog
+for (const f of ['ochre', 'verdant', 'pearlescent']) add({ id: `${f}_froglight`, name: `${f[0]!.toUpperCase()}${f.slice(1)} Froglight`, hardness: 0.3, sound: 'wool', model: 'column', props: { axis: ['x', 'y', 'z'] }, defaults: { axis: 'y' }, tex: { top: `${f}_froglight_top`, side: `${f}_froglight_side` }, light: 15 });
 // Portable storage: keeps its contents when broken
 add({ id: 'shulker_box', name: 'Shulker Box', hardness: 2, sound: 'stone', model: 'cube', props: { facing: ['up', 'down', 'north', 'south', 'west', 'east'] }, defaults: { facing: 'up' }, tex: { top: 'shulker_box_top', side: 'shulker_box_side', bottom: 'shulker_box_bottom' }, tool: 'pickaxe', entity: 'barrel', interact: 'barrel', drops: 'none' });
 // Conduit: in water inside a prismarine frame it lets divers breathe and see

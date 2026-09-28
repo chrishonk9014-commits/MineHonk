@@ -314,10 +314,10 @@ export class FlyWanderGoal implements Goal {
     private readonly maxAboveGround = 20,
   ) {}
   canUse(m: Mob): boolean {
-    return !m.wantPos && m.rng.next() < 0.1;
+    return !m.sitting && !m.wantPos && m.rng.next() < 0.1;
   }
   canContinue(m: Mob): boolean {
-    return !!m.wantPos;
+    return !!m.wantPos && !m.sitting;
   }
   start(m: Mob): void {
     const x = m.x + (m.rng.next() * 2 - 1) * this.radius;
@@ -326,6 +326,8 @@ export class FlyWanderGoal implements Goal {
     let y = m.y + (m.rng.next() * 2 - 1) * 6;
     y = Math.max(ground + 2 + this.minY, Math.min(ground + this.maxAboveGround, y));
     if (m.def.id === 'bat') y = Math.min(y, m.y + 3);
+    // Parrots flit between the treetops and the ground
+    if (m.def.id === 'parrot') y = Math.min(y, ground + 1 + m.rng.next() * 5);
     m.wantPos = { x, y, z, speed: 1 };
   }
 }
@@ -425,7 +427,7 @@ export class MeleeAttackGoal implements Goal {
   }
 }
 
-export type RangedKind = 'arrow' | 'crossbow' | 'fireball' | 'small_fireball' | 'potion' | 'shulker_bullet' | 'rift_bolt';
+export type RangedKind = 'arrow' | 'crossbow' | 'fireball' | 'small_fireball' | 'potion' | 'shulker_bullet' | 'rift_bolt' | 'llama_spit';
 
 export class RangedAttackGoal implements Goal {
   flags: GoalFlag[] = ['move', 'look'];

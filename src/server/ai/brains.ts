@@ -63,6 +63,88 @@ export function installBrain(m: Mob): void {
       if (d.brain === 'fox') m.addTargetGoal(2, new G.NearestTargetGoal(G.nearestEntityTarget(12, hostileTo(['chicken', 'rabbit'])), true, 0.02));
       if (d.brain === 'cat') m.addTargetGoal(2, new G.NearestTargetGoal(G.nearestEntityTarget(10, hostileTo(['rabbit', 'chicken'])), true, 0.01));
       break;
+    case 'turtle':
+      m.addGoal(1, new G.PanicGoal(1.2));
+      m.addGoal(2, new G.BreedGoal());
+      m.addGoal(3, new G.TemptGoal(breed));
+      m.addGoal(4, new G.FollowParentGoal());
+      m.addGoal(5, new G.SwimWanderGoal());
+      m.addGoal(6, new G.WanderGoal(1, 1 / 80));
+      m.addGoal(7, new G.LookAtPlayerGoal(6));
+      break;
+    case 'parrot':
+      m.addGoal(1, new G.FollowOwnerGoal());
+      m.addGoal(2, new G.FlyWanderGoal(8, 0, 6));
+      m.addGoal(3, new G.LookAtPlayerGoal(8));
+      break;
+    case 'ocelot':
+      m.addGoal(0, new G.FloatGoal());
+      // Shy until it trusts the player; a trusted ocelot no longer runs
+      m.addGoal(1, new G.AvoidGoal((e) => e.type === 'player' && !m.data.trusting, 10, 1.8));
+      m.addGoal(2, new G.MeleeAttackGoal(1.4));
+      m.addGoal(3, new G.BreedGoal());
+      m.addGoal(4, new G.TemptGoal(breed, 0.6));
+      m.addGoal(5, new G.FollowParentGoal());
+      m.addGoal(6, new G.WanderGoal(1, 1 / 80));
+      m.addGoal(7, new G.LookAtPlayerGoal(6));
+      m.addTargetGoal(1, new G.NearestTargetGoal(G.nearestEntityTarget(10, hostileTo(['chicken'])), true, 0.02));
+      break;
+    case 'panda': {
+      const aggressive = m.data.variant === 'aggressive';
+      m.addGoal(0, new G.FloatGoal());
+      if (aggressive) m.addGoal(1, new G.MeleeAttackGoal(1.2));
+      else m.addGoal(1, new G.PanicGoal(1.4));
+      m.addGoal(2, new G.BreedGoal());
+      m.addGoal(3, new G.TemptGoal(breed, 1));
+      m.addGoal(4, new G.FollowParentGoal());
+      m.addGoal(5, new G.WanderGoal(m.data.variant === 'lazy' ? 0.6 : 0.9, m.data.variant === 'lazy' ? 1 / 200 : 1 / 80));
+      m.addGoal(6, new G.LookAtPlayerGoal(6));
+      m.addGoal(7, new G.LookRandomGoal());
+      if (aggressive) m.addTargetGoal(1, new G.HurtByTargetGoal(true));
+      break;
+    }
+    case 'llama':
+      m.addGoal(0, new G.FloatGoal());
+      m.addGoal(1, new G.RangedAttackGoal('llama_spit', 40, 10, 1.2));
+      m.addGoal(2, new G.BreedGoal());
+      m.addGoal(3, new G.TemptGoal(breed));
+      m.addGoal(4, new G.FollowParentGoal());
+      m.addGoal(5, new G.WanderGoal(0.8, 1 / 80));
+      m.addGoal(6, new G.LookAtPlayerGoal(6));
+      m.addGoal(7, new G.LookRandomGoal());
+      m.addTargetGoal(1, new G.HurtByTargetGoal(true));
+      m.addTargetGoal(2, new G.NearestTargetGoal(G.nearestEntityTarget(12, (e) => e.type === 'wolf' && !(e as Mob).owner), true, 0.05));
+      break;
+    case 'camel':
+      m.addGoal(0, new G.FloatGoal());
+      m.addGoal(1, new G.PanicGoal(1.6));
+      m.addGoal(2, new G.BreedGoal());
+      m.addGoal(3, new G.TemptGoal(breed));
+      m.addGoal(4, new G.FollowParentGoal());
+      m.addGoal(5, new G.WanderGoal(0.8, 1 / 150, 14));
+      m.addGoal(6, new G.LookAtPlayerGoal(8));
+      break;
+    case 'frog':
+      m.addGoal(1, new G.MeleeAttackGoal(1.3, 1.5));
+      m.addGoal(2, new G.BreedGoal());
+      m.addGoal(3, new G.TemptGoal(breed));
+      m.addGoal(4, new G.SwimWanderGoal());
+      m.addGoal(5, new G.WanderGoal(1, 1 / 50));
+      m.addGoal(6, new G.LookAtPlayerGoal(6));
+      // Small slimes and magma cubes are frog food
+      m.addTargetGoal(1, new G.NearestTargetGoal(G.nearestEntityTarget(10, (e) => (e.type === 'slime' || e.type === 'magma_cube') && Number((e as Mob).data.size ?? 1) === 1), false, 0.05));
+      break;
+    case 'axolotl':
+      m.addGoal(1, new G.MeleeAttackGoal(1.4));
+      m.addGoal(2, new G.BreedGoal());
+      m.addGoal(3, new G.TemptGoal(breed));
+      m.addGoal(4, new G.FollowParentGoal());
+      m.addGoal(5, new G.SwimWanderGoal());
+      m.addGoal(6, new G.WanderGoal(1, 1 / 120));
+      m.addTargetGoal(1, new G.HurtByTargetGoal());
+      // Hunts other swimmers (and drowned), but only in the water
+      m.addTargetGoal(2, new G.NearestTargetGoal(G.nearestEntityTarget(12, (e) => ['cod', 'salmon', 'tropical_fish', 'pufferfish', 'squid', 'drowned'].includes(e.type) && (e as Mob).body.inWater), false, 0.05));
+      break;
     case 'fish':
     case 'squid':
       m.addGoal(1, new G.PanicGoal(1.5));

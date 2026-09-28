@@ -10,7 +10,7 @@ import { mobDef } from '../../common/data/mobs';
 import { stepMovement, updateEnvironment, moveBody, bodyObstructed } from '../../common/physics/movement';
 import { STATE_FLUID, STATE_OPAQUE, STATE_BLOCK, blocks } from '../../common/registry/blocks';
 import { Random } from '../../common/math/rng';
-import type { ItemStack } from '../../common/game/itemstack';
+import { type ItemStack, stackOf } from '../../common/game/itemstack';
 import { itemById, items } from '../../common/registry/items';
 import type { EntitySpawn } from '../../common/net/protocol';
 import { Pathfinder, type PathNode, type PathOptions } from '../ai/Pathfinder';
@@ -214,6 +214,8 @@ export class Mob extends LivingEntity {
     if (this.baby && ++this.growTicks >= 24000) {
       this.baby = false;
       this.metaDirty = true;
+      // A turtle sheds its scute as it grows up
+      if (this.type === 'turtle') this.dim.server.mining.dropItem(this.dim, this.x, this.y + 0.3, this.z, stackOf('scute', 1));
     }
     if (!this.controlled) this.environment();
     if (this.dead || this.removed) return;
@@ -279,7 +281,7 @@ export class Mob extends LivingEntity {
           this.hurt(2, { source: 'drown', attacker: null });
         }
       } else this.airTicks = 300;
-    } else if (b.eyesInWater && this.def.brain !== 'zombie' && !this.def.undead) {
+    } else if (b.eyesInWater && this.def.brain !== 'zombie' && !this.def.undead && !this.def.amphibious) {
       if (--this.airTicks < -20) {
         this.airTicks = 0;
         this.hurt(2, { source: 'drown', attacker: null });
@@ -324,7 +326,7 @@ export class Mob extends LivingEntity {
       ty = this.wantPos.y;
       tz = this.wantPos.z;
       speed = this.wantPos.speed;
-      if ((tx - this.x) ** 2 + (tz - this.z) ** 2 + (def.flying || def.aquatic ? (ty - this.y) ** 2 : 0) < 0.3) this.wantPos = null;
+      if ((tx - this.x) ** 2 + (tz - this.z) ** 2 + (def.flying || def.aquatic || (def.amphibious && b.inWater) ? (ty - this.y) ** 2 : 0) < 0.3) this.wantPos = null;
     } else if (this.path && this.pathIndex < this.path.length) {
       this.pathAge++;
       const n = this.path[this.pathIndex]!;
@@ -337,7 +339,7 @@ export class Mob extends LivingEntity {
         if (this.pathIndex >= this.path.length) this.path = null;
       }
     }
-    if (def.flying || (def.aquatic && b.inWater && def.brain !== 'zombie')) {
+    if (def.flying || ((def.aquatic || def.amphibious) && b.inWater && def.brain !== 'zombie')) {
       this.flyMove(tx, ty, tz, speed);
       return;
     }
@@ -405,13 +407,15 @@ export class Mob extends LivingEntity {
       b.vz += (dz / d) * accel;
       this.yaw = approachAngle(this.yaw, Math.atan2(-dx, -dz), 0.3);
       this.headYaw = this.yaw;
-    } else if (!def.aquatic) {
+    } else if (!def.aquatic && !def.amphibious) {
       // gentle hover
       b.vy += Math.sin(this.age * 0.1) * 0.002;
     }
+    // A sitting flyer (a parrot told to stay) settles down
+    if (this.sitting && def.flying && !b.onGround) b.vy -= 0.04;
     if (def.aquatic && !b.inWater) b.vy -= 0.08;
     moveBody(this.dim, b, b.vx, b.vy, b.vz);
-    const drag = def.aquatic ? 0.9 : 0.91;
+    const drag = def.aquatic || def.amphibious ? 0.9 : 0.91;
     b.vx *= drag;
     b.vy *= drag;
     b.vz *= drag;
@@ -494,7 +498,7 @@ export class Mob extends LivingEntity {
     if (this.owner) m.tame = true;
     if (this.fuse >= 0) m.fuse = this.fuse;
     if (this.angryAt || this.target) m.angry = true;
-    for (const k of ['color', 'sheared', 'size', 'profession', 'variant', 'charged', 'carried', 'phase', 'open', 'saddle', 'leashPos']) if (this.data[k] !== undefined) m[k] = this.data[k];
+    for (const k of ['color', 'sheared', 'size', 'profession', 'variant', 'charged', 'carried', 'phase', 'open', 'saddle', 'leashPos', 'puff', 'dancing', 'playDead', 'rolling', 'eating', 'trusting', 'tongue']) if (this.data[k] !== undefined) m[k] = this.data[k];
     if (this.data.glowTicks) m.glowing = true;
     if (this.data.leash && this.metaHolder) m.leash = this.metaHolder;
     if (this.rider) m.rider = this.rider.id;

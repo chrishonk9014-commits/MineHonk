@@ -200,6 +200,12 @@ export class Gadgets {
     return true;
   }
 
+  /** Whether a record is playing within `r` blocks (parrots dance to it). */
+  recordNear(dim: Dimension, x: number, y: number, z: number, r: number): boolean {
+    for (const rec of this.records.values()) if (rec.dim === dim && (rec.x + 0.5 - x) ** 2 + (rec.y + 0.5 - y) ** 2 + (rec.z + 0.5 - z) ** 2 <= r * r) return true;
+    return false;
+  }
+
   private stopRecord(dim: Dimension, x: number, y: number, z: number): void {
     const k = `${dim.id}|${x},${y},${z}`;
     const r = this.records.get(k);

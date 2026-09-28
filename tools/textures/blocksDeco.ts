@@ -912,6 +912,23 @@ export function registerDeco(r: PainterRegistry): void {
     t.rect(6, 6, 4, 4, hex(0x8ae0ff));
     t.rect(7, 7, 2, 2, hex(0x0a1a2a));
   });
+  // Froglights: soft glowing blocks with a scaly rim
+  for (const [f, core, rim] of [
+    ['ochre', 0xfbe8a0, 0xd8a040],
+    ['verdant', 0xd8f0b0, 0x6aa84a],
+    ['pearlescent', 0xf8e8f0, 0xb88ab0],
+  ] as const) {
+    r.add(`${f}_froglight_side`, (t) => {
+      blotchy(t, [hex(core), shade(hex(core), 0.95), mix(hex(core), hex(0xffffff), 0.4)], 1, 0.5);
+      for (let y = 0; y < 16; y += 4) for (let x = (y / 4) % 2 ? 2 : 0; x < 16; x += 4) t.set(x, y, shade(hex(core), 0.88));
+      frame(t, hex(rim));
+    });
+    r.add(`${f}_froglight_top`, (t) => {
+      blotchy(t, [hex(core), mix(hex(core), hex(0xffffff), 0.5)], 1, 0.5);
+      frame(t, hex(rim));
+      frame(t, shade(hex(rim), 1.15), 2);
+    });
+  }
   r.add('lodestone_side', (t) => {
     stones(t, STONE_PAL, hex(0x4a4a4a), 6);
     t.rect(0, 5, 16, 2, hex(0x3a3a3a));

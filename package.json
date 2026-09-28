@@ -1,6 +1,6 @@
 {
   "name": "minehonk",
-  "version": "0.1.0",
+  "version": "2.0.0",
   "private": true,
   "description": "MineHonk - a multiplayer voxel survival sandbox",
   "type": "module",

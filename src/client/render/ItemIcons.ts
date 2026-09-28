@@ -152,8 +152,19 @@ export class ItemIcons {
       this.iso(ctx, this.texture(top, 'block', faceTint(top)), this.texture(left, 'block', faceTint(left)), this.texture(right, 'block', faceTint(right)), hFrac);
       return c;
     }
+    if (def.model === 'campfire' && def.tex.log && def.tex.fire) {
+      // Flames over two stacked logs
+      const fire = this.texture(def.tex.fire);
+      const log = this.texture(def.tex.log);
+      if (fire) ctx.drawImage(fire, 0, 0, 16, 16, 6, 0, 20, 22);
+      if (log) {
+        ctx.drawImage(log, 0, 0, 16, 4, 2, 20, 28, 5);
+        ctx.drawImage(log, 0, 8, 16, 4, 2, 25, 28, 5);
+      }
+      return c;
+    }
     // Flat sprite from block texture
-    let spriteName = def.tex.all ?? def.tex.bottom ?? def.tex.top ?? def.tex.side;
+    let spriteName = def.tex.all ?? def.tex.bottom ?? def.tex.top ?? def.tex.side ?? def.tex.particle;
     if (def.model === 'double_plant') spriteName = def.tex.top;
     if (def.model === 'door') spriteName = def.tex.top;
     if (def.model === 'bed') spriteName = `${def.data?.color ?? 'red'}_bed_head_top`;

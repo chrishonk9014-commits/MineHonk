@@ -160,7 +160,7 @@ export const LOOT_TABLES: Record<string, LootTable> = {
   },
   'chest/village': {
     pools: [
-      { rolls: [3, 8], entries: [e('iron_ingot', 10, [1, 5]), e('bread', 15, [1, 4]), e('apple', 15, [1, 5]), e('wheat', 10, [2, 8]), e('iron_pickaxe', 5), e('iron_sword', 5), e('iron_chestplate', 5), e('iron_helmet', 5), e('iron_leggings', 5), e('iron_boots', 5), e('obsidian', 5, [3, 7]), e('oak_sapling', 5, [3, 7]), e('emerald', 3, [1, 3]), e('potato', 10, [1, 7]), e('carrot', 10, [1, 7]), e('torch', 10, [2, 8])] },
+      { rolls: [3, 8], entries: [e('honeycomb', 6, [1, 4]), e('iron_ingot', 10, [1, 5]), e('bread', 15, [1, 4]), e('apple', 15, [1, 5]), e('wheat', 10, [2, 8]), e('iron_pickaxe', 5), e('iron_sword', 5), e('iron_chestplate', 5), e('iron_helmet', 5), e('iron_leggings', 5), e('iron_boots', 5), e('obsidian', 5, [3, 7]), e('oak_sapling', 5, [3, 7]), e('emerald', 3, [1, 3]), e('potato', 10, [1, 7]), e('carrot', 10, [1, 7]), e('torch', 10, [2, 8])] },
     ],
   },
   'chest/stronghold_corridor': {
@@ -209,7 +209,7 @@ export const LOOT_TABLES: Record<string, LootTable> = {
   'chest/witch_hut': { pools: [{ rolls: [2, 5], entries: [e('glowstone_dust', 10, [1, 3]), e('redstone', 10, [1, 3]), e('spider_eye', 10, [1, 2]), e('sugar', 10, [1, 3]), e('glass_bottle', 10, [1, 3]), e('fermented_spider_eye', 3)] }] },
   // Original structures
   'chest/sky_shrine': { pools: [{ rolls: [3, 6], entries: [e('feather', 20, [3, 8]), e('sky_ray_membrane', 8, [1, 2]), e('diamond', 4, [1, 2]), e('emerald', 8, [1, 4]), e('golden_apple', 6), ench('iron_boots', 6, [15, 30]), book(6), e('ender_pearl', 6, [1, 2])] }] },
-  'chest/overgrown_ruin': { pools: [{ rolls: [3, 7], entries: [e('bone', 20, [1, 6]), e('iron_nugget', 20, [3, 12]), e('emerald', 8, [1, 3]), e('sunroot_seeds', 12, [2, 5]), e('glowbell', 10, [1, 3]), e('golden_carrot', 6, [1, 4]), book(4), e('gold_ingot', 8, [1, 3])] }] },
+  'chest/overgrown_ruin': { pools: [{ rolls: [3, 7], entries: [e('honeycomb', 10, [1, 5]), e('candle', 6, [1, 3]), e('bone', 20, [1, 6]), e('iron_nugget', 20, [3, 12]), e('emerald', 8, [1, 3]), e('sunroot_seeds', 12, [2, 5]), e('glowbell', 10, [1, 3]), e('golden_carrot', 6, [1, 4]), book(4), e('gold_ingot', 8, [1, 3])] }] },
   'chest/stalker_den': { pools: [{ rolls: [3, 6], entries: [e('bone', 25, [2, 8]), e('stalker_fang', 10, [1, 3]), e('iron_ingot', 15, [2, 5]), e('diamond', 6, [1, 3]), e('echo_shard', 3, [1, 2]), ench('iron_sword', 5, [15, 30]), e('music_disc_deepcave', 2)] }] },
   'chest/ember_forge': { pools: [{ rolls: [3, 6], entries: [e('cinder', 25, [2, 6]), e('ember_core', 4), e('netherite_scrap', 3), e('gold_ingot', 20, [2, 6]), e('blaze_rod', 10, [1, 3]), ench('golden_sword', 6, [20, 30]), e('ember_pepper', 15, [2, 5])] }] },
   'chest/farlands_ruin': {

@@ -114,7 +114,8 @@ export type BlockEntityKind =
   | 'campfire'
   | 'barrel'
   | 'ender_chest'
-  | 'beacon';
+  | 'beacon'
+  | 'conduit';
 
 /** What happens when the player uses (right clicks) the block. */
 export type InteractKind =
@@ -145,7 +146,8 @@ export type InteractKind =
   | 'bell'
   | 'beacon'
   | 'cauldron'
-  | 'flower_pot';
+  | 'flower_pot'
+  | 'candle';
 
 export type TintKind = 'none' | 'grass' | 'foliage' | 'water' | 'birch' | 'spruce' | 'stem' | 'lily';
 

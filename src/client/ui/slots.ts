@@ -2,7 +2,7 @@
 import { el } from './dom';
 import type { ItemIcons } from '../render/ItemIcons';
 import type { Slot } from '../../common/game/itemstack';
-import { items } from '../../common/registry/items';
+import { items, itemById } from '../../common/registry/items';
 import { romanNumeral } from '../../common/data/enchantments';
 import { enchantName } from '../../common/game/enchanting';
 import { blockById } from '../../common/registry/blocks';
@@ -104,6 +104,12 @@ export function showTooltip(stack: Slot, x: number, y: number, advanced = false)
   }
   if (d.armor) tooltipEl.append(el('div', { class: 'blue' }, `+${d.armor.defense} Armor`), ...(d.armor.toughness ? [el('div', { class: 'blue' }, `+${d.armor.toughness} Armor Toughness`)] : []));
   if (d.durability && (stack.damage ?? 0) > 0) tooltipEl.append(el('div', { class: 'dim' }, `Durability: ${d.durability - (stack.damage ?? 0)} / ${d.durability}`));
+  if (it.id === 'shulker_box' && Array.isArray(stack.tag?.data?.items)) {
+    // Packed contents: the first five stacks, then a count of the rest
+    const packed = (stack.tag!.data!.items as ({ id?: unknown; count?: unknown } | null)[]).filter((e) => e && typeof e.id === 'string');
+    for (const e of packed.slice(0, 5)) tooltipEl.append(el('div', {}, `${itemById.get(String(e!.id).replace(/^minehonk:/, ''))?.def.name ?? String(e!.id)} x${Number(e!.count ?? 1)}`));
+    if (packed.length > 5) tooltipEl.append(el('div', { class: 'dim italic' }, `and ${packed.length - 5} more...`));
+  }
   if (it.id === 'farlands_compass') tooltipEl.append(el('div', { class: 'rarity-glitched' }, 'Points somewhere it should not.'));
   if (stack.tag?.admin) tooltipEl.append(el('div', { class: 'dim' }, 'Cheat item: never counts for advancements'));
   if (advanced) {

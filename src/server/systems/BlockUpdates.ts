@@ -352,6 +352,18 @@ export class BlockUpdates {
     return Math.max(block, sky - skyDim);
   }
 
+  /** A ripe stem sets its fruit on free ground beside it (one at a time). */
+  private growFruit(dim: Dimension, x: number, y: number, z: number, fruit: string): void {
+    if (this.lightAt(dim, x, y + 1, z) < 9 || !rng.chance(1 / 4)) return;
+    for (let f = 2; f < 6; f++) if (blocks[STATE_BLOCK[dim.getState(x + FACE_DX[f], y, z + FACE_DZ[f])]!]!.id === fruit) return;
+    const f = 2 + rng.int(4);
+    const fx = x + FACE_DX[f];
+    const fz = z + FACE_DZ[f];
+    const ground = blocks[STATE_BLOCK[dim.getState(fx, y - 1, fz)]!]!.id;
+    if (dim.getState(fx, y, fz) !== 0 || !['dirt', 'grass_block', 'farmland', 'coarse_dirt', 'podzol', 'moss_block', 'rooted_dirt', 'mud'].includes(ground)) return;
+    dim.setBlock(fx, y, fz, S(fruit));
+  }
+
   private randomTick(dim: Dimension, x: number, y: number, z: number, st: number): void {
     const bt = blocks[STATE_BLOCK[st]!]!;
     const def = bt.def;
@@ -359,7 +371,10 @@ export class BlockUpdates {
     if (def.model === 'crop') {
       const age = parseInt(getProp(st, 'age')!, 10);
       const max = (def.data?.maxAge as number) ?? 7;
-      if (age >= max) return;
+      if (age >= max) {
+        if (def.data?.fruit) this.growFruit(dim, x, y, z, String(def.data.fruit));
+        return;
+      }
       if (id !== 'nether_wart' && this.lightAt(dim, x, y + 1, z) < 9) return;
       const farm = dim.getState(x, y - 1, z);
       const moist = blocks[STATE_BLOCK[farm]!]!.id === 'farmland' && getProp(farm, 'moisture') === '7';

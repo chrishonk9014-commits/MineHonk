@@ -465,6 +465,20 @@ export function registerDeco(r: PainterRegistry): void {
   for (const [n, stages, leaf, fruit] of cropSpec) {
     for (let s = 0; s < stages; s++) r.add(`${n}_stage${s}`, (t) => crop(t, s, stages - 1, leaf, fruit, n));
   }
+  // Melon and pumpkin stems: a vine that grows taller and yellows as it ripens
+  for (let s = 0; s < 8; s++) {
+    r.add(`stem_stage${s}`, (t) => {
+      t.clear();
+      const h = 2 + s * 2;
+      const k = s / 7;
+      const col: RGB = [Math.round(0x4a + (0xc8 - 0x4a) * k), Math.round(0x9a + (0xa0 - 0x9a) * k), Math.round(0x2a + (0x20 - 0x2a) * k)];
+      for (let y = 16 - h; y < 16; y++) t.set(7 + ((y >> 2) & 1), y, col);
+      for (let i = 0; i < Math.min(3, s); i++) {
+        const ly = 16 - h + 3 + i * 4;
+        if (ly < 15) t.set(i % 2 ? 9 : 6, ly, shade(col, 0.8));
+      }
+    });
+  }
 
   // Functional
   const oak = WOODS.oak!.plank;
@@ -841,6 +855,63 @@ export function registerDeco(r: PainterRegistry): void {
     frame(t, hex(0x6a3aa8), 3);
   });
   r.add('respawn_anchor_bottom', (t) => blotchy(t, [hex(0x14101c), hex(0x1c1628), hex(0x241c34)], 1, 0.8));
+  // Candle: cream wax with a dark wick; the lit variant carries a small flame
+  const candleTex = (lit: boolean) => (t: Tex): void => {
+    t.clear();
+    const wax = [hex(0xe8dcb8), hex(0xf4ecd0), hex(0xd8c8a0)];
+    for (let y = 6; y < 16; y++) for (let x = 6; x < 10; x++) t.set(x, y, wax[(x === 6 ? 2 : x === 9 ? 2 : y === 6 ? 1 : 0)]!);
+    t.set(7, 5, hex(0x2a2a2a));
+    t.set(7, 4, hex(0x3a3a3a));
+    if (lit) {
+      t.set(7, 3, hex(0xffe070));
+      t.set(7, 2, hex(0xfff0a0));
+      t.set(8, 3, hex(0xf0a030));
+      t.set(6, 3, hex(0xf0a030));
+      t.set(7, 1, hex(0xffc040), 200);
+    }
+  };
+  r.add('candle', candleTex(false));
+  r.add('candle_lit', candleTex(true));
+  r.add('honeycomb_block', (t) => {
+    t.fill(hex(0xd8901a));
+    // Hexagon cells
+    for (let y = 0; y < 16; y++)
+      for (let x = 0; x < 16; x++) {
+        const row = Math.floor(y / 4);
+        const ox = row & 1 ? 2 : 0;
+        const cx = (x + ox) % 4;
+        const cy = y % 4;
+        if (cx === 0 || cy === 0) t.set(x, y, hex(0xb86a10));
+        else if (cx === 1 && cy === 1) t.set(x, y, hex(0xf8c040));
+        else t.set(x, y, t.rng.chance(0.2) ? hex(0xe8a828) : hex(0xe09a20));
+      }
+  });
+  const SHULKER = [hex(0x6a4a7a), hex(0x8a6a9a), hex(0x9a7aaa), hex(0x7a5a8a)];
+  r.add('shulker_box_side', (t) => {
+    blotchy(t, SHULKER, 1, 0.5);
+    t.rect(0, 0, 16, 5, hex(0x9a7aaa));
+    t.rect(0, 5, 16, 1, hex(0x3a2a4a));
+    frame(t, hex(0x4a3458));
+  });
+  r.add('shulker_box_top', (t) => {
+    blotchy(t, SHULKER, 1, 0.5);
+    frame(t, hex(0x4a3458));
+    t.rect(3, 3, 10, 10, hex(0x9a7aaa));
+    frame(t, hex(0x5a4468), 3);
+  });
+  r.add('shulker_box_bottom', (t) => {
+    blotchy(t, SHULKER.slice(0, 2), 1, 0.5);
+    frame(t, hex(0x4a3458));
+  });
+  r.add('conduit', (t) => {
+    // Dark wooden cage around a glowing blue eye
+    t.fill(hex(0x5a4028));
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) if ((x + y) % 5 === 0) t.set(x, y, hex(0x3a2818));
+    t.rect(4, 4, 8, 8, hex(0x1a5a8a));
+    t.rect(5, 5, 6, 6, hex(0x2a8ad8));
+    t.rect(6, 6, 4, 4, hex(0x8ae0ff));
+    t.rect(7, 7, 2, 2, hex(0x0a1a2a));
+  });
   r.add('lodestone_side', (t) => {
     stones(t, STONE_PAL, hex(0x4a4a4a), 6);
     t.rect(0, 5, 16, 2, hex(0x3a3a3a));

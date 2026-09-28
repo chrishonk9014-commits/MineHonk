@@ -380,8 +380,8 @@ export class Game {
         const k = `${m.x},${m.y},${m.z}`;
         if (m.data) this.blockEntities.set(k, m.data);
         else this.blockEntities.delete(k);
-        // Keep the chunk copy current too (beacon beams read it)
-        if (m.data?.type === 'beacon') this.world.getChunk(m.x >> 4, m.z >> 4)?.setBlockEntity(m.x & 15, m.y, m.z & 15, m.data as { type: string });
+        // Keep the chunk copy current too (beacon beams and sign text read it)
+        this.world.getChunk(m.x >> 4, m.z >> 4)?.setBlockEntity(m.x & 15, m.y, m.z & 15, (m.data as { type: string } | null) ?? undefined);
         break;
       }
       case 'spawn': {

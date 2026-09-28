@@ -1411,6 +1411,28 @@ export function registerItems(r: PainterRegistry): void {
   r.add('shulker_shell', (t) => paintMask(t, 'scale', matPal(hex(0x9a6aa0))));
   r.add('nautilus_shell', (t) => paintMask(t, 'ball', matPal(hex(0xe8d8c8))));
   r.add('honeycomb', (t) => paintMask(t, 'honeycomb', matPal(hex(0xf0a820))));
+  r.add('candle', (t) => {
+    t.clear();
+    for (let y = 5; y < 15; y++) for (let x = 6; x < 10; x++) t.set(x, y, x === 6 ? hex(0xf8f0d8) : x === 9 ? hex(0xc8b890) : hex(0xe8dcb8));
+    t.set(7, 4, hex(0x2a2a2a));
+    t.set(7, 3, hex(0x3a3a3a));
+    for (let x = 6; x < 10; x++) t.set(x, 15, hex(0xb8a880));
+  });
+  r.add('conduit', (t) => {
+    t.clear();
+    const cage = hex(0x6a4a2a);
+    const dark = hex(0x3a2818);
+    for (let y = 2; y < 14; y++)
+      for (let x = 2; x < 14; x++) {
+        const edge = x === 2 || x === 13 || y === 2 || y === 13;
+        const bar = (x + y) % 4 === 0;
+        if (edge || bar) t.set(x, y, edge ? dark : cage);
+      }
+    for (let y = 5; y < 11; y++) for (let x = 5; x < 11; x++) t.set(x, y, hex(0x2a8ad8));
+    for (let y = 6; y < 10; y++) for (let x = 6; x < 10; x++) t.set(x, y, hex(0x8ae0ff));
+    t.set(7, 7, hex(0x0a1a2a));
+    t.set(8, 8, hex(0x0a1a2a));
+  });
   r.add('ghast_tear', (t) => paintMask(t, 'shard', matPal(hex(0xd8f0f0))));
   r.add('nether_star', (t) => paintMask(t, 'star', matPal(hex(0xf0f0e8))));
   r.add('ink_sac', (t) => paintMask(t, 'dye', matPal(hex(0x2a2a3a))));

@@ -254,8 +254,8 @@ for (const c of COLORS) mat(c + '_dye', { tags: ['dyes'] });
 // Seeds (place crops)
 add({ id: 'wheat_seeds', name: 'Wheat Seeds', block: 'wheat', creative: 'nature', tags: ['seeds'] });
 add({ id: 'beetroot_seeds', name: 'Beetroot Seeds', block: 'beetroots', creative: 'nature', tags: ['seeds'] });
-add({ id: 'pumpkin_seeds', name: 'Pumpkin Seeds', creative: 'nature', tags: ['seeds'] });
-add({ id: 'melon_seeds', name: 'Melon Seeds', creative: 'nature', tags: ['seeds'] });
+add({ id: 'pumpkin_seeds', name: 'Pumpkin Seeds', block: 'pumpkin_stem', creative: 'nature', tags: ['seeds'] });
+add({ id: 'melon_seeds', name: 'Melon Seeds', block: 'melon_stem', creative: 'nature', tags: ['seeds'] });
 add({ id: 'sunroot_seeds', name: 'Sunroot Seeds', block: 'sunroot', creative: 'nature', tags: ['seeds'] });
 add({ id: 'nether_wart', name: 'Nether Wart', block: 'nether_wart', creative: 'nature' });
 add({ id: 'sign', name: 'Sign', maxStack: 16, block: 'sign', wallBlock: 'wall_sign', creative: 'functional', fuel: 200 });

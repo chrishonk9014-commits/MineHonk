@@ -20,6 +20,7 @@ export const TRADES: Record<Exclude<Profession, 'none'>, TradeDef[]> = {
     { buy: ['emerald', 3], sell: ['cookie', 18], maxUses: 12 },
     { buy: ['emerald', 4], sell: ['golden_carrot', 3], maxUses: 12 },
     { buy: ['sunroot', 8], sell: ['emerald', 1], maxUses: 12 },
+    { buy: ['emerald', 2], sell: ['honeycomb', 3], maxUses: 12 },
   ],
   librarian: [
     { buy: ['paper', 24], sell: ['emerald', 1], maxUses: 16 },

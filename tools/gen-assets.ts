@@ -108,7 +108,7 @@ for (const d of BLOCK_DEFS) for (const v of Object.values(d.tex)) if (v) referen
 const blockNames = [...new Set([...blockReg.painters.keys()])];
 const missing = [...referenced].filter((n) => !blockReg.has(n) && !fs.existsSync(path.join(OVERRIDES, 'blocks', n + '.png')));
 // Names that are only logical references (resolved by the model baker to suffixed textures).
-const LOGICAL = /^(wheat|carrots|potatoes|beetroots|sunroot|nether_wart)_stage$|^(chest|trapped_chest|ender_chest)$|_wool$/;
+const LOGICAL = /^(wheat|carrots|potatoes|beetroots|sunroot|nether_wart|stem)_stage$|^(chest|trapped_chest|ender_chest)$|_wool$/;
 const realMissing = missing.filter((n) => !LOGICAL.test(n));
 if (realMissing.length) console.warn(`[gen-assets] ${realMissing.length} block textures without painter:`, realMissing.join(' '));
 

@@ -693,6 +693,9 @@ crop('carrots', 4, 'carrot', 'carrot');
 crop('potatoes', 4, 'potato', 'potato');
 crop('beetroots', 4, 'beetroot', 'beetroot_seeds');
 crop('sunroot', 4, 'sunroot', 'sunroot_seeds'); // original crop
+// Stems grow for 8 stages, then set a melon or pumpkin on free ground beside them
+crop('melon_stem', 8, 'melon_seeds', 'melon_seeds', { tex: { all: 'stem_stage' }, drops: { item: 'melon_seeds' }, data: { maxAge: 7, drop: 'melon_seeds', seed: 'melon_seeds', fruit: 'melon' } });
+crop('pumpkin_stem', 8, 'pumpkin_seeds', 'pumpkin_seeds', { tex: { all: 'stem_stage' }, drops: { item: 'pumpkin_seeds' }, data: { maxAge: 7, drop: 'pumpkin_seeds', seed: 'pumpkin_seeds', fruit: 'pumpkin' } });
 add({ id: 'nether_wart', name: 'Nether Wart', hardness: 0, sound: 'crop', model: 'crop', props: { age: ['0', '1', '2', '3'] }, tex: { all: 'nether_wart_stage' }, place: 'needs_soul_sand', randomTicks: true, drops: { table: 'crop_nether_wart' }, item: false, data: { maxAge: 3, drop: 'nether_wart', seed: 'nether_wart' } });
 
 // ---------------------------------------------------------------------------
@@ -776,7 +779,7 @@ for (const a of ['anvil', 'chipped_anvil', 'damaged_anvil']) {
 add({ id: 'brewing_stand', name: 'Brewing Stand', hardness: 0.5, sound: 'metal', model: 'brewing_stand', tex: { all: 'brewing_stand', base: 'brewing_stand_base' }, tool: 'pickaxe', harvestLevel: 0, requiresTool: true, light: 1, entity: 'brewing_stand', interact: 'brewing' });
 add({ id: 'smithing_table', name: 'Smithing Table', hardness: 2.5, sound: 'wood', model: 'cube', tex: { top: 'smithing_table_top', side: 'smithing_table_side', front: 'smithing_table_front', bottom: 'smithing_table_bottom' }, tool: 'axe', interact: 'smithing' });
 add({ id: 'stonecutter', name: 'Stonecutter', hardness: 3.5, sound: 'stone', model: 'custom', props: { facing: FACING4 }, tex: { top: 'stonecutter_top', side: 'stonecutter_side', bottom: 'stonecutter_bottom' }, tool: 'pickaxe', harvestLevel: 0, requiresTool: true, interact: 'stonecutter', collide: true, layer: 'cutout' });
-add({ id: 'cauldron', name: 'Cauldron', hardness: 2, sound: 'metal', model: 'cauldron', props: { level: ['0', '1', '2', '3'] }, tex: { all: 'cauldron_side', top: 'cauldron_top', inner: 'cauldron_inner' }, tool: 'pickaxe', harvestLevel: 0, requiresTool: true });
+add({ id: 'cauldron', name: 'Cauldron', hardness: 2, sound: 'metal', model: 'cauldron', props: { level: ['0', '1', '2', '3'] }, tex: { all: 'cauldron_side', top: 'cauldron_top', inner: 'cauldron_inner' }, tool: 'pickaxe', harvestLevel: 0, requiresTool: true, interact: 'cauldron' });
 add({ id: 'composter', name: 'Composter', hardness: 0.6, sound: 'wood', model: 'cauldron', props: { level: ['0', '1', '2', '3', '4', '5', '6', '7', '8'] }, tex: { all: 'composter_side', top: 'composter_top', inner: 'composter_bottom' }, tool: 'axe', interact: 'composter' });
 add({ id: 'jukebox', name: 'Jukebox', hardness: 2, sound: 'wood', model: 'cube', props: { has_record: BOOL }, tex: { top: 'jukebox_top', side: 'jukebox_side' }, tool: 'axe', entity: 'jukebox', interact: 'jukebox' });
 add({ id: 'note_block', name: 'Note Block', hardness: 0.8, sound: 'wood', model: 'cube', tex: { all: 'note_block' }, tool: 'axe', interact: 'note_block' });
@@ -799,7 +802,16 @@ add({ id: 'beacon', name: 'Beacon', hardness: 3, sound: 'glass', model: 'cube', 
 add({ id: 'respawn_anchor', name: 'Respawn Anchor', hardness: 50, sound: 'stone', model: 'cube', props: { charges: ['0', '1', '2', '3', '4'] }, tex: { top: 'respawn_anchor_top', side: 'respawn_anchor_side', bottom: 'respawn_anchor_bottom' }, tool: 'pickaxe', harvestLevel: 3, requiresTool: true, interact: 'respawn_anchor' });
 add({ id: 'lodestone', name: 'Lodestone', hardness: 3.5, sound: 'stone', model: 'cube', tex: { top: 'lodestone_top', side: 'lodestone_side' }, tool: 'pickaxe', harvestLevel: 0, requiresTool: true });
 add({ id: 'cake', name: 'Cake', hardness: 0.5, sound: 'wool', model: 'custom', props: { bites: ['0', '1', '2', '3', '4', '5', '6'] }, tex: { top: 'cake_top', side: 'cake_side', bottom: 'cake_bottom', inner: 'cake_inner' }, interact: 'cake', drops: 'none', collide: true, layer: 'cutout' });
-add({ id: 'flower_pot', name: 'Flower Pot', hardness: 0, sound: 'stone', model: 'custom', tex: { all: 'flower_pot' }, collide: true, layer: 'cutout' });
+// Candles: up to four on one block, lit with flint and steel
+add({ id: 'candle', name: 'Candle', hardness: 0.1, sound: 'wool', model: 'custom', props: { candles: ['1', '2', '3', '4'], lit: BOOL }, tex: { all: 'candle', lit: 'candle_lit' }, light: 12, collide: true, layer: 'cutout', place: 'needs_solid_below', interact: 'candle' });
+cube('honeycomb_block', 0.6, 'wool', { tex: { all: 'honeycomb_block' } });
+// Portable storage: keeps its contents when broken
+add({ id: 'shulker_box', name: 'Shulker Box', hardness: 2, sound: 'stone', model: 'cube', props: { facing: ['up', 'down', 'north', 'south', 'west', 'east'] }, defaults: { facing: 'up' }, tex: { top: 'shulker_box_top', side: 'shulker_box_side', bottom: 'shulker_box_bottom' }, tool: 'pickaxe', entity: 'barrel', interact: 'barrel', drops: 'none' });
+// Conduit: in water inside a prismarine frame it lets divers breathe and see
+add({ id: 'conduit', name: 'Conduit', hardness: 3, sound: 'glass', model: 'custom', tex: { all: 'conduit' }, light: 15, collide: true, layer: 'cutout', tool: 'pickaxe', entity: 'conduit' });
+/** Plants a flower pot can hold. */
+export const POTTABLE = ['none', 'dandelion', 'poppy', 'blue_orchid', 'allium', 'azure_bluet', 'red_tulip', 'orange_tulip', 'white_tulip', 'pink_tulip', 'oxeye_daisy', 'cornflower', 'lily_of_the_valley', 'oak_sapling', 'spruce_sapling', 'birch_sapling', 'jungle_sapling', 'acacia_sapling', 'dark_oak_sapling', 'cherry_sapling', 'red_mushroom', 'brown_mushroom', 'fern', 'dead_bush', 'glowbell'] as const;
+add({ id: 'flower_pot', name: 'Flower Pot', hardness: 0, sound: 'stone', model: 'custom', props: { plant: POTTABLE }, tex: { all: 'flower_pot' }, collide: true, layer: 'cutout', interact: 'flower_pot' });
 
 // Stairs / slabs / walls for stone materials
 family('cobblestone', 'cobblestone', 2, 'stone', true);

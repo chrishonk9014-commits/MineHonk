@@ -180,10 +180,13 @@ export class Mining {
       for (const s of drops.items) this.dropItem(dim, x + 0.5, y + 0.3, z + 0.5, s);
       if (drops.xp > 0) this.dropXp(dim, x + 0.5, y + 0.5, z + 0.5, drops.xp, cheat);
       // Container contents spill
-      if (be && Array.isArray((be as { items?: unknown }).items)) this.server.interaction.spillContainer(dim, x, y, z, be);
+      if (be && Array.isArray((be as { items?: unknown }).items)) this.server.interaction.spillContainer(dim, x, y, z, be, bt.id, cheat);
       if (def.hardness > 0) this.server.interaction.damageHeld(p, 1);
       this.server.interaction.survival.exhaust(p, 0.005);
       this.server.interaction.onBlockMined(p, bt.id, drops.items, cheat);
+    } else if (bt.id === 'shulker_box' && Array.isArray(be?.items) && (be!.items as unknown[]).some(Boolean)) {
+      // Even in creative a packed shulker box is kept rather than lost
+      this.server.interaction.spillContainer(dim, x, y, z, be, bt.id, cheat);
     }
   }
 

@@ -929,7 +929,7 @@ export class MobSystem {
       if (dim.getBlockEntity(bx, by, bz)) {
         s.interaction.containers.materializeLoot(dim, bx, by, bz, 27, cheatDrops);
         const be = dim.getBlockEntity(bx, by, bz);
-        if (be && Array.isArray((be as { items?: unknown }).items)) s.interaction.spillContainer(dim, bx, by, bz, be);
+        if (be && Array.isArray((be as { items?: unknown }).items)) s.interaction.spillContainer(dim, bx, by, bz, be, id, cheatDrops);
       }
       dim.setBlock(bx, by, bz, 0);
     }

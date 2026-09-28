@@ -207,6 +207,11 @@ function applyStateOverrides(bt: BlockType): void {
       if (getProp(s, 'lit') !== 'true') STATE_LIGHT[s] = 0;
     }
   }
+  if (def.id === 'candle') {
+    for (let s = bt.baseState; s < bt.baseState + bt.stateCount; s++) {
+      STATE_LIGHT[s] = getProp(s, 'lit') === 'true' ? 3 * parseInt(getProp(s, 'candles') ?? '1', 10) : 0;
+    }
+  }
   if (def.id === 'end_portal_frame') {
     for (let s = bt.baseState; s < bt.baseState + bt.stateCount; s++) {
       STATE_LIGHT[s] = getProp(s, 'eye') === 'true' ? 1 : 0;

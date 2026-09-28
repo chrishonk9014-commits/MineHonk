@@ -306,8 +306,15 @@ export class Containers {
 
   openBarrel(p: ServerPlayer, dim: Dimension, x: number, y: number, z: number): void {
     const inv = this.containerAt(dim, x, y, z, 27, 'barrel', this.server.admin.inContext(p));
-    const w = new Window(this.newId(), 'chest', 'Barrel', 27);
-    for (let i = 0; i < 27; i++) w.slots.push(invSlot(inv, i, 'container', () => true, 64, () => this.persist(dim, x, y, z, inv)));
+    const shulker = dim.blockId(x, y, z) === 'shulker_box';
+    const w = new Window(this.newId(), 'chest', shulker ? 'Shulker Box' : 'Barrel', 27);
+    // A shulker box cannot hold another shulker box
+    const may = shulker ? (st: ItemStack) => items[st.id]?.id !== 'shulker_box' : () => true;
+    for (let i = 0; i < 27; i++) w.slots.push(invSlot(inv, i, 'container', may, 64, () => this.persist(dim, x, y, z, inv)));
+    if (shulker) {
+      this.server.playSound(dim, 'shulker.open', x + 0.5, y + 0.5, z + 0.5, 0.5, 1);
+      w.onClose = () => this.server.playSound(dim, 'shulker.close', x + 0.5, y + 0.5, z + 0.5, 0.5, 1);
+    }
     this.addPlayerInventory(w, p);
     w.pos = { dim, x, y, z };
     this.open(p, w);

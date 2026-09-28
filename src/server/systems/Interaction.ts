@@ -10,7 +10,7 @@ import { Survival, type DamageInfo } from './Survival';
 import { Containers, type Window } from './Containers';
 import { Weather } from './Weather';
 import type { C2S } from '../../common/net/protocol';
-import { type ItemStack, type Slot, cloneStack, itemIdOf, stackOf, isAdminStack } from '../../common/game/itemstack';
+import { type ItemStack, type Slot, cloneStack, itemIdOf, stackOf, isAdminStack, markAdmin } from '../../common/game/itemstack';
 import { items, itemById } from '../../common/registry/items';
 import { blocks, STATE_BLOCK, getProp, withProp, S, stateOf, STATE_FLUID, STATE_SOLID, STATE_REPLACEABLE, blockHasTag } from '../../common/registry/blocks';
 import { computePlacement, canSurvive, chestPartnerUpdate } from '../../common/game/placement';
@@ -205,7 +205,15 @@ export class Interaction {
       if (pu) dim.setBlock(pu.x, pu.y, pu.z, pu.state, { keepBlockEntity: true });
     }
     if (pdef.entity === 'furnace') dim.setBlockEntity(first.x, first.y, first.z, { type: 'furnace', items: [null, null, null] });
-    if (pdef.entity === 'chest' || pdef.entity === 'barrel') dim.setBlockEntity(first.x, first.y, first.z, { type: pdef.entity, items: new Array(27).fill(null) });
+    if (pdef.entity === 'chest' || pdef.entity === 'barrel') {
+      // A shulker box keeps what was packed into it
+      const packed = pdef.id === 'shulker_box' && Array.isArray(stack.tag?.data?.items) ? (stack.tag!.data!.items as unknown[]).slice(0, 27) : null;
+      dim.setBlockEntity(first.x, first.y, first.z, { type: pdef.entity, items: packed ? [...packed, ...new Array(27 - packed.length).fill(null)] : new Array(27).fill(null) });
+    }
+    if (pdef.entity === 'conduit') {
+      dim.setBlockEntity(first.x, first.y, first.z, { type: 'conduit' });
+      this.server.gadgets?.addConduit(dim, first.x, first.y, first.z);
+    }
     if (pdef.entity === 'sign') {
       dim.setBlockEntity(first.x, first.y, first.z, { type: 'sign', lines: ['', '', '', ''] });
       p.send({ t: 'open_window', window: -1, kind: 'player', title: 'sign', size: 0, data: { sign: [first.x, first.y, first.z] } });
@@ -352,12 +360,18 @@ export class Interaction {
         return !!this.server.gadgets?.ringBell(p, x, y, z);
       case 'beacon':
         return !!this.server.gadgets?.useBeacon(p, x, y, z);
+      case 'cauldron':
+        return !!this.server.gadgets?.useCauldron(p, x, y, z, state);
+      case 'flower_pot':
+        return !!this.server.gadgets?.useFlowerPot(p, x, y, z, state);
+      case 'candle':
+        return !!this.server.gadgets?.useCandle(p, x, y, z, state);
       case 'enchanting':
       case 'anvil':
       case 'brewing':
         return !!this.hooks.useBlock?.(p, x, y, z, state);
       case 'sign':
-        return false;
+        return !!this.server.gadgets?.inkSign(p, x, y, z);
     }
     // Redstone ore glows when touched
     if (bt.id === 'redstone_ore' || bt.id === 'deepslate_redstone_ore') {
@@ -797,7 +811,7 @@ export class Interaction {
     this.damageStack(p, p.selectedSlot, amount);
   }
 
-  private damageHeldSlot(p: ServerPlayer, slot: number, amount: number): void {
+  damageHeldSlot(p: ServerPlayer, slot: number, amount: number): void {
     this.damageStack(p, slot, amount);
   }
 
@@ -893,9 +907,21 @@ export class Interaction {
     this.containers.syncInventory(p);
   }
 
-  spillContainer(dim: Dimension, x: number, y: number, z: number, be: unknown): void {
+  /**
+   * Drops what a broken container held. A shulker box instead drops itself
+   * with its contents packed inside (`blockId` names the broken block).
+   */
+  spillContainer(dim: Dimension, x: number, y: number, z: number, be: unknown, blockId?: string, cheat = false): void {
     const list = (be as { items?: unknown[] }).items ?? [];
     this.containers.forget(dim, x, y, z);
+    if (blockId === 'shulker_box') {
+      const packed = list.map((raw) => (raw && typeof (raw as { id?: unknown }).id === 'string' && fromSavedSafe(raw) ? raw : null));
+      while (packed.length && packed[packed.length - 1] === null) packed.pop();
+      const box = stackOf('shulker_box', 1, packed.length ? { tag: { data: { items: packed } } } : undefined);
+      if (cheat) markAdmin(box);
+      this.server.mining.dropItem(dim, x + 0.5, y + 0.5, z + 0.5, box);
+      return;
+    }
     for (const raw of list) {
       const s = raw ? (typeof (raw as { id?: unknown }).id === 'string' ? fromSavedSafe(raw) : null) : null;
       if (s) this.server.mining.dropItem(dim, x + 0.5, y + 0.5, z + 0.5, s);
@@ -945,8 +971,9 @@ export class Interaction {
       const clean = l.replace(/[\u0000-\u001f\u007f]/g, '').slice(0, 32);
       return filter ? filter(clean, p) ?? '' : clean;
     });
-    p.dim.setBlockEntity(m.x, m.y, m.z, { type: 'sign', lines });
-    this.server.sendToWatchers(p.dim, m.x, m.z, { t: 'block_entity', x: m.x, y: m.y, z: m.z, data: { type: 'sign', lines } });
+    const glow = be.glow === true ? { glow: true } : {};
+    p.dim.setBlockEntity(m.x, m.y, m.z, { type: 'sign', lines, ...glow });
+    this.server.sendToWatchers(p.dim, m.x, m.z, { t: 'block_entity', x: m.x, y: m.y, z: m.z, data: { type: 'sign', lines, ...glow } });
   }
 
   handleWindowAction(p: ServerPlayer, m: C2S): void {

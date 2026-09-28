@@ -18,6 +18,7 @@ import { AtlasLookup, type AtlasMeta } from './atlasInfo';
 import type { Settings } from '../settings';
 import { selectionShape } from '../../common/physics/shapes';
 import { BeaconBeams } from './BeaconBeams';
+import { SignText } from './SignText';
 
 export interface GameAssets {
   blockAtlas: THREE.Texture;
@@ -74,6 +75,7 @@ export class WorldRenderer {
   readonly weather: Weather;
   readonly hand: HandRenderer;
   readonly beams: BeaconBeams;
+  readonly signs: SignText;
   readonly atlas: AtlasLookup;
   private readonly selection: THREE.LineSegments;
   private readonly crackMeshes: THREE.Mesh[] = [];
@@ -108,7 +110,8 @@ export class WorldRenderer {
     this.weather = new Weather(world);
     this.hand = new HandRenderer(assets.icons, (n) => this.blockTexture(n));
     this.beams = new BeaconBeams(world);
-    this.scene.add(this.sky.group, this.sky.cloudGroup, this.chunks.group, this.entities.group, this.particles.mesh, this.weather.mesh, this.beams.group);
+    this.signs = new SignText(world);
+    this.scene.add(this.sky.group, this.sky.cloudGroup, this.chunks.group, this.entities.group, this.particles.mesh, this.weather.mesh, this.beams.group, this.signs.group);
 
     const selMat = new THREE.LineBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.45 });
     this.selection = new THREE.LineSegments(new THREE.BufferGeometry(), selMat);
@@ -316,6 +319,7 @@ export class WorldRenderer {
 
     this.chunks.update(cam, f.time);
     this.beams.update(cam.position.x, cam.position.z, f.time);
+    this.signs.update(cam.position.x, cam.position.y, cam.position.z, (x, y, z) => this.lightAt(x, y, z));
     this.updateSelection(f.target);
     this.updateCracks(f.crack);
     this.particles.update((x, y, z) => this.lightAt(x, y, z));
@@ -353,6 +357,7 @@ export class WorldRenderer {
   dispose(): void {
     this.chunks.dispose();
     this.beams.dispose();
+    this.signs.dispose();
     this.sky.dispose();
     this.entities.clear();
     this.renderer.dispose();

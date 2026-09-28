@@ -51,6 +51,10 @@ potion('weakness', 'Potion of Weakness', 0x484d48, [{ id: 'weakness', amp: 0, du
 potion('long_weakness', 'Potion of Weakness', 0x484d48, [{ id: 'weakness', amp: 0, duration: 4800 }]);
 potion('slow_falling', 'Potion of Slow Falling', 0xf7f8e0, [{ id: 'slow_falling', amp: 0, duration: 1800 }]);
 potion('long_slow_falling', 'Potion of Slow Falling', 0xf7f8e0, [{ id: 'slow_falling', amp: 0, duration: 4800 }]);
+/** Original: brewed from a dragon scale, hardens the skin. */
+potion('resilience', 'Potion of Resilience', 0x6a4a8a, [{ id: 'resistance', amp: 0, duration: 1800 }]);
+potion('long_resilience', 'Potion of Resilience', 0x6a4a8a, [{ id: 'resistance', amp: 0, duration: 4800 }]);
+potion('strong_resilience', 'Potion of Resilience', 0x6a4a8a, [{ id: 'resistance', amp: 1, duration: 900 }]);
 /** Original: resists the Farlands' corruption (reduces glitch damage, clears nausea). */
 potion('stability', 'Potion of Stability', 0x2ad7c2, [{ id: 'stability', amp: 0, duration: 3600 }]);
 potion('long_stability', 'Potion of Stability', 0x2ad7c2, [{ id: 'stability', amp: 0, duration: 9600 }]);
@@ -75,6 +79,9 @@ export const BREWING: Record<string, Record<string, string>> = {
   phantom_membrane: { awkward: 'slow_falling' },
   sky_ray_membrane: { awkward: 'slow_falling' },
   glitch_shard: { awkward: 'stability' },
+  dragon_scale: { awkward: 'resilience' },
+  ember_core: { awkward: 'long_fire_resistance' },
+  stalker_fang: { awkward: 'long_night_vision' },
   fermented_spider_eye: {
     water: 'weakness',
     night_vision: 'invisibility',

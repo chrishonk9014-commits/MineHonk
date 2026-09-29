@@ -406,6 +406,7 @@ export function stepMovement(world: BlockAccess, b: Body, input: MoveInput, ab: 
   } else if (b.y < prevY) {
     b.fallDistance += prevY - b.y;
   }
+  if (sinking) b.fallDistance = 0;
 
   if (ab.levitation) {
     b.vy += (0.05 * ab.levitation - b.vy) * 0.2;

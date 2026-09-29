@@ -17,6 +17,8 @@ import { S, stateOf, getProp, STATE_BLOCK, STATE_SOLID, STATE_FLUID, STATE_REPLA
 import { WORLD_BORDER } from '../../common/world/constants';
 
 const MAX_SIZE = 21;
+/** Blocks that frame a Farlands portal. */
+const FAR_FRAMES = ['far_portal_frame', 'glitched_portal_frame'];
 /** Ticks a survival player must stand in a nether portal. */
 export const NETHER_PORTAL_DELAY = 80;
 /** Far portals pull players through a little faster. */
@@ -55,26 +57,30 @@ export class Portals {
 
   // ------------------------------------------------------------------ frames
 
-  /** Finds a complete empty frame around the open block (x,y,z) along an axis. */
-  findFrame(dim: Dimension, x: number, y: number, z: number, axis: 'x' | 'z', frameId: string): PortalFrame | null {
-    const frame = S(frameId);
+  /**
+   * Finds a complete empty frame around the open block (x,y,z) along an axis.
+   * Every state of any of `frameIds` counts as frame; corners are never checked.
+   */
+  findFrame(dim: Dimension, x: number, y: number, z: number, axis: 'x' | 'z', frameIds: string | string[]): PortalFrame | null {
+    const nums = new Set((Array.isArray(frameIds) ? frameIds : [frameIds]).map((id) => STATE_BLOCK[S(id)]!));
+    const isFrame = (s: number): boolean => nums.has(STATE_BLOCK[s]!);
     const open = (s: number): boolean => s === 0 || (STATE_REPLACEABLE[s] === 1 && !STATE_FLUID[s]) || blocks[STATE_BLOCK[s]!]!.id === 'fire';
     const at = (i: number, j: number, bx: number, bz: number): number => dim.getState(bx + (axis === 'x' ? i : 0), j, bz + (axis === 'z' ? i : 0));
     if (!open(dim.getState(x, y, z))) return null;
     // Down to the bottom frame
     let yb = y;
     while (yb > y - MAX_SIZE && open(dim.getState(x, yb - 1, z))) yb--;
-    if (dim.getState(x, yb - 1, z) !== frame) return null;
+    if (!isFrame(dim.getState(x, yb - 1, z))) return null;
     // Back to the first column
     let start = 0;
     while (start > -MAX_SIZE && open(at(start - 1, yb, x, z))) start--;
-    if (at(start - 1, yb, x, z) !== frame) return null;
+    if (!isFrame(at(start - 1, yb, x, z))) return null;
     let width = 0;
     while (width < MAX_SIZE && open(at(start + width, yb, x, z))) {
-      if (at(start + width, yb - 1, x, z) !== frame) return null;
+      if (!isFrame(at(start + width, yb - 1, x, z))) return null;
       width++;
     }
-    if (width < 2 || width > MAX_SIZE || at(start + width, yb, x, z) !== frame) return null;
+    if (width < 2 || width > MAX_SIZE || !isFrame(at(start + width, yb, x, z))) return null;
     let height = 0;
     for (; height < MAX_SIZE; height++) {
       const j = yb + height;
@@ -82,11 +88,11 @@ export class Portals {
       let allOpen = true;
       for (let i = 0; i < width; i++) {
         const s = at(start + i, j, x, z);
-        if (s !== frame) allFrame = false;
+        if (!isFrame(s)) allFrame = false;
         if (!open(s)) allOpen = false;
       }
       if (allFrame) break;
-      if (!allOpen || at(start - 1, j, x, z) !== frame || at(start + width, j, x, z) !== frame) return null;
+      if (!allOpen || !isFrame(at(start - 1, j, x, z)) || !isFrame(at(start + width, j, x, z))) return null;
     }
     if (height < 3 || height >= MAX_SIZE || y >= yb + height) return null;
     return { x: x + (axis === 'x' ? start : 0), y: yb, z: z + (axis === 'z' ? start : 0), axis, width, height };
@@ -119,25 +125,40 @@ export class Portals {
     return false;
   }
 
-  /** A Corrupted Eye pressed into a far portal frame awakens the gateway. */
-  lightFar(dim: Dimension, x: number, y: number, z: number): boolean {
-    if (dim.id !== 'overworld' && dim.id !== 'farlands') return false;
+  /**
+   * A Corrupted Eye pressed into a far portal frame (Corrupted Bedrock, or a
+   * V3 glitched portal's broken frame) awakens the gateway.
+   */
+  lightFar(dim: Dimension, x: number, y: number, z: number): PortalFrame | null {
+    if (dim.id !== 'overworld' && dim.id !== 'farlands') return null;
     for (let f = 0; f < 6; f++) {
       const ax = x + [0, 0, 0, 0, -1, 1][f]!;
       const ay = y + [-1, 1, 0, 0, 0, 0][f]!;
       const az = z + [0, 0, -1, 1, 0, 0][f]!;
       for (const axis of ['x', 'z'] as const) {
-        const fr = this.findFrame(dim, ax, ay, az, axis, 'far_portal_frame');
+        const fr = this.findFrame(dim, ax, ay, az, axis, FAR_FRAMES);
         if (!fr) continue;
         this.fill(dim, fr, 'far_portal');
         this.register(dim, 'far', fr);
         this.server.playSound(dim, 'glitch.zap', ax + 0.5, ay + 0.5, az + 0.5, 2, 0.6);
         this.server.playSound(dim, 'portal.open', ax + 0.5, ay + 0.5, az + 0.5, 1, 0.7);
         this.server.particles(dim, 'glitch', ax + 0.5, ay + 1, az + 0.5, 40, 1.5);
-        return true;
+        this.seatEye(dim, fr);
+        return fr;
       }
     }
-    return false;
+    return null;
+  }
+
+  /** A glitched frame keeps the Eye: its socket (or, failing that, any glitched piece of the rim) shows it. */
+  private seatEye(dim: Dimension, f: PortalFrame): void {
+    const at = (i: number, j: number): [number, number, number] => [f.x + (f.axis === 'x' ? i : 0), f.y + j, f.z + (f.axis === 'z' ? i : 0)];
+    const rim: [number, number, number][] = [];
+    for (let i = 0; i < f.width; i++) rim.push(at(i, f.height), at(i, -1));
+    for (let j = 0; j < f.height; j++) rim.push(at(-1, j), at(f.width, j));
+    const state = (p: [number, number, number]): number => dim.getState(p[0], p[1], p[2]);
+    const seat = rim.find((p) => getProp(state(p), 'part') === 'socket') ?? rim.find((p) => blocks[STATE_BLOCK[state(p)]!]!.id === 'glitched_portal_frame');
+    if (seat) dim.setBlock(seat[0], seat[1], seat[2], stateOf('glitched_portal_frame', { part: 'eye' }), { updateNeighbors: false });
   }
 
   // ------------------------------------------------------------------ travel
@@ -221,6 +242,8 @@ export class Portals {
     const tx = Math.max(-lim, Math.min(lim, Math.floor(p.x)));
     const tz = Math.max(-lim, Math.min(lim, Math.floor(p.z)));
     const axisHere = getProp(p.dim.getState(Math.floor(p.x), Math.floor(p.y + 0.5), Math.floor(p.z)), 'axis');
+    // Crossing over tears the picture apart for a moment (V3 effects)
+    if (to === 'farlands') p.send({ t: 'fx', kind: 'farlands_entry', ticks: 50 });
     this.depart(p, to, 'far', tx, tz, axisHere === 'z' ? 'z' : 'x', 128);
   }
 

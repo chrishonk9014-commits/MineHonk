@@ -64,7 +64,8 @@ export class Progression {
     for (const p of this.server.players.values()) {
       if (p.dead || p.gamemode === 'spectator') continue;
       const at = p.dim.generator.structureAt?.(Math.floor(p.x), Math.floor(p.y), Math.floor(p.z));
-      const a = at ? STRUCTURE_ACHIEVEMENTS[at] : undefined;
+      // V3 ruins only hold toppled frame pieces: the real portals are underground
+      const a = at && !(at === 'glitched_ruin' && this.server.level.generatorVersion >= 3) ? STRUCTURE_ACHIEVEMENTS[at] : undefined;
       if (a) {
         this.server.interaction.grant(p, a);
         if (at === 'treasure_room') this.server.interaction.grant(p, 'find_underground_structure');
@@ -96,6 +97,11 @@ export class Progression {
       for (let i = 1; i <= 9; i++) if (p.visitedCaveBiomes.has(i)) n++;
       if (n >= 9) it.grant(p, 'all_cave_biomes');
       if (cb === 10) it.grant(p, 'find_corrupted_cave');
+    }
+    // Standing before a glitched portal (they only exist in corrupted caves)
+    if (cb === 10 && this.server.tickNo % 40 === 0 && !p.achievements.has('find_far_portal')) {
+      const gp = g.locate?.('glitched_portal', Math.floor(p.x), Math.floor(p.z));
+      if (gp && (gp.x - p.x) ** 2 + (gp.y - p.y) ** 2 + (gp.z - p.z) ** 2 < 14 * 14) it.grant(p, 'find_far_portal');
     }
     if (g.inMegaCavern?.(p.x, p.y, p.z)) it.grant(p, 'find_mega_cavern');
   }

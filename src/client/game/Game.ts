@@ -24,7 +24,7 @@ import type { Slot, ItemStack } from '../../common/game/itemstack';
 import type { GameMode } from '../../common/game/gamemode';
 import type { DimensionId } from '../../common/data/biomes';
 import { items, itemById } from '../../common/registry/items';
-import { blocks, blockOf, STATE_BLOCK, STATE_FLUID, STATE_SOLID } from '../../common/registry/blocks';
+import { blocks, blockOf, getProp, STATE_BLOCK, STATE_FLUID, STATE_SOLID } from '../../common/registry/blocks';
 import { lookDirection, rayBox } from './look';
 import { entityInfo } from '../../common/data/entities';
 import { raycastBlocks } from '../../common/physics/raycast';
@@ -1081,6 +1081,23 @@ export class Game {
               break search;
             }
           }
+    }
+    // Glitched portal frames flicker and hum; one holding the Eye much harder
+    if (this.tickNo % 5 === 0 && this.dimension === 'overworld' && this.caveBiome === 10) {
+      const px = Math.floor(b.x);
+      const py = Math.floor(b.y);
+      const pz = Math.floor(b.z);
+      for (let i = 0; i < 24; i++) {
+        const x = px + Math.floor(Math.random() * 25) - 12;
+        const y = py + Math.floor(Math.random() * 13) - 6;
+        const z = pz + Math.floor(Math.random() * 25) - 12;
+        const s = this.world.getState(x, y, z);
+        if (blockOf(s).id !== 'glitched_portal_frame') continue;
+        const lit = getProp(s, 'part') === 'eye';
+        if (this.settings.particles !== 'minimal') this.renderer.particles.spawn(lit ? 'void_burst' : 'glitch', x + 0.5, y + 0.5, z + 0.5, lit ? 4 : 2, 0.6);
+        if (Math.random() < (lit ? 0.25 : 0.08)) this.audio.play('glitch.hum', x + 0.5, y + 0.5, z + 0.5, lit ? 0.8 : 0.4, lit ? 0.7 : 1, 'ambient');
+        break;
+      }
     }
   }
 

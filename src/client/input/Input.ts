@@ -1,6 +1,7 @@
 /**
- * Keyboard, mouse (pointer lock) and gamepad input. Game code queries
- * held actions and consumes discrete "pressed" events.
+ * Keyboard, mouse (pointer lock), gamepad and touch input. Game code
+ * queries held actions and consumes discrete "pressed" events. On touch
+ * screens the on-screen controls (TouchControls) set the touch* fields.
  */
 import type { Settings, KeyBinds } from '../settings';
 
@@ -20,11 +21,24 @@ export class Input {
   padMove: [number, number] = [0, 0];
   padLook: [number, number] = [0, 0];
   padActive = false;
+  /** Playing with a touch screen: on-screen controls, no pointer lock. */
+  touchMode = false;
+  /** Joystick (x right, y down/back, -1..1), and held on-screen buttons. */
+  touchMove: [number, number] = [0, 0];
+  touchJump = false;
+  touchSneak = false;
+  touchSprint = false;
+  touchAttack = false;
+  touchUse = false;
 
   constructor(
     private readonly canvas: HTMLElement,
     private readonly settings: Settings,
   ) {
+    // Phones and tablets: touch mode from the start, or as soon as the screen is touched
+    const coarse = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
+    this.touchMode = coarse || (navigator.maxTouchPoints > 0 && typeof matchMedia === 'function' && !matchMedia('(pointer: fine)').matches);
+    window.addEventListener('touchstart', () => (this.touchMode = true), { passive: true });
     window.addEventListener('keydown', (e) => this.keyDown(e));
     window.addEventListener('keyup', (e) => this.held.delete(e.code));
     window.addEventListener('blur', () => {
@@ -44,6 +58,8 @@ export class Input {
     });
     window.addEventListener('mousemove', (e) => {
       if (!this.locked) return;
+      // A real mouse took over (a tablet with a trackpad, say)
+      this.touchMode = false;
       this.mouseDX += e.movementX;
       this.mouseDY += e.movementY;
     });
@@ -89,6 +105,17 @@ export class Input {
     return this.enabled && this.locked && (this.mouseButtons & (1 << button)) !== 0;
   }
 
+  /** Queues a discrete action (on-screen buttons). */
+  pushAction(a: Action): void {
+    this.pressedQueue.push(a);
+  }
+
+  /** Looking around by dragging on a touch screen (same units as mouse movement). */
+  addLook(dx: number, dy: number): void {
+    this.mouseDX += dx;
+    this.mouseDY += dy;
+  }
+
   /** Returns and clears queued discrete actions. */
   consume(): Action[] {
     const out = this.pressedQueue.splice(0);
@@ -103,7 +130,8 @@ export class Input {
   }
 
   lock(): void {
-    if (!this.locked) {
+    // Touch screens have no pointer to lock
+    if (!this.locked && !this.touchMode) {
       try {
         const r = this.canvas.requestPointerLock() as unknown;
         if (r && typeof (r as Promise<void>).catch === 'function') (r as Promise<void>).catch(() => {});

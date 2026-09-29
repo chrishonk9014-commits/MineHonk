@@ -39,6 +39,7 @@ import { keyName } from '../ui/Screens';
 import { Navigator, type Instrument } from '../ui/Navigator';
 import * as THREE from 'three';
 import { GlitchHud } from '../ui/GlitchHud';
+import { TouchControls } from '../ui/TouchControls';
 import { EndingCard } from '../ui/EndingCard';
 
 export interface GameHost {
@@ -93,6 +94,9 @@ export class Game {
   readonly root = el('div', { class: 'layer' });
   /** Glitch effects on the interface and the ending cards (V3). */
   private readonly glitchHud: GlitchHud;
+  /** On-screen controls for phones and tablets. */
+  private readonly touch: TouchControls;
+  private readonly touchClose = el('div', { class: 'touch-close hidden' }, 'X');
   private readonly endingCard: EndingCard;
   private readonly playerList = new PlayerList();
 
@@ -210,6 +214,21 @@ export class Game {
     });
     this.root.append(this.scopeOverlay, this.frostOverlay, this.powderOverlay, this.hud.root, this.chat.root, this.chat.input, this.playerList.root);
     this.hud.root.append(this.navigator.root);
+    this.touch = new TouchControls(this.input, {
+      selectSlot: (i) => this.selectSlot(i),
+      hotbarRect: () => this.hud.hotbarRect(),
+      targetingEntity: () => !!this.entityTarget,
+    });
+    this.root.append(this.touch.root, this.touchClose);
+    this.touchClose.addEventListener(
+      'touchstart',
+      (e) => {
+        e.preventDefault();
+        if (this.chat.open) this.chat.close();
+        else if (this.screen) this.closeWindow(true);
+      },
+      { passive: false },
+    );
     this.glitchHud = new GlitchHud(this.root, settings);
     this.endingCard = new EndingCard(this.root, settings);
     ui.append(this.root);
@@ -813,6 +832,8 @@ export class Game {
       n++;
     }
     if (n === 5) this.acc = 0;
+    this.touch.setVisible(this.input.touchMode && this.joined && !this.uiBlocking && !this.player.dead);
+    this.touchClose.classList.toggle('hidden', !(this.input.touchMode && (!!this.screen || this.chat.open)));
     this.look(dt);
     this.render(this.acc / 50, dt);
     this.frames++;
@@ -858,13 +879,13 @@ export class Game {
     let sneak = false;
     let sprint = false;
     if (!blocking) {
-      forward = (inp.isHeld('forward') ? 1 : 0) - (inp.isHeld('back') ? 1 : 0) - inp.padMove[1];
-      strafe = (inp.isHeld('right') ? 1 : 0) - (inp.isHeld('left') ? 1 : 0) + inp.padMove[0];
+      forward = (inp.isHeld('forward') ? 1 : 0) - (inp.isHeld('back') ? 1 : 0) - inp.padMove[1] - inp.touchMove[1];
+      strafe = (inp.isHeld('right') ? 1 : 0) - (inp.isHeld('left') ? 1 : 0) + inp.padMove[0] + inp.touchMove[0];
       forward = Math.max(-1, Math.min(1, forward));
       strafe = Math.max(-1, Math.min(1, strafe));
-      jump = inp.isHeld('jump') || inp.gpJump;
-      sneak = inp.isHeld('sneak') || inp.gpSneak;
-      sprint = inp.isHeld('sprint') || inp.gpSprint;
+      jump = inp.isHeld('jump') || inp.gpJump || inp.touchJump;
+      sneak = inp.isHeld('sneak') || inp.gpSneak || inp.touchSneak;
+      sprint = inp.isHeld('sprint') || inp.gpSprint || inp.touchSprint;
     }
     const forwardPressed = forward > 0 && !this.wasForward;
     const jumpPressed = jump && !this.wasJump;
@@ -893,12 +914,12 @@ export class Game {
     this.updateTargets();
     // Mining / attacking / using
     if (!blocking && !p.dead) {
-      const attackHeld = inp.mouseHeld(0) || inp.gpAttack;
+      const attackHeld = inp.mouseHeld(0) || inp.gpAttack || inp.touchAttack;
       const helmet = this.invSlots[HELMET] ?? null;
       const underwater = p.isUnderwater();
       if (this.entityTarget && attackHeld) this.interaction.tickMining(this.held(), false, underwater, 0, 0, false);
       else this.interaction.tickMining(this.held(), attackHeld, underwater, this.effectLevel('haste'), this.effectLevel('mining_fatigue'), BlockInteraction.aquaAffinity(helmet));
-      const useHeld = inp.mouseHeld(2) || inp.gpUse;
+      const useHeld = inp.mouseHeld(2) || inp.gpUse || inp.touchUse;
       if (useHeld && !this.usingItem) {
         if (this.useRepeat > 0) this.useRepeat--;
         else {
@@ -1744,6 +1765,7 @@ export class Game {
     this.closeScreenLocal();
     this.sign?.destroy();
     this.audio.stopAll();
+    this.touch.dispose();
     this.renderer.dispose();
     this.root.remove();
     this.conn.onMessage = () => {};

@@ -29,6 +29,11 @@ body {
   margin: 0;
   height: 100%;
   overflow: hidden;
+  /* Phones: no pinch zoom, double-tap zoom, pull-to-refresh or long-press menus */
+  touch-action: none;
+  overscroll-behavior: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
   background: #000;
   font-family: 'MineHonk Pixel', monospace;
   -webkit-font-smoothing: none;
@@ -1834,4 +1839,126 @@ body {
   font-size: calc(var(--s) * 36);
   text-shadow: calc(var(--s) * -3) 0 0 #ff2a6a, calc(var(--s) * 3) 0 0 #7a2ad0;
   animation: glitch-jitter 1.2s steps(2) infinite;
+}
+
+/* ------------------------------------------------------------------ touch controls (phones, tablets) */
+.touch-layer {
+  position: absolute;
+  inset: 0;
+  touch-action: none;
+  z-index: 5;
+  /* The UI root lets clicks through to the world; this layer takes touches */
+  pointer-events: auto;
+}
+.touch-stick-base {
+  position: absolute;
+  left: max(18%, calc(env(safe-area-inset-left) + 90px));
+  top: 68%;
+  width: 112px;
+  height: 112px;
+  margin: -56px 0 0 -56px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  background: rgba(0, 0, 0, 0.18);
+  opacity: 0.45;
+  pointer-events: none;
+}
+.touch-stick-base.active {
+  opacity: 1;
+}
+.touch-stick-knob {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.45);
+  border: 2px solid rgba(255, 255, 255, 0.7);
+  transform: translate(-50%, -50%);
+}
+.touch-btn {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.35);
+  border: 2px solid rgba(255, 255, 255, 0.45);
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 12px;
+  text-shadow: 1px 1px 0 #000;
+  touch-action: none;
+  pointer-events: auto;
+}
+.touch-btn.down,
+.touch-btn.on {
+  background: rgba(255, 255, 255, 0.35);
+  border-color: #fff;
+}
+.touch-btn.tb-jump {
+  width: 76px;
+  height: 76px;
+  right: calc(env(safe-area-inset-right) + 22px);
+  bottom: calc(env(safe-area-inset-bottom) + 64px);
+}
+.touch-btn.tb-sneak {
+  right: calc(env(safe-area-inset-right) + 110px);
+  bottom: calc(env(safe-area-inset-bottom) + 34px);
+}
+.touch-btn.tb-hit {
+  right: calc(env(safe-area-inset-right) + 30px);
+  bottom: calc(env(safe-area-inset-bottom) + 156px);
+}
+.touch-btn.tb-use {
+  right: calc(env(safe-area-inset-right) + 104px);
+  bottom: calc(env(safe-area-inset-bottom) + 120px);
+}
+.touch-btn.tb-inv,
+.touch-btn.tb-drop,
+.touch-btn.tb-chat,
+.touch-btn.tb-view,
+.touch-btn.tb-pause {
+  top: calc(env(safe-area-inset-top) + 8px);
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  font-size: 11px;
+}
+.touch-btn.tb-pause {
+  right: calc(env(safe-area-inset-right) + 8px);
+}
+.touch-btn.tb-chat {
+  right: calc(env(safe-area-inset-right) + 58px);
+}
+.touch-btn.tb-view {
+  right: calc(env(safe-area-inset-right) + 108px);
+}
+.touch-btn.tb-drop {
+  right: calc(env(safe-area-inset-right) + 158px);
+}
+.touch-btn.tb-inv {
+  right: calc(env(safe-area-inset-right) + 208px);
+}
+
+/* Closes the inventory, containers and chat on a touch screen (no Esc key there) */
+.touch-close {
+  position: absolute;
+  top: calc(env(safe-area-inset-top) + 8px);
+  right: calc(env(safe-area-inset-right) + 8px);
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.55);
+  border: 2px solid rgba(255, 255, 255, 0.6);
+  color: #fff;
+  font-size: 18px;
+  z-index: 60;
+  pointer-events: auto;
+  touch-action: none;
 }

@@ -251,6 +251,12 @@ export class Hud {
     if (progress !== undefined) ((b.children[1] as HTMLElement).children[0] as HTMLElement).style.width = `${Math.max(0, Math.min(1, progress)) * 100}%`;
   }
 
+  /** Where the hotbar is on screen (touch controls pick slots from it). */
+  hotbarRect(): DOMRect | null {
+    const r = this.hotbarEl.getBoundingClientRect();
+    return r.width > 0 ? r : null;
+  }
+
   hasBoss(): boolean {
     return this.bossBars.size > 0;
   }

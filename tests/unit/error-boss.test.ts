@@ -235,4 +235,46 @@ describe('The Error', () => {
     expect(player.achievements.has('defeat_error')).toBe(false);
     expect(server.endings!.state.errorDefeated).toBe(false);
   }, 60000);
+
+  it('scales for a group: more health, longer warnings, and the ending for everyone there', async () => {
+    const { server } = await makeServer({ seed: 'error-arena', mode: 'survival' });
+    const { conn: c1, player: p1 } = await join(server, 'One');
+    const { conn: c2, player: p2 } = await join(server, 'Two');
+    const a = server.dim('farlands').generator.locate!('error_arena', 0, 0)!;
+    for (const [p, dz] of [
+      [p1, 0],
+      [p2, 3],
+    ] as const)
+      server.changeDimension(p, 'farlands', a.x + 10.5, a.y, a.z + 0.5 + dz);
+    await settle(server, 120);
+    for (let i = 0; i < 200 && server.errorBoss!.fight?.state !== 'fight'; i++) {
+      server.teleport(p1, a.x + 10.5, a.y, a.z + 0.5);
+      server.teleport(p2, a.x + 10.5, a.y, a.z + 3.5);
+      p1.health = p1.maxHealth;
+      p2.health = p2.maxHealth;
+      tick(server, 1);
+    }
+    const f = server.errorBoss!.fight!;
+    expect(f.state).toBe('fight');
+    expect(f.boss!.maxHealth).toBe(960);
+    expect(server.errorBoss!.telegraph(2)).toBeGreaterThan(server.errorBoss!.telegraph(1));
+    // Both see the boss bar
+    expect(c1.of('boss').length).toBeGreaterThan(0);
+    expect(c2.of('boss').length).toBeGreaterThan(0);
+    f.state = 'exposed';
+    f.boss!.invulnerableTicks = 0;
+    f.boss!.hurt(10_000, { source: 'player', attacker: p1 });
+    for (let i = 0; i < 300; i++) {
+      p1.health = p1.maxHealth;
+      p2.health = p2.maxHealth;
+      tick(server, 1);
+    }
+    for (const [c, p] of [
+      [c1, p1],
+      [c2, p2],
+    ] as const) {
+      expect(c.of('ending').some((m) => (m as { id: string }).id === 'error_defeated')).toBe(true);
+      expect(p.achievements.has('defeat_error')).toBe(true);
+    }
+  }, 90000);
 });

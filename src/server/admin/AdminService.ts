@@ -437,9 +437,40 @@ export class AdminService {
         return { ok: true, text: 'Resending nearby chunks.' };
       case 'perf':
         return { ok: true, text: '', data: this.perf() };
+      case 'endgame':
+        return this.endgame(p, a.op, a.id);
       default:
         return { ok: false, text: 'Unknown action.' };
     }
+  }
+
+  /** V3: endings and The Error. Forced endings are remembered as forced, never as reached. */
+  private endgame(p: ServerPlayer, op: 'status' | 'reset_endings' | 'force_ending' | 'reset_error', id?: string): { ok: boolean; text: string; data?: unknown } {
+    const s = this.server;
+    const e = s.endings;
+    if (!e) return { ok: false, text: 'Endings are not available.' };
+    switch (op) {
+      case 'reset_endings':
+        e.reset();
+        return { ok: true, text: 'Every ending in this world was reset.', data: this.endgameStatus() };
+      case 'force_ending':
+        if (!e.force(p, id!)) return { ok: false, text: 'Unknown ending.' };
+        return { ok: true, text: 'Ending forced (as a cheat).', data: this.endgameStatus() };
+      case 'reset_error': {
+        const f = s.errorBoss?.fight;
+        if (f) s.errorBoss!.reset(f);
+        e.state.errorDefeated = false;
+        return { ok: true, text: f ? 'The Error was reset; its arena is restored.' : 'The Error can form again.', data: this.endgameStatus() };
+      }
+      default:
+        return { ok: true, text: '', data: this.endgameStatus() };
+    }
+  }
+
+  private endgameStatus(): Record<string, unknown> {
+    const s = this.server;
+    const st = s.endings!.state;
+    return { dragonDeath: st.dragonDeath, reached: Object.keys(st.reached), forced: st.forced, eyeAwarded: st.eyeAwarded, farlandsAccess: st.farlandsAccess, errorDefeated: st.errorDefeated, error: s.errorBoss?.status() ?? null };
   }
 
   private setCheats(on: boolean, by: ServerPlayer): void {

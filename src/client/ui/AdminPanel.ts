@@ -13,6 +13,7 @@ import { ENCHANTMENTS } from '../../common/data/enchantments';
 import { MOB_DEFS } from '../../common/data/mobs';
 import { structureName, TIME_PRESETS, ADMIN_DIMENSIONS, type AdminAction, type AdminCatalog, type LocateResult } from '../../common/game/admin';
 import type { DimensionId } from '../../common/data/biomes';
+import { ENDINGS } from '../../common/data/endings';
 
 export interface AdminReply {
   ok: boolean;
@@ -30,13 +31,14 @@ export interface AdminHost {
   cheats(): boolean;
 }
 
-type Tab = 'items' | 'mobs' | 'teleport' | 'player' | 'world' | 'perf';
+type Tab = 'items' | 'mobs' | 'teleport' | 'player' | 'world' | 'endgame' | 'perf';
 const TABS: { id: Tab; name: string; icon: string }[] = [
   { id: 'items', name: 'Give Items', icon: 'chest' },
   { id: 'mobs', name: 'Spawn Mobs', icon: 'spawn_egg_zombie' },
   { id: 'teleport', name: 'Teleport', icon: 'ender_pearl' },
   { id: 'player', name: 'Player', icon: 'golden_apple' },
   { id: 'world', name: 'World', icon: 'grass_block' },
+  { id: 'endgame', name: 'Endgame', icon: 'corrupted_eye' },
   { id: 'perf', name: 'Performance', icon: 'redstone' },
 ];
 const DIM_NAMES: Record<string, string> = { overworld: 'Overworld', nether: 'Nether', end: 'The End', farlands: 'Farlands' };
@@ -524,6 +526,51 @@ export function adminScreen(host: AdminHost): Screen {
     );
   };
 
+  // ------------------------------------------------------------------ endgame (V3)
+  const renderEndgame = (): HTMLElement => {
+    const state = el('div', { class: 'admin-stats' });
+    const showState = (d: unknown): void => {
+      if (!d || typeof d !== 'object') return;
+      const st = d as { dragonDeath: string | null; reached: string[]; forced: string[]; eyeAwarded: boolean; farlandsAccess: boolean; errorDefeated: boolean; error: { state: string; phase: number; health: number; maxHealth: number } | null };
+      const nameOf = (id: string): string => ENDINGS.find((e) => e.id === id)?.card.title ?? id;
+      clear(state);
+      const rows: [string, string][] = [
+        ['Dragon', st.dragonDeath ? `defeated (${st.dragonDeath})` : 'alive'],
+        ['Endings reached', st.reached.map(nameOf).join(', ') || 'none'],
+        ['Forced (cheats)', st.forced.map(nameOf).join(', ') || 'none'],
+        ['Corrupted Eye awarded', st.eyeAwarded ? 'yes' : 'no'],
+        ['Glitched portal lit', st.farlandsAccess ? 'yes' : 'no'],
+        ['The Error', st.error ? `${st.error.state}, phase ${st.error.phase}, ${Math.ceil(st.error.health)}/${st.error.maxHealth}` : st.errorDefeated ? 'defeated' : 'waiting in its arena'],
+      ];
+      for (const [k, v] of rows) state.append(el('div', { class: 'row' }, el('span', { class: 'muted' }, k), el('span', {}, v)));
+    };
+    const endgame = (op: 'status' | 'reset_endings' | 'force_ending' | 'reset_error', id?: string): void => void send({ a: 'endgame', op, id }).then((r) => showState(r.data));
+    const spawn = (mob: string, label: string): HTMLElement => btn(label, () => void send({ a: 'spawn', mob, count: 1 }), 'btn chip');
+    const give = (item: string, label: string): HTMLElement => btn(label, () => void send({ a: 'give', item, count: 1 }), 'btn chip');
+    const find = (dim: DimensionId, structure: string, label: string): HTMLElement =>
+      el('div', { class: 'row' }, el('span', { class: 'label' }, label), btn('Find', () => void send({ a: 'locate_structure', dim, structure }), 'btn chip'), btn('Teleport', () => void send({ a: 'tp_structure', dim, structure }), 'btn chip'));
+    const cave = el('div', { class: 'row' }, el('span', { class: 'label' }, 'Corrupted Cave'), btn('Find', () => void send({ a: 'locate_biome', dim: 'overworld', biome: 'cave:corrupted_caves' }), 'btn chip'), btn('Teleport', () => void send({ a: 'tp_biome', dim: 'overworld', biome: 'cave:corrupted_caves' }), 'btn chip'));
+    endgame('status');
+    return el(
+      'div',
+      { class: 'admin-cols' },
+      el(
+        'div',
+        { class: 'admin-col' },
+        section('Summon', el('div', { class: 'admin-chips' }, spawn('enderman', 'Enderman'), spawn('ender_dragon', 'Ender Dragon'), spawn('the_error', 'The Error'))),
+        section('Give', el('div', { class: 'admin-chips' }, give('mysterious_potion', 'Mysterious Potion'), give('corrupted_eye', 'Corrupted Eye'), give('farlands_compass', 'Farlands Compass'))),
+        section('Find', cave, find('overworld', 'glitched_portal', 'Glitched Portal'), find('farlands', 'error_arena', "The Error's Arena")),
+      ),
+      el(
+        'div',
+        { class: 'admin-col' },
+        section('World State', state, btn('Refresh', () => endgame('status'), 'btn chip')),
+        section('Endings', el('div', { class: 'admin-chips' }, ...ENDINGS.map((e) => btn(`Force: ${e.card.title}`, () => endgame('force_ending', e.id), 'btn chip'))), btn('Reset all endings', () => endgame('reset_endings'), 'btn chip')),
+        section('The Error', el('div', { class: 'muted small' }, 'Ends a fight in progress and lets The Error form again.'), btn('Reset The Error', () => endgame('reset_error'), 'btn chip')),
+      ),
+    );
+  };
+
   // ------------------------------------------------------------------ performance
   const renderPerf = (): HTMLElement => {
     const box = el('div', { class: 'admin-cols' });
@@ -556,7 +603,7 @@ export function adminScreen(host: AdminHost): Screen {
     for (const c of tabs.children) c.classList.toggle('active', (c as HTMLElement).dataset.tab === t);
     clear(body);
     hideTooltip();
-    const view = t === 'items' ? renderItems() : t === 'mobs' ? renderMobs() : t === 'teleport' ? renderTeleport() : t === 'player' ? renderPlayer() : t === 'world' ? renderWorld() : renderPerf();
+    const view = t === 'items' ? renderItems() : t === 'mobs' ? renderMobs() : t === 'teleport' ? renderTeleport() : t === 'player' ? renderPlayer() : t === 'world' ? renderWorld() : t === 'endgame' ? renderEndgame() : renderPerf();
     body.append(view);
   };
   for (const t of TABS) {

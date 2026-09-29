@@ -41,6 +41,9 @@ export const STRUCTURE_NAMES: Record<string, string> = {
   abandoned_lab: 'Abandoned Lab',
   cave_shrine: 'Cave Shrine',
   monster_chamber: 'Monster Chamber',
+  // V3
+  glitched_portal: 'Glitched Portal',
+  error_arena: "The Error's Arena",
 };
 
 export function structureName(id: string): string {
@@ -75,7 +78,9 @@ export type AdminAction =
   | { a: 'regen_chunk' }
   | { a: 'reload_chunks' }
   | { a: 'perf' }
-  | { a: 'set_cheats'; on: boolean };
+  | { a: 'set_cheats'; on: boolean }
+  /** V3 endgame: endings and The Error's fight (all cheats: never advancements). */
+  | { a: 'endgame'; op: 'status' | 'reset_endings' | 'force_ending' | 'reset_error'; id?: string };
 
 export type AdminActionName = AdminAction['a'];
 
@@ -90,6 +95,10 @@ export function validateAdmin(raw: unknown): AdminAction | null {
   if (!raw || typeof raw !== 'object') return null;
   const m = raw as Record<string, unknown>;
   switch (m.a) {
+    case 'endgame':
+      if (m.op !== 'status' && m.op !== 'reset_endings' && m.op !== 'force_ending' && m.op !== 'reset_error') return null;
+      if (m.op === 'force_ending' && !id(m.id)) return null;
+      return { a: 'endgame', op: m.op, id: m.op === 'force_ending' ? (m.id as string) : undefined };
     case 'catalog':
     case 'regen_chunk':
     case 'reload_chunks':

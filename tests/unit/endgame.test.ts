@@ -187,6 +187,43 @@ describe('the Voidbound Enderman and the dragon', () => {
   }, 120000);
 });
 
+describe('the secret ending with company', () => {
+  it('everyone in the End sees it and goes home; only the potion user gets the Eye', async () => {
+    const { server } = await makeServer({ seed: 'secret-ending' });
+    const { conn: c1, player: p1 } = await join(server, 'Witch');
+    const { conn: c2, player: p2 } = await join(server, 'Friend');
+    await enterEnd(server, p1);
+    const { entry: e2 } = await enterEnd(server, p2);
+    const fight = server.theEnd!.fight;
+    const dragon = fight.dragon!;
+    p1.spawnProtection = p2.spawnProtection = 100000;
+    for (const c of fight.crystals()) server.mobs!.playerAttack(p1, c);
+    tick(server, 2);
+    holdPotion(p1);
+    const e = spawnEnderman(server, p1);
+    server.handle(c1, { t: 'interact', id: e.id, hand: 0 });
+    dragon.health = 30;
+    for (let t = 0; !dragon.dead && t < 2400; t++) {
+      p1.health = p2.health = 20;
+      tick(server, 1);
+    }
+    expect(dragon.dead).toBe(true);
+    await settle(server, 400, () => (p1.health = p2.health = 20));
+    for (const [c, p] of [
+      [c1, p1],
+      [c2, p2],
+    ] as const) {
+      expect(p.dim.id).toBe('overworld');
+      expect((c as FakeConn).of('fx').some((m) => m.kind === 'integrity')).toBe(true);
+      expect((c as FakeConn).of('ending').pop()?.id).toBe('farlands_remains');
+    }
+    // Each goes back to the portal they came in by
+    expect(Math.hypot(p2.x - e2.x, p2.z - e2.z)).toBeLessThan(12);
+    expect(count(p1, 'corrupted_eye')).toBe(1);
+    expect(count(p2, 'corrupted_eye')).toBe(0);
+  }, 180000);
+});
+
 describe('endings', () => {
   it('a normal kill is Ending 1: no Corrupted Eye, and the card waits for the way home', async () => {
     const { server } = await makeServer({ seed: 'ending-one' });

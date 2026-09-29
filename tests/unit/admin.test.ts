@@ -474,3 +474,56 @@ describe('advancements and cheats', () => {
     void hello;
   });
 });
+
+describe('admin endgame (V3)', () => {
+  it('teleports to a glitched portal and a corrupted cave, and lights the portal without advancements', async () => {
+    const { server } = await makeServer({ cheats: true, seed: 'corrupt-1' });
+    const { conn, player } = await join(server);
+    const tp = admin(server, conn, { a: 'tp_structure', dim: 'overworld', structure: 'glitched_portal' });
+    expect(await settle(server, () => result(conn, tp)?.data?.teleported === true || result(conn, tp)?.ok === false, 8000)).toBe(true);
+    expect(result(conn, tp)!.ok).toBe(true);
+    const loc = server.overworld.generator.locate!('glitched_portal', 0, 0)!;
+    expect(Math.hypot(player.x - loc.x, player.z - loc.z)).toBeLessThan(12);
+    tick(server, 60);
+    // An admin Corrupted Eye opens the portal but earns nothing and grants no Farlands access
+    admin(server, conn, { a: 'give', item: 'corrupted_eye', count: 1 });
+    player.selectedSlot = player.inventory.slots.findIndex((s) => s?.id === itemById.get('corrupted_eye')!.num);
+    const g = server.overworld.generator as import('../../src/common/gen/generator').OverworldGenerator;
+    const p = g.terrain.corrupted!.nearest(0, 0, true)!.portal!;
+    const bx = p.x + (p.axis === 'x' ? 1 : 0);
+    const bz = p.z + (p.axis === 'z' ? 1 : 0);
+    server.handle(conn, { t: 'use_on', x: bx, y: p.y - 1, z: bz, face: 1, hx: 0.5, hy: 1, hz: 0.5, hand: 0, yaw: 0, pitch: 1.2, seq: 1 });
+    expect(player.dim.blockId(bx, p.y + 1, bz)).toBe('far_portal');
+    expect(server.endings!.state.farlandsAccess).toBe(false);
+    expect(player.achievements.has('find_far_portal')).toBe(false);
+    tick(server, 100);
+    expect(player.achievements.has('find_corrupted_cave')).toBe(false);
+
+    const cave = admin(server, conn, { a: 'tp_biome', dim: 'overworld', biome: 'cave:corrupted_caves' });
+    expect(await settle(server, () => result(conn, cave)?.data?.teleported === true || result(conn, cave)?.ok === false, 8000)).toBe(true);
+    expect(result(conn, cave)!.ok).toBe(true);
+    expect(server.overworld.generator.caveBiomeAt!(Math.floor(player.x), Math.floor(player.y + 1), Math.floor(player.z))).toBe(10);
+    tick(server, 60);
+    expect(player.achievements.size).toBe(0);
+  }, 90000);
+
+  it('forces and resets endings as cheats', async () => {
+    const { server } = await makeServer({ cheats: true });
+    const { conn, player } = await join(server);
+    const f = admin(server, conn, { a: 'endgame', op: 'force_ending', id: 'error_defeated' });
+    expect(result(conn, f)!.ok).toBe(true);
+    expect(server.endings!.state.errorDefeated).toBe(true);
+    expect(server.endings!.state.forced).toContain('error_defeated');
+    expect(server.endings!.state.reached.error_defeated).toBeUndefined();
+    expect(player.endings.has('error_defeated')).toBe(false);
+    expect(conn.of('ending').length).toBe(1);
+    const r = admin(server, conn, { a: 'endgame', op: 'reset_endings' });
+    expect(result(conn, r)!.ok).toBe(true);
+    expect(server.endings!.state.errorDefeated).toBe(false);
+    expect(server.endings!.state.forced).toEqual([]);
+    const st = admin(server, conn, { a: 'endgame', op: 'status' });
+    expect(result(conn, st)!.data).toMatchObject({ dragonDeath: null, errorDefeated: false });
+    expect(admin(server, conn, { a: 'endgame', op: 'nope' })).toBeGreaterThan(0);
+    expect(player.achievements.size).toBe(0);
+  });
+});

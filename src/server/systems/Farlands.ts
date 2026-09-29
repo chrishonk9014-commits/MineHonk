@@ -9,6 +9,7 @@ import type { ServerPlayer } from '../player/ServerPlayer';
 import type { ItemStack } from '../../common/game/itemstack';
 import { items } from '../../common/registry/items';
 import { Random } from '../../common/math/rng';
+import { EnderEye } from '../entity/EndEntities';
 
 /** Ticks between corruption checks for each player in the Farlands. */
 const CORRUPTION_INTERVAL = 100;
@@ -22,7 +23,8 @@ export class FarlandsSystem {
   useOnBlock(p: ServerPlayer, stack: ItemStack, x: number, y: number, z: number): boolean {
     if (items[stack.id]?.id !== 'corrupted_eye') return false;
     const id = p.dim.blockId(x, y, z);
-    if (id !== 'far_portal_frame' && id !== 'glitched_portal_frame') return false;
+    // Anywhere but a portal frame, the Eye shows the way instead
+    if (id !== 'far_portal_frame' && id !== 'glitched_portal_frame') return this.guide(p, stack);
     const f = this.server.portals?.lightFar(p.dim, x, y, z);
     if (!f) return false;
     if (p.gamemode !== 'creative') {
@@ -47,8 +49,44 @@ export class FarlandsSystem {
     return true;
   }
 
-  /** Right click with the Farlands Compass. */
+  /** Ticks between Corrupted Eye guides. */
+  private readonly guideReady = new WeakMap<ServerPlayer, number>();
+
+  /**
+   * V3.1: the Corrupted Eye works like an Eye of Ender that is never used
+   * up. Thrown, an image of it flies towards the nearest glitched portal
+   * (a glitched ruin's frame in worlds made before V3) and dissolves; the
+   * Eye stays in hand. Returns true whenever the click was the Eye's.
+   */
+  guide(p: ServerPlayer, stack: ItemStack): boolean {
+    const s = this.server;
+    const now = s.tickNo;
+    if ((this.guideReady.get(p) ?? 0) > now) return true;
+    if (p.dim.id !== 'overworld') {
+      p.send({ t: 'chat', text: 'The Eye stares back, unfocused. There is no way through from here.', kind: 'system' });
+      this.guideReady.set(p, now + 20);
+      return true;
+    }
+    const type = s.level.generatorVersion >= 3 ? 'glitched_portal' : 'glitched_ruin';
+    const target = p.dim.generator.locate?.(type, Math.floor(p.x), Math.floor(p.z));
+    if (!target) {
+      p.send({ t: 'chat', text: 'The Eye flickers, but finds nothing to lead you to.', kind: 'system' });
+      this.guideReady.set(p, now + 20);
+      return true;
+    }
+    const [ex, ey, ez] = s.eyePos(p);
+    const eye = new EnderEye(ex, ey - 0.1, ez, target, false, true);
+    p.dim.addEntity(eye);
+    s.playSound(p.dim, 'ender_eye.launch', ex, ey, ez, 1, 0.6);
+    s.playSound(p.dim, 'glitch.zap', ex, ey, ez, 0.5, 1.4);
+    this.guideReady.set(p, now + 20);
+    p.send({ t: 'cooldown', item: stack.id, ticks: 20 });
+    return true;
+  }
+
+  /** Right click with the Farlands Compass (or the Corrupted Eye, in the air). */
   useItem(p: ServerPlayer, stack: ItemStack): boolean {
+    if (items[stack.id]?.id === 'corrupted_eye') return this.guide(p, stack);
     if (items[stack.id]?.id !== 'farlands_compass') return false;
     const inFar = p.dim.id === 'farlands';
     if (p.dim.id !== 'overworld' && !inFar) {

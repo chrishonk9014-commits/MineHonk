@@ -200,4 +200,38 @@ describe('glitched portal', () => {
     expect(player.achievements.has('find_far_portal')).toBe(true);
     expect(conn.received.some((m) => m.t === 'fx' && m.kind === 'portal_on')).toBe(true);
   }, 60000);
+
+  it('the Corrupted Eye also leads the way, like an Eye of Ender that is never used up', async () => {
+    const { server } = await makeServer({ seed: 'corrupt-1', mode: 'survival', cheats: false });
+    const { conn, player } = await join(server);
+    await settle(server, 20);
+    const target = server.overworld.generator.locate!('glitched_portal', Math.floor(player.x), Math.floor(player.z))!;
+    player.inventory.set(player.selectedSlot, stackOf('corrupted_eye', 1));
+    const eyes = (): { x: number; y: number; z: number; meta(): Record<string, unknown> }[] => [...player.dim.entities.values()].filter((e) => e.type === 'eye_of_ender') as never;
+    // Thrown in the air
+    server.handle(conn, { t: 'use', hand: 0, action: 'start' });
+    expect(eyes().length).toBe(1);
+    const eye = eyes()[0]!;
+    expect(eye.meta().corrupted).toBe(true);
+    const d0 = Math.hypot(target.x - eye.x, target.z - eye.z);
+    tick(server, 40);
+    expect(Math.hypot(target.x - eye.x, target.z - eye.z)).toBeLessThan(d0 - 5);
+    tick(server, 40);
+    // It dissolves: nothing dropped, the Eye still in hand
+    expect(eyes().length).toBe(0);
+    expect([...player.dim.entities.values()].some((e) => e.type === 'item')).toBe(false);
+    expect(player.inventory.get(player.selectedSlot)?.count).toBe(1);
+    // Again as often as you like, after a short cooldown (clicking the ground works too)
+    server.handle(conn, { t: 'use', hand: 0, action: 'start' });
+    expect(eyes().length).toBe(1);
+    server.handle(conn, { t: 'use', hand: 0, action: 'start' });
+    expect(eyes().length).toBe(1);
+    tick(server, 80);
+    const gx = Math.floor(player.x);
+    const gy = Math.floor(player.y) - 1;
+    const gz = Math.floor(player.z);
+    server.handle(conn, { t: 'use_on', x: gx, y: gy, z: gz, face: 1, hx: 0.5, hy: 1, hz: 0.5, hand: 0, yaw: 0, pitch: 1.2, seq: 1 });
+    expect(eyes().length).toBe(1);
+    expect(player.inventory.get(player.selectedSlot)?.count).toBe(1);
+  }, 60000);
 });

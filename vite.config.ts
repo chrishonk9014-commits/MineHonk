@@ -2,6 +2,8 @@ import { defineConfig } from 'vite';
 
 export default defineConfig({
   root: '.',
+  // GitHub Pages serves the game from /<repo>/ (PAGES_BASE=/MineHonk/ npx vite build)
+  base: process.env.PAGES_BASE ?? '/',
   publicDir: 'public',
   build: {
     outDir: 'dist',

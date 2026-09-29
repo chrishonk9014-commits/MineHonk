@@ -452,6 +452,7 @@ export class AdminService {
     switch (op) {
       case 'reset_endings':
         e.reset();
+        delete s.level.flags.errorCalm;
         return { ok: true, text: 'Every ending in this world was reset.', data: this.endgameStatus() };
       case 'force_ending':
         if (!e.force(p, id!)) return { ok: false, text: 'Unknown ending.' };
@@ -460,6 +461,7 @@ export class AdminService {
         const f = s.errorBoss?.fight;
         if (f) s.errorBoss!.reset(f);
         e.state.errorDefeated = false;
+        delete s.level.flags.errorCalm;
         return { ok: true, text: f ? 'The Error was reset; its arena is restored.' : 'The Error can form again.', data: this.endgameStatus() };
       }
       default:

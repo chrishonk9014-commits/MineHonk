@@ -152,7 +152,8 @@ export class ErrorBossSystem {
         this.adopt(e);
         return;
       }
-    if (s.endings?.state.errorDefeated) return;
+    // Once beaten (even by cheats) its arena stays calm until the Admin Panel resets it
+    if (s.endings?.state.errorDefeated || s.level.flags.errorCalm) return;
     const far = s.dims.get('farlands');
     if (!far) return;
     for (const p of s.players.values()) {
@@ -204,11 +205,16 @@ export class ErrorBossSystem {
     return f > 0.75 ? 1 : f > 0.5 ? 2 : f > 0.25 ? 3 : 4;
   }
 
-  /** Players in the fight: alive, playing and near the arena. */
+  /**
+   * Players in the fight: alive, not spectating and near the arena. Creative
+   * players count too (their win is a cheat): otherwise a fight with only
+   * creative players in it would reset itself every few seconds and a new,
+   * full-health Error would form under them.
+   */
   participants(f: ErrorFight): ServerPlayer[] {
     const out: ServerPlayer[] = [];
     for (const p of this.server.players.values()) {
-      if (p.dim !== f.dim || p.dead || p.gamemode === 'spectator' || p.gamemode === 'creative') continue;
+      if (p.dim !== f.dim || p.dead || p.gamemode === 'spectator') continue;
       if (Math.hypot(p.x - f.arena.x, p.z - f.arena.z) > LEASH || p.y < f.arena.y - 60) continue;
       out.push(p);
     }
@@ -899,15 +905,19 @@ export class ErrorBossSystem {
     const drops = [stackOf('glitch_core', 2), stackOf('glitched_ingot', 2 + this.rng.int(2)), stackOf('data_fragment', 6)];
     for (const st of drops) s.mining.dropItem(f.dim, m.x, m.y + 1, m.z, st);
     s.mining.dropXp(f.dim, m.x, m.y + 1, m.z, 1200, cheat);
-    // ERROR DEFEATED, for everyone who saw it through
+    // ERROR DEFEATED, for everyone who saw it through (a cheat for anyone in creative or another cheat context)
     const endings = s.endings;
-    const winners = this.participants(f);
-    for (const p of s.players.values()) if (p.dim === f.dim && p.gamemode === 'creative' && Math.hypot(p.x - f.arena.x, p.z - f.arena.z) < LEASH) winners.push(p);
-    for (const p of winners) {
-      if (!cheat) s.interaction.grant(p, 'defeat_error');
-      if (endings) s.later(60, () => endings.reach(p, 'error_defeated', { cheat, show: 'now' }));
+    let earned = false;
+    for (const p of this.participants(f)) {
+      const cheatHere = cheat || s.admin.inContext(p);
+      if (!cheatHere) {
+        s.interaction.grant(p, 'defeat_error');
+        earned = true;
+      }
+      if (endings) s.later(60, () => endings.reach(p, 'error_defeated', { cheat: cheatHere, show: 'now' }));
     }
-    if (endings && !cheat) endings.state.errorDefeated = true;
+    if (endings && earned) endings.state.errorDefeated = true;
+    s.level.flags.errorCalm = true;
     m.remove();
     this.fight = null;
   }

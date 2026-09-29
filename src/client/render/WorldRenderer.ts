@@ -71,6 +71,12 @@ export interface FrameState {
 export class WorldRenderer {
   readonly renderer: THREE.WebGLRenderer;
   readonly scene = new THREE.Scene();
+  /**
+   * The sky (dome, sun, moon, stars) is drawn in its own pass before the
+   * world. Its see-through pieces would otherwise land in three.js's
+   * transparent pass, after all solid terrain, and show through blocks.
+   */
+  readonly skyScene = new THREE.Scene();
   readonly camera: THREE.PerspectiveCamera;
   readonly chunks: ChunkRenderer;
   readonly sky: Sky;
@@ -122,7 +128,8 @@ export class WorldRenderer {
     this.beams = new BeaconBeams(world);
     this.signs = new SignText(world);
     this.glitch = new GlitchFX(settings);
-    this.scene.add(this.sky.group, this.sky.cloudGroup, this.chunks.group, this.entities.group, this.particles.mesh, this.weather.mesh, this.beams.group, this.signs.group, this.glitch.group, this.worldFx.group);
+    this.skyScene.add(this.sky.group);
+    this.scene.add(this.sky.cloudGroup, this.chunks.group, this.entities.group, this.particles.mesh, this.weather.mesh, this.beams.group, this.signs.group, this.glitch.group, this.worldFx.group);
 
     const selMat = new THREE.LineBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.45 });
     this.selection = new THREE.LineSegments(new THREE.BufferGeometry(), selMat);
@@ -264,6 +271,7 @@ export class WorldRenderer {
     for (const m of this.chunks.materials) g.add(new THREE.Mesh(geo, m));
     this.scene.add(g);
     try {
+      this.renderer.compile(this.skyScene, cam);
       this.renderer.compile(this.scene, cam);
     } finally {
       this.scene.remove(g);
@@ -380,6 +388,7 @@ export class WorldRenderer {
     const fx = this.glitch.begin(this.renderer);
     this.renderer.clear();
     if (!this.warmed) this.warmUp(cam);
+    if (this.sky.group.visible) this.renderer.render(this.skyScene, cam);
     this.renderer.render(this.scene, cam);
 
     // Hand overlay

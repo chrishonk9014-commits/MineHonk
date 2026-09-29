@@ -48,7 +48,9 @@ export function wrapClick(host: ScreenHost, f: () => void): () => void {
 // ---------------------------------------------------------------------------
 const SPLASHES = [
   'Now with more honk!',
+  'The ERROR Update!',
   'The Caves Update!',
+  'ERROR DEFEATED?',
   'Deeper than ever!',
   'Listen. Something is listening back.',
   'Bring a torch!',
@@ -74,7 +76,7 @@ export function titleScreen(host: ScreenHost, actions: { singleplayer: () => voi
     button('Multiplayer', wrapClick(host, actions.multiplayer)),
     el('div', { class: 'row' }, button('Options...', wrapClick(host, actions.options), 'btn half'), button(`Profile: ${profile.name}`, wrapClick(host, actions.profile), 'btn half')),
   );
-  const footer = el('div', { class: 'footer' }, el('span', {}, 'MineHonk 2.0 — The Caves Update'), el('span', {}, 'Original game — all art & sound generated'));
+  const footer = el('div', { class: 'footer' }, el('span', {}, 'MineHonk V3.1 - The ERROR Update!'), el('span', {}, 'Original game — all art & sound generated'));
   return { root: el('div', { class: 'screen dirt title-screen' }, logo, body, footer), escapable: false };
 }
 

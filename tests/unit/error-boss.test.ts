@@ -234,6 +234,8 @@ describe('The Error', () => {
     }
     expect(player.achievements.has('defeat_error')).toBe(false);
     expect(server.endings!.state.errorDefeated).toBe(false);
+    // Even a cheat win leaves the arena calm until the Admin Panel resets it
+    expect(server.level.flags.errorCalm).toBe(true);
   }, 60000);
 
   it('scales for a group: more health, longer warnings, and the ending for everyone there', async () => {
@@ -276,5 +278,39 @@ describe('The Error', () => {
       expect(c.of('ending').some((m) => (m as { id: string }).id === 'error_defeated')).toBe(true);
       expect(p.achievements.has('defeat_error')).toBe(true);
     }
+  }, 90000);
+
+  it('does not keep re-forming under a creative player, and stays gone once beaten', async () => {
+    const { server } = await makeServer({ seed: 'error-arena', mode: 'creative' });
+    const { player } = await join(server, 'Builder');
+    const a = server.dim('farlands').generator.locate!('error_arena', 0, 0)!;
+    server.changeDimension(player, 'farlands', a.x + 10.5, a.y, a.z + 0.5);
+    await settle(server, 120);
+    const eb = server.errorBoss!;
+    const stay = (n: number): void => {
+      for (let i = 0; i < n; i++) {
+        server.teleport(player, a.x + 10.5, a.y, a.z + 0.5);
+        tick(server, 1);
+      }
+    };
+    stay(200);
+    const boss = eb.fight!.boss!;
+    expect(boss).toBeTruthy();
+    // Well past the reset delay: still the same Error, not a fresh one
+    stay(400);
+    expect(eb.fight?.boss).toBe(boss);
+    expect(boss.removed).toBe(false);
+    // Beaten (a creative world's own players are not cheating): it stays beaten
+    eb.fight!.state = 'exposed';
+    boss.invulnerableTicks = 0;
+    boss.hurt(100_000, { source: 'player', attacker: player });
+    stay(300);
+    expect(eb.fight).toBeNull();
+    expect(server.endings!.state.errorDefeated).toBe(true);
+    stay(200);
+    expect(eb.fight).toBeNull();
+    let errors = 0;
+    for (const e of server.dim('farlands').entities.values()) if (e.type === 'the_error') errors++;
+    expect(errors).toBe(0);
   }, 90000);
 });

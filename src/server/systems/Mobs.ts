@@ -214,7 +214,7 @@ export class MobSystem {
   /** Spawns generated non-mob entities (end crystals); returns true when handled. */
   extraEntity?: (dim: Dimension, type: string, x: number, y: number, z: number) => boolean;
   /** Boss death hand-off (the dragon fight runs its own death sequence). */
-  onBossDeath?: (m: Mob, killer: ServerPlayer | null) => void;
+  onBossDeath?: (m: Mob, killer: ServerPlayer | null, info: HurtInfo) => void;
 
   onChunkGenerated(dim: Dimension, c: Chunk): void {
     let spawned = false;
@@ -617,9 +617,11 @@ export class MobSystem {
     else if (cat === 'water' && !underWater) y = Math.max(1, top - 1 - r.int(8));
     else if (underCreature || underWater) y = 8 + r.int(Math.max(1, Math.min(52, top - 12) - 8));
     else if (!dim.rules.hasSky) {
-      // Cavern dimensions: pick one of the column's floors instead of a random height
+      // Cavern dimensions: pick one of the column's floors instead of a random height.
+      // Without a ceiling (the End) the surface itself is a floor too.
       const floors: number[] = [];
-      for (let yy = 2; yy < top; yy++) if (STATE_SOLID[dim.getState(x, yy - 1, z)] && !STATE_SOLID[dim.getState(x, yy, z)] && !STATE_SOLID[dim.getState(x, yy + 1, z)] && !STATE_FLUID[dim.getState(x, yy, z)]) floors.push(yy);
+      const last = dim.rules.hasCeiling ? top - 1 : top;
+      for (let yy = 2; yy <= last; yy++) if (STATE_SOLID[dim.getState(x, yy - 1, z)] && !STATE_SOLID[dim.getState(x, yy, z)] && !STATE_SOLID[dim.getState(x, yy + 1, z)] && !STATE_FLUID[dim.getState(x, yy, z)]) floors.push(yy);
       if (!floors.length) return;
       y = floors[r.int(floors.length)]!;
     } else y = 1 + r.int(Math.max(1, top));
@@ -661,6 +663,8 @@ export class MobSystem {
         }
       }
       if (sy < 1) continue;
+      // Chosen for a cave biome: it must still be in that biome after dropping to the floor
+      if (cb && dim.generator.caveBiomeAt!(sx, sy, sz) !== cb) continue;
       let tooClose = false;
       for (const pl of this.server.players.values()) if (pl.dim === dim && pl.distanceSq(sx, sy, sz) < 24 * 24) tooClose = true;
       if (tooClose) continue;
@@ -1282,7 +1286,7 @@ export class MobSystem {
         killer.addStat('killed.' + m.type);
         killer.addStat('mob_kills');
       }
-      this.onBossDeath(m, killer);
+      this.onBossDeath(m, killer, info);
       return;
     }
     const weapon = killer ? killer.inventory.get(killer.selectedSlot) : null;

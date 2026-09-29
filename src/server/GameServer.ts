@@ -66,6 +66,14 @@ export class GameServer {
   power: import('./systems/Power').Power | null = null;
   sculk: import('./systems/Sculk').Sculk | null = null;
   warden: import('./systems/Warden').WardenSystem | null = null;
+  /** Endings and the world's endgame state (V3, installed by gameplay). */
+  endings: import('./systems/Endings').EndingsSystem | null = null;
+  /** The mysterious potion, Voidbound Endermen and the secret ending (V3, installed by gameplay). */
+  endgame: import('./systems/Endgame').EndgameSystem | null = null;
+  /** The Error, the Farlands boss (V3, installed by gameplay). */
+  errorBoss: import('./systems/ErrorBoss').ErrorBossSystem | null = null;
+  /** Work scheduled for a later tick (see `later`). */
+  private readonly scheduled: { at: number; fn: () => void }[] = [];
   /** Hook for the hosting layer to forward player reports (e.g. to platform moderation). */
   onReport?: (from: ServerPlayer, target: ServerPlayer, reason: string) => void;
   readonly interaction: Interaction;
@@ -759,6 +767,25 @@ export class GameServer {
 
   // ------------------------------------------------------------------ tick
 
+  /** Runs `fn` after `ticks` server ticks (not saved: only for short effects). */
+  later(ticks: number, fn: () => void): void {
+    this.scheduled.push({ at: this.tickNo + Math.max(1, Math.floor(ticks)), fn });
+  }
+
+  private runScheduled(): void {
+    if (!this.scheduled.length) return;
+    const due = this.scheduled.filter((s) => s.at <= this.tickNo);
+    if (!due.length) return;
+    for (let i = this.scheduled.length - 1; i >= 0; i--) if (this.scheduled[i]!.at <= this.tickNo) this.scheduled.splice(i, 1);
+    for (const s of due) {
+      try {
+        s.fn();
+      } catch (e) {
+        this.log(`[server] scheduled task failed: ${(e as Error).message}`);
+      }
+    }
+  }
+
   private tick(): void {
     this.tickNo++;
     const level = this.level;
@@ -774,6 +801,7 @@ export class GameServer {
     }
     this.interaction.weather.tick();
     if (this.tickNo % 100 === 0) this.sendTime();
+    this.runScheduled();
 
     for (const p of this.players.values()) {
       p.movesThisTick = 0;

@@ -15,6 +15,9 @@ import { Mounts } from './systems/Mounts';
 import { Power } from './systems/Power';
 import { Sculk } from './systems/Sculk';
 import { WardenSystem } from './systems/Warden';
+import { EndingsSystem } from './systems/Endings';
+import { EndgameSystem } from './systems/Endgame';
+import { ErrorBossSystem } from './systems/ErrorBoss';
 
 export function installGameplay(server: GameServer): void {
   const mobs = new MobSystem(server);
@@ -22,7 +25,7 @@ export function installGameplay(server: GameServer): void {
   const it = server.interaction;
   const h = it.hooks;
   h.attack = (p, target) => mobs.playerAttack(p, target);
-  h.interactEntity = (p, target, hand) => mobs.interact(p, target, hand);
+  h.interactEntity = (p, target, hand) => server.endgame?.useOnEntity(p, target, hand) || mobs.interact(p, target, hand);
   h.restore = (dim, data) => mobs.restore(dim, data) ?? end.restore(dim, data);
   const ws = new Workstations(server);
   server.workstations = ws;
@@ -40,7 +43,7 @@ export function installGameplay(server: GameServer): void {
   server.sculk = sculk;
   server.warden = new WardenSystem(server);
   power.extraPower = (dim, x, y, z) => sculk.sensorPower(dim, x, y, z);
-  h.useItem = (p, stack, hand) => mobs.useItem(p, stack) || end.fillBottle(p, stack) || ws.fillBottle(p, stack) || ws.throwSplash(p, stack) || end.useItem(p, stack) || far.useItem(p, stack) || gadgets.useItem(p, stack, hand);
+  h.useItem = (p, stack, hand) => !!server.endgame?.useItem(p, stack) || mobs.useItem(p, stack) || end.fillBottle(p, stack) || ws.fillBottle(p, stack) || ws.throwSplash(p, stack) || end.useItem(p, stack) || far.useItem(p, stack) || gadgets.useItem(p, stack, hand);
   h.useBlock = (p, x, y, z, state) => ws.useBlock(p, x, y, z, state);
   h.windowAction = (p, m) => ws.windowAction(p, m);
   const prevUseOnBlock = h.useItemOnBlock;
@@ -51,8 +54,15 @@ export function installGameplay(server: GameServer): void {
     end.spawnCrystal(dim, x, y, z);
     return true;
   };
-  mobs.onBossDeath = (m, killer) => {
-    if (m.type === 'ender_dragon') end.fight.onDeath(m, killer);
+  const endings = new EndingsSystem(server);
+  server.endings = endings;
+  const endgame = new EndgameSystem(server);
+  server.endgame = endgame;
+  const errorBoss = new ErrorBossSystem(server);
+  server.errorBoss = errorBoss;
+  mobs.onBossDeath = (m, killer, info) => {
+    if (m.type === 'ender_dragon') end.fight.onDeath(m, killer, info);
+    else if (m.type === 'the_error') errorBoss.onDeath(m, killer, info);
   };
   h.releaseItem = (p, stack, ticks, slot) => mobs.releaseBow(p, stack, ticks, slot);
   h.igniteTnt = (dim, x, y, z) => mobs.igniteTnt(dim, x, y, z);
@@ -74,6 +84,8 @@ export function installGameplay(server: GameServer): void {
     ws.tick();
     portals.tick();
     end.tick();
+    endgame.tick();
+    errorBoss.tick();
     far.tick();
     gadgets.tick();
     mounts.tick();

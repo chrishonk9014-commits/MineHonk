@@ -388,10 +388,15 @@ describe('advancements and cheats', () => {
     tick(server, 260);
     expect(player.achievements.has('kill_dragon')).toBe(false);
     expect(player.achievements.has('enter_end')).toBe(false);
-    const eye = [...player.dim.entities.values()].find((e) => e.type === 'item' && (e as unknown as { stack: ItemStack }).stack.id === itemById.get('corrupted_eye')!.num) as unknown as { stack: ItemStack } | undefined;
+    // V3: no dragon kill drops a Corrupted Eye (only the secret ending gives one)
+    const eye = [...player.dim.entities.values()].find((e) => e.type === 'item' && (e as unknown as { stack: ItemStack }).stack.id === itemById.get('corrupted_eye')!.num);
     const carried = player.inventory.slots.find((s) => s?.id === itemById.get('corrupted_eye')!.num);
-    expect(eye || carried).toBeTruthy();
-    expect(isAdminStack(eye?.stack ?? carried)).toBe(true);
+    expect(eye || carried).toBeFalsy();
+    // Its loot is cheat-made
+    for (const e of player.dim.entities.values()) if (e.type === 'item') expect(isAdminStack((e as unknown as { stack: ItemStack }).stack)).toBe(true);
+    // The world records the kill as a cheat, never as Ending 1 for anyone
+    expect(server.level.endings.dragonDeath).toBe('cheat');
+    expect(player.endings.has('dragon')).toBe(false);
   });
 
   it('cheat experience never counts for Experienced', async () => {

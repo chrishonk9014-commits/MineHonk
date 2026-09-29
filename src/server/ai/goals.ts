@@ -679,6 +679,8 @@ export function nearestEntityTarget(range: number, pred: (e: Entity) => boolean)
 
 /** Endermen become hostile towards players that stare at their head. */
 export function staringPlayer(m: Mob): Target | null {
+  // An Enderman changed by the mysterious potion has something else on its mind
+  if (m.data.voidbound) return null;
   for (const p of players(m, 48)) {
     if (!isPlayer(p)) continue;
     const helmet = p.inventory.get(39);

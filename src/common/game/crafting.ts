@@ -131,6 +131,8 @@ export function craftingRemainder(s: ItemStack): ItemStack | null {
   const id = items[s.id]!.id;
   if (id === 'milk_bucket' || id === 'water_bucket' || id === 'lava_bucket') return { id: itemById.get('bucket')!.num, count: 1 };
   if (id === 'honey_bottle') return { id: itemById.get('glass_bottle')!.num, count: 1 };
+  // The Corrupted Eye is only ever lent to a recipe (it can't be replaced)
+  if (id === 'corrupted_eye') return { ...s, count: 1 };
   return null;
 }
 

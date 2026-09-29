@@ -111,6 +111,8 @@ export function showTooltip(stack: Slot, x: number, y: number, advanced = false)
     if (packed.length > 5) tooltipEl.append(el('div', { class: 'dim italic' }, `and ${packed.length - 5} more...`));
   }
   if (it.id === 'farlands_compass') tooltipEl.append(el('div', { class: 'rarity-glitched' }, 'Points somewhere it should not.'));
+  if (it.id === 'mysterious_potion') tooltipEl.append(el('div', { class: 'dim italic' }, 'Something in it is looking back.'));
+  if (it.id === 'corrupted_eye') tooltipEl.append(el('div', { class: 'dim italic' }, 'It remembers the End breaking.'));
   if (stack.tag?.admin) tooltipEl.append(el('div', { class: 'dim' }, 'Cheat item: never counts for advancements'));
   if (advanced) {
     tooltipEl.append(el('div', { class: 'dim' }, `minehonk:${it.id}`));

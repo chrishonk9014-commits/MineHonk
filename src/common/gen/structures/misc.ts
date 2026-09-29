@@ -238,7 +238,8 @@ export const WITCH_HUT = single({
   y: 'surface',
   biome: ids('swamp'),
   maxSlope: 6,
-  build(b) {
+  build(b, rng, seed) {
+    void rng;
     const planks = S('spruce_planks');
     const y0 = 3;
     for (const [x, z] of [
@@ -259,6 +260,8 @@ export const WITCH_HUT = single({
     b.set(4, y0 + 1, 6, S('cauldron'));
     b.set(2, y0 + 1, 6, S('crafting_table'));
     b.set(2, y0 + 1, 3, S('flower_pot'));
+    // The witch's things (V3): one of them is a potion that should not exist
+    b.chest(4, y0 + 1, 3, 'west', 'chest/witch_hut', lootSeed(b, 4, y0 + 1, 3, seed));
     b.fill(1, y0 + 1, 0, 5, y0 + 1, 0, S('oak_fence'));
   },
   entities: (x, y, z) => [

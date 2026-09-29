@@ -78,6 +78,41 @@ export interface LevelData {
   reports: { from: string; target: string; reason: string; at: number }[];
   /** Cheat bookkeeping (blocks placed by cheats, cheat-set time/weather). */
   admin?: { sky?: boolean; blocks?: Record<string, Record<string, number[]>>; chunks?: Record<string, number[]> };
+  /** Endgame state: endings, the Corrupted Eye, the Farlands and its boss. */
+  endings: WorldEndings;
+}
+
+/** Endgame state of a world (V3): how the dragon fell and which endings were reached. */
+export interface WorldEndings {
+  /** How the Ender Dragon last died: by a player, by a Voidbound Enderman (the secret ending) or by a cheat. */
+  dragonDeath: 'player' | 'enderman' | 'cheat' | null;
+  /** Endings reached in this world: id -> when (ms) it was first reached. */
+  reached: Record<string, number>;
+  /** Endings that were only ever forced by the Admin Panel or reached with cheats. */
+  forced: string[];
+  /** The secret ending awarded a Corrupted Eye. */
+  eyeAwarded: boolean;
+  /** A glitched portal has been lit with a Corrupted Eye. */
+  farlandsAccess: boolean;
+  /** The Error has been defeated in the Farlands. */
+  errorDefeated: boolean;
+}
+
+export function newWorldEndings(): WorldEndings {
+  return { dragonDeath: null, reached: {}, forced: [], eyeAwarded: false, farlandsAccess: false, errorDefeated: false };
+}
+
+function sanitizeEndings(raw: unknown): WorldEndings {
+  const out = newWorldEndings();
+  if (!raw || typeof raw !== 'object') return out;
+  const r = raw as Partial<WorldEndings>;
+  out.dragonDeath = r.dragonDeath === 'player' || r.dragonDeath === 'enderman' || r.dragonDeath === 'cheat' ? r.dragonDeath : null;
+  if (r.reached && typeof r.reached === 'object') for (const [k, v] of Object.entries(r.reached)) if (k.length < 64 && typeof v === 'number' && Number.isFinite(v)) out.reached[k] = v;
+  out.forced = Array.isArray(r.forced) ? r.forced.filter((s): s is string => typeof s === 'string' && s.length < 64).slice(0, 32) : [];
+  out.eyeAwarded = r.eyeAwarded === true;
+  out.farlandsAccess = r.farlandsAccess === true;
+  out.errorDefeated = r.errorDefeated === true;
+  return out;
 }
 
 export interface PortalRecord {
@@ -162,6 +197,7 @@ export function createLevelData(o: NewWorldOptions): LevelData {
     defaultRole: 'builder',
     muted: {},
     reports: [],
+    endings: newWorldEndings(),
   };
 }
 
@@ -214,6 +250,7 @@ export function sanitizeLevelData(raw: unknown, fallbackId: string): LevelData |
   out.generatorVersion = num(r.generatorVersion, 1);
   out.bonusChest = !!r.bonusChest;
   out.generateStructures = r.generateStructures !== false;
+  out.endings = sanitizeEndings(r.endings);
   if (r.admin && typeof r.admin === 'object') {
     const a = r.admin as NonNullable<LevelData['admin']>;
     out.admin = { sky: a.sky === true, blocks: a.blocks && typeof a.blocks === 'object' ? a.blocks : {}, chunks: a.chunks && typeof a.chunks === 'object' ? a.chunks : {} };

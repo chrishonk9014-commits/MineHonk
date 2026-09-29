@@ -156,6 +156,14 @@ export class Portals {
           const id = blocks[STATE_BLOCK[p.dim.getState(x, y, z)]!]!.id;
           if (id === 'nether_portal' || id === 'end_portal' || id === 'far_portal' || id === 'end_gateway') return id;
         }
+    // An End Gateway is a single block between bedrock that no body fits
+    // into: pressing against its open side is enough to go through
+    if (p.dim.id === 'end') {
+      const m = 0.25;
+      for (let y = Math.floor(p.y - m); y <= Math.floor(p.y + 1.8 + m); y++)
+        for (let z = Math.floor(p.z - 0.3 - m); z <= Math.floor(p.z + 0.3 + m); z++)
+          for (let x = Math.floor(p.x - 0.3 - m); x <= Math.floor(p.x + 0.3 + m); x++) if (blocks[STATE_BLOCK[p.dim.getState(x, y, z)]!]!.id === 'end_gateway') return 'end_gateway';
+    }
     return null;
   }
 

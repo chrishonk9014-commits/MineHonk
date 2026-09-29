@@ -132,6 +132,14 @@ export type S2C =
   | { t: 'cave_biome'; id: number }
   /** A particle travelling from one point to another over `ticks` (vibrations, sonic booms). */
   | { t: 'trail'; kind: string; x0: number; y0: number; z0: number; x1: number; y1: number; z1: number; ticks: number }
+  /** An ending card (V3). */
+  | { t: 'ending'; id: string; head: string; title: string; line: string; style: 'calm' | 'glitch' | 'error' }
+  /**
+   * Screen and world effects (V3): glitch bursts, the End falling silent and
+   * corrupting, warning markers on the ground, lasers, shockwaves...
+   * Positions are world coordinates; `id` ties a marker to its later updates.
+   */
+  | { t: 'fx'; kind: FxKind; strength?: number; ticks?: number; text?: string; x?: number; y?: number; z?: number; r?: number; x1?: number; y1?: number; z1?: number; id?: number }
   | { t: 'teleport'; x: number; y: number; z: number; yaw?: number; pitch?: number; seq: number }
   | { t: 'dig_progress'; x: number; y: number; z: number; stage: number; by: number }
   | { t: 'gamemode'; mode: GameMode; abilities: AbilitiesMsg }
@@ -177,6 +185,43 @@ export interface AbilitiesMsg {
 
 export type EntityAnim = 'swing' | 'hurt' | 'death' | 'crit' | 'eat' | 'magic_crit' | 'wake' | 'sleep' | 'totem' | 'teleport' | 'attack' | 'roar';
 export type ChatKind = 'chat' | 'system' | 'join' | 'leave' | 'death' | 'announce' | 'error' | 'achievement' | 'whisper';
+
+/**
+ * Screen/world effect kinds (V3).
+ * - glitch: a burst of screen glitching (`strength` 0..1, `ticks`)
+ * - silence / unsilence: every sound fades out (the End goes quiet) / back in
+ * - corrupt_world: the world around flickers, blocks float and vanish, the sky stutters
+ * - integrity: the brief WORLD INTEGRITY FAILURE screen (`text`)
+ * - player_glitch: the local player was hit by a glitch attack
+ * - stabilize: effects calm down (the Farlands stabilises)
+ * - warn_circle / warn_end: a telegraph ring on the ground at x,y,z with radius r (`id`)
+ * - warn_beam / laser: a targeting line / the firing laser from (x,y,z) to (x1,y1,z1)
+ * - zone / zone_end: a lingering danger area (`id`)
+ * - pulse: a shockwave ring expanding from x,y,z to radius r over `ticks`
+ * - afterimage: a fading copy of an entity (`id`) where it stood
+ * - portal_on: a glitched portal wakes up at x,y,z
+ * - farlands_entry: the crossing into the Farlands
+ * - boss_death: The Error comes apart at x,y,z
+ */
+export type FxKind =
+  | 'glitch'
+  | 'silence'
+  | 'unsilence'
+  | 'corrupt_world'
+  | 'integrity'
+  | 'player_glitch'
+  | 'stabilize'
+  | 'warn_circle'
+  | 'warn_end'
+  | 'warn_beam'
+  | 'laser'
+  | 'zone'
+  | 'zone_end'
+  | 'pulse'
+  | 'afterimage'
+  | 'portal_on'
+  | 'farlands_entry'
+  | 'boss_death';
 export type WindowKind =
   | 'player'
   | 'crafting'

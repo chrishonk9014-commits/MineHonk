@@ -313,7 +313,13 @@ export const LOOT_TABLES: Record<string, LootTable> = {
   'chest/buried_treasure': { pools: [{ rolls: 1, entries: [e('heart_of_the_sea', 1)] }, { rolls: [5, 8], entries: [e('iron_ingot', 20, [1, 4]), e('gold_ingot', 10, [1, 4]), e('tnt', 5, [1, 2]), e('emerald', 5, [4, 8]), e('diamond', 5, [1, 2]), e('prismarine_crystals', 5, [1, 5]), e('cooked_cod', 5, [2, 4])] }] },
   'chest/pillager_outpost': { pools: [{ rolls: [2, 3], entries: [e('wheat', 7, [3, 5]), e('carrot', 5, [3, 5]), e('potato', 5, [2, 5])] }, { rolls: [1, 3], entries: [e('dark_oak_log', 1, [2, 3]), e('experience_bottle', 1), e('string', 4, [1, 6]), e('arrow', 4, [2, 7]), e('tripwire_hook', 0), e('iron_ingot', 3, [1, 3]), book(1)] }, { rolls: [0, 1], entries: [e('crossbow', 1)] }] },
   'chest/ocean_ruin': { pools: [{ rolls: [2, 5], entries: [e('coal', 10, [1, 4]), e('wheat', 10, [2, 3]), e('gold_nugget', 10, [1, 3]), e('emerald', 5), e('iron_ingot', 5), book(5), e('heart_of_the_sea', 1)] }] },
-  'chest/witch_hut': { pools: [{ rolls: [2, 5], entries: [e('glowstone_dust', 10, [1, 3]), e('redstone', 10, [1, 3]), e('spider_eye', 10, [1, 2]), e('sugar', 10, [1, 3]), e('glass_bottle', 10, [1, 3]), e('fermented_spider_eye', 3)] }] },
+  'chest/witch_hut': {
+    pools: [
+      { rolls: [2, 5], entries: [e('glowstone_dust', 10, [1, 3]), e('redstone', 10, [1, 3]), e('spider_eye', 10, [1, 2]), e('sugar', 10, [1, 3]), e('glass_bottle', 10, [1, 3]), e('fermented_spider_eye', 3)] },
+      // V3: every hut keeps one
+      { rolls: 1, entries: [e('mysterious_potion', 1)] },
+    ],
+  },
   // Original structures
   'chest/sky_shrine': { pools: [{ rolls: [3, 6], entries: [e('feather', 20, [3, 8]), e('sky_ray_membrane', 8, [1, 2]), e('diamond', 4, [1, 2]), e('emerald', 8, [1, 4]), e('golden_apple', 6), ench('iron_boots', 6, [15, 30]), book(6), e('ender_pearl', 6, [1, 2])] }] },
   'chest/overgrown_ruin': { pools: [{ rolls: [3, 7], entries: [e('honeycomb', 10, [1, 5]), e('candle', 6, [1, 3]), e('bone', 20, [1, 6]), e('iron_nugget', 20, [3, 12]), e('emerald', 8, [1, 3]), e('sunroot_seeds', 12, [2, 5]), e('glowbell', 10, [1, 3]), e('golden_carrot', 6, [1, 4]), book(4), e('gold_ingot', 8, [1, 3])] }] },
@@ -328,7 +334,7 @@ export const LOOT_TABLES: Record<string, LootTable> = {
   'chest/farlands_vault': {
     pools: [
       { rolls: 1, entries: [e('glitched_ingot', 1, [1, 2])] },
-      { rolls: [4, 8], entries: [e('glitch_shard', 20, [3, 8]), e('nullium_ingot', 10, [1, 3]), e('data_fragment', 20, [2, 4]), e('enchanted_golden_apple', 3), e('totem_of_undying', 3), ench('netherite_sword', 3, [30, 50]), ench('netherite_pickaxe', 3, [30, 50]), e('corrupted_eye', 5)] },
+      { rolls: [4, 8], entries: [e('glitch_shard', 20, [3, 8]), e('nullium_ingot', 10, [1, 3]), e('data_fragment', 20, [2, 4]), e('enchanted_golden_apple', 3), e('totem_of_undying', 3), ench('netherite_sword', 3, [30, 50]), ench('netherite_pickaxe', 3, [30, 50])] },
     ],
   },
 };

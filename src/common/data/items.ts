@@ -168,6 +168,8 @@ add({ id: 'bone_meal', name: 'Bone Meal', use: 'bone_meal', creative: 'materials
 add({ id: 'glass_bottle', name: 'Glass Bottle', use: 'glass_bottle', creative: 'brewing' });
 add({ id: 'potion', name: 'Potion', maxStack: 1, use: 'potion', creative: 'brewing' });
 add({ id: 'splash_potion', name: 'Splash Potion', maxStack: 1, use: 'splash_potion', creative: 'brewing' });
+// V3: found only in witch's huts. What it does is left for the player to find out.
+add({ id: 'mysterious_potion', name: 'Mysterious Potion', maxStack: 1, rarity: 'glitched', glint: true, creative: 'brewing' });
 add({ id: 'experience_bottle', name: "Bottle o' Enchanting", use: 'experience_bottle', rarity: 'uncommon', glint: true, creative: 'tools' });
 add({ id: 'enchanted_book', name: 'Enchanted Book', maxStack: 1, rarity: 'uncommon', glint: true, creative: 'tools' });
 add({ id: 'name_tag', name: 'Name Tag', creative: 'tools' });

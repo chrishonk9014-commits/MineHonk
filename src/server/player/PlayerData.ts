@@ -61,6 +61,11 @@ export class PlayerData {
     if (typeof raw.wardenWarning === 'number' && raw.wardenWarning >= 0 && raw.wardenWarning <= 4) p.wardenWarning = Math.floor(raw.wardenWarning);
     const ld = raw.lastDeath as Record<string, unknown> | undefined;
     if (ld && DIMS.includes(ld.dim as DimensionId) && [ld.x, ld.y, ld.z].every((v) => typeof v === 'number' && Number.isFinite(v))) p.lastDeath = { dim: ld.dim as DimensionId, x: ld.x as number, y: ld.y as number, z: ld.z as number };
+    if (Array.isArray(raw.endings)) for (const e of raw.endings) if (typeof e === 'string' && e.length < 64) p.endings.add(e);
+    if (typeof raw.pendingEnding === 'string' && raw.pendingEnding.length < 64) p.pendingEnding = raw.pendingEnding;
+    const ee = raw.endEntry as Record<string, unknown> | undefined;
+    if (ee && [ee.x, ee.y, ee.z].every((v) => typeof v === 'number' && Number.isFinite(v))) p.endEntry = { x: ee.x as number, y: ee.y as number, z: ee.z as number };
+    p.freezeTicks = Math.max(0, Math.min(140, Math.floor(num(raw.freeze, 0))));
     p.cheat = loadAdminState(raw.cheat);
     this.server.interaction.survival.updateArmor(p);
     return { found: true, dim };
@@ -92,6 +97,10 @@ export class PlayerData {
       lastDeath: p.lastDeath ?? undefined,
       wardenWarning: p.wardenWarning || undefined,
       caveBiomes: p.visitedCaveBiomes.size ? [...p.visitedCaveBiomes] : undefined,
+      endings: p.endings.size ? [...p.endings] : undefined,
+      pendingEnding: p.pendingEnding ?? undefined,
+      endEntry: p.endEntry ?? undefined,
+      freeze: p.freezeTicks || undefined,
       fire: (p as { fireTicks?: number }).fireTicks ?? 0,
       cheat: p.cheat,
       savedAt: Date.now(),

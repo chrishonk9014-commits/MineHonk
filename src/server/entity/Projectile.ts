@@ -139,6 +139,22 @@ export class Projectile extends Entity {
     const ex = x0 + (this.vx / (len || 1)) * travel;
     const ey = y0 + (this.vy / (len || 1)) * travel;
     const ez = z0 + (this.vz / (len || 1)) * travel;
+    // An ender pearl flying through an End Gateway takes its thrower along
+    if (this.kind === 'ender_pearl' && this.dim.id === 'end' && travel > 0) {
+      const steps = Math.ceil(travel / 0.25);
+      for (let i = 0; i <= steps; i++) {
+        const f = i / steps;
+        const gx = Math.floor(x0 + (ex - x0) * f);
+        const gy = Math.floor(y0 + (ey - y0) * f);
+        const gz = Math.floor(z0 + (ez - z0) * f);
+        if (this.dim.blockId(gx, gy, gz) !== 'end_gateway') continue;
+        if (this.dim.server.theEnd?.pearlGateway(this.owner, gx, gy, gz)) {
+          this.remove();
+          return;
+        }
+        break;
+      }
+    }
     let best = Infinity;
     const mid = [(x0 + ex) / 2, (y0 + ey) / 2, (z0 + ez) / 2] as const;
     // A trident that already hit something just drops

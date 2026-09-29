@@ -240,6 +240,29 @@ export class WorldRenderer {
     return Math.max(sky, blk, u.uAmbient!.value as number, u.uNightVision!.value as number);
   }
 
+  private warmed = false;
+
+  /**
+   * Compiles every chunk material once, up front. Otherwise a material's
+   * shader compiles the first time something using it comes into view (the
+   * first water seen from a hilltop, say), stalling that frame for up to a
+   * second on slower machines.
+   */
+  private warmUp(cam: THREE.Camera): void {
+    this.warmed = true;
+    const g = new THREE.Group();
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0, 0, 0, 0, 0, 0, 0], 3));
+    for (const m of this.chunks.materials) g.add(new THREE.Mesh(geo, m));
+    this.scene.add(g);
+    try {
+      this.renderer.compile(this.scene, cam);
+    } finally {
+      this.scene.remove(g);
+      geo.dispose();
+    }
+  }
+
   render(f: FrameState): void {
     this.frameCount++;
     const cam = this.camera;
@@ -312,7 +335,8 @@ export class WorldRenderer {
       fogNear = Math.min(fogNear, fogFar * 0.45);
     }
     this.sky.group.visible = !cave || cave.amount < 0.9;
-    this.sky.cloudGroup.visible = this.sky.group.visible && this.settings.clouds;
+    // Only ever hides: the sky decides per dimension whether clouds show at all
+    if (!this.sky.group.visible) this.sky.cloudGroup.visible = false;
     if (f.darkness > 0) {
       fog.multiplyScalar(1 - f.darkness);
       fogFar = fogFar * (1 - f.darkness) + 12 * f.darkness;
@@ -339,6 +363,7 @@ export class WorldRenderer {
     this.particles.update((x, y, z) => this.lightAt(x, y, z));
 
     this.renderer.clear();
+    if (!this.warmed) this.warmUp(cam);
     this.renderer.render(this.scene, cam);
 
     // Hand overlay

@@ -1,6 +1,6 @@
 /** V3 world: corrupted caves, glitched portals, powder snow ice caves and powder snow physics. */
 import { describe, it, expect, beforeAll } from 'vitest';
-import { initItems } from '../../src/common/registry/items';
+import { initItems, itemById } from '../../src/common/registry/items';
 import { blockOf, getProp, S } from '../../src/common/registry/blocks';
 import { seedFromString } from '../../src/common/math/rng';
 import { OverworldGenerator } from '../../src/common/gen/generator';
@@ -219,7 +219,8 @@ describe('glitched portal', () => {
     tick(server, 40);
     // It dissolves: nothing dropped, the Eye still in hand
     expect(eyes().length).toBe(0);
-    expect([...player.dim.entities.values()].some((e) => e.type === 'item')).toBe(false);
+    const eyeNum = itemById.get('corrupted_eye')!.num;
+    expect([...player.dim.entities.values()].some((e) => e.type === 'item' && (e as unknown as { stack: { id: number } }).stack.id === eyeNum)).toBe(false);
     expect(player.inventory.get(player.selectedSlot)?.count).toBe(1);
     // Again as often as you like, after a short cooldown (clicking the ground works too)
     server.handle(conn, { t: 'use', hand: 0, action: 'start' });

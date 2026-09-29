@@ -1,23 +1,40 @@
 /**
- * The title screen backdrop: a patch of real, freshly generated terrain,
- * slowly orbited by the camera. Since the Caves Update it is the inside of
- * a random mega-cavern from a random seed (falling back to a scenic spawn
- * when none is found). Chunks are generated a few per frame so the menu
- * stays responsive, then lit together (so chunk borders have no seams) and
- * handed to the normal world renderer.
+ * The title screen backdrop: a patch of real, freshly generated terrain from
+ * a random seed. Since V3.5 it is one of three places, picked at random:
+ *  - the Farlands, the camera turning slowly above its broken terrain;
+ *  - the End's main island, circling the exit portal and its pillars;
+ *  - The Error's arena over the void, circling The Error itself.
+ * Chunks are generated a few per frame so the menu stays responsive, then lit
+ * together (so chunk borders have no seams) and handed to the normal world
+ * renderer.
  */
 import { WorldRenderer, type FrameState, type GameAssets } from './WorldRenderer';
 import { ClientWorld } from '../world/ClientWorld';
-import { OverworldGenerator } from '../../common/gen/generator';
+import { ClientEntity } from '../game/ClientEntity';
+import { EndGenerator } from '../../common/gen/end';
+import { FarlandsGenerator } from '../../common/gen/farlands';
+import type { DimensionGenerator } from '../../common/gen/pipeline';
 import { LightEngine } from '../../common/world/light';
 import { encodeChunk, type Chunk } from '../../common/world/chunk';
 import { chunkIndex } from '../../common/world/constants';
 import { seedFromString } from '../../common/math/rng';
-import { STATE_SOLID, STATE_FLUID } from '../../common/registry/blocks';
-import { CAVE_BIOMES } from '../../common/gen/caves/caveBiomes';
+import { STATE_SOLID } from '../../common/registry/blocks';
 import type { Settings } from '../settings';
 
 const RADIUS = 4;
+
+type Scene = 'farlands' | 'end' | 'arena';
+
+/** What each scene looks like: particles in the air, camera tilt, extra light. */
+const LOOK: Record<Scene, { particle: string; pitch: number; nightVision: number; aside: number }> = {
+  farlands: { particle: 'glitch', pitch: 0.18, nightVision: 0, aside: 0 },
+  end: { particle: 'portal', pitch: 0.32, nightVision: 0.35, aside: 0 },
+  // Looking a little past The Error keeps it beside the menu, not behind it
+  arena: { particle: 'glitch', pitch: -0.2, nightVision: 0.15, aside: 0.62 },
+};
+
+/** The Error's poses shown on the title screen, cycling. */
+const ERROR_POSES = ['idle', 'roar', 'idle', 'cast', 'idle', 'laser'];
 
 export class TitlePanorama {
   private renderer: WorldRenderer | null = null;
@@ -26,9 +43,11 @@ export class TitlePanorama {
   private active = true;
   private readonly start = performance.now();
   private center = { x: 0, y: 80, z: 0 };
+  /** 0: turn in place; otherwise circle the centre at this distance, looking at it. */
+  private orbit = 0;
+  private scene: Scene = 'farlands';
+  private boss: ClientEntity | null = null;
   private disposed = false;
-  private inCave = false;
-  private caveBiome = 1;
   private lastTick = 0;
   onReady: (() => void) | null = null;
   ready = false;
@@ -45,14 +64,34 @@ export class TitlePanorama {
     } catch {
       return; // no WebGL: the menu keeps its dirt background
     }
-    // A random world each time, and a random huge cave somewhere in it
-    const gen = new OverworldGenerator(seedFromString('title-' + Math.floor(Math.random() * 1e9)));
-    const mega = gen.terrain.carver?.nearestMega(Math.floor((Math.random() - 0.5) * 6000), Math.floor((Math.random() - 0.5) * 6000));
-    const spawn = mega ?? gen.findSpawn();
-    this.inCave = !!mega;
-    this.center = mega ? { x: mega.x + 0.5, y: mega.y + 0.5, z: mega.z + 0.5 } : { x: spawn.x + 0.5, y: spawn.y + 14, z: spawn.z + 0.5 };
-    const ccx = Math.floor(spawn.x) >> 4;
-    const ccz = Math.floor(spawn.z) >> 4;
+    const seed = seedFromString('title-' + Math.floor(Math.random() * 1e9));
+    const scenes: Scene[] = ['farlands', 'end', 'arena'];
+    // ?title=farlands|end|arena picks one (for screenshots)
+    const asked = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('title') : null;
+    this.scene = scenes.includes(asked as Scene) ? (asked as Scene) : scenes[Math.floor(Math.random() * scenes.length)]!;
+    let gen: DimensionGenerator;
+    let focus: { x: number; y: number; z: number };
+    if (this.scene === 'end') {
+      gen = new EndGenerator(seed);
+      focus = { x: 0, y: 70, z: 0 };
+    } else {
+      const far = new FarlandsGenerator(seed);
+      gen = far;
+      const arena = this.scene === 'arena' ? far.arenas?.nearest(Math.floor((Math.random() - 0.5) * 4000), Math.floor((Math.random() - 0.5) * 4000)) : null;
+      if (arena) focus = { x: arena.x, y: arena.y, z: arena.z };
+      else {
+        this.scene = 'farlands';
+        focus = far.findSpawn();
+      }
+    }
+    // The renderer draws whichever dimension the world says it is
+    const dim = this.scene === 'end' ? 'end' : 'farlands';
+    this.world.dimension = dim;
+    this.world.hasSky = dim !== 'end';
+    this.renderer.sky.dimension = dim;
+
+    const ccx = Math.floor(focus.x) >> 4;
+    const ccz = Math.floor(focus.z) >> 4;
     const todo: [number, number][] = [];
     for (let dz = -RADIUS; dz <= RADIUS; dz++) for (let dx = -RADIUS; dx <= RADIUS; dx++) if (dx * dx + dz * dz <= RADIUS * RADIUS + RADIUS) todo.push([ccx + dx, ccz + dz]);
     const chunks = new Map<number, Chunk>();
@@ -67,15 +106,10 @@ export class TitlePanorama {
         this.raf = requestAnimationFrame(step);
         return;
       }
-      const light = new LightEngine({ getChunk: (cx, cz) => chunks.get(chunkIndex(cx, cz)), markLightDirty: () => {} }, true);
+      const light = new LightEngine({ getChunk: (cx, cz) => chunks.get(chunkIndex(cx, cz)), markLightDirty: () => {} }, this.world.hasSky);
       for (const c of chunks.values()) light.initChunk(c);
       for (const c of chunks.values()) this.world.loadChunk(encodeChunk(c, { light: true, blockEntities: false }));
-      if (this.inCave) this.placeInCave(gen);
-      else {
-        // Keep the camera above the ground it circles
-        const h = this.world.heightAt(Math.floor(this.center.x), Math.floor(this.center.z));
-        this.center.y = Math.max(this.center.y, h + 10);
-      }
+      this.frameScene(focus);
       this.ready = true;
       this.onReady?.();
       this.raf = requestAnimationFrame(this.frame);
@@ -83,42 +117,35 @@ export class TitlePanorama {
     this.raf = requestAnimationFrame(step);
   }
 
-  /**
-   * Moves the camera to the roomiest open air near the cavern's centre (so it
-   * isn't inside a pillar) and picks up the cave biome's fog and particles.
-   */
-  private placeInCave(gen: OverworldGenerator): void {
+  /** Where the camera goes once the terrain is in. */
+  private frameScene(focus: { x: number; y: number; z: number }): void {
     const w = this.world;
-    const open = (x: number, y: number, z: number): boolean => {
-      const s = w.getState(x, y, z);
-      return !STATE_SOLID[s] && !STATE_FLUID[s];
-    };
-    // How far the view is free in the eight horizontal directions (capped)
-    const room = (x: number, y: number, z: number): number => {
-      let sum = 0;
-      for (let a = 0; a < 8; a++) {
-        const dx = Math.cos((a * Math.PI) / 4);
-        const dz = Math.sin((a * Math.PI) / 4);
-        let d = 1;
-        while (d < 40 && open(Math.floor(x + dx * d), y, Math.floor(z + dz * d))) d++;
-        sum += d;
+    const fx = Math.floor(focus.x);
+    const fz = Math.floor(focus.z);
+    switch (this.scene) {
+      case 'farlands': {
+        // Turning in place well above the ground
+        const h = w.heightAt(fx, fz);
+        this.center = { x: fx + 0.5, y: Math.max(focus.y + 14, h + 12), z: fz + 0.5 };
+        this.orbit = 0;
+        break;
       }
-      return sum;
-    };
-    const c = this.center;
-    let best = { x: Math.floor(c.x), y: Math.floor(c.y), z: Math.floor(c.z), score: -1 };
-    for (let dy = -12; dy <= 12; dy += 3)
-      for (let dx = -16; dx <= 16; dx += 4)
-        for (let dz = -16; dz <= 16; dz += 4) {
-          const x = Math.floor(c.x) + dx;
-          const y = Math.floor(c.y) + dy;
-          const z = Math.floor(c.z) + dz;
-          if (!open(x, y, z) || !open(x, y + 1, z) || !open(x, y - 1, z)) continue;
-          const sc = room(x, y, z) - Math.abs(dy) * 2;
-          if (sc > best.score) best = { x, y, z, score: sc };
-        }
-    this.center = { x: best.x + 0.5, y: best.y + 0.5, z: best.z + 0.5 };
-    this.caveBiome = gen.caveBiomeAt(best.x, best.y, best.z) || 1;
+      case 'end': {
+        // Circling the exit portal, high enough to see the pillars around it
+        const h = w.heightAt(0, 0);
+        this.center = { x: 0.5, y: h + 16, z: 0.5 };
+        this.orbit = 30;
+        break;
+      }
+      case 'arena': {
+        // Circling The Error, which stands in the middle of its platform
+        this.center = { x: fx + 0.5, y: focus.y + 5, z: fz + 0.5 };
+        this.orbit = 24;
+        this.boss = new ClientEntity(-1, 'the_error', fx + 0.5, focus.y, fz + 0.5, 0, 0, { errorAnim: 'idle', errorPhase: 1 });
+        this.renderer!.entities.add(this.boss);
+        break;
+      }
+    }
   }
 
   private readonly frame = (): void => {
@@ -127,26 +154,40 @@ export class TitlePanorama {
     if (!this.active) return;
     const t = (performance.now() - this.start) / 1000;
     const r = this.renderer;
-    const cave = this.inCave ? CAVE_BIOMES[this.caveBiome] : undefined;
+    const look = LOOK[this.scene];
+    const c = this.center;
+    const yaw = t * 0.045;
+    const cam = { x: c.x, y: c.y + Math.sin(t * 0.07) * 1.5, z: c.z };
+    if (this.orbit > 0) {
+      // Forward is (-sin yaw, -cos yaw): standing here looks straight at the centre
+      cam.x += Math.sin(yaw) * this.orbit;
+      cam.z += Math.cos(yaw) * this.orbit;
+    }
     // Particles run at the game's 20 ticks a second
     while (this.lastTick < t * 20) {
       this.lastTick++;
       r.particles.tick();
-      if (cave?.particle && this.settings.particles !== 'minimal') {
-        for (let i = 0; i < 2; i++) {
-          const x = this.center.x + (Math.random() - 0.5) * 28;
-          const y = this.center.y + (Math.random() - 0.5) * 12;
-          const z = this.center.z + (Math.random() - 0.5) * 28;
-          if (!STATE_SOLID[this.world.getState(Math.floor(x), Math.floor(y), Math.floor(z))]) r.particles.spawn(cave.particle, x, y, z, 1, 0.2);
-        }
+      if (this.settings.particles !== 'minimal') {
+        const x = cam.x + (Math.random() - 0.5) * 28;
+        const y = cam.y + (Math.random() - 0.5) * 12;
+        const z = cam.z + (Math.random() - 0.5) * 28;
+        if (!STATE_SOLID[this.world.getState(Math.floor(x), Math.floor(y), Math.floor(z))]) r.particles.spawn(look.particle, x, y, z, 1, 0.2);
       }
     }
+    const boss = this.boss;
+    if (boss) {
+      // It watches the camera, and shifts between poses now and then
+      const face = Math.atan2(-(cam.x - boss.x), -(cam.z - boss.z));
+      boss.yaw = boss.headYaw = boss.tyaw = boss.theadYaw = face;
+      boss.meta.errorAnim = ERROR_POSES[Math.floor(t / 5) % ERROR_POSES.length];
+      r.entities.update([boss], 1, t * 20, () => 1);
+    }
     const fs: FrameState = {
-      x: this.center.x,
-      y: this.center.y + Math.sin(t * 0.07) * 1.5,
-      z: this.center.z,
-      yaw: t * 0.045,
-      pitch: this.inCave ? 0.08 : 0.18,
+      x: cam.x,
+      y: cam.y,
+      z: cam.z,
+      yaw: yaw + look.aside,
+      pitch: look.pitch,
       fovMod: 1,
       bobPhase: 0,
       bobAmount: 0,
@@ -157,18 +198,17 @@ export class TitlePanorama {
       thunder: 0,
       underwater: false,
       inLava: false,
-      biomeSky: this.world.biomeAt(this.center.x, this.center.z).sky,
+      biomeSky: this.world.biomeAt(cam.x, cam.z).sky,
       target: null,
       crack: [],
       thirdPerson: 0,
       showHand: false,
-      // A little light so the cave reads as a place rather than a black screen
-      nightVision: this.inCave ? 0.55 : 0,
+      nightVision: look.nightVision,
       flash: 0,
       shake: 0,
       darkness: 0,
       hurtTilt: 0,
-      cave: cave ? { color: cave.fog, density: Math.max(0.9, cave.fogDensity), amount: 1 } : undefined,
+      cave: undefined,
     };
     r.render(fs);
   };
@@ -181,6 +221,7 @@ export class TitlePanorama {
   dispose(): void {
     this.disposed = true;
     cancelAnimationFrame(this.raf);
+    if (this.boss) this.renderer?.entities.remove(this.boss.id);
     this.world.clear();
     this.renderer?.dispose();
     this.renderer = null;

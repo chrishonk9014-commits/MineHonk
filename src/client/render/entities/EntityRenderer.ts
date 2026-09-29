@@ -10,6 +10,7 @@ import type { ItemIcons } from '../ItemIcons';
 import { items } from '../../../common/registry/items';
 import { blocks, STATE_BLOCK } from '../../../common/registry/blocks';
 import type { ClientWorld } from '../../world/ClientWorld';
+import { MOB_BY_ID } from '../../../common/data/mobs';
 
 export interface EntityVisual {
   object: THREE.Object3D;
@@ -28,6 +29,8 @@ export interface VisualContext {
   blockTexture(name: string): THREE.Texture;
   /** Another rendered entity by id (e.g. the dragon an end crystal beams to). */
   entity?(id: number): ClientEntity | undefined;
+  /** Where the local player's hand is (fishing lines, leads), if `id` is the local player. */
+  localHand?(id: number): [number, number, number] | null;
 }
 
 const factories = new Map<string, VisualFactory>();
@@ -135,10 +138,76 @@ export function boxVisual(model: BoxModel, animate: (m: BoxModel, e: ClientEntit
 
 // ------------------------------------------------------------------ built-in visuals
 
-registerVisual('player', (e) => {
+registerVisual('player', (e, ctx) => {
   const name = typeof e.meta.name === 'string' ? e.meta.name : null;
   const m = new BoxModel(humanoidDef(), playerSkin(name));
-  return boxVisual(m, (mm, ee, a) => animateHumanoid(mm, ee, a), { name: name ?? 'Player', nameY: 2.15 });
+  // Elytra wings on the back, folded unless gliding
+  const wingMat = new THREE.MeshBasicMaterial({ color: 0x8e8aa8 });
+  const wings: THREE.Mesh[] = [];
+  const body = m.part('body');
+  if (body) {
+    for (const side of [-1, 1]) {
+      const g = new THREE.BoxGeometry(0.5, 0.95, 0.06);
+      g.translate(side * 0.25, -0.475, 0);
+      const w = new THREE.Mesh(g, wingMat);
+      w.position.set(side * 0.1, 0.75, -0.16);
+      w.visible = false;
+      body.add(w);
+      wings.push(w);
+    }
+  }
+  const v = boxVisual(
+    m,
+    (mm, ee, a) => {
+      animateHumanoid(mm, ee, a);
+      const gliding = ee.meta.glide === true;
+      const hasWings = ee.meta.elytra === true;
+      wings.forEach((w, i) => {
+        const side = i === 0 ? -1 : 1;
+        w.visible = hasWings;
+        w.rotation.set(gliding ? 0.25 : 0.1, 0, side * (gliding ? 1.2 : 0.12));
+      });
+      mm.root.rotation.order = 'YXZ';
+      // Riding: sit on the mount's seat (drawn from the mount's own position so the two never drift apart)
+      const vehicle = typeof ee.meta.riding === 'number' ? ctx.entity?.(ee.meta.riding) : undefined;
+      if (vehicle) {
+        const seat = MOB_BY_ID.get(vehicle.type)?.mount?.seat ?? 0.7;
+        const [vx, vy, vz] = vehicle.lerp(a);
+        const [px, py, pz] = ee.lerp(a);
+        mm.root.position.set(vx - px, vy + seat - py - 0.3, vz - pz);
+        const rl = mm.part('rightLeg');
+        const ll = mm.part('leftLeg');
+        if (rl) rl.rotation.set(-1.4, 0.2, 0);
+        if (ll) ll.rotation.set(-1.4, -0.2, 0);
+        mm.root.rotation.x = 0;
+        return;
+      }
+      mm.root.position.x = 0;
+      mm.root.position.z = 0;
+      if (gliding) {
+        // Body flat along the flight direction, arms back
+        mm.root.rotation.x = Math.PI / 2 - 0.25 + ee.pitch * 0.6;
+        mm.root.position.y = 0.3;
+        const ra = mm.part('rightArm');
+        const la = mm.part('leftArm');
+        if (ra) ra.rotation.set(0, 0, -0.25);
+        if (la) la.rotation.set(0, 0, 0.25);
+      } else mm.root.rotation.x = 0;
+    },
+    { name: name ?? 'Player', nameY: 2.15 },
+  );
+  const baseBright = v.setBrightness.bind(v);
+  v.setBrightness = (b) => {
+    baseBright(b);
+    wingMat.color.setHex(0x8e8aa8).multiplyScalar(b);
+  };
+  const baseDispose = v.dispose.bind(v);
+  v.dispose = () => {
+    baseDispose();
+    for (const w of wings) w.geometry.dispose();
+    wingMat.dispose();
+  };
+  return v;
 });
 
 registerVisual('item', (e, ctx) => {
@@ -270,13 +339,15 @@ export class EntityRenderer {
   private readonly visuals = new Map<number, EntityVisual>();
   private readonly known = new Map<number, ClientEntity>();
   private readonly ctx: VisualContext;
+  /** The local player (not a replicated entity): id and hand position for lines. */
+  local: { id: number; hand: () => [number, number, number] } | null = null;
 
   constructor(
     ctx: VisualContext,
     private readonly world: ClientWorld,
   ) {
     this.group.name = 'entities';
-    this.ctx = { ...ctx, entity: (id) => this.known.get(id) };
+    this.ctx = { ...ctx, entity: (id) => this.known.get(id), localHand: (id) => (this.local && this.local.id === id ? this.local.hand() : null) };
   }
 
   add(e: ClientEntity): void {
@@ -290,6 +361,7 @@ export class EntityRenderer {
 
   remove(id: number): void {
     const v = this.visuals.get(id);
+    this.glowing.delete(id);
     if (!v) return;
     this.group.remove(v.object);
     v.dispose();
@@ -307,11 +379,28 @@ export class EntityRenderer {
     for (const e of entities) {
       const v = this.visuals.get(e.id);
       if (!v) continue;
-      v.setBrightness(lightAt(e.x, e.y + 0.5, e.z));
+      const glowing = e.meta.glowing === true;
+      v.setBrightness(glowing ? 1 : lightAt(e.x, e.y + 0.5, e.z));
       v.update(e, alpha, time);
       if (v.nameTag) v.nameTag.visible = !(e.meta.sneak === true);
+      if (glowing !== this.glowing.has(e.id)) this.setGlowing(e.id, v, glowing);
     }
     void this.world;
+  }
+
+  /** Entity ids currently drawn through walls (the Glowing effect). */
+  private readonly glowing = new Set<number>();
+
+  /** Glowing entities are drawn over the terrain so they can be spotted behind walls. */
+  private setGlowing(id: number, v: EntityVisual, on: boolean): void {
+    if (on) this.glowing.add(id);
+    else this.glowing.delete(id);
+    v.object.traverse((o) => {
+      const mat = (o as THREE.Mesh).material as THREE.Material | THREE.Material[] | undefined;
+      if (!mat) return;
+      for (const m of Array.isArray(mat) ? mat : [mat]) m.depthTest = !on;
+      o.renderOrder = on ? 8 : 0;
+    });
   }
 
   clear(): void {

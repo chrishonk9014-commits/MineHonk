@@ -52,6 +52,9 @@ export function computeBlockDrops(state: number, tool: ItemStack | null, rng: Ra
     result.items.push(stackOf(bt.id, 2));
     return result;
   }
+  // A potted plant comes out with its pot
+  const plant = def.id === 'flower_pot' ? getProp(state, 'plant') : undefined;
+  if (plant && plant !== 'none' && itemById.has(plant)) result.items.push(stackOf(plant, 1));
   if (spec?.table) {
     const maxAge = (def.data?.maxAge as number | undefined) ?? 0;
     const age = parseInt(getProp(state, 'age') ?? '0', 10);

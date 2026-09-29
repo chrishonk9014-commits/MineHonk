@@ -181,6 +181,26 @@ try {
   check(Math.hypot(after[0] - before[0], after[2] - before[1]) > 30, `teleported to the village (${after.map(Math.round)}, from ${before.map(Math.round)})`);
   await shot('village');
 
+  // Underground finder (V2): deep dark and the Ancient City
+  await page.evaluate(() => window.minehonk.openAdmin());
+  await page.locator('.admin-panel').waitFor();
+  await page.locator('.admin-tab[data-tab="teleport"]').dispatchEvent('mousedown');
+  await page.waitForTimeout(500);
+  const under = page.locator('.admin-result').last();
+  for (const [btn, name] of [['Find Deep Dark', 'Deep Dark'], ['Find Ancient City', 'Ancient City']]) {
+    await page.getByRole('button', { name: btn }).click();
+    await page.waitForFunction((n) => {
+      const boxes = document.querySelectorAll('.admin-result');
+      const t = boxes[boxes.length - 1]?.textContent ?? '';
+      return t.includes(n) || /No |not /.test(t);
+    }, name, { timeout: 120000 });
+    const txt = (await under.textContent()).replace(/\s+/g, ' ');
+    check(txt.includes(name) && /blocks/.test(txt), `underground finder: ${txt}`);
+  }
+  await shot('admin-underground');
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(300);
+
   // Biome teleport (Nether biome from the overworld)
   await page.evaluate(() => window.minehonk.openAdmin());
   await page.locator('.admin-panel').waitFor();

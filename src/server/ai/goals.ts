@@ -155,7 +155,8 @@ export class PanicGoal implements Goal {
   flags: GoalFlag[] = ['move'];
   constructor(private readonly speed = 1.8) {}
   canUse(m: Mob): boolean {
-    if (m.dim.server.tickNo - m.lastHurtTick > 100 && m.fireTicks <= 0) return false;
+    // Hurt, burning, or alarmed by a ringing bell
+    if (m.dim.server.tickNo - m.lastHurtTick > 100 && m.fireTicks <= 0 && !m.data.alarmTicks) return false;
     const t = m.pathfinder.randomTarget(m.x, m.y, m.z, 6, 3, m.pathOptions(), () => m.rng.next());
     return !!t && m.navigateTo(t.x + 0.5, t.y, t.z + 0.5, this.speed);
   }
@@ -313,10 +314,10 @@ export class FlyWanderGoal implements Goal {
     private readonly maxAboveGround = 20,
   ) {}
   canUse(m: Mob): boolean {
-    return !m.wantPos && m.rng.next() < 0.1;
+    return !m.sitting && !m.wantPos && m.rng.next() < 0.1;
   }
   canContinue(m: Mob): boolean {
-    return !!m.wantPos;
+    return !!m.wantPos && !m.sitting;
   }
   start(m: Mob): void {
     const x = m.x + (m.rng.next() * 2 - 1) * this.radius;
@@ -325,6 +326,8 @@ export class FlyWanderGoal implements Goal {
     let y = m.y + (m.rng.next() * 2 - 1) * 6;
     y = Math.max(ground + 2 + this.minY, Math.min(ground + this.maxAboveGround, y));
     if (m.def.id === 'bat') y = Math.min(y, m.y + 3);
+    // Parrots flit between the treetops and the ground
+    if (m.def.id === 'parrot') y = Math.min(y, ground + 1 + m.rng.next() * 5);
     m.wantPos = { x, y, z, speed: 1 };
   }
 }
@@ -424,7 +427,7 @@ export class MeleeAttackGoal implements Goal {
   }
 }
 
-export type RangedKind = 'arrow' | 'crossbow' | 'fireball' | 'small_fireball' | 'potion' | 'shulker_bullet' | 'rift_bolt';
+export type RangedKind = 'arrow' | 'crossbow' | 'fireball' | 'small_fireball' | 'potion' | 'shulker_bullet' | 'rift_bolt' | 'llama_spit';
 
 export class RangedAttackGoal implements Goal {
   flags: GoalFlag[] = ['move', 'look'];
@@ -531,6 +534,20 @@ export class TeleportGoal implements Goal {
   }
   start(m: Mob): void {
     m.dim.server.mobs!.teleportMob(m, this.behindTarget ? m.target : null);
+  }
+}
+
+/** Hands every decision to the Warden system (it hears and smells rather than sees). */
+export class WardenGoal implements Goal {
+  flags: GoalFlag[] = ['move', 'look', 'target'];
+  canUse(): boolean {
+    return true;
+  }
+  canContinue(): boolean {
+    return true;
+  }
+  tick(m: Mob): void {
+    m.dim.server.warden?.think(m);
   }
 }
 

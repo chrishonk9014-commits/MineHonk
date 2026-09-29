@@ -56,6 +56,11 @@ export class DecorView {
     return this.protoAt(x >> 4, z >> 4).getHeight(x & 15, z & 15);
   }
 
+  /** The proto (pure terrain) chunk at chunk coordinates. */
+  protoChunk(cx: number, cz: number): Chunk {
+    return this.protoAt(cx, cz);
+  }
+
   biome(x: number, z: number): number {
     return this.protoAt(x >> 4, z >> 4).getBiome(x & 15, z & 15);
   }

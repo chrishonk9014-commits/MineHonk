@@ -9,14 +9,14 @@ import type { ItemStack, Slot } from '../game/itemstack';
 import type { GameMode, Difficulty, GodHearts } from '../game/gamemode';
 import type { DimensionId } from '../data/biomes';
 
-export const PROTOCOL_VERSION = 1;
+export const PROTOCOL_VERSION = 2;
 
 // ---------------------------------------------------------------------------
 // Client -> Server
 // ---------------------------------------------------------------------------
 export type C2S =
   | { t: 'hello'; version: number; name: string; token?: string; viewDistance: number; registryHash: string }
-  | { t: 'move'; x: number; y: number; z: number; yaw: number; pitch: number; onGround: boolean; flying: boolean; sneak: boolean; sprint: boolean; seq: number }
+  | { t: 'move'; x: number; y: number; z: number; yaw: number; pitch: number; onGround: boolean; flying: boolean; sneak: boolean; sprint: boolean; seq: number; glide?: boolean }
   | { t: 'dig'; action: 'start' | 'abort' | 'finish'; x: number; y: number; z: number; face: number }
   | { t: 'use_on'; x: number; y: number; z: number; face: number; hx: number; hy: number; hz: number; hand: 0 | 1; yaw: number; pitch: number; seq: number }
   | { t: 'use'; hand: 0 | 1; action: 'start' | 'release' }
@@ -42,7 +42,10 @@ export type C2S =
   | { t: 'request_progress' }
   | { t: 'ping'; time: number }
   /** Admin Panel request (authorised and validated by the server). */
-  | { t: 'admin'; req: number; action: AdminAction };
+  | { t: 'admin'; req: number; action: AdminAction }
+  /** Position of the mount the player steers (horses). */
+  | { t: 'vehicle_move'; x: number; y: number; z: number; yaw: number }
+  | { t: 'dismount' };
 
 export type ClickMode = 'pickup' | 'quick' | 'swap' | 'drop' | 'drag_start' | 'drag_add' | 'drag_end' | 'collect' | 'clone';
 
@@ -125,6 +128,10 @@ export type S2C =
   | { t: 'chat'; text: string; kind: ChatKind; from?: string }
   | { t: 'sound'; name: string; x: number; y: number; z: number; volume: number; pitch: number }
   | { t: 'particles'; kind: string; x: number; y: number; z: number; count: number; spread?: number; data?: number }
+  /** The cave biome the player is now in (0 = none): fog, ambience, music. */
+  | { t: 'cave_biome'; id: number }
+  /** A particle travelling from one point to another over `ticks` (vibrations, sonic booms). */
+  | { t: 'trail'; kind: string; x0: number; y0: number; z0: number; x1: number; y1: number; z1: number; ticks: number }
   | { t: 'teleport'; x: number; y: number; z: number; yaw?: number; pitch?: number; seq: number }
   | { t: 'dig_progress'; x: number; y: number; z: number; stage: number; by: number }
   | { t: 'gamemode'; mode: GameMode; abilities: AbilitiesMsg }
@@ -143,7 +150,19 @@ export type S2C =
   | { t: 'use_result'; seq: number; ok: boolean }
   | { t: 'progress'; achievements: string[]; stats: Record<string, number> }
   | { t: 'debug'; data: Record<string, unknown> }
-  | { t: 'admin_result'; req: number; ok: boolean; text: string; data?: unknown };
+  | { t: 'admin_result'; req: number; ok: boolean; text: string; data?: unknown }
+  /** An item can't be used for a while (knocked-aside shield, pearl cooldown). */
+  | { t: 'cooldown'; item: number; ticks: number }
+  /** A firework rocket pushes the gliding player for `ticks`. */
+  | { t: 'boost'; ticks: number }
+  /** Started (id) or stopped (null) riding; `control`: the client steers the mount. */
+  | { t: 'mount'; id: number | null; control?: boolean; seat?: number; width?: number; height?: number; speed?: number; jump?: number; x?: number; y?: number; z?: number; yaw?: number }
+  /** The server corrected the steered mount's position. */
+  | { t: 'vehicle_pos'; x: number; y: number; z: number }
+  /** A jukebox starts (track) or stops (null) playing. */
+  | { t: 'record'; x: number; y: number; z: number; track: string | null }
+  /** Where the player last died (Recovery Compass), or null. */
+  | { t: 'death_pos'; pos: { dim: DimensionId; x: number; y: number; z: number } | null };
 
 export interface AbilitiesMsg {
   mayFly: boolean;
@@ -156,7 +175,7 @@ export interface AbilitiesMsg {
   flySpeed: number;
 }
 
-export type EntityAnim = 'swing' | 'hurt' | 'death' | 'crit' | 'eat' | 'magic_crit' | 'wake' | 'sleep' | 'totem' | 'teleport' | 'attack';
+export type EntityAnim = 'swing' | 'hurt' | 'death' | 'crit' | 'eat' | 'magic_crit' | 'wake' | 'sleep' | 'totem' | 'teleport' | 'attack' | 'roar';
 export type ChatKind = 'chat' | 'system' | 'join' | 'leave' | 'death' | 'announce' | 'error' | 'achievement' | 'whisper';
 export type WindowKind =
   | 'player'
@@ -171,7 +190,8 @@ export type WindowKind =
   | 'smithing'
   | 'creative'
   | 'merchant'
-  | 'stonecutter';
+  | 'stonecutter'
+  | 'beacon';
 
 export type { ItemStack };
 

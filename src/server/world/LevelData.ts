@@ -5,7 +5,8 @@ import { seedFromString } from '../../common/math/rng';
 import type { DimensionId } from '../../common/data/biomes';
 
 export const LEVEL_VERSION = 1;
-export const GENERATOR_VERSION = 1;
+/** Worlds created from V2 on generate with the Caves Update terrain (see GeneratorOptions.version). */
+export const GENERATOR_VERSION = 2;
 
 export interface GameRules {
   doDaylightCycle: boolean;
@@ -25,6 +26,8 @@ export interface GameRules {
   showCoordinates: boolean;
   randomTickSpeed: number;
   spawnRadius: number;
+  /** Seconds a Warden stays calm before it burrows back into the ground. */
+  wardenCalmSeconds: number;
 }
 
 export interface LevelData {
@@ -101,6 +104,7 @@ export const DEFAULT_RULES: GameRules = {
   showCoordinates: true,
   randomTickSpeed: 3,
   spawnRadius: 8,
+  wardenCalmSeconds: 60,
 };
 
 export interface NewWorldOptions {
@@ -206,7 +210,8 @@ export function sanitizeLevelData(raw: unknown, fallbackId: string): LevelData |
   out.portals = Array.isArray(r.portals)
     ? r.portals.filter((q): q is PortalRecord => !!q && typeof q === 'object' && ['overworld', 'nether', 'end', 'farlands'].includes(q.dim) && (q.kind === 'nether' || q.kind === 'far') && [q.x, q.y, q.z].every((n) => Number.isInteger(n)) && (q.axis === 'x' || q.axis === 'z')).slice(0, 1024)
     : [];
-  out.generatorVersion = num(r.generatorVersion, GENERATOR_VERSION);
+  // Worlds saved without a version predate V2
+  out.generatorVersion = num(r.generatorVersion, 1);
   out.bonusChest = !!r.bonusChest;
   out.generateStructures = r.generateStructures !== false;
   if (r.admin && typeof r.admin === 'object') {

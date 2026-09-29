@@ -8,6 +8,8 @@ import type { Slot } from '../../common/game/itemstack';
 export interface HudState {
   stats: PlayerStats;
   hotbar: Slot[];
+  /** Per hotbar slot: remaining item cooldown 0..1. */
+  cooldowns?: number[];
   offhand: Slot;
   selected: number;
   survival: boolean;
@@ -90,6 +92,20 @@ export class Hud {
       s.hotbar.forEach((stack, i) => fillSlot(this.hslots[i]!, stack));
     }
     this.selEl.style.left = `calc(var(--s) * ${-2 + s.selected * 20})`;
+    s.hotbar.forEach((_, i) => {
+      const slot = this.hslots[i]!;
+      const f = s.cooldowns?.[i] ?? 0;
+      let cd = slot.querySelector<HTMLElement>('.cooldown');
+      if (f <= 0) {
+        cd?.remove();
+        return;
+      }
+      if (!cd) {
+        cd = el('div', { class: 'cooldown' });
+        slot.append(cd);
+      }
+      cd.style.height = `${Math.round(f * 100)}%`;
+    });
     const name = itemDisplayName(s.hotbar[s.selected] ?? null);
     if (name !== this.lastSelectedName) {
       this.lastSelectedName = name;

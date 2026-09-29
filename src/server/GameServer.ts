@@ -28,6 +28,7 @@ import { Interaction } from './systems/Interaction';
 import { Commands } from './commands/Commands';
 import { PlayerData } from './player/PlayerData';
 import { AdminService } from './admin/AdminService';
+import { RegistryHistory } from './world/RegistryHistory';
 
 export interface ServerOptions {
   /** Max chunks sent per player per tick. */
@@ -57,12 +58,22 @@ export class GameServer {
   portals: import('./systems/Portals').Portals | null = null;
   theEnd: import('./systems/TheEnd').EndSystem | null = null;
   farlands: import('./systems/Farlands').FarlandsSystem | null = null;
+  /** Fireworks, fishing, compasses, jukeboxes, beacons (installed by gameplay). */
+  gadgets: import('./systems/Gadgets').Gadgets | null = null;
+  /** Riding and leads (installed by gameplay). */
+  mounts: import('./systems/Mounts').Mounts | null = null;
+  /** Redstone power (installed by gameplay). */
+  power: import('./systems/Power').Power | null = null;
+  sculk: import('./systems/Sculk').Sculk | null = null;
+  warden: import('./systems/Warden').WardenSystem | null = null;
   /** Hook for the hosting layer to forward player reports (e.g. to platform moderation). */
   onReport?: (from: ServerPlayer, target: ServerPlayer, reason: string) => void;
   readonly interaction: Interaction;
   readonly commands: Commands;
   readonly playerData: PlayerData;
   readonly admin: AdminService;
+  /** Block registries the world's saved chunks were written with. */
+  readonly registries: RegistryHistory;
   tickNo = 0;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private nextTickAt = 0;
@@ -92,6 +103,7 @@ export class GameServer {
       filterChat: opts.filterChat,
       canJoin: opts.canJoin,
     };
+    this.registries = new RegistryHistory(storage, (m) => this.log(m));
     this.blockUpdates = new BlockUpdates(this);
     this.mining = new Mining(this);
     this.interaction = new Interaction(this);
@@ -121,7 +133,9 @@ export class GameServer {
       level = createLevelData(create);
       await storage.writeLevel(level);
     }
-    return new GameServer(storage, level, opts);
+    const server = new GameServer(storage, level, opts);
+    await server.registries.load();
+    return server;
   }
 
   log(msg: string): void {
@@ -278,6 +292,7 @@ export class GameServer {
       spawn: this.level.spawn ?? [0, 64, 0],
     });
     this.sendTime(p);
+    p.send({ t: 'death_pos', pos: p.lastDeath });
     this.interaction.syncInventory(p);
     p.statsDirty = true;
     this.broadcastChat(`${p.name} joined the world`, 'join');
@@ -433,6 +448,12 @@ export class GameServer {
       case 'admin':
         this.admin.handle(p, m.req, m.action);
         break;
+      case 'vehicle_move':
+        this.mounts?.vehicleMove(p, m.x, m.y, m.z, m.yaw);
+        break;
+      case 'dismount':
+        this.mounts?.dismount(p);
+        break;
       case 'hello':
         break;
     }
@@ -453,6 +474,7 @@ export class GameServer {
   private async removePlayer(p: ServerPlayer, announce: boolean): Promise<void> {
     if (!this.players.has(p.conn.id)) return;
     this.players.delete(p.conn.id);
+    this.mounts?.dismount(p, true);
     this.interaction.closeWindow(p, p.windowId, true);
     p.dim.removeEntity(p);
     if (announce) {
@@ -482,6 +504,8 @@ export class GameServer {
     p.yaw = m.yaw;
     p.pitch = m.pitch;
     p.headYaw = m.yaw;
+    // Riders sit on their mount: only the look direction comes from the client
+    if (p.vehicle) return;
     if (p.sneaking !== m.sneak) {
       p.sneaking = m.sneak;
       p.metaDirty = true;
@@ -495,8 +519,15 @@ export class GameServer {
     const dy = m.y - p.y;
     const dz = m.z - p.z;
     const distSq = dx * dx + dz * dz;
+    // Elytra gliding needs a working Elytra and open air
+    const glide = !!m.glide && !m.onGround && !p.abilities.flying && this.interaction.canGlide(p);
+    if (glide !== p.gliding) {
+      p.gliding = glide;
+      p.metaDirty = true;
+      if (!glide) p.glideSpeed = 0;
+    }
     // Movement budget: generous limits (client runs the same physics).
-    const maxH = p.abilities.flying ? (p.gamemode === 'spectator' ? 4 : 2.2) : p.body.inWater ? 1.0 : 1.3;
+    const maxH = p.abilities.flying ? (p.gamemode === 'spectator' ? 4 : 2.2) : p.gliding ? (this.tickNo < p.boostUntil ? 3.4 : 2.6) : p.body.inWater ? 1.0 : 1.3;
     const effSpeed = p.effects.get('speed');
     const limit = maxH * (1 + (effSpeed ? (effSpeed.amp + 1) * 0.3 : 0)) + (p.body.vy < -1 ? 0.5 : 0);
     const maxV = 5;
@@ -521,16 +552,38 @@ export class GameServer {
       this.teleport(p, ox, oy, oz);
       return;
     }
+    if (p.gliding) this.glideImpact(p, dx, dz);
     // Ground truth for fall damage: check below the feet server-side.
     const groundBelow = this.hasGroundBelow(p);
     const claimedGround = m.onGround && groundBelow;
+    const wasOnGround = p.body.onGround;
+    const fell = p.body.fallDistance;
     this.interaction.survival.onMove(p, oy, claimedGround);
+    this.sculk?.onPlayerMove(p, dx, dz, wasOnGround, claimedGround, fell);
     p.body.onGround = claimedGround;
     p.lastValidX = m.x;
     p.lastValidY = m.y;
     p.lastValidZ = m.z;
     p.dim.updateBucket(p);
     if (p.dig && p.distanceSq(p.dig.x + 0.5, p.dig.y + 0.5, p.dig.z + 0.5) > 64) p.dig = null;
+  }
+
+  /** Flying into a wall at speed hurts (like the ground does). */
+  private glideImpact(p: ServerPlayer, dx: number, dz: number): void {
+    const h = Math.hypot(dx, dz);
+    const lost = p.glideSpeed - h;
+    if (lost > 0.3 && p.glideSpeed > 0) {
+      const probe = { ...p.body, x: p.x + p.glideDirX * 0.4, z: p.z + p.glideDirZ * 0.4 };
+      if (bodyObstructed(p.dim, probe, 0.05)) {
+        const dmg = lost * 10 - 3;
+        if (dmg > 0) this.interaction.survival.damage(p, dmg, { source: 'fly_into_wall' });
+      }
+    }
+    p.glideSpeed = h;
+    if (h > 0.01) {
+      p.glideDirX = dx / h;
+      p.glideDirZ = dz / h;
+    }
   }
 
   private hasGroundBelow(p: ServerPlayer): boolean {
@@ -655,16 +708,20 @@ export class GameServer {
   onChunkGenerated(dim: Dimension, c: Chunk): void {
     this.blockUpdates.onChunkReady(dim, c);
     this.mobs?.onChunkGenerated(dim, c);
+    this.sculk?.onChunk(dim, c);
   }
 
   onChunkLoaded(dim: Dimension, c: Chunk, _entities: Record<string, unknown>[]): void {
     this.blockUpdates.onChunkReady(dim, c);
     this.mobs?.onChunkLoaded(dim, c);
     this.workstations?.onChunk(dim, c);
+    this.gadgets?.onChunk(dim, c);
+    this.sculk?.onChunk(dim, c);
   }
 
   onChunkUnloaded(dim: Dimension, c: Chunk): void {
     this.mobs?.onChunkUnloaded(dim, c);
+    this.sculk?.onChunkUnload(dim, c.cx, c.cz);
     const k = chunkIndex(c.cx, c.cz);
     // Entities in unloaded chunks are removed (persistent ones were saved with the chunk).
     const b = dim.buckets.get(k);
@@ -895,6 +952,7 @@ export class GameServer {
   changeDimension(p: ServerPlayer, target: DimensionId, x: number, y: number, z: number, yaw = p.yaw, opts: { admin?: boolean } = {}): void {
     const from = p.dim;
     const to = this.dim(target);
+    this.mounts?.dismount(p, true);
     this.interaction.closeWindow(p, p.windowId, true);
     from.removeEntity(p);
     for (const id of p.tracked) void id;

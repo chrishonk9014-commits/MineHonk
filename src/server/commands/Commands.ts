@@ -202,7 +202,7 @@ export class Commands {
         else if (typeof cur === 'number') {
           const n = parseFloat(a[1]);
           if (!Number.isFinite(n)) return 'Invalid number';
-          rules[name] = name === 'randomTickSpeed' ? Math.max(0, Math.min(100, n)) : name === 'dayLengthMinutes' ? Math.max(1, Math.min(240, n)) : n;
+          rules[name] = name === 'randomTickSpeed' ? Math.max(0, Math.min(100, n)) : name === 'dayLengthMinutes' ? Math.max(1, Math.min(240, n)) : name === 'wardenCalmSeconds' ? Math.max(10, Math.min(3600, n)) : n;
         }
         if (name === 'doDaylightCycle' || name === 'dayLengthMinutes') s.sendTime();
         return `Gamerule ${name} is now ${rules[name]}`;

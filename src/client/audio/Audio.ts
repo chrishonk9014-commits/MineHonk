@@ -3,6 +3,7 @@
  * and a generative music system. All sounds come from ./synth.
  */
 import { SynthCtx, recipeFor } from './synth';
+import { Random, hashString } from '../../common/math/rng';
 import type { Settings } from '../settings';
 import type { DimensionId } from '../../common/data/biomes';
 
@@ -21,10 +22,12 @@ export class AudioEngine {
   private listener = { x: 0, y: 0, z: 0 };
   private active = 0;
   readonly music: MusicPlayer;
+  readonly discs: DiscPlayer;
   onSubtitle: ((text: string) => void) | null = null;
 
   constructor(private readonly settings: Settings) {
     this.music = new MusicPlayer(this);
+    this.discs = new DiscPlayer(this);
   }
 
   /** Browsers only allow audio after a user gesture. */
@@ -241,6 +244,7 @@ export class AudioEngine {
       this.rainNode = null;
     }
     this.music.stop();
+    this.discs.stopAll();
   }
 }
 
@@ -265,7 +269,7 @@ function subtitleFor(name: string): string {
 // ---------------------------------------------------------------------------
 // Generative music
 // ---------------------------------------------------------------------------
-type Mood = 'calm' | 'creative' | 'nether' | 'end' | 'farlands' | 'menu' | 'underwater' | 'boss';
+type Mood = 'calm' | 'creative' | 'nether' | 'end' | 'farlands' | 'menu' | 'underwater' | 'boss' | 'caves' | 'lush' | 'crystal' | 'mushroom' | 'lava_caves' | 'frozen' | 'deep_dark';
 
 const SCALES: Record<Mood, { root: number; scale: number[]; tempo: number; density: number; wave: 'piano' | 'pad' | 'glass' | 'square' }> = {
   calm: { root: 57, scale: [0, 2, 4, 7, 9], tempo: 0.9, density: 0.55, wave: 'piano' },
@@ -276,7 +280,18 @@ const SCALES: Record<Mood, { root: number; scale: number[]; tempo: number; densi
   end: { root: 50, scale: [0, 2, 5, 7, 9], tempo: 1.6, density: 0.35, wave: 'glass' },
   farlands: { root: 48, scale: [0, 1, 4, 6, 7, 11], tempo: 0.8, density: 0.6, wave: 'square' },
   boss: { root: 45, scale: [0, 1, 3, 5, 7, 8], tempo: 0.45, density: 0.85, wave: 'pad' },
+  // Cave biomes (V2)
+  caves: { root: 45, scale: [0, 2, 3, 7, 8], tempo: 1.3, density: 0.4, wave: 'glass' },
+  lush: { root: 57, scale: [0, 2, 4, 7, 9, 11], tempo: 1.0, density: 0.55, wave: 'glass' },
+  crystal: { root: 62, scale: [0, 2, 6, 7, 11], tempo: 1.2, density: 0.45, wave: 'glass' },
+  mushroom: { root: 50, scale: [0, 1, 4, 5, 8], tempo: 1.3, density: 0.4, wave: 'pad' },
+  lava_caves: { root: 40, scale: [0, 1, 3, 6, 7], tempo: 1.1, density: 0.45, wave: 'pad' },
+  frozen: { root: 60, scale: [0, 2, 3, 7, 10], tempo: 1.6, density: 0.3, wave: 'glass' },
+  deep_dark: { root: 33, scale: [0, 1, 6, 7], tempo: 2.2, density: 0.2, wave: 'pad' },
 };
+
+/** Music for each cave biome number (see CaveBiome). */
+const CAVE_MOODS: Mood[] = ['calm', 'caves', 'caves', 'lush', 'mushroom', 'crystal', 'caves', 'lava_caves', 'frozen', 'deep_dark'];
 
 export class MusicPlayer {
   private playingUntil = 0;
@@ -287,8 +302,9 @@ export class MusicPlayer {
   constructor(private readonly engine: AudioEngine) {}
 
   /** Chooses a mood from the game state. */
-  static moodFor(dim: DimensionId, creative: boolean, underwater: boolean, boss: boolean): Mood {
+  static moodFor(dim: DimensionId, creative: boolean, underwater: boolean, boss: boolean, caveBiome = 0): Mood {
     if (boss) return 'boss';
+    if (dim === 'overworld' && caveBiome > 0 && !underwater) return CAVE_MOODS[caveBiome] ?? 'caves';
     if (dim === 'nether') return 'nether';
     if (dim === 'end') return 'end';
     if (dim === 'farlands') return 'farlands';
@@ -370,52 +386,163 @@ export class MusicPlayer {
     return bars * beatsPerBar * beat + 4;
   }
 
-  private note(ctx: AudioContext, bus: AudioNode, rev: AudioNode | null, freq: number, t: number, len: number, vol: number, wave: 'piano' | 'pad' | 'glass' | 'square'): void {
-    const g = ctx.createGain();
-    const o = ctx.createOscillator();
-    const f = ctx.createBiquadFilter();
-    f.type = 'lowpass';
-    o.frequency.value = freq;
-    if (wave === 'piano') {
-      o.type = 'triangle';
-      f.frequency.setValueAtTime(freq * 6, t);
-      f.frequency.exponentialRampToValueAtTime(freq * 1.5, t + len);
-      g.gain.setValueAtTime(0, t);
-      g.gain.linearRampToValueAtTime(vol, t + 0.01);
-      g.gain.exponentialRampToValueAtTime(0.0005, t + len);
-    } else if (wave === 'glass') {
-      o.type = 'sine';
-      f.frequency.value = 8000;
-      g.gain.setValueAtTime(0, t);
-      g.gain.linearRampToValueAtTime(vol * 0.9, t + 0.02);
-      g.gain.exponentialRampToValueAtTime(0.0005, t + len * 1.5);
-    } else if (wave === 'square') {
-      o.type = 'square';
-      f.frequency.value = freq * 3;
-      g.gain.setValueAtTime(0, t);
-      g.gain.linearRampToValueAtTime(vol * 0.35, t + 0.01);
-      g.gain.exponentialRampToValueAtTime(0.0005, t + len);
-      o.detune.setValueAtTime(0, t);
-      o.detune.linearRampToValueAtTime((Math.random() - 0.5) * 60, t + len);
-    } else {
-      o.type = 'sawtooth';
-      f.frequency.value = freq * 2;
-      f.Q.value = 0.5;
-      g.gain.setValueAtTime(0, t);
-      g.gain.linearRampToValueAtTime(vol * 0.5, t + len * 0.3);
-      g.gain.linearRampToValueAtTime(0, t + len);
-    }
-    o.connect(f);
-    f.connect(g);
-    g.connect(bus);
-    if (rev) g.connect(rev);
-    o.start(t);
-    o.stop(t + len * 1.6 + 0.1);
-    this.voices.push(o);
-    o.onended = () => {
-      o.disconnect();
-      g.disconnect();
-      f.disconnect();
+  private note(ctx: AudioContext, bus: AudioNode, rev: AudioNode | null, freq: number, t: number, len: number, vol: number, wave: Wave): void {
+    this.voices.push(scheduleNote(ctx, bus, rev, freq, t, len, vol, wave));
+  }
+}
+
+type Wave = 'piano' | 'pad' | 'glass' | 'square';
+
+/** One synthesized note (shared by the ambient music and jukebox discs). */
+export function scheduleNote(ctx: AudioContext, bus: AudioNode, rev: AudioNode | null, freq: number, t: number, len: number, vol: number, wave: Wave): OscillatorNode {
+  const g = ctx.createGain();
+  const o = ctx.createOscillator();
+  const f = ctx.createBiquadFilter();
+  f.type = 'lowpass';
+  o.frequency.value = freq;
+  if (wave === 'piano') {
+    o.type = 'triangle';
+    f.frequency.setValueAtTime(freq * 6, t);
+    f.frequency.exponentialRampToValueAtTime(freq * 1.5, t + len);
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(vol, t + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0005, t + len);
+  } else if (wave === 'glass') {
+    o.type = 'sine';
+    f.frequency.value = 8000;
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(vol * 0.9, t + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0005, t + len * 1.5);
+  } else if (wave === 'square') {
+    o.type = 'square';
+    f.frequency.value = freq * 3;
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(vol * 0.35, t + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0005, t + len);
+    o.detune.setValueAtTime(0, t);
+    o.detune.linearRampToValueAtTime((Math.random() - 0.5) * 60, t + len);
+  } else {
+    o.type = 'sawtooth';
+    f.frequency.value = freq * 2;
+    f.Q.value = 0.5;
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(vol * 0.5, t + len * 0.3);
+    g.gain.linearRampToValueAtTime(0, t + len);
+  }
+  o.connect(f);
+  f.connect(g);
+  g.connect(bus);
+  if (rev) g.connect(rev);
+  o.start(t);
+  o.stop(t + len * 1.6 + 0.1);
+  o.onended = () => {
+    o.disconnect();
+    g.disconnect();
+    f.disconnect();
+  };
+  return o;
+}
+
+/** Jukebox tracks: each disc is its own seeded composition. */
+const DISC_TRACKS: Record<string, { title: string; root: number; scale: number[]; beat: number; wave: Wave; bass: Wave; density: number; bars: number }> = {
+  meadow: { title: 'Meadow', root: 60, scale: [0, 2, 4, 7, 9], beat: 0.42, wave: 'piano', bass: 'pad', density: 0.6, bars: 36 },
+  deepcave: { title: 'Deep Cave', root: 45, scale: [0, 2, 3, 7, 8], beat: 0.75, wave: 'glass', bass: 'pad', density: 0.45, bars: 28 },
+  overflow: { title: 'Overflow', root: 52, scale: [0, 1, 4, 6, 7, 11], beat: 0.3, wave: 'square', bass: 'square', density: 0.7, bars: 44 },
+  ember: { title: 'Ember', root: 43, scale: [0, 1, 3, 6, 7, 10], beat: 0.55, wave: 'pad', bass: 'pad', density: 0.5, bars: 32 },
+  drift: { title: 'Drift', root: 50, scale: [0, 2, 5, 7, 9], beat: 0.95, wave: 'glass', bass: 'pad', density: 0.35, bars: 24 },
+  skyward: { title: 'Skyward', root: 64, scale: [0, 2, 4, 6, 7, 9, 11], beat: 0.36, wave: 'piano', bass: 'glass', density: 0.65, bars: 40 },
+  echo: { title: 'Echo', root: 38, scale: [0, 1, 3, 5, 7, 8], beat: 1.05, wave: 'glass', bass: 'pad', density: 0.3, bars: 26 },
+  hollow: { title: 'Hollow', root: 38, scale: [0, 1, 5, 6, 10], beat: 0.9, wave: 'glass', bass: 'pad', density: 0.35, bars: 30 },
+};
+
+export function discTitle(track: string): string {
+  return DISC_TRACKS[track]?.title ?? track;
+}
+
+/** Plays jukebox discs positionally around the jukebox. */
+export class DiscPlayer {
+  private readonly playing = new Map<string, { nodes: OscillatorNode[]; out: GainNode; panner: PannerNode }>();
+
+  constructor(private readonly engine: AudioEngine) {}
+
+  play(x: number, y: number, z: number, track: string): void {
+    const key = `${x},${y},${z}`;
+    this.stop(x, y, z);
+    const ctx = this.engine.context;
+    const bus = this.engine.bus('music');
+    if (!ctx || !bus || ctx.state !== 'running') return;
+    const def = DISC_TRACKS[track] ?? DISC_TRACKS.meadow!;
+    const out = ctx.createGain();
+    out.gain.value = 1.4;
+    const panner = ctx.createPanner();
+    panner.panningModel = 'equalpower';
+    panner.distanceModel = 'linear';
+    panner.refDistance = 4;
+    panner.maxDistance = 64;
+    panner.rolloffFactor = 1;
+    if (panner.positionX) {
+      panner.positionX.value = x + 0.5;
+      panner.positionY.value = y + 0.5;
+      panner.positionZ.value = z + 0.5;
+    } else panner.setPosition(x + 0.5, y + 0.5, z + 0.5);
+    out.connect(panner);
+    panner.connect(bus);
+    // Deterministic per track: the same disc always plays the same piece
+    const rng = new Random(hashString('disc:' + track));
+    const nodes: OscillatorNode[] = [];
+    const midi = (n: number): number => 440 * Math.pow(2, (n - 69) / 12);
+    const degree = (d: number): number => {
+      const sc = def.scale;
+      const oct = Math.floor(d / sc.length);
+      return def.root + sc[((d % sc.length) + sc.length) % sc.length]! + oct * 12;
     };
+    const progs = [
+      [0, 3, 4, 2],
+      [0, 5, 3, 4],
+      [0, 2, 3, 1],
+      [0, 4, 5, 3],
+    ];
+    const prog = progs[rng.int(progs.length)]!;
+    const motif: number[] = Array.from({ length: 8 }, () => rng.int(5) - 2);
+    let mel = 7;
+    const t0 = ctx.currentTime + 0.2;
+    for (let bar = 0; bar < def.bars; bar++) {
+      const tb = t0 + bar * 4 * def.beat;
+      const root = prog[bar % prog.length]!;
+      const chordLen = 4 * def.beat * 0.98;
+      for (const d of [root, root + 2, root + 4]) nodes.push(scheduleNote(ctx, out, null, midi(degree(d) - 12), tb, chordLen, 0.045, def.bass));
+      if (bar % 2 === 0) nodes.push(scheduleNote(ctx, out, null, midi(degree(root) - 24), tb, chordLen * 2, 0.06, 'pad'));
+      // Melody: a motif varied a little every phrase, quieter towards the end
+      const phrase = Math.floor(bar / 4);
+      for (let b = 0; b < 8; b++) {
+        if (rng.next() > def.density) continue;
+        mel = Math.max(3, Math.min(14, mel + motif[(b + phrase) % motif.length]! + (rng.next() < 0.2 ? rng.int(3) - 1 : 0)));
+        const fade = bar > def.bars - 4 ? 0.5 : 1;
+        nodes.push(scheduleNote(ctx, out, null, midi(degree(mel)), tb + (b * def.beat) / 2, def.beat * (rng.next() < 0.3 ? 2 : 1.2), 0.08 * fade, def.wave));
+      }
+    }
+    this.playing.set(key, { nodes, out, panner });
+  }
+
+  stop(x: number, y: number, z: number): void {
+    const key = `${x},${y},${z}`;
+    const p = this.playing.get(key);
+    if (!p) return;
+    for (const n of p.nodes)
+      try {
+        n.stop();
+      } catch {
+        /* already stopped */
+      }
+    p.out.disconnect();
+    p.panner.disconnect();
+    this.playing.delete(key);
+  }
+
+  stopAll(): void {
+    for (const k of [...this.playing.keys()]) {
+      const [x, y, z] = k.split(',').map(Number) as [number, number, number];
+      this.stop(x, y, z);
+    }
   }
 }

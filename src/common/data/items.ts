@@ -150,13 +150,15 @@ add({ id: 'flint_and_steel', name: 'Flint and Steel', maxStack: 1, durability: 6
 add({ id: 'fire_charge', name: 'Fire Charge', use: 'fire_charge', creative: 'tools' });
 add({ id: 'shears', name: 'Shears', maxStack: 1, durability: 238, use: 'shears', tool: { type: 'shears', tier: 2, speed: 5 }, creative: 'tools' });
 add({ id: 'fishing_rod', name: 'Fishing Rod', maxStack: 1, durability: 64, use: 'fishing_rod', creative: 'tools' });
+add({ id: 'carrot_on_a_stick', name: 'Carrot on a Stick', maxStack: 1, durability: 25, use: 'carrot_on_a_stick', creative: 'tools' });
 add({ id: 'bucket', name: 'Bucket', maxStack: 16, use: 'bucket', creative: 'tools' });
 add({ id: 'water_bucket', name: 'Water Bucket', maxStack: 1, use: 'water_bucket', creative: 'tools' });
 add({ id: 'lava_bucket', name: 'Lava Bucket', maxStack: 1, use: 'lava_bucket', fuel: 20000, creative: 'tools' });
 add({ id: 'milk_bucket', name: 'Milk Bucket', maxStack: 1, use: 'milk_bucket', food: { hunger: 0, saturation: 0, alwaysEdible: true, special: 'milk', remainder: 'bucket' }, creative: 'food' });
 add({ id: 'compass', name: 'Compass', use: 'compass', creative: 'tools' });
-add({ id: 'clock', name: 'Clock', creative: 'tools' });
-add({ id: 'spyglass', name: 'Spyglass', maxStack: 1, creative: 'tools' });
+add({ id: 'recovery_compass', name: 'Recovery Compass', use: 'recovery_compass', rarity: 'uncommon', creative: 'tools' });
+add({ id: 'clock', name: 'Clock', use: 'clock', creative: 'tools' });
+add({ id: 'spyglass', name: 'Spyglass', maxStack: 1, use: 'spyglass', creative: 'tools' });
 add({ id: 'ender_pearl', name: 'Ender Pearl', maxStack: 16, use: 'ender_pearl', creative: 'tools' });
 add({ id: 'ender_eye', name: 'Eye of Ender', use: 'ender_eye', creative: 'tools' });
 add({ id: 'end_crystal', name: 'End Crystal', creative: 'tools', rarity: 'rare' });
@@ -172,8 +174,19 @@ add({ id: 'name_tag', name: 'Name Tag', creative: 'tools' });
 add({ id: 'saddle', name: 'Saddle', maxStack: 1, creative: 'tools' });
 add({ id: 'lead', name: 'Lead', creative: 'tools' });
 add({ id: 'firework_rocket', name: 'Firework Rocket', use: 'firework', creative: 'tools' });
-for (const d of ['disc_meadow', 'disc_deepcave', 'disc_overflow']) {
-  add({ id: 'music_' + d, name: 'Music Disc', maxStack: 1, use: 'music_disc', rarity: 'rare', creative: 'tools', data: { track: d } });
+/** Music discs: each plays its own procedurally composed piece in a jukebox. */
+export const MUSIC_DISCS: [string, string][] = [
+  ['meadow', 'Meadow'],
+  ['deepcave', 'Deep Cave'],
+  ['overflow', 'Overflow'],
+  ['ember', 'Ember'],
+  ['drift', 'Drift'],
+  ['skyward', 'Skyward'],
+  ['echo', 'Echo'],
+  ['hollow', 'Hollow'],
+];
+for (const [track, title] of MUSIC_DISCS) {
+  add({ id: 'music_disc_' + track, name: `Music Disc - ${title}`, maxStack: 1, use: 'music_disc', rarity: 'rare', creative: 'tools', data: { track } });
 }
 
 // ---------------------------------------------------------------------------
@@ -193,7 +206,7 @@ mat('copper_ingot');
 mat('diamond');
 mat('emerald');
 mat('lapis_lazuli');
-mat('redstone');
+mat('redstone', { block: 'redstone_wire' });
 mat('quartz', { name: 'Nether Quartz' });
 mat('amethyst_shard');
 mat('netherite_scrap', { fireResistant: true });
@@ -222,6 +235,10 @@ mat('book');
 mat('sugar');
 mat('wheat');
 mat('ink_sac');
+mat('lumen_shard', { name: 'Lumen Shard' });
+// Ancient City finds
+mat('disc_fragment', { name: 'Disc Fragment', rarity: 'uncommon' });
+add({ id: 'resonance_charm', name: 'Resonance Charm', maxStack: 1, rarity: 'epic', creative: 'tools' });
 mat('glow_ink_sac');
 mat('phantom_membrane');
 mat('rabbit_foot');
@@ -242,8 +259,8 @@ for (const c of COLORS) mat(c + '_dye', { tags: ['dyes'] });
 // Seeds (place crops)
 add({ id: 'wheat_seeds', name: 'Wheat Seeds', block: 'wheat', creative: 'nature', tags: ['seeds'] });
 add({ id: 'beetroot_seeds', name: 'Beetroot Seeds', block: 'beetroots', creative: 'nature', tags: ['seeds'] });
-add({ id: 'pumpkin_seeds', name: 'Pumpkin Seeds', creative: 'nature', tags: ['seeds'] });
-add({ id: 'melon_seeds', name: 'Melon Seeds', creative: 'nature', tags: ['seeds'] });
+add({ id: 'pumpkin_seeds', name: 'Pumpkin Seeds', block: 'pumpkin_stem', creative: 'nature', tags: ['seeds'] });
+add({ id: 'melon_seeds', name: 'Melon Seeds', block: 'melon_stem', creative: 'nature', tags: ['seeds'] });
 add({ id: 'sunroot_seeds', name: 'Sunroot Seeds', block: 'sunroot', creative: 'nature', tags: ['seeds'] });
 add({ id: 'nether_wart', name: 'Nether Wart', block: 'nether_wart', creative: 'nature' });
 add({ id: 'sign', name: 'Sign', maxStack: 16, block: 'sign', wallBlock: 'wall_sign', creative: 'functional', fuel: 200 });
@@ -251,6 +268,7 @@ add({ id: 'kelp', name: 'Kelp', block: 'kelp', creative: 'nature' });
 add({ id: 'sugar_cane', name: 'Sugar Cane', block: 'sugar_cane', creative: 'nature' });
 add({ id: 'torch', name: 'Torch', block: 'torch', wallBlock: 'wall_torch', creative: 'functional' });
 add({ id: 'soul_torch', name: 'Soul Torch', block: 'soul_torch', wallBlock: 'soul_wall_torch', creative: 'functional' });
+add({ id: 'redstone_torch', name: 'Redstone Torch', block: 'redstone_torch', wallBlock: 'redstone_wall_torch', creative: 'redstone' });
 
 // ---------------------------------------------------------------------------
 // Food

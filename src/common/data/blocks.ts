@@ -193,6 +193,12 @@ add({
   contactDamage: 0,
 });
 cube('amethyst_block', 1.5, 'glass', { tool: 'pickaxe' });
+// Crystal caves: budding blocks grow buds; lumen crystals are an original glowing crystal
+cube('budding_amethyst', 1.5, 'glass', { tool: 'pickaxe', drops: 'none', randomTicks: true });
+add({ id: 'amethyst_bud', name: 'Amethyst Bud', hardness: 1.5, sound: 'glass', model: 'cross', tex: { all: 'amethyst_bud' }, light: 2, tool: 'pickaxe', drops: { item: 'none', silkTouch: true } });
+add({ id: 'lumen_crystal', name: 'Lumen Crystal', hardness: 1, sound: 'glass', model: 'cross', tex: { all: 'lumen_crystal' }, light: 12, tool: 'pickaxe', drops: { item: 'lumen_shard', min: 1, max: 3, fortune: true, silkTouch: true } });
+// Frozen caves: icicles hang like dripstone and break when something lands on them
+add({ id: 'icicle', name: 'Icicle', hardness: 0.5, sound: 'glass', model: 'dripstone', props: { vertical_direction: ['up', 'down'], thickness: ['tip', 'frustum', 'middle', 'base'] }, tex: { all: 'icicle' }, layer: 'translucent', collide: true, drops: { item: 'none', silkTouch: true } });
 add({ id: 'amethyst_cluster', name: 'Amethyst Cluster', hardness: 1.5, sound: 'glass', model: 'cross', tex: { all: 'amethyst_cluster' }, light: 5, tool: 'pickaxe', drops: { item: 'amethyst_shard', min: 2, max: 4 } });
 
 // ---------------------------------------------------------------------------
@@ -658,6 +664,13 @@ add({ id: 'sweet_berry_bush', name: 'Sweet Berry Bush', hardness: 0, sound: 'pla
 add({ id: 'azalea', name: 'Azalea', hardness: 0, sound: 'plant', model: 'cross', tex: { all: 'azalea' }, place: 'needs_soil' });
 add({ id: 'cave_vines', name: 'Cave Vines', hardness: 0, sound: 'plant', model: 'hanging_plant', props: { berries: BOOL }, tex: { all: 'cave_vines', lit: 'cave_vines_lit' }, climbable: true, drops: { item: 'glow_berries', min: 0, max: 1 }, item: false });
 add({ id: 'hanging_roots', name: 'Hanging Roots', hardness: 0, sound: 'plant', model: 'hanging_plant', tex: { all: 'hanging_roots' }, replaceable: true, drops: { item: 'none', silkTouch: true } });
+// Lush caves: dripleaves grow out of water-side clay and moss
+add({ id: 'big_dripleaf', name: 'Big Dripleaf', hardness: 0.1, sound: 'plant', model: 'custom', props: { facing: FACING4, tilt: ['none', 'partial', 'full'] }, tex: { top: 'big_dripleaf_top', side: 'big_dripleaf_side', stem: 'big_dripleaf_stem' }, collide: true, layer: 'cutout', tool: 'axe', place: 'needs_solid_below' });
+add({ id: 'big_dripleaf_stem', name: 'Big Dripleaf Stem', hardness: 0.1, sound: 'plant', model: 'cross', tex: { all: 'big_dripleaf_stem' }, drops: { item: 'big_dripleaf' }, item: false });
+add({ id: 'small_dripleaf', name: 'Small Dripleaf', hardness: 0, sound: 'plant', model: 'cross', tex: { all: 'small_dripleaf' }, place: 'needs_solid_below', drops: { item: 'none', silkTouch: true } });
+// Mushroom caves (original): glowing mushrooms, small and giant
+add({ id: 'glowshroom', name: 'Glowshroom', hardness: 0, sound: 'plant', model: 'cross', tex: { all: 'glowshroom' }, light: 10, place: 'needs_solid_below' });
+cube('glowshroom_block', 0.2, 'wood', { light: 13, tool: 'axe', drops: { item: 'glowshroom', min: 0, max: 2, silkTouch: true } });
 add({ id: 'spore_blossom', name: 'Spore Blossom', hardness: 0, sound: 'plant', model: 'hanging_plant', tex: { all: 'spore_blossom' }, light: 0 });
 add({ id: 'weeping_vines', name: 'Weeping Vines', hardness: 0, sound: 'plant', model: 'hanging_plant', tex: { all: 'weeping_vines' }, climbable: true });
 add({ id: 'twisting_vines', name: 'Twisting Vines', hardness: 0, sound: 'plant', model: 'cross', tex: { all: 'twisting_vines' }, climbable: true });
@@ -693,6 +706,9 @@ crop('carrots', 4, 'carrot', 'carrot');
 crop('potatoes', 4, 'potato', 'potato');
 crop('beetroots', 4, 'beetroot', 'beetroot_seeds');
 crop('sunroot', 4, 'sunroot', 'sunroot_seeds'); // original crop
+// Stems grow for 8 stages, then set a melon or pumpkin on free ground beside them
+crop('melon_stem', 8, 'melon_seeds', 'melon_seeds', { tex: { all: 'stem_stage' }, drops: { item: 'melon_seeds' }, data: { maxAge: 7, drop: 'melon_seeds', seed: 'melon_seeds', fruit: 'melon' } });
+crop('pumpkin_stem', 8, 'pumpkin_seeds', 'pumpkin_seeds', { tex: { all: 'stem_stage' }, drops: { item: 'pumpkin_seeds' }, data: { maxAge: 7, drop: 'pumpkin_seeds', seed: 'pumpkin_seeds', fruit: 'pumpkin' } });
 add({ id: 'nether_wart', name: 'Nether Wart', hardness: 0, sound: 'crop', model: 'crop', props: { age: ['0', '1', '2', '3'] }, tex: { all: 'nether_wart_stage' }, place: 'needs_soul_sand', randomTicks: true, drops: { table: 'crop_nether_wart' }, item: false, data: { maxAge: 3, drop: 'nether_wart', seed: 'nether_wart' } });
 
 // ---------------------------------------------------------------------------
@@ -776,7 +792,7 @@ for (const a of ['anvil', 'chipped_anvil', 'damaged_anvil']) {
 add({ id: 'brewing_stand', name: 'Brewing Stand', hardness: 0.5, sound: 'metal', model: 'brewing_stand', tex: { all: 'brewing_stand', base: 'brewing_stand_base' }, tool: 'pickaxe', harvestLevel: 0, requiresTool: true, light: 1, entity: 'brewing_stand', interact: 'brewing' });
 add({ id: 'smithing_table', name: 'Smithing Table', hardness: 2.5, sound: 'wood', model: 'cube', tex: { top: 'smithing_table_top', side: 'smithing_table_side', front: 'smithing_table_front', bottom: 'smithing_table_bottom' }, tool: 'axe', interact: 'smithing' });
 add({ id: 'stonecutter', name: 'Stonecutter', hardness: 3.5, sound: 'stone', model: 'custom', props: { facing: FACING4 }, tex: { top: 'stonecutter_top', side: 'stonecutter_side', bottom: 'stonecutter_bottom' }, tool: 'pickaxe', harvestLevel: 0, requiresTool: true, interact: 'stonecutter', collide: true, layer: 'cutout' });
-add({ id: 'cauldron', name: 'Cauldron', hardness: 2, sound: 'metal', model: 'cauldron', props: { level: ['0', '1', '2', '3'] }, tex: { all: 'cauldron_side', top: 'cauldron_top', inner: 'cauldron_inner' }, tool: 'pickaxe', harvestLevel: 0, requiresTool: true });
+add({ id: 'cauldron', name: 'Cauldron', hardness: 2, sound: 'metal', model: 'cauldron', props: { level: ['0', '1', '2', '3'] }, tex: { all: 'cauldron_side', top: 'cauldron_top', inner: 'cauldron_inner' }, tool: 'pickaxe', harvestLevel: 0, requiresTool: true, interact: 'cauldron' });
 add({ id: 'composter', name: 'Composter', hardness: 0.6, sound: 'wood', model: 'cauldron', props: { level: ['0', '1', '2', '3', '4', '5', '6', '7', '8'] }, tex: { all: 'composter_side', top: 'composter_top', inner: 'composter_bottom' }, tool: 'axe', interact: 'composter' });
 add({ id: 'jukebox', name: 'Jukebox', hardness: 2, sound: 'wood', model: 'cube', props: { has_record: BOOL }, tex: { top: 'jukebox_top', side: 'jukebox_side' }, tool: 'axe', entity: 'jukebox', interact: 'jukebox' });
 add({ id: 'note_block', name: 'Note Block', hardness: 0.8, sound: 'wood', model: 'cube', tex: { all: 'note_block' }, tool: 'axe', interact: 'note_block' });
@@ -784,16 +800,33 @@ add({ id: 'sign', name: 'Sign', hardness: 1, sound: 'wood', model: 'sign', props
 add({ id: 'wall_sign', name: 'Wall Sign', hardness: 1, sound: 'wood', model: 'wall_sign', props: { facing: FACING4 }, tex: { all: 'oak_planks' }, tool: 'axe', entity: 'sign', interact: 'sign', drops: { item: 'sign' }, item: false, creative: 'hidden' });
 add({ id: 'lever', name: 'Lever', hardness: 0.5, sound: 'wood', model: 'lever', props: { face: ['floor', 'wall', 'ceiling'], facing: FACING4, powered: BOOL }, tex: { all: 'lever', base: 'cobblestone' }, interact: 'lever' });
 add({ id: 'stone_button', name: 'Stone Button', hardness: 0.5, sound: 'stone', model: 'button', props: { face: ['floor', 'wall', 'ceiling'], facing: FACING4, powered: BOOL }, tex: { all: 'stone' }, interact: 'button' });
+// Redstone: dust carries power (0-15) between sources and the things it switches
+const WIRE_SIDE = ['none', 'side', 'up'] as const;
+add({ id: 'redstone_wire', name: 'Redstone Dust', hardness: 0, sound: 'stone', model: 'custom', props: { north: WIRE_SIDE, south: WIRE_SIDE, west: WIRE_SIDE, east: WIRE_SIDE, power: LEVELS }, tex: { all: 'redstone_dust_line', dot: 'redstone_dust_dot', on: 'redstone_dust_line_on', on_dot: 'redstone_dust_dot_on', particle: 'redstone_dust_dot' }, collide: false, layer: 'cutout', place: 'needs_solid_below', drops: { item: 'redstone' }, item: false, creative: 'hidden', tags: ['redstone'] });
+add({ id: 'redstone_torch', name: 'Redstone Torch', hardness: 0, sound: 'wood', model: 'torch', props: { lit: BOOL }, defaults: { lit: 'true' }, tex: { all: 'redstone_torch', off: 'redstone_torch_off' }, light: 7, place: 'needs_solid_below', drops: { item: 'redstone_torch' }, tags: ['redstone'] });
+add({ id: 'redstone_wall_torch', name: 'Redstone Wall Torch', hardness: 0, sound: 'wood', model: 'wall_torch', props: { facing: FACING4, lit: BOOL }, defaults: { lit: 'true' }, tex: { all: 'redstone_torch', off: 'redstone_torch_off' }, light: 7, drops: { item: 'redstone_torch' }, item: false, creative: 'hidden', tags: ['redstone'] });
+add({ id: 'redstone_lamp', name: 'Redstone Lamp', hardness: 0.3, sound: 'glass', model: 'cube', props: { lit: BOOL }, tex: { all: 'redstone_lamp', on: 'redstone_lamp_on' }, light: 15, tags: ['redstone'] });
 add({ id: 'stone_pressure_plate', name: 'Stone Pressure Plate', hardness: 0.5, sound: 'stone', model: 'pressure_plate', props: { powered: BOOL }, tex: { all: 'stone' }, tool: 'pickaxe', harvestLevel: 0, requiresTool: true, place: 'needs_solid_below' });
 add({ id: 'iron_door', name: 'Iron Door', hardness: 5, sound: 'metal', model: 'door', props: { facing: FACING4, half: ['lower', 'upper'], open: BOOL, hinge: ['left', 'right'] }, tex: { top: 'iron_door_top', bottom: 'iron_door_bottom', particle: 'iron_door_bottom' }, tool: 'pickaxe', harvestLevel: 0, requiresTool: true, tags: ['doors'] });
 add({ id: 'iron_trapdoor', name: 'Iron Trapdoor', hardness: 5, sound: 'metal', model: 'trapdoor', props: { facing: FACING4, half: ['bottom', 'top'], open: BOOL }, tex: { all: 'iron_trapdoor' }, tool: 'pickaxe', harvestLevel: 0, requiresTool: true, tags: ['trapdoors'] });
 add({ id: 'spawner', name: 'Monster Spawner', hardness: 5, sound: 'metal', model: 'cube', tex: { all: 'spawner' }, layer: 'cutout', tool: 'pickaxe', harvestLevel: 0, requiresTool: true, entity: 'spawner', drops: { item: 'none', xp: [15, 43] }, creative: 'hidden' });
-add({ id: 'bell', name: 'Bell', hardness: 5, sound: 'metal', model: 'lantern', props: { hanging: BOOL }, tex: { all: 'bell' }, tool: 'pickaxe' });
-add({ id: 'beacon', name: 'Beacon', hardness: 3, sound: 'glass', model: 'cube', tex: { all: 'beacon' }, light: 15, layer: 'cutout' });
+add({ id: 'bell', name: 'Bell', hardness: 5, sound: 'metal', model: 'lantern', props: { hanging: BOOL }, tex: { all: 'bell' }, tool: 'pickaxe', interact: 'bell' });
+add({ id: 'beacon', name: 'Beacon', hardness: 3, sound: 'glass', model: 'cube', tex: { all: 'beacon' }, light: 15, layer: 'cutout', interact: 'beacon', entity: 'beacon' });
 add({ id: 'respawn_anchor', name: 'Respawn Anchor', hardness: 50, sound: 'stone', model: 'cube', props: { charges: ['0', '1', '2', '3', '4'] }, tex: { top: 'respawn_anchor_top', side: 'respawn_anchor_side', bottom: 'respawn_anchor_bottom' }, tool: 'pickaxe', harvestLevel: 3, requiresTool: true, interact: 'respawn_anchor' });
 add({ id: 'lodestone', name: 'Lodestone', hardness: 3.5, sound: 'stone', model: 'cube', tex: { top: 'lodestone_top', side: 'lodestone_side' }, tool: 'pickaxe', harvestLevel: 0, requiresTool: true });
 add({ id: 'cake', name: 'Cake', hardness: 0.5, sound: 'wool', model: 'custom', props: { bites: ['0', '1', '2', '3', '4', '5', '6'] }, tex: { top: 'cake_top', side: 'cake_side', bottom: 'cake_bottom', inner: 'cake_inner' }, interact: 'cake', drops: 'none', collide: true, layer: 'cutout' });
-add({ id: 'flower_pot', name: 'Flower Pot', hardness: 0, sound: 'stone', model: 'custom', tex: { all: 'flower_pot' }, collide: true, layer: 'cutout' });
+// Candles: up to four on one block, lit with flint and steel
+add({ id: 'candle', name: 'Candle', hardness: 0.1, sound: 'wool', model: 'custom', props: { candles: ['1', '2', '3', '4'], lit: BOOL }, tex: { all: 'candle', lit: 'candle_lit' }, light: 12, collide: true, layer: 'cutout', place: 'needs_solid_below', interact: 'candle' });
+cube('honeycomb_block', 0.6, 'wool', { tex: { all: 'honeycomb_block' } });
+// Froglights: what a frog makes of a small magma cube, a colour for each kind of frog
+for (const f of ['ochre', 'verdant', 'pearlescent']) add({ id: `${f}_froglight`, name: `${f[0]!.toUpperCase()}${f.slice(1)} Froglight`, hardness: 0.3, sound: 'wool', model: 'column', props: { axis: ['x', 'y', 'z'] }, defaults: { axis: 'y' }, tex: { top: `${f}_froglight_top`, side: `${f}_froglight_side` }, light: 15 });
+// Portable storage: keeps its contents when broken
+add({ id: 'shulker_box', name: 'Shulker Box', hardness: 2, sound: 'stone', model: 'cube', props: { facing: ['up', 'down', 'north', 'south', 'west', 'east'] }, defaults: { facing: 'up' }, tex: { top: 'shulker_box_top', side: 'shulker_box_side', bottom: 'shulker_box_bottom' }, tool: 'pickaxe', entity: 'barrel', interact: 'barrel', drops: 'none' });
+// Conduit: in water inside a prismarine frame it lets divers breathe and see
+add({ id: 'conduit', name: 'Conduit', hardness: 3, sound: 'glass', model: 'custom', tex: { all: 'conduit' }, light: 15, collide: true, layer: 'cutout', tool: 'pickaxe', entity: 'conduit' });
+/** Plants a flower pot can hold. */
+export const POTTABLE = ['none', 'dandelion', 'poppy', 'blue_orchid', 'allium', 'azure_bluet', 'red_tulip', 'orange_tulip', 'white_tulip', 'pink_tulip', 'oxeye_daisy', 'cornflower', 'lily_of_the_valley', 'oak_sapling', 'spruce_sapling', 'birch_sapling', 'jungle_sapling', 'acacia_sapling', 'dark_oak_sapling', 'cherry_sapling', 'red_mushroom', 'brown_mushroom', 'fern', 'dead_bush', 'glowbell'] as const;
+add({ id: 'flower_pot', name: 'Flower Pot', hardness: 0, sound: 'stone', model: 'custom', props: { plant: POTTABLE }, tex: { all: 'flower_pot' }, collide: true, layer: 'cutout', interact: 'flower_pot' });
 
 // Stairs / slabs / walls for stone materials
 family('cobblestone', 'cobblestone', 2, 'stone', true);
@@ -913,9 +946,12 @@ cube('missing_block', 1, 'glitch', { tool: 'pickaxe', name: 'Missing Block' });
 add({ id: 'far_tall_grass', name: 'Warped Tallgrass', hardness: 0, sound: 'plant', model: 'cross', tex: { all: 'far_tall_grass' }, replaceable: true, place: 'needs_soil', drops: { item: 'none', silkTouch: true } });
 
 // Sculk (deep dark)
-cube('sculk', 0.2, 'moss', { tool: 'hoe', light: 1, drops: { item: 'sculk', xp: [1, 1], silkTouch: true } });
+cube('sculk', 0.2, 'moss', { tool: 'hoe', drops: { item: 'sculk', xp: [1, 1], silkTouch: true } });
 add({ id: 'sculk_vein', name: 'Sculk Vein', hardness: 0.2, sound: 'moss', model: 'vine', props: { north: BOOL, south: BOOL, west: BOOL, east: BOOL, up: BOOL, down: BOOL }, tex: { all: 'sculk_vein' }, replaceable: true, drops: { item: 'none', silkTouch: true } });
-add({ id: 'sculk_sensor', name: 'Sculk Sensor', hardness: 1.5, sound: 'moss', model: 'custom', tex: { top: 'sculk_sensor_top', side: 'sculk_sensor_side', bottom: 'sculk_sensor_bottom' }, light: 1, tool: 'hoe', collide: true, layer: 'cutout' });
+add({ id: 'sculk_sensor', name: 'Sculk Sensor', hardness: 1.5, sound: 'moss', model: 'custom', props: { phase: ['inactive', 'active', 'cooldown'] }, tex: { top: 'sculk_sensor_top', side: 'sculk_sensor_side', bottom: 'sculk_sensor_bottom', on: 'sculk_sensor_top_active' }, light: 1, tool: 'hoe', collide: true, layer: 'cutout', drops: { item: 'sculk_sensor', xp: [1, 1], silkTouch: false } });
+// Sensors switch between phases when they hear a vibration; shriekers call the Warden
+add({ id: 'sculk_shrieker', name: 'Sculk Shrieker', hardness: 3, sound: 'moss', model: 'custom', props: { can_summon: BOOL, shrieking: BOOL }, tex: { top: 'sculk_shrieker_top', side: 'sculk_shrieker_side', bottom: 'sculk_shrieker_bottom', inner: 'sculk_shrieker_inner' }, tool: 'hoe', collide: true, layer: 'cutout', drops: { item: 'none', xp: [5, 5], silkTouch: true } });
+add({ id: 'sculk_catalyst', name: 'Sculk Catalyst', hardness: 3, sound: 'moss', model: 'cube', props: { bloom: BOOL }, tex: { top: 'sculk_catalyst_top', side: 'sculk_catalyst_side', bottom: 'sculk_catalyst_bottom', on: 'sculk_catalyst_top_bloom' }, light: 6, tool: 'hoe', drops: { item: 'none', xp: [5, 5], silkTouch: true } });
 stoneLike('reinforced_deepslate', 55, { harvestLevel: 99, drops: 'none', sound: 'deepslate', tex: { top: 'reinforced_deepslate_top', side: 'reinforced_deepslate_side', bottom: 'reinforced_deepslate_bottom' } });
 
 export const BLOCK_DEFS: readonly BlockDef[] = defs;

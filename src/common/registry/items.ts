@@ -24,6 +24,7 @@ export const CREATIVE_TABS = [
   { id: 'colored', name: 'Colored Blocks', icon: 'cyan_wool' },
   { id: 'nature', name: 'Natural Blocks', icon: 'grass_block' },
   { id: 'functional', name: 'Functional Blocks', icon: 'crafting_table' },
+  { id: 'redstone', name: 'Redstone', icon: 'redstone' },
   { id: 'tools', name: 'Tools & Utilities', icon: 'diamond_pickaxe' },
   { id: 'combat', name: 'Combat', icon: 'netherite_sword' },
   { id: 'food', name: 'Food & Drinks', icon: 'golden_apple' },
@@ -38,6 +39,7 @@ function autoTab(def: { id: string; tags?: string[]; interact?: string; entity?:
   const id = def.id;
   if (/^(far_|farstone|corrupted|glitch|static|overflow|null_|fractal|echo_lamp|data_crystal|stretched|missing|stripped_null)/.test(id)) return 'farlands';
   if (def.tags?.some((t) => ['wool', 'carpets', 'stained_glass', 'concrete', 'terracotta', 'beds'].includes(t))) return 'colored';
+  if (def.tags?.includes('redstone') || ['button', 'pressure_plate', 'lever'].includes(def.model) || id === 'tnt' || id === 'note_block' || id === 'redstone_block' || id === 'iron_door' || id === 'iron_trapdoor') return 'redstone';
   if (def.interact || def.entity || (def.light ?? 0) > 0 || ['ladder', 'torch', 'lantern', 'chain', 'scaffolding', 'bookshelf', 'tnt', 'cauldron'].includes(def.model) || id === 'tnt') return 'functional';
   if (def.tags?.some((t) => ['ore', 'dirt', 'leaves', 'saplings', 'flowers', 'logs', 'base_stone', 'sand', 'mushrooms', 'nylium', 'coral_blocks'].includes(t))) return 'nature';
   if (['cross', 'double_plant', 'crop', 'vine', 'lily_pad', 'cactus', 'hanging_plant'].includes(def.model)) return 'nature';

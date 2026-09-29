@@ -10,7 +10,7 @@ import { Survival, type DamageInfo } from './Survival';
 import { Containers, type Window } from './Containers';
 import { Weather } from './Weather';
 import type { C2S } from '../../common/net/protocol';
-import { type ItemStack, type Slot, cloneStack, itemIdOf, stackOf, isAdminStack } from '../../common/game/itemstack';
+import { type ItemStack, type Slot, cloneStack, itemIdOf, stackOf, isAdminStack, markAdmin } from '../../common/game/itemstack';
 import { items, itemById } from '../../common/registry/items';
 import { blocks, STATE_BLOCK, getProp, withProp, S, stateOf, STATE_FLUID, STATE_SOLID, STATE_REPLACEABLE, blockHasTag } from '../../common/registry/blocks';
 import { computePlacement, canSurvive, chestPartnerUpdate } from '../../common/game/placement';
@@ -55,7 +55,7 @@ export class Interaction {
     hurtEntity?: (e: Entity, amount: number, source: string, attacker: Entity | null) => void;
     useItem?: (p: ServerPlayer, stack: ItemStack, hand: 0 | 1) => boolean;
     useItemOnBlock?: (p: ServerPlayer, stack: ItemStack, x: number, y: number, z: number, face: number) => boolean;
-    releaseItem?: (p: ServerPlayer, stack: ItemStack, ticks: number) => void;
+    releaseItem?: (p: ServerPlayer, stack: ItemStack, ticks: number, slot: number) => void;
     useBlock?: (p: ServerPlayer, x: number, y: number, z: number, state: number) => boolean;
     restore?: (dim: Dimension, data: Record<string, unknown>) => Entity | null;
     onDimension?: (p: ServerPlayer, dim: string) => void;
@@ -160,6 +160,7 @@ export class Interaction {
     if (!(p.sneaking && stack)) {
       if (this.useBlock(p, x, y, z, state)) {
         p.send({ t: 'use_result', seq: m.seq, ok: true });
+        this.server.sculk?.vibrate(dim, x + 0.5, y + 0.5, z + 0.5, p, 'block_use');
         return;
       }
     }
@@ -205,12 +206,21 @@ export class Interaction {
       if (pu) dim.setBlock(pu.x, pu.y, pu.z, pu.state, { keepBlockEntity: true });
     }
     if (pdef.entity === 'furnace') dim.setBlockEntity(first.x, first.y, first.z, { type: 'furnace', items: [null, null, null] });
-    if (pdef.entity === 'chest' || pdef.entity === 'barrel') dim.setBlockEntity(first.x, first.y, first.z, { type: pdef.entity, items: new Array(27).fill(null) });
+    if (pdef.entity === 'chest' || pdef.entity === 'barrel') {
+      // A shulker box keeps what was packed into it
+      const packed = pdef.id === 'shulker_box' && Array.isArray(stack.tag?.data?.items) ? (stack.tag!.data!.items as unknown[]).slice(0, 27) : null;
+      dim.setBlockEntity(first.x, first.y, first.z, { type: pdef.entity, items: packed ? [...packed, ...new Array(27 - packed.length).fill(null)] : new Array(27).fill(null) });
+    }
+    if (pdef.entity === 'conduit') {
+      dim.setBlockEntity(first.x, first.y, first.z, { type: 'conduit' });
+      this.server.gadgets?.addConduit(dim, first.x, first.y, first.z);
+    }
     if (pdef.entity === 'sign') {
       dim.setBlockEntity(first.x, first.y, first.z, { type: 'sign', lines: ['', '', '', ''] });
       p.send({ t: 'open_window', window: -1, kind: 'player', title: 'sign', size: 0, data: { sign: [first.x, first.y, first.z] } });
     }
     this.server.playSound(dim, 'place.' + pdef.sound, first.x + 0.5, first.y + 0.5, first.z + 0.5, 1, 0.8, p);
+    this.server.sculk?.vibrate(dim, first.x + 0.5, first.y + 0.5, first.z + 0.5, p, 'block_place');
     if (isSurvivalLike(p.gamemode)) this.consume(p, hand, 1);
     p.addStat('placed.' + blocks[STATE_BLOCK[first.state]!]!.id);
     if (pdef.model === 'crop' && !cheat) this.grant(p, 'plant_seed');
@@ -238,6 +248,8 @@ export class Interaction {
       p.send({ t: 'chat', text: 'Visitors cannot use that in this world.', kind: 'error' });
       return true;
     }
+    // Tie leashed animals to fences
+    if ((bt.tags.has('fences') || bt.tags.has('walls')) && this.server.mounts?.useFence(p, x, y, z)) return true;
     if (this.hooks.useBlock?.(p, x, y, z, state)) return true;
     const adventureOk = p.gamemode !== 'spectator';
     if (!adventureOk) return false;
@@ -343,15 +355,25 @@ export class Interaction {
         return false;
       }
       case 'jukebox':
-        return false;
+        return !!this.server.gadgets?.useJukebox(p, x, y, z, state);
       case 'respawn_anchor':
-        return false;
+        return !!this.server.gadgets?.useRespawnAnchor(p, x, y, z, state);
+      case 'bell':
+        return !!this.server.gadgets?.ringBell(p, x, y, z);
+      case 'beacon':
+        return !!this.server.gadgets?.useBeacon(p, x, y, z);
+      case 'cauldron':
+        return !!this.server.gadgets?.useCauldron(p, x, y, z, state);
+      case 'flower_pot':
+        return !!this.server.gadgets?.useFlowerPot(p, x, y, z, state);
+      case 'candle':
+        return !!this.server.gadgets?.useCandle(p, x, y, z, state);
       case 'enchanting':
       case 'anvil':
       case 'brewing':
         return !!this.hooks.useBlock?.(p, x, y, z, state);
       case 'sign':
-        return false;
+        return !!this.server.gadgets?.inkSign(p, x, y, z);
     }
     // Redstone ore glows when touched
     if (bt.id === 'redstone_ore' || bt.id === 'deepslate_redstone_ore') {
@@ -382,7 +404,7 @@ export class Interaction {
       this.server.interaction.explode?.(dim, x + 0.5, y + 0.5, z + 0.5, 5, true, null);
       return true;
     }
-    p.spawnPoint = { dim: dim.id, x: x + 0.5, y: y + 0.6, z: z + 0.5, forced: false };
+    p.spawnPoint = { dim: dim.id, x: x + 0.5, y: y + 0.6, z: z + 0.5, forced: false, block: [x, y, z] };
     p.send({ t: 'chat', text: 'Respawn point set', kind: 'system' });
     if (!this.server.admin.blockMarked(dim, x, y, z)) this.grant(p, 'sleep_bed');
     const dt = this.server.level.dayTime;
@@ -642,7 +664,7 @@ export class Interaction {
       if (u) {
         this.using.delete(p);
         const held = p.inventory.get(u.slot);
-        if (held && held.id === u.item && u.kind === 'bow') this.hooks.releaseItem?.(p, held, this.server.tickNo - u.start);
+        if (held && held.id === u.item && u.kind === 'bow') this.hooks.releaseItem?.(p, held, this.server.tickNo - u.start, u.slot);
       }
       return;
     }
@@ -663,6 +685,7 @@ export class Interaction {
       return;
     }
     if (def.use === 'shield') {
+      if (this.server.tickNo < p.shieldDownUntil) return;
       this.using.set(p, { slot: hand, hand: m.hand, item: stack.id, start: this.server.tickNo, duration: 72000, kind: 'block' });
       return;
     }
@@ -690,6 +713,19 @@ export class Interaction {
     return this.using.get(p);
   }
 
+  /** Whether the player wears an Elytra with flight left in it. */
+  canGlide(p: ServerPlayer): boolean {
+    const c = p.inventory.get(ARMOR_START + 2);
+    if (!c) return false;
+    const it = items[c.id];
+    return it?.id === 'elytra' && (c.damage ?? 0) < (it.def.durability ?? 1) - 1;
+  }
+
+  /** Ends any item use in progress (shield knocked aside, dismounting...). */
+  stopUsing(p: ServerPlayer): void {
+    this.using.delete(p);
+  }
+
   private tickUsing(p: ServerPlayer): void {
     const u = this.using.get(p);
     if (!u) return;
@@ -712,6 +748,7 @@ export class Interaction {
   }
 
   private finishEating(p: ServerPlayer, slot: number, stack: ItemStack): void {
+    this.server.sculk?.vibrate(p.dim, p.x, p.y + 1, p.z, p, 'eat');
     const def = items[stack.id]!.def;
     const id = items[stack.id]!.id;
     if (def.use === 'potion') {
@@ -777,7 +814,7 @@ export class Interaction {
     this.damageStack(p, p.selectedSlot, amount);
   }
 
-  private damageHeldSlot(p: ServerPlayer, slot: number, amount: number): void {
+  damageHeldSlot(p: ServerPlayer, slot: number, amount: number): void {
     this.damageStack(p, slot, amount);
   }
 
@@ -796,7 +833,9 @@ export class Interaction {
       dmg++;
     }
     if (dmg === 0) return;
-    const nd = (s.damage ?? 0) + dmg;
+    let nd = (s.damage ?? 0) + dmg;
+    // An Elytra wears down to its last point and stops flying instead of breaking
+    if (items[s.id]!.id === 'elytra') nd = Math.min(nd, dur - 1);
     if (nd >= dur) {
       p.inventory.set(slot, null);
       this.server.playSound(p.dim, 'item.break', p.x, p.y + 1, p.z, 0.8, 0.9);
@@ -871,9 +910,21 @@ export class Interaction {
     this.containers.syncInventory(p);
   }
 
-  spillContainer(dim: Dimension, x: number, y: number, z: number, be: unknown): void {
+  /**
+   * Drops what a broken container held. A shulker box instead drops itself
+   * with its contents packed inside (`blockId` names the broken block).
+   */
+  spillContainer(dim: Dimension, x: number, y: number, z: number, be: unknown, blockId?: string, cheat = false): void {
     const list = (be as { items?: unknown[] }).items ?? [];
     this.containers.forget(dim, x, y, z);
+    if (blockId === 'shulker_box') {
+      const packed = list.map((raw) => (raw && typeof (raw as { id?: unknown }).id === 'string' && fromSavedSafe(raw) ? raw : null));
+      while (packed.length && packed[packed.length - 1] === null) packed.pop();
+      const box = stackOf('shulker_box', 1, packed.length ? { tag: { data: { items: packed } } } : undefined);
+      if (cheat) markAdmin(box);
+      this.server.mining.dropItem(dim, x + 0.5, y + 0.5, z + 0.5, box);
+      return;
+    }
     for (const raw of list) {
       const s = raw ? (typeof (raw as { id?: unknown }).id === 'string' ? fromSavedSafe(raw) : null) : null;
       if (s) this.server.mining.dropItem(dim, x + 0.5, y + 0.5, z + 0.5, s);
@@ -923,8 +974,9 @@ export class Interaction {
       const clean = l.replace(/[\u0000-\u001f\u007f]/g, '').slice(0, 32);
       return filter ? filter(clean, p) ?? '' : clean;
     });
-    p.dim.setBlockEntity(m.x, m.y, m.z, { type: 'sign', lines });
-    this.server.sendToWatchers(p.dim, m.x, m.z, { t: 'block_entity', x: m.x, y: m.y, z: m.z, data: { type: 'sign', lines } });
+    const glow = be.glow === true ? { glow: true } : {};
+    p.dim.setBlockEntity(m.x, m.y, m.z, { type: 'sign', lines, ...glow });
+    this.server.sendToWatchers(p.dim, m.x, m.z, { t: 'block_entity', x: m.x, y: m.y, z: m.z, data: { type: 'sign', lines, ...glow } });
   }
 
   handleWindowAction(p: ServerPlayer, m: C2S): void {
@@ -1026,13 +1078,14 @@ export class Interaction {
   /** Moves a player to their respawn point (bed/anchor) or the world spawn. */
   sendToSpawn(p: ServerPlayer): void {
     const level = this.server.level;
+    // A bed or anchor that was broken (or an anchor without charge) no longer holds the spawn
+    if (p.spawnPoint?.block && !this.server.gadgets?.claimSpawnBlock(p)) {
+      p.spawnPoint = null;
+      p.send({ t: 'chat', text: 'You have no home bed or charged respawn anchor, or it was obstructed', kind: 'system' });
+    }
     let dimId = p.spawnPoint?.dim ?? 'overworld';
     let pos: [number, number, number] | null = null;
-    if (p.spawnPoint) {
-      const d = this.server.dim(p.spawnPoint.dim);
-      pos = [p.spawnPoint.x, p.spawnPoint.y, p.spawnPoint.z];
-      void d;
-    }
+    if (p.spawnPoint) pos = [p.spawnPoint.x, p.spawnPoint.y, p.spawnPoint.z];
     if (!pos) {
       const s = level.spawn ?? [0, 80, 0];
       const r = level.rules.spawnRadius;
@@ -1051,6 +1104,7 @@ export class Interaction {
 
   onPlayerDied(p: ServerPlayer, info: DamageInfo): void {
     this.using.delete(p);
+    this.server.mounts?.dismount(p, true);
     this.hooks.onDeath?.(p, info);
   }
 
@@ -1102,6 +1156,9 @@ export class Interaction {
     if (id === 'elytra') this.grant(p, 'elytra');
     if (id === 'corrupted_eye') this.grant(p, 'corrupted_eye');
     if (id === 'iron_ingot') this.grant(p, 'smelt_iron');
+    if (id.endsWith('_froglight')) this.grant(p, 'froglight');
+    if (id === 'resonance_charm') this.grant(p, 'vault_reward');
+    if (id === 'enchanted_book' && stack.tag?.stored?.silent_stride) this.grant(p, 'silent_stride');
   }
 
   onCrafted(p: ServerPlayer, stack: ItemStack): void {
@@ -1113,6 +1170,8 @@ export class Interaction {
     if (id === 'iron_pickaxe') this.grant(p, 'iron_tools');
     if (id.startsWith('iron_') && ['helmet', 'chestplate', 'leggings', 'boots'].some((a) => id.endsWith(a))) this.grant(p, 'obtain_armor');
     if (id === 'bread') this.grant(p, 'bake_bread');
+    if (id === 'recovery_compass') this.grant(p, 'recovery_compass');
+    if (id === 'music_disc_hollow') this.grant(p, 'hollow_disc');
     if (id.startsWith('glitched_')) this.grant(p, 'glitched_gear');
     if (id.startsWith('netherite_')) {
       const all = [36, 37, 38, 39].every((i) => items[p.inventory.get(i)?.id ?? 0]?.id.startsWith('netherite_'));

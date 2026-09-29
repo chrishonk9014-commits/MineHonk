@@ -32,6 +32,15 @@ export const STRUCTURE_NAMES: Record<string, string> = {
   end_fountain: 'Exit Portal (Dragon Island)',
   data_spire: 'Data Spire',
   farlands_vault: 'Farlands Vault',
+  // V2: The Caves Update
+  ancient_city: 'Ancient City',
+  underground_ruins: 'Underground Ruins',
+  buried_temple: 'Buried Temple',
+  hidden_chamber: 'Hidden Chamber',
+  treasure_room: 'Treasure Room',
+  abandoned_lab: 'Abandoned Lab',
+  cave_shrine: 'Cave Shrine',
+  monster_chamber: 'Monster Chamber',
 };
 
 export function structureName(id: string): string {
@@ -161,10 +170,12 @@ export interface AdminCatalog {
   biomes: Record<string, { id: string; name: string }[]>;
   mobs: { id: string; name: string; category: string }[];
   players: string[];
+  /** V2 cave features per dimension (cave biome ids, 'mega_cavern', 'ravine'). */
+  caves?: Record<string, { id: string; name: string }[]>;
 }
 
 export interface LocateResult {
-  kind: 'structure' | 'biome';
+  kind: 'structure' | 'biome' | 'cave';
   id: string;
   name: string;
   dim: DimensionId;

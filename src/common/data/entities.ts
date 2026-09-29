@@ -30,6 +30,9 @@ const INFO = new Map<string, EntityTypeInfo>([
   ['end_crystal', { width: 2, height: 2, attackable: true }],
   ['boat', { width: 1.375, height: 0.56, attackable: true, interactable: true }],
   ['minecart', { width: 0.98, height: 0.7, attackable: true, interactable: true }],
+  ['trident', { width: 0.5, height: 0.5, attackable: false }],
+  ['firework', { width: 0.25, height: 0.25, attackable: false }],
+  ['fishing_bobber', { width: 0.25, height: 0.25, attackable: false }],
 ]);
 
 export function registerEntityInfo(type: string, info: EntityTypeInfo): void {

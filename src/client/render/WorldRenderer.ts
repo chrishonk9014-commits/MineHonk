@@ -17,6 +17,8 @@ import type { ItemIcons } from './ItemIcons';
 import { AtlasLookup, type AtlasMeta } from './atlasInfo';
 import type { Settings } from '../settings';
 import { selectionShape } from '../../common/physics/shapes';
+import { BeaconBeams } from './BeaconBeams';
+import { SignText } from './SignText';
 
 export interface GameAssets {
   blockAtlas: THREE.Texture;
@@ -60,6 +62,8 @@ export interface FrameState {
   /** Nausea strength 0..1. */
   nausea?: number;
   portalColor?: number;
+  /** Underground in a cave biome: fog colour/thickness and how far the view has blended in (0..1). */
+  cave?: { color: number; density: number; amount: number };
 }
 
 export class WorldRenderer {
@@ -72,6 +76,9 @@ export class WorldRenderer {
   readonly particles: Particles;
   readonly weather: Weather;
   readonly hand: HandRenderer;
+  readonly beams: BeaconBeams;
+  readonly signs: SignText;
+  private readonly caveColor = new THREE.Color();
   readonly atlas: AtlasLookup;
   private readonly selection: THREE.LineSegments;
   private readonly crackMeshes: THREE.Mesh[] = [];
@@ -105,7 +112,9 @@ export class WorldRenderer {
     this.particles = new Particles(assets.blockAtlas, this.atlas, world);
     this.weather = new Weather(world);
     this.hand = new HandRenderer(assets.icons, (n) => this.blockTexture(n));
-    this.scene.add(this.sky.group, this.sky.cloudGroup, this.chunks.group, this.entities.group, this.particles.mesh, this.weather.mesh);
+    this.beams = new BeaconBeams(world);
+    this.signs = new SignText(world);
+    this.scene.add(this.sky.group, this.sky.cloudGroup, this.chunks.group, this.entities.group, this.particles.mesh, this.weather.mesh, this.beams.group, this.signs.group);
 
     const selMat = new THREE.LineBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.45 });
     this.selection = new THREE.LineSegments(new THREE.BufferGeometry(), selMat);
@@ -231,6 +240,29 @@ export class WorldRenderer {
     return Math.max(sky, blk, u.uAmbient!.value as number, u.uNightVision!.value as number);
   }
 
+  private warmed = false;
+
+  /**
+   * Compiles every chunk material once, up front. Otherwise a material's
+   * shader compiles the first time something using it comes into view (the
+   * first water seen from a hilltop, say), stalling that frame for up to a
+   * second on slower machines.
+   */
+  private warmUp(cam: THREE.Camera): void {
+    this.warmed = true;
+    const g = new THREE.Group();
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0, 0, 0, 0, 0, 0, 0], 3));
+    for (const m of this.chunks.materials) g.add(new THREE.Mesh(geo, m));
+    this.scene.add(g);
+    try {
+      this.renderer.compile(this.scene, cam);
+    } finally {
+      this.scene.remove(g);
+      geo.dispose();
+    }
+  }
+
   render(f: FrameState): void {
     this.frameCount++;
     const cam = this.camera;
@@ -293,6 +325,18 @@ export class WorldRenderer {
       fogFar = Math.min(fogFar, 110);
     }
     if (f.rain > 0 && !f.underwater) fogNear *= 1 - f.rain * 0.4;
+    // Caves: the fog turns the cave biome's colour and the sky disappears
+    const cave = f.cave && !f.underwater && !f.inLava ? f.cave : null;
+    if (cave) {
+      this.caveColor.setHex(cave.color);
+      fog.lerp(this.caveColor, cave.amount);
+      const far = Math.min(fogFar, 40 + 90 * cave.density);
+      fogFar = fogFar + (far - fogFar) * cave.amount;
+      fogNear = Math.min(fogNear, fogFar * 0.45);
+    }
+    this.sky.group.visible = !cave || cave.amount < 0.9;
+    // Only ever hides: the sky decides per dimension whether clouds show at all
+    if (!this.sky.group.visible) this.sky.cloudGroup.visible = false;
     if (f.darkness > 0) {
       fog.multiplyScalar(1 - f.darkness);
       fogFar = fogFar * (1 - f.darkness) + 12 * f.darkness;
@@ -312,11 +356,14 @@ export class WorldRenderer {
     this.renderer.setClearColor(fog);
 
     this.chunks.update(cam, f.time);
+    this.beams.update(cam.position.x, cam.position.z, f.time);
+    this.signs.update(cam.position.x, cam.position.y, cam.position.z, (x, y, z) => this.lightAt(x, y, z));
     this.updateSelection(f.target);
     this.updateCracks(f.crack);
     this.particles.update((x, y, z) => this.lightAt(x, y, z));
 
     this.renderer.clear();
+    if (!this.warmed) this.warmUp(cam);
     this.renderer.render(this.scene, cam);
 
     // Hand overlay
@@ -348,6 +395,8 @@ export class WorldRenderer {
 
   dispose(): void {
     this.chunks.dispose();
+    this.beams.dispose();
+    this.signs.dispose();
     this.sky.dispose();
     this.entities.clear();
     this.renderer.dispose();

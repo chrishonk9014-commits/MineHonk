@@ -398,6 +398,40 @@ export function registerNatural(r: PainterRegistry): void {
   r.add('amethyst_block', (t) => {
     blotchy(t, [hex(0x5c3f99), hex(0x7a55c1), hex(0x8d68d4), hex(0xa583e8), hex(0xc6a8ff)], 1, 1.3);
   });
+  r.add('budding_amethyst', (t) => {
+    blotchy(t, [hex(0x5c3f99), hex(0x7a55c1), hex(0x8d68d4)], 1, 1.3);
+    for (let i = 0; i < 7; i++) {
+      const x = 1 + t.rng.int(13);
+      const y = 1 + t.rng.int(13);
+      t.set(x, y, hex(0x3a2270));
+      t.set(x + 1, y, hex(0xe0ccff));
+    }
+  });
+  r.add('amethyst_bud', (t) => {
+    t.clear();
+    for (const [x0, h] of [[6, 6], [8, 8], [10, 5]] as const) for (let y = 16 - h; y < 16; y++) t.set(x0, y, y === 16 - h ? hex(0xe0ccff) : hex(0xa583e8));
+  });
+  r.add('lumen_crystal', (t) => {
+    // Original: cyan-white crystal spikes that give off light
+    t.clear();
+    const c = [hex(0x3ac8d8), hex(0x8af0ff), hex(0xf0ffff)];
+    for (const [x0, h, lean] of [[3, 9, -1], [6, 14, 0], [9, 12, 0], [12, 8, 1]] as const) {
+      for (let k = 0; k < h; k++) {
+        const x = x0 + Math.round((k / h) * lean * 2);
+        const y = 15 - k;
+        t.set(x, y, c[k > h - 3 ? 2 : 1]!);
+        if (k < h - 2) t.set(x + 1, y, c[0]!);
+      }
+    }
+  });
+  r.add('icicle', (t) => {
+    t.clear();
+    const c = [hex(0xa8d8f8), hex(0xd0f0ff), hex(0xf4fcff)];
+    for (let y = 0; y < 16; y++) {
+      const w = Math.max(1, Math.round((16 - y) / 4));
+      for (let x = 8 - w; x < 8 + w; x++) t.set(x, y, c[(x + y) % 3]!, 210);
+    }
+  });
   r.add('amethyst_cluster', (t) => {
     t.clear();
     const c = [hex(0x7a55c1), hex(0xa583e8), hex(0xe0ccff)];

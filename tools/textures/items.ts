@@ -1356,6 +1356,7 @@ export function registerItems(r: PainterRegistry): void {
   r.add('lapis_lazuli', (t) => paintMask(t, 'lump', matPal(hex(0x2552c6))));
   r.add('quartz', (t) => paintMask(t, 'gem', matPal(hex(0xeae4dc))));
   r.add('amethyst_shard', (t) => paintMask(t, 'shard', matPal(hex(0xa070e8))));
+  r.add('lumen_shard', (t) => paintMask(t, 'shard', matPal(hex(0x6ae8f0))));
   r.add('echo_shard', (t) => paintMask(t, 'shard', matPal(hex(0x0f6a7a))));
   r.add('prismarine_shard', (t) => paintMask(t, 'shard', matPal(hex(0x5aa090))));
   r.add('prismarine_crystals', (t) => paintMask(t, 'gem', matPal(hex(0xb8e8d8))));
@@ -1411,6 +1412,28 @@ export function registerItems(r: PainterRegistry): void {
   r.add('shulker_shell', (t) => paintMask(t, 'scale', matPal(hex(0x9a6aa0))));
   r.add('nautilus_shell', (t) => paintMask(t, 'ball', matPal(hex(0xe8d8c8))));
   r.add('honeycomb', (t) => paintMask(t, 'honeycomb', matPal(hex(0xf0a820))));
+  r.add('candle', (t) => {
+    t.clear();
+    for (let y = 5; y < 15; y++) for (let x = 6; x < 10; x++) t.set(x, y, x === 6 ? hex(0xf8f0d8) : x === 9 ? hex(0xc8b890) : hex(0xe8dcb8));
+    t.set(7, 4, hex(0x2a2a2a));
+    t.set(7, 3, hex(0x3a3a3a));
+    for (let x = 6; x < 10; x++) t.set(x, 15, hex(0xb8a880));
+  });
+  r.add('conduit', (t) => {
+    t.clear();
+    const cage = hex(0x6a4a2a);
+    const dark = hex(0x3a2818);
+    for (let y = 2; y < 14; y++)
+      for (let x = 2; x < 14; x++) {
+        const edge = x === 2 || x === 13 || y === 2 || y === 13;
+        const bar = (x + y) % 4 === 0;
+        if (edge || bar) t.set(x, y, edge ? dark : cage);
+      }
+    for (let y = 5; y < 11; y++) for (let x = 5; x < 11; x++) t.set(x, y, hex(0x2a8ad8));
+    for (let y = 6; y < 10; y++) for (let x = 6; x < 10; x++) t.set(x, y, hex(0x8ae0ff));
+    t.set(7, 7, hex(0x0a1a2a));
+    t.set(8, 8, hex(0x0a1a2a));
+  });
   r.add('ghast_tear', (t) => paintMask(t, 'shard', matPal(hex(0xd8f0f0))));
   r.add('nether_star', (t) => paintMask(t, 'star', matPal(hex(0xf0f0e8))));
   r.add('ink_sac', (t) => paintMask(t, 'dye', matPal(hex(0x2a2a3a))));
@@ -1455,6 +1478,7 @@ export function registerItems(r: PainterRegistry): void {
     paintMask(t, 'compass', { ...matPal(hex(0x5a2a7a)), r: hex(0xff40ff), w: hex(0x00ffff) });
     glitchify(t);
   });
+  r.add('recovery_compass', (t) => paintMask(t, 'compass', { ...matPal(hex(0x1f4a52)), r: hex(0x3ae0d0), w: hex(0x0a1418) }));
   r.add('clock', (t) => paintMask(t, 'clock', { ...matPal(hex(0xf0c040)), w: hex(0x2a2a2a) }));
   r.add('spyglass', (t) => paintMask(t, 'spyglass', matPal(hex(0xc87a4a))));
   r.add('bow', (t) => paintMask(t, 'bow', { s: hex(0xe0e0e0) }));
@@ -1478,6 +1502,15 @@ export function registerItems(r: PainterRegistry): void {
     for (let y = 4; y < 14; y++) t.set(13, y, hex(0xe0e0e0));
     t.set(13, 14, hex(0x6a6a6a));
   });
+  r.add('carrot_on_a_stick', (t) => {
+    paintMask(t, 'stick', {});
+    for (let y = 4; y < 11; y++) t.set(13, y, hex(0xe0e0e0));
+    // A carrot dangling from the line
+    t.rect(12, 11, 3, 3, hex(0xf08a1a));
+    t.set(13, 14, hex(0xc86a10));
+    t.set(12, 10, hex(0x4a9a2a));
+    t.set(14, 10, hex(0x4a9a2a));
+  });
   r.add('name_tag', (t) => paintMask(t, 'tag', { ...matPal(hex(0xe8dcc0)), k: hex(0x6a6a6a) }));
   r.add('saddle', (t) => paintMask(t, 'saddle', { ...matPal(hex(0x8a4a24)), g: hex(0xa8a8a8) }));
   r.add('lead', (t) => paintMask(t, 'string', matPal(hex(0xc8a070))));
@@ -1486,6 +1519,38 @@ export function registerItems(r: PainterRegistry): void {
   disc('music_disc_meadow', 0x4ac050);
   disc('music_disc_deepcave', 0x2a6ad0);
   disc('music_disc_overflow', 0xd040ff);
+  disc('music_disc_ember', 0xf06a20);
+  disc('music_disc_drift', 0xc8b0f0);
+  disc('music_disc_skyward', 0x7ad0ff);
+  disc('music_disc_echo', 0x1ab0b8);
+  disc('music_disc_hollow', 0x0a3a4a);
+  r.add('disc_fragment', (t) => {
+    // A broken wedge of a dark record
+    t.clear();
+    for (let y = 3; y < 14; y++)
+      for (let x = 3; x < 14; x++) {
+        const dx = x - 3;
+        const dy = y - 3;
+        if (dx + dy > 13 || Math.hypot(dx, dy) > 10.5) continue;
+        const ring = Math.round(Math.hypot(dx, dy)) % 3 === 0;
+        t.set(x, y, ring ? hex(0x2a2a30) : hex(0x16161c));
+      }
+    t.set(4, 4, hex(0x1ab0b8));
+    t.set(5, 4, hex(0x1ab0b8));
+    t.set(4, 5, hex(0x1ab0b8));
+  });
+  r.add('resonance_charm', (t) => {
+    // Original: a teal crystal in a bone setting on a cord; it soaks up sound
+    t.clear();
+    for (let x = 4; x < 12; x++) t.set(x, 1 + Math.round(Math.abs(x - 7.5) / 2), hex(0x5a4a3a));
+    const bone = hex(0xd8d0b8);
+    for (let y = 5; y < 15; y++)
+      for (let x = 4; x < 12; x++) {
+        const d = Math.abs(x - 7.5) + Math.abs(y - 9.5);
+        if (d > 5.5) continue;
+        t.set(x, y, d > 4.2 ? bone : d > 2.5 ? hex(0x1ab0b8) : d > 1 ? hex(0x6af0f0) : hex(0xe0ffff));
+      }
+  });
   r.add('bowl', (t) => paintMask(t, 'bowl', { o: hex(0x3a2a14), s: hex(0x5a4222), k: hex(0x6a4a24), c: hex(0x9a7a44), b: hex(0x7a5a34) }));
   const stew = (n: string, c: RGB) => r.add(n, (t) => paintMask(t, 'bowl', { o: hex(0x3a2a14), s: c, k: hex(0x6a4a24), c: hex(0x9a7a44), b: hex(0x7a5a34) }));
   stew('mushroom_stew', hex(0xc8a070));

@@ -268,6 +268,52 @@ export class Particles {
         case 'composter':
           this.add({ x: x + ox, y: y + oy, z: z + oz, vy: 0.03, maxLife: 15, size: 0.08, r: 0.4, g: 0.7, b: 0.2 });
           break;
+        case 'firework': {
+          // Burst: sparks on a sphere, coloured by hue (data) with white highlights
+          const u = Math.random() * 2 - 1;
+          const th = Math.random() * Math.PI * 2;
+          const rr = Math.sqrt(1 - u * u);
+          const sp = 0.22 + Math.random() * 0.06;
+          const [cr, cg, cb] = Math.random() < 0.15 ? [1, 1, 1] : hueRgb(data ?? Math.random() * 360);
+          this.add({ x, y, z, vx: rr * Math.cos(th) * sp, vy: u * sp, vz: rr * Math.sin(th) * sp, maxLife: 30 + Math.random() * 18, size: 0.14, r: cr, g: cg, b: cb, gravity: 0.004, drag: 0.92, emissive: true, fade: true });
+          break;
+        }
+        case 'firework_trail':
+          this.add({ x: x + ox * 0.2, y: y + oy * 0.2, z: z + oz * 0.2, vx: ox * 0.01, vy: -0.02, vz: oz * 0.01, maxLife: 10 + Math.random() * 6, size: 0.08, r: 1, g: 0.9, b: 0.6, emissive: true, fade: true });
+          break;
+        case 'shriek': {
+          // Rings of sound rising off a shrieker
+          const a = (i / n) * Math.PI * 2;
+          this.add({ x: x + Math.cos(a) * 0.3, y: y + (i % 3) * 0.3, z: z + Math.sin(a) * 0.3, vx: Math.cos(a) * 0.06, vy: 0.05, vz: Math.sin(a) * 0.06, maxLife: 30, size: 0.18, r: 0.35, g: 0.95, b: 1, emissive: true, fade: true, drag: 0.95 });
+          break;
+        }
+        case 'spore_cloud':
+          this.add({ x: x + ox, y: y + oy, z: z + oz, vx: ox * 0.03, vy: 0.01, vz: oz * 0.03, maxLife: 50 + Math.random() * 30, size: 0.3, grow: 0.01, r: 0.55, g: 0.9, b: 0.85, a: 0.7, fade: true, drag: 0.94 });
+          break;
+        case 'sculk_soul':
+          this.add({ x: x + ox, y: y + oy, z: z + oz, vy: 0.03, vx: ox * 0.01, vz: oz * 0.01, maxLife: 40 + Math.random() * 20, size: 0.14, r: 0.3, g: 0.9, b: 1, emissive: true, fade: true, drag: 0.98 });
+          break;
+        case 'sculk_charge':
+          this.add({ x: x + ox, y: y + oy * 0.3, z: z + oz, vy: 0.01, maxLife: 25 + Math.random() * 15, size: 0.08, r: 0.1, g: 0.8, b: 0.85, emissive: true, fade: true });
+          break;
+        case 'spore':
+          // Lush caves: slow greenish pollen drifting down
+          this.add({ x: x + ox, y: y + oy, z: z + oz, vx: (Math.random() - 0.5) * 0.008, vy: -0.004, vz: (Math.random() - 0.5) * 0.008, maxLife: 90 + Math.random() * 60, size: 0.05, r: 0.6, g: 0.85, b: 0.35, drag: 0.99, fade: true });
+          break;
+        case 'spore_glow':
+          // Mushroom grottos: faint blue motes rising and bobbing
+          this.add({ x: x + ox, y: y + oy, z: z + oz, vx: (Math.random() - 0.5) * 0.01, vy: 0.006, vz: (Math.random() - 0.5) * 0.01, maxLife: 70 + Math.random() * 50, size: 0.06, r: 0.4, g: 0.75, b: 1, emissive: true, fade: true, drag: 0.99 });
+          break;
+        case 'crystal_glint':
+          // Crystal hollows: short sparkles that barely move
+          this.add({ x: x + ox, y: y + oy, z: z + oz, maxLife: 12 + Math.random() * 10, size: 0.07, r: 0.85, g: 0.7, b: 1, emissive: true, fade: true, grow: -0.003, drag: 1 });
+          break;
+        case 'dust':
+          this.add({ x: x + ox, y: y + oy, z: z + oz, vx: (Math.random() - 0.5) * 0.004, vy: -0.002, vz: (Math.random() - 0.5) * 0.004, maxLife: 100 + Math.random() * 60, size: 0.035, r: 0.62, g: 0.52, b: 0.42, drag: 0.99, fade: true });
+          break;
+        case 'snowflake':
+          this.add({ x: x + ox, y: y + oy, z: z + oz, vx: (Math.random() - 0.5) * 0.012, vy: -0.012, vz: (Math.random() - 0.5) * 0.012, maxLife: 80 + Math.random() * 40, size: 0.05, r: 0.92, g: 0.96, b: 1, drag: 0.99, collide: true, fade: true });
+          break;
         case 'rain_splash':
           this.add({ x, y, z, vx: ox * 0.05, vy: 0.06, vz: oz * 0.05, maxLife: 6, size: 0.05, r: 0.6, g: 0.7, b: 1, gravity: 0.02 });
           break;
@@ -275,6 +321,28 @@ export class Particles {
           this.add({ x: x + ox, y: y + oy, z: z + oz, vy: 0.02, maxLife: 20, size: 0.1 });
       }
     }
+  }
+
+  /**
+   * A particle that travels from one point to another in `ticks` ticks:
+   * vibrations flying to a sculk sensor, the Warden's sonic boom.
+   */
+  trail(kind: string, x0: number, y0: number, z0: number, x1: number, y1: number, z1: number, ticks: number): void {
+    const t = Math.max(1, ticks);
+    const vx = (x1 - x0) / t;
+    const vy = (y1 - y0) / t;
+    const vz = (z1 - z0) / t;
+    if (kind === 'sonic_boom') {
+      // A string of expanding rings along the whole path at once
+      const len = Math.hypot(x1 - x0, y1 - y0, z1 - z0);
+      const n = Math.max(2, Math.round(len * 1.2));
+      for (let i = 0; i <= n; i++) {
+        const f = i / n;
+        this.add({ x: x0 + (x1 - x0) * f, y: y0 + (y1 - y0) * f, z: z0 + (z1 - z0) * f, maxLife: 10 + i * 0.6, size: 0.5, grow: 0.07, r: 0.45, g: 0.95, b: 1, a: 0.9, emissive: true, fade: true, drag: 1 });
+      }
+      return;
+    }
+    this.add({ x: x0, y: y0, z: z0, vx, vy, vz, maxLife: t, size: 0.16, r: 0.2, g: 0.95, b: 1, emissive: true, drag: 1 });
   }
 
   tick(): void {
@@ -355,4 +423,11 @@ export class Particles {
   clear(): void {
     this.list.length = 0;
   }
+}
+
+/** Saturated colour for a hue in degrees. */
+function hueRgb(h: number): [number, number, number] {
+  const k = (n: number): number => (n + h / 60) % 6;
+  const f = (n: number): number => 1 - Math.max(0, Math.min(k(n), 4 - k(n), 1));
+  return [f(5), f(3), f(1)];
 }

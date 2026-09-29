@@ -8,7 +8,7 @@ import { BoxModel } from './BoxModel';
 import { registerVisual, boxVisual, animateHumanoid, type EntityVisual, type VisualContext } from './EntityRenderer';
 import { kitModel, humanoidParts, quadParts, eyes, type KitPart, type FacePainter } from './modelKit';
 import type { ClientEntity } from '../../game/ClientEntity';
-import { MOB_DEFS } from '../../../common/data/mobs';
+import { MOB_DEFS, MOB_BY_ID } from '../../../common/data/mobs';
 import { items } from '../../../common/registry/items';
 
 type Anim = (m: BoxModel, e: ClientEntity, alpha: number, time: number) => void;
@@ -141,6 +141,22 @@ const animSwim: Anim = (m, e, alpha, time) => {
   void alpha;
 };
 
+/** A leather saddle strapped over a body of the given size (pixels). */
+function saddlePart(bw: number, bh: number, len: number, z: number): KitPart {
+  return {
+    name: 'saddle',
+    parent: 'body',
+    pivot: [0, bh / 2, z],
+    from: [-bw / 2 - 0.5, -2, -len / 2],
+    size: [bw + 1, 3, len],
+    colors: { all: '#7a3a18', top: '#8a4a24' },
+    paint: (p) => {
+      p.px('left', 0, 1, '#b0b0b0', 1, 2);
+      p.px('right', 0, 1, '#b0b0b0', 1, 2);
+    },
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Model registry
 // ---------------------------------------------------------------------------
@@ -214,7 +230,8 @@ V.mooshroom = {
   anim: animQuad,
 };
 V.pig = {
-  parts: () =>
+  variant: (e) => (e.meta.saddle ? 'saddle' : 'plain'),
+  parts: (e) =>
     quadParts({
       body: [10, 8, 16],
       legH: 6,
@@ -232,7 +249,7 @@ V.pig = {
       },
       snout: { size: [4, 3, 1], colors: { all: '#e87a8a' } },
       ears: { size: [2, 2, 1], colors: { all: '#e08888' } },
-    }),
+    }).concat(e.meta.saddle ? [saddlePart(10, 8, 10, 0)] : []),
   anim: animQuad,
 };
 V.sheep = {
@@ -310,24 +327,36 @@ V.rabbit = {
     m.root.position.y = e.limbSpeed > 0.1 ? Math.abs(Math.sin(walkPhase(e, alpha) * 0.8)) * 0.25 : 0;
   },
 };
+const HORSE_COATS: Record<string, [string, string]> = {
+  chestnut: ['#8a5a30', '#2a1a10'],
+  bay: ['#6a3a1a', '#1a1008'],
+  black: ['#2a2626', '#121010'],
+  white: ['#e8e4dc', '#b8b0a4'],
+  gray: ['#7a7470', '#3a3634'],
+  creamy: ['#d8b88a', '#8a6a44'],
+  dark_brown: ['#3e2a1a', '#1a100a'],
+};
 V.horse = {
-  parts: () =>
-    quadParts({
+  variant: (e) => `${String(e.meta.variant ?? 'chestnut')}:${e.meta.saddle ? 1 : 0}`,
+  parts: (e) => {
+    const [coat, mane] = HORSE_COATS[String(e.meta.variant ?? 'chestnut')] ?? HORSE_COATS.chestnut!;
+    return quadParts({
       body: [10, 10, 22],
       legH: 14,
       legW: 4,
       head: [6, 8, 12],
       headOffset: [12, -2],
-      bodyColors: { all: '#8a5a30' },
-      legColors: { all: '#7a4a28', bottom: '#2a2a2a' },
-      headColors: { all: '#8a5a30' },
+      bodyColors: { all: coat },
+      legColors: { all: coat, bottom: '#2a2a2a' },
+      headColors: { all: coat },
       face: (p) => {
         p.px('left', 2, 2, '#111111');
         p.px('right', 2, 2, '#111111');
       },
-      tail: { size: [3, 12, 3], colors: { all: '#2a1a10' }, rot: 0.6 },
-      ears: { size: [2, 3, 1], colors: { all: '#8a5a30' } },
-    }).concat([{ name: 'mane', parent: 'head', pivot: [0, 4, -1], from: [-1, -2, -4], size: [2, 10, 6], colors: { all: '#2a1a10' } }]),
+      tail: { size: [3, 12, 3], colors: { all: mane }, rot: 0.6 },
+      ears: { size: [2, 3, 1], colors: { all: coat } },
+    }).concat([{ name: 'mane', parent: 'head', pivot: [0, 4, -1], from: [-1, -2, -4], size: [2, 10, 6], colors: { all: mane } }], e.meta.saddle ? [saddlePart(10, 10, 8, 2)] : []);
+  },
   anim: animQuad,
 };
 V.goat = {
@@ -923,6 +952,525 @@ V.fish = {
   anim: animSwim,
 };
 
+// ---------------------------------------------------------------- newer animals
+V.turtle = {
+  parts: () => {
+    const skin = '#6ab06a';
+    const flip = (n: string, x: number, z: number, back: boolean): KitPart => ({ name: n, pivot: [x, 1.5, z], from: [back ? -1.5 : -2.5, -0.5, -2.5], size: [back ? 3 : 5, 1, back ? 4 : 5], colors: { all: skin } });
+    return [
+      { name: 'body', pivot: [0, 3, 0], from: [-6, -1.5, -7.5], size: [12, 3, 15], colors: { all: '#3a6a30', bottom: '#d8d0a0' }, paint: (p) => p.speckle('all', '#2a4a22', 0.2) },
+      { name: 'shell', parent: 'body', pivot: [0, 1.5, 0], from: [-5, 0, -6], size: [10, 2, 12], colors: { all: '#4a8a3a' }, paint: (p) => {
+        p.speckle('top', '#6aa84a', 0.25);
+        p.px('top', 4, 0, '#2a5a22', 2, 12);
+      } },
+      { name: 'head', pivot: [0, 3, 7.5], from: [-2, -1.5, 0], size: [4, 3, 4], colors: { all: skin }, paint: (p) => {
+        p.px('left', 1, 0, '#1a1a1a');
+        p.px('right', 2, 0, '#1a1a1a');
+        p.speckle('top', '#8ac88a', 0.2);
+      } },
+      flip('leg0', -6, 5, false),
+      flip('leg1', 6, 5, false),
+      flip('leg2', -4, -7, true),
+      flip('leg3', 4, -7, true),
+    ];
+  },
+  anim: (m, e, alpha, time) => {
+    const w = walkPhase(e, alpha);
+    const swim = Math.abs(e.y - e.py) > 0.005 || e.limbSpeed < 0.05;
+    const s = swim ? Math.sin(time * 0.25 + e.id) * 0.5 : Math.sin(w * 0.9) * 0.6 * e.limbSpeed;
+    for (const [n, k] of [['leg0', 1], ['leg1', -1], ['leg2', -1], ['leg3', 1]] as const) {
+      const p = m.part(n);
+      if (p) p.rotation.y = s * k;
+    }
+    lookHead(m, e);
+    babyScale(m, e, false);
+    if (e.meta.baby === true) m.root.scale.setScalar(0.3);
+  },
+};
+
+const PARROTS: Record<string, [string, string, string]> = {
+  red: ['#d82020', '#2050d0', '#f0c020'],
+  blue: ['#2050e0', '#1a2a8a', '#f0e040'],
+  green: ['#50c020', '#2a7a10', '#d0e040'],
+  cyan: ['#30c0e0', '#e0e0e0', '#f0c020'],
+  gray: ['#b8b8b8', '#707070', '#e0e0e0'],
+};
+V.parrot = {
+  variant: (e) => String(e.meta.variant ?? 'red'),
+  parts: (e) => {
+    const [body, wing, crest] = PARROTS[String(e.meta.variant ?? 'red')] ?? PARROTS.red!;
+    return [
+      { name: 'body', pivot: [0, 5, 0], from: [-1.5, -3, -2], size: [3, 6, 4], rot: [0.35, 0, 0], colors: { all: body } },
+      { name: 'head', pivot: [0, 8.5, 0.8], from: [-1.5, 0, -1.5], size: [3, 3, 3], colors: { all: body }, paint: (p) => {
+        p.px('left', 1, 1, '#1a1a1a');
+        p.px('right', 1, 1, '#1a1a1a');
+        p.px('left', 0, 1, '#f0f0f0');
+        p.px('right', 2, 1, '#f0f0f0');
+      } },
+      { name: 'beak', parent: 'head', pivot: [0, 1.5, 1.5], from: [-0.5, -1.5, 0], size: [1, 2, 1.5], colors: { all: '#e8a020', bottom: '#3a3a3a' } },
+      { name: 'crest', parent: 'head', pivot: [0, 3, -0.5], from: [-0.5, 0, -1.5], size: [1, 2, 2], rot: [-0.5, 0, 0], colors: { all: crest } },
+      { name: 'wingL', parent: 'body', pivot: [1.5, 2.5, 0], from: [0, -5, -1.5], size: [1, 5, 3], colors: { all: wing } },
+      { name: 'wingR', parent: 'body', pivot: [-1.5, 2.5, 0], from: [-1, -5, -1.5], size: [1, 5, 3], colors: { all: wing } },
+      { name: 'tail', parent: 'body', pivot: [0, -3, -1.5], from: [-1, -4, -0.5], size: [2, 4, 1], rot: [0.3, 0, 0], colors: { all: wing } },
+      { name: 'leg0', pivot: [-1, 2, 0], from: [-0.5, -2, -0.5], size: [1, 2, 1], colors: { all: '#6a6a6a' } },
+      { name: 'leg1', pivot: [1, 2, 0], from: [-0.5, -2, -0.5], size: [1, 2, 1], colors: { all: '#6a6a6a' } },
+    ];
+  },
+  anim: (m, e, alpha, time) => {
+    lookHead(m, e);
+    const perched = e.meta.sit === true || Math.abs(e.y - e.py) < 0.002;
+    const flap = perched ? 0 : Math.sin(time * 1.4 + e.id) * 1.1;
+    const wl = m.part('wingL');
+    const wr = m.part('wingR');
+    if (wl) wl.rotation.z = -Math.abs(flap);
+    if (wr) wr.rotation.z = Math.abs(flap);
+    // Dancing: bob and sway to the music
+    const body = m.part('body');
+    const head = m.part('head');
+    if (e.meta.dancing === true) {
+      m.root.position.y = Math.abs(Math.sin(time * 0.5)) * 0.12;
+      m.root.rotation.z = Math.sin(time * 0.25) * 0.3;
+      if (head) head.rotation.z = Math.sin(time * 0.5) * 0.4;
+    } else {
+      m.root.position.y = 0;
+      m.root.rotation.z = 0;
+      if (head) head.rotation.z = 0;
+    }
+    void body;
+    void alpha;
+  },
+};
+
+V.ocelot = {
+  parts: () =>
+    quadParts({
+      body: [4, 4, 12],
+      legH: 6,
+      legW: 2,
+      head: [5, 4, 5],
+      headOffset: [2, -1],
+      bodyColors: { all: '#e8c860', bottom: '#f4ecd0' },
+      legColors: { all: '#e0bc58' },
+      headColors: { all: '#e8c860' },
+      bodyPaint: (p) => p.speckle('all', '#5a3a18', 0.3),
+      face: (p) => {
+        p.px('front', 1, 1, '#38c838');
+        p.px('front', 3, 1, '#38c838');
+        p.px('front', 2, 2, '#8a5a3a');
+        p.speckle('top', '#5a3a18', 0.3);
+      },
+      ears: { size: [1, 2, 1], colors: { all: '#e8c860' } },
+      tail: { size: [1, 8, 1], colors: { all: '#e8c860', bottom: '#3a2a18' }, rot: 0.9 },
+    }),
+  anim: animQuad,
+};
+
+V.panda = {
+  variant: (e) => `${String(e.meta.variant ?? 'normal')}`,
+  parts: (e) => {
+    const brown = e.meta.variant === 'brown';
+    const white = brown ? '#c8b098' : '#f0f0ee';
+    const dark = brown ? '#6a4a2a' : '#1c1c24';
+    const parts = quadParts({
+      body: [12, 10, 18],
+      legH: 7,
+      legW: 5,
+      head: [10, 8, 6],
+      headOffset: [3, 0],
+      bodyColors: { all: white },
+      legColors: { all: dark },
+      headColors: { all: white },
+      face: (p) => {
+        p.px('front', 1, 2, dark, 3, 3);
+        p.px('front', 6, 2, dark, 3, 3);
+        p.px('front', 2, 3, '#f0f0f0');
+        p.px('front', 7, 3, '#f0f0f0');
+        p.px('front', 4, 5, dark, 2, 1);
+        if (e.meta.variant === 'aggressive') {
+          p.px('front', 1, 1, dark, 3, 1);
+          p.px('front', 6, 1, dark, 3, 1);
+        }
+      },
+      ears: { size: [3, 3, 1], colors: { all: dark } },
+    });
+    parts.push({ name: 'shoulders', parent: 'body', pivot: [0, 0, 5], from: [-6, -5, -3], size: [12, 10, 5], inflate: 0.1, colors: { all: dark } });
+    return parts;
+  },
+  anim: (m, e, alpha, time) => {
+    animSitQuad(m, e, alpha, time);
+    // Rolling pandas tumble over; eating pandas nod over their bamboo
+    m.root.rotation.x = e.meta.rolling ? (time * 0.25) % (Math.PI * 2) : 0;
+    const head = m.part('head');
+    if (e.meta.eating && head) head.rotation.x = 0.3 + Math.sin(time * 0.4) * 0.2;
+  },
+};
+
+const LLAMAS: Record<string, [string, string]> = {
+  creamy: ['#e8d8b0', '#c8b890'],
+  white: ['#f0ece4', '#d8d4cc'],
+  brown: ['#7a5030', '#5a3820'],
+  gray: ['#8a8480', '#6a6460'],
+};
+V.llama = {
+  variant: (e) => String(e.meta.variant ?? 'creamy'),
+  parts: (e) => {
+    const [coat, dark] = LLAMAS[String(e.meta.variant ?? 'creamy')] ?? LLAMAS.creamy!;
+    const parts = quadParts({
+      body: [12, 10, 18],
+      legH: 14,
+      legW: 4,
+      head: [6, 6, 7],
+      headOffset: [14, 0],
+      bodyColors: { all: coat },
+      legColors: { all: coat, bottom: dark },
+      headColors: { all: coat },
+      bodyPaint: (p) => p.speckle('all', dark, 0.15),
+      face: (p) => {
+        p.px('front', 1, 2, '#1a1a1a');
+        p.px('front', 4, 2, '#1a1a1a');
+        p.px('front', 2, 4, dark, 2, 2);
+      },
+      ears: { size: [2, 4, 1], colors: { all: coat } },
+    });
+    parts.push({ name: 'neck', parent: 'body', pivot: [0, 4, 8], from: [-3, 0, -3], size: [6, 12, 5], colors: { all: coat }, paint: (p) => p.speckle('all', dark, 0.15) });
+    return parts;
+  },
+  anim: animQuad,
+};
+
+V.camel = {
+  variant: (e) => (e.meta.saddle ? 'saddle' : 'plain'),
+  parts: (e) => {
+    const coat = '#d8a860';
+    const parts = quadParts({
+      body: [14, 12, 22],
+      legH: 20,
+      legW: 5,
+      head: [6, 6, 10],
+      headOffset: [12, 4],
+      bodyColors: { all: coat },
+      legColors: { all: coat, bottom: '#8a6a3a' },
+      headColors: { all: coat },
+      bodyPaint: (p) => p.speckle('all', '#c89850', 0.2),
+      face: (p) => {
+        p.px('left', 3, 2, '#1a1a1a');
+        p.px('right', 3, 2, '#1a1a1a');
+      },
+      ears: { size: [2, 1, 2], colors: { all: coat } },
+      tail: { size: [2, 10, 2], colors: { all: coat, bottom: '#6a4a2a' }, rot: 0.2 },
+    });
+    parts.push({ name: 'hump', parent: 'body', pivot: [0, 6, 0], from: [-4, 0, -5], size: [8, 5, 10], colors: { all: '#c89850' } });
+    parts.push({ name: 'neck', parent: 'body', pivot: [0, 2, 10], from: [-3, -2, -1], size: [6, 16, 5], rot: [0.35, 0, 0], colors: { all: coat } });
+    if (e.meta.saddle) parts.push(saddlePart(14, 12, 10, -6));
+    return parts;
+  },
+  anim: (m, e, alpha, time) => {
+    animQuad(m, e, alpha, time);
+    // Resting camels fold their long legs
+    const sit = e.meta.sit === true;
+    for (const n of ['leg0', 'leg1', 'leg2', 'leg3']) {
+      const p = m.part(n);
+      if (p && sit) p.rotation.x = n === 'leg0' || n === 'leg1' ? -1.5 : 1.5;
+    }
+    m.root.position.y = sit ? -1.1 : 0;
+  },
+};
+
+const FROGS: Record<string, [string, string]> = {
+  temperate: ['#c07030', '#f0d098'],
+  warm: ['#e8e0d0', '#b8a890'],
+  cold: ['#5a8a3a', '#c8d8a0'],
+};
+V.frog = {
+  variant: (e) => `${String(e.meta.variant ?? 'temperate')}:${e.meta.tongue ? 1 : 0}`,
+  parts: (e) => {
+    const [skin, belly] = FROGS[String(e.meta.variant ?? 'temperate')] ?? FROGS.temperate!;
+    const parts: KitPart[] = [
+      { name: 'body', pivot: [0, 2.5, 0], from: [-3.5, -1, -4.5], size: [7, 3, 9], colors: { all: skin, bottom: belly }, paint: (p) => p.speckle('top', belly, 0.1) },
+      { name: 'head', parent: 'body', pivot: [0, 2, 1], from: [-3.5, 0, -1], size: [7, 2, 5], colors: { all: skin, front: belly } },
+      { name: 'eyeL', parent: 'head', pivot: [2, 2, 2.5], from: [-1, 0, -1], size: [2, 2, 2], colors: { all: skin }, paint: (p) => p.px('front', 0, 0, '#1a1a1a', 2, 1) },
+      { name: 'eyeR', parent: 'head', pivot: [-2, 2, 2.5], from: [-1, 0, -1], size: [2, 2, 2], colors: { all: skin }, paint: (p) => p.px('front', 0, 0, '#1a1a1a', 2, 1) },
+      { name: 'leg0', pivot: [-3, 2, 3], from: [-1, -2, -1], size: [2, 2, 2], colors: { all: skin } },
+      { name: 'leg1', pivot: [3, 2, 3], from: [-1, -2, -1], size: [2, 2, 2], colors: { all: skin } },
+      { name: 'leg2', pivot: [-3.5, 2, -3], from: [-1.5, -2, -2], size: [3, 2, 4], colors: { all: skin } },
+      { name: 'leg3', pivot: [3.5, 2, -3], from: [-1.5, -2, -2], size: [3, 2, 4], colors: { all: skin } },
+    ];
+    if (e.meta.tongue) parts.push({ name: 'tongue', parent: 'body', pivot: [0, 0.5, 4.5], from: [-0.5, -0.5, 0], size: [1, 1, 10], colors: { all: '#e06a8a' } });
+    return parts;
+  },
+  anim: (m, e, alpha, time) => {
+    animQuad(m, e, alpha, time);
+    // Frogs hop instead of walking
+    m.root.position.y = e.limbSpeed > 0.08 ? Math.abs(Math.sin(walkPhase(e, alpha) * 0.7)) * 0.3 : 0;
+  },
+};
+
+const AXOLOTLS: Record<string, [string, string]> = {
+  lucy: ['#f8b8d8', '#e05a9a'],
+  wild: ['#8a6a4a', '#c07a5a'],
+  gold: ['#f8d040', '#f8a020'],
+  cyan: ['#c8e8f0', '#e060b0'],
+  blue: ['#4060d8', '#f0d040'],
+};
+V.axolotl = {
+  variant: (e) => String(e.meta.variant ?? 'lucy'),
+  parts: (e) => {
+    const [skin, gill] = AXOLOTLS[String(e.meta.variant ?? 'lucy')] ?? AXOLOTLS.lucy!;
+    const leg = (n: string, x: number, z: number): KitPart => ({ name: n, pivot: [x, 1.5, z], from: [-0.5, -1.5, -0.5], size: [1, 2, 1], colors: { all: skin } });
+    return [
+      { name: 'body', pivot: [0, 2.5, 0], from: [-2, -1.5, -5], size: [4, 3, 10], colors: { all: skin }, paint: (p) => p.speckle('top', gill, 0.08) },
+      { name: 'fin', parent: 'body', pivot: [0, 1.5, 0], from: [0, 0, -4], size: [0.5, 2, 8], colors: { all: gill } },
+      { name: 'head', pivot: [0, 2.5, 5], from: [-3, -1.5, 0], size: [6, 3, 5], colors: { all: skin }, paint: (p) => {
+        p.px('front', 1, 1, '#1a1a1a');
+        p.px('front', 4, 1, '#1a1a1a');
+        p.px('front', 2, 2, gill, 2, 1);
+      } },
+      { name: 'gillTop', parent: 'head', pivot: [0, 1.5, 1], from: [-3, 0, 0], size: [6, 2, 0.5], colors: { all: gill } },
+      { name: 'gillL', parent: 'head', pivot: [3, 0.5, 1], from: [0, -1.5, 0], size: [2, 3, 0.5], colors: { all: gill } },
+      { name: 'gillR', parent: 'head', pivot: [-3, 0.5, 1], from: [-2, -1.5, 0], size: [2, 3, 0.5], colors: { all: gill } },
+      { name: 'tail', parent: 'body', pivot: [0, 0, -5], from: [0, -1.5, -7], size: [0.5, 4, 7], colors: { all: gill } },
+      leg('leg0', -2, 3),
+      leg('leg1', 2, 3),
+      leg('leg2', -2, -3),
+      leg('leg3', 2, -3),
+    ];
+  },
+  anim: (m, e, alpha, time) => {
+    animQuad(m, e, alpha, time);
+    const tail = m.part('tail');
+    if (tail) tail.rotation.y = Math.sin(time * 0.3 + e.id) * 0.5;
+    // Playing dead: rolls onto its side and lies still
+    m.root.rotation.z = e.meta.playDead ? Math.PI / 2 : 0;
+  },
+};
+
+const FISH_COLORS: Record<string, string> = { ...DYE };
+V.tropical_fish = {
+  variant: (e) => String(e.meta.variant ?? 'kob:orange:white'),
+  parts: (e) => {
+    const [pattern, base, accent] = String(e.meta.variant ?? 'kob:orange:white').split(':');
+    const c = FISH_COLORS[base ?? 'orange'] ?? '#f07613';
+    const a = FISH_COLORS[accent ?? 'white'] ?? '#e9ecec';
+    const tall = pattern === 'flopper' || pattern === 'stripey' || pattern === 'spotty';
+    const h = tall ? 6 : 3;
+    return [
+      { name: 'body', pivot: [0, h / 2 + 1, 0], from: [-1, -h / 2, -3], size: [2, h, 6], colors: { all: c }, paint: (p) => {
+        if (pattern === 'stripey' || pattern === 'dasher') for (let z = 1; z < 6; z += 2) {
+          p.px('left', z, 0, a, 1, h);
+          p.px('right', z, 0, a, 1, h);
+        } else p.speckle('all', a, pattern === 'spotty' ? 0.3 : 0.15);
+        p.px('left', 5, 1, '#1a1a1a');
+        p.px('right', 0, 1, '#1a1a1a');
+      } },
+      { name: 'finTop', parent: 'body', pivot: [0, h / 2, 0], from: [0, 0, -2], size: [0.5, tall ? 3 : 2, 4], colors: { all: a } },
+      { name: 'tail', parent: 'body', pivot: [0, 0, -3], from: [0, -h / 2, -3], size: [0.5, h, 3], colors: { all: a } },
+    ];
+  },
+  anim: animSwim,
+};
+
+V.pufferfish = {
+  variant: (e) => String(e.meta.puff ?? 0),
+  parts: (e) => {
+    const puff = Number(e.meta.puff ?? 0);
+    const s = [3, 5, 8][puff] ?? 3;
+    const body = '#e8c030';
+    const parts: KitPart[] = [
+      { name: 'body', pivot: [0, s / 2 + 0.5, 0], from: [-s / 2, -s / 2, -s / 2], size: [s, s, s], colors: { all: body, bottom: '#f0f0d0' }, paint: (p) => {
+        p.speckle('top', '#8a6a18', 0.2);
+        p.px('left', s - 2, 1, '#1a1a1a');
+        p.px('right', 1, 1, '#1a1a1a');
+      } },
+      { name: 'tail', parent: 'body', pivot: [0, 0, -s / 2], from: [0, -1, -2], size: [0.5, 2, 2], colors: { all: '#4aa0c0' } },
+      { name: 'finL', parent: 'body', pivot: [s / 2, 0, 0], from: [0, -1, -0.5], size: [1, 2, 1], colors: { all: '#4aa0c0' } },
+      { name: 'finR', parent: 'body', pivot: [-s / 2, 0, 0], from: [-1, -1, -0.5], size: [1, 2, 1], colors: { all: '#4aa0c0' } },
+    ];
+    if (puff === 2) {
+      // Spines stand out on every side: little points in a grid on each face
+      const h = s / 2;
+      let i = 0;
+      for (const a of [-2, 2])
+        for (const b of [-2, 2]) {
+          for (const [px, py, pz] of [
+            [a, b, h],
+            [a, b, -h - 1],
+            [h, a, b],
+            [-h - 1, a, b],
+            [a, h, b],
+            [a, -h - 1, b],
+          ] as const) parts.push({ name: `spine${i++}`, parent: 'body', pivot: [px, py, pz], from: [-0.5, 0, 0], size: [1, 1, 1], colors: { all: '#f0e8a0' } });
+        }
+    }
+    return parts;
+  },
+  anim: (m, e, alpha, time) => {
+    animSwim(m, e, alpha, time);
+    m.root.position.y = Math.sin(time * 0.1 + e.id) * 0.04;
+  },
+};
+
+// ---------------------------------------------------------------- cave mobs
+V.glow_squid = {
+  parts: () => {
+    const parts: KitPart[] = [{ name: 'body', pivot: [0, 8, 0], from: [-6, 0, -6], size: [12, 16, 12], colors: { all: '#0a5a5e' }, paint: (p) => {
+      p.speckle('all', '#3ae0c0', 0.25);
+      p.px('front', 3, 12, '#c8fff0', 2, 2);
+      p.px('front', 7, 12, '#c8fff0', 2, 2);
+    } }];
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      parts.push({ name: 'arm' + i, pivot: [Math.cos(a) * 5, 8, Math.sin(a) * 5], from: [-1, -18, -1], size: [2, 18, 2], colors: { all: '#0e6a6e' }, paint: (p) => p.speckle('all', '#5af0d0', 0.3) });
+    }
+    return parts;
+  },
+  anim: (m, e, alpha, time) => {
+    for (let i = 0; i < 8; i++) {
+      const a = m.part('arm' + i);
+      if (a) a.rotation.x = Math.sin(time * 0.15 + i) * 0.25;
+    }
+    void alpha;
+    void e;
+  },
+  scale: 0.6,
+  glow: true,
+};
+V.crystal_mite = {
+  parts: () => [
+    { name: 'body', pivot: [0, 2, 0], from: [-2.5, -1.5, -4], size: [5, 3, 8], colors: { all: '#4a3a6a' }, paint: (p) => p.speckle('all', '#6a4a9a', 0.3) },
+    { name: 'shard1', parent: 'body', pivot: [-1, 1.5, 1], from: [-0.5, 0, -0.5], size: [1, 4, 1], rot: [0.3, 0, -0.3], colors: { all: '#a583e8', top: '#e0ccff' } },
+    { name: 'shard2', parent: 'body', pivot: [1, 1.5, -1], from: [-0.5, 0, -0.5], size: [1, 5, 1], rot: [-0.2, 0, 0.25], colors: { all: '#c6a8ff', top: '#f0e8ff' } },
+    { name: 'shard3', parent: 'body', pivot: [0, 1.5, -3], from: [-0.5, 0, -0.5], size: [1, 3, 1], rot: [-0.4, 0, 0], colors: { all: '#8d68d4', top: '#e0ccff' } },
+    { name: 'head', pivot: [0, 2, 4], from: [-2, -1, 0], size: [4, 2, 2], colors: { all: '#3a2a5a' }, paint: (p) => {
+      p.px('front', 0, 0, '#e0ccff');
+      p.px('front', 3, 0, '#e0ccff');
+    } },
+    { name: 'leg0', pivot: [-2.5, 1, 2], from: [-2, -1, -0.5], size: [2, 1, 1], colors: { all: '#2a1a4a' } },
+    { name: 'leg1', pivot: [2.5, 1, 2], from: [0, -1, -0.5], size: [2, 1, 1], colors: { all: '#2a1a4a' } },
+    { name: 'leg2', pivot: [-2.5, 1, -2], from: [-2, -1, -0.5], size: [2, 1, 1], colors: { all: '#2a1a4a' } },
+    { name: 'leg3', pivot: [2.5, 1, -2], from: [0, -1, -0.5], size: [2, 1, 1], colors: { all: '#2a1a4a' } },
+  ],
+  anim: (m, e, alpha, time) => {
+    const w = walkPhase(e, alpha);
+    for (const [n, k] of [['leg0', 1], ['leg1', -1], ['leg2', -1], ['leg3', 1]] as const) {
+      const p = m.part(n);
+      if (p) p.rotation.y = Math.sin(w * 1.4) * 0.6 * e.limbSpeed * k;
+    }
+    const b = m.part('body');
+    if (b) b.rotation.z = Math.sin(time * 0.5) * 0.05 * e.limbSpeed;
+  },
+};
+V.sporeling = {
+  parts: () => [
+    { name: 'body', pivot: [0, 5, 0], from: [-2.5, 0, -2.5], size: [5, 8, 5], colors: { all: '#d8d0c0', bottom: '#b8b0a0' }, paint: (p) => {
+      p.px('front', 1, 2, '#1a1a1a');
+      p.px('front', 3, 2, '#1a1a1a');
+      p.px('front', 2, 4, '#8a7a6a');
+    } },
+    { name: 'head', parent: 'body', pivot: [0, 8, 0], from: [-6, 0, -6], size: [12, 5, 12], colors: { all: '#2a8a9a', bottom: '#d8e8e0', top: '#3ab8c0' }, paint: (p) => p.speckle('top', '#c8fff8', 0.18) },
+    { name: 'cap2', parent: 'head', pivot: [0, 5, 0], from: [-4, 0, -4], size: [8, 2, 8], colors: { all: '#3ab8c0' }, paint: (p) => p.speckle('top', '#c8fff8', 0.2) },
+    { name: 'leg0', pivot: [-1.5, 5, 0], from: [-1, -5, -1], size: [2, 5, 2], colors: { all: '#c8c0b0' } },
+    { name: 'leg1', pivot: [1.5, 5, 0], from: [-1, -5, -1], size: [2, 5, 2], colors: { all: '#c8c0b0' } },
+  ],
+  anim: (m, e, alpha, time) => {
+    const w = walkPhase(e, alpha);
+    const s = Math.sin(w * 0.8) * 0.8 * e.limbSpeed;
+    const l0 = m.part('leg0');
+    const l1 = m.part('leg1');
+    if (l0) l0.rotation.x = s;
+    if (l1) l1.rotation.x = -s;
+    const b = m.part('body');
+    if (b) b.rotation.z = Math.sin(time * 0.1 + e.id) * 0.05;
+  },
+  glow: true,
+};
+
+// ---------------------------------------------------------------- the Warden
+/** Client-side memory of the Warden's last cues (to time twitches and sniffs). */
+const wardenCues = new WeakMap<ClientEntity, { listen: unknown; listenAt: number; sniff: unknown; sniffAt: number }>();
+V.warden = {
+  parts: () => [
+    { name: 'body', pivot: [0, 13, 0], from: [-9, 0, -5], size: [18, 20, 10], colors: { all: '#0e3a44', top: '#123f4a' }, paint: (p) => {
+      p.speckle('all', '#16505a', 0.12);
+      for (let y = 3; y < 17; y += 3) p.px('front', 3, y, '#2a7a84', 12, 1);
+      p.speckle('back', '#3ae8e8', 0.04);
+    } },
+    { name: 'heart', parent: 'body', pivot: [0, 12, 5], from: [-4, -4, 0], size: [8, 8, 1.5], colors: { all: '#2ad8e0' }, paint: (p) => p.speckle('all', '#c8ffff', 0.3) },
+    { name: 'head', pivot: [0, 33, 0], from: [-7, 0, -7], size: [14, 12, 14], colors: { all: '#0e3a44', bottom: '#082a32' }, paint: (p) => {
+      // No eyes: a jagged mouth and souls under the skin
+      p.px('front', 3, 8, '#051a20', 8, 1);
+      p.px('front', 4, 9, '#051a20', 6, 1);
+      p.speckle('front', '#16505a', 0.15);
+      p.speckle('top', '#2ad8e0', 0.05);
+    } },
+    { name: 'tendrilL', parent: 'head', pivot: [7, 9, 0], from: [0, 0, -0.5], size: [9, 7, 1], rot: [0, 0, -0.45], colors: { all: '#16767e' }, paint: (p) => {
+      p.px('front', 0, 0, '#5ad8e0', 9, 2);
+      p.px('back', 0, 0, '#5ad8e0', 9, 2);
+    } },
+    { name: 'tendrilR', parent: 'head', pivot: [-7, 9, 0], from: [-9, 0, -0.5], size: [9, 7, 1], rot: [0, 0, 0.45], colors: { all: '#16767e' }, paint: (p) => {
+      p.px('front', 0, 0, '#5ad8e0', 9, 2);
+      p.px('back', 0, 0, '#5ad8e0', 9, 2);
+    } },
+    { name: 'rightArm', pivot: [-9, 31, 0], from: [-7, -24, -4], size: [7, 26, 8], colors: { all: '#0e3a44', bottom: '#082a32' }, paint: (p) => p.speckle('all', '#16505a', 0.1) },
+    { name: 'leftArm', pivot: [9, 31, 0], from: [0, -24, -4], size: [7, 26, 8], colors: { all: '#0e3a44', bottom: '#082a32' }, paint: (p) => p.speckle('all', '#16505a', 0.1) },
+    { name: 'rightLeg', pivot: [-5, 13, 0], from: [-3, -13, -3], size: [6, 13, 6], colors: { all: '#0b323b' } },
+    { name: 'leftLeg', pivot: [5, 13, 0], from: [-3, -13, -3], size: [6, 13, 6], colors: { all: '#0b323b' } },
+  ],
+  nameY: 3.3,
+  anim: (m, e, alpha, time) => {
+    animateHumanoid(m, e, alpha);
+    const now = performance.now() / 1000;
+    let cue = wardenCues.get(e);
+    if (!cue) {
+      cue = { listen: e.meta.listen, listenAt: -9, sniff: e.meta.sniff, sniffAt: -9 };
+      wardenCues.set(e, cue);
+    }
+    if (e.meta.listen !== cue.listen) {
+      cue.listen = e.meta.listen;
+      cue.listenAt = now;
+    }
+    if (e.meta.sniff !== cue.sniff) {
+      cue.sniff = e.meta.sniff;
+      cue.sniffAt = now;
+    }
+    // Heartbeat: quicker the angrier it is
+    const lvl = Number(e.meta.angerLevel ?? 0);
+    const rate = lvl === 2 ? 2.6 : lvl === 1 ? 1.8 : 1.1;
+    const heart = m.part('heart');
+    const charging = e.meta.sonic !== undefined;
+    if (heart) heart.scale.setScalar(charging ? 1.5 + Math.sin(now * 30) * 0.15 : 1 + 0.3 * Math.pow(Math.max(0, Math.sin(now * rate * Math.PI * 2)), 6));
+    // Tendrils twitch when it hears something
+    const twitch = now - cue.listenAt < 0.8 ? Math.sin(now * 40) * 0.25 : 0;
+    const tl = m.part('tendrilL');
+    const tr = m.part('tendrilR');
+    if (tl) tl.rotation.z = -0.45 + twitch;
+    if (tr) tr.rotation.z = 0.45 - twitch;
+    const head = m.part('head');
+    // Sniffing: the head sweeps side to side
+    if (head && now - cue.sniffAt < 1.2) head.rotation.y += Math.sin((now - cue.sniffAt) * 10) * 0.5;
+    // Roar: head back, arms out
+    if (e.anim === 'roar' && e.animTime < 50) {
+      const k = Math.sin((e.animTime / 50) * Math.PI);
+      if (head) head.rotation.x = -0.7 * k;
+      const ra = m.part('rightArm');
+      const la = m.part('leftArm');
+      if (ra) ra.rotation.z = 0.8 * k;
+      if (la) la.rotation.z = -0.8 * k;
+    }
+    // Charging a sonic boom: arms braced forward
+    if (charging) {
+      const ra = m.part('rightArm');
+      const la = m.part('leftArm');
+      if (ra) ra.rotation.x = -1.1;
+      if (la) la.rotation.x = -1.1;
+    }
+    // Emerging from / digging into the ground
+    const emerge = e.meta.emerge !== undefined ? Number(e.meta.emerge) : 1;
+    const dig = e.meta.dig !== undefined ? Number(e.meta.dig) : 0;
+    m.root.position.y = -(1 - emerge) * 3 - dig * 3;
+    void time;
+  },
+};
+
 // ---------------------------------------------------------------- original mobs
 V.cave_stalker = {
   parts: () => [
@@ -1229,11 +1777,52 @@ function makeVisual(def: MobVisualDef, e: ClientEntity, ctx: VisualContext): Ent
     baseSet(b);
     heldMat?.color.setScalar(b);
   };
+  // Lead: a sagging rope to the holder's hand or a fence post
+  const SEG = 10;
+  const leadGeo = new THREE.BufferGeometry();
+  leadGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array((SEG + 1) * 3), 3));
+  const leadMat = new THREE.LineBasicMaterial({ color: 0x8a6a3a });
+  const lead = new THREE.Line(leadGeo, leadMat);
+  lead.frustumCulled = false;
+  lead.visible = false;
+  // The rope lives in world space: keep it out of the moving holder
+  const leadRoot = new THREE.Group();
+  leadRoot.add(lead);
+  visual.object.add(leadRoot);
+  const baseUpdate = visual.update.bind(visual);
+  visual.update = (ent, alpha, time) => {
+    baseUpdate(ent, alpha, time);
+    let to: [number, number, number] | null = null;
+    const pos = ent.meta.leashPos as number[] | undefined;
+    if (Array.isArray(pos)) to = [pos[0]! + 0.5, pos[1]! + 0.5, pos[2]! + 0.5];
+    else if (typeof ent.meta.leash === 'number') {
+      to = ctx.localHand?.(ent.meta.leash) ?? null;
+      const h = to ? null : ctx.entity?.(ent.meta.leash);
+      if (h) {
+        const [hx, hy, hz] = h.lerp(alpha);
+        to = [hx, hy + 1.1, hz];
+      }
+    }
+    lead.visible = !!to;
+    if (!to) return;
+    const [x, y, z] = ent.lerp(alpha);
+    leadRoot.position.set(-x, -y, -z);
+    const fy = y + (MOB_BY_ID.get(ent.type)?.height ?? 1) * 0.75;
+    const p = leadGeo.getAttribute('position') as THREE.BufferAttribute;
+    const sag = Math.min(1, Math.hypot(to[0] - x, to[2] - z) * 0.08);
+    for (let i = 0; i <= SEG; i++) {
+      const t = i / SEG;
+      p.setXYZ(i, x + (to[0] - x) * t, fy + (to[1] - fy) * t - Math.sin(t * Math.PI) * sag, z + (to[2] - z) * t);
+    }
+    p.needsUpdate = true;
+  };
   const baseDispose = visual.dispose.bind(visual);
   visual.dispose = () => {
     baseDispose();
     heldMat?.map?.dispose();
     heldMat?.dispose();
+    leadGeo.dispose();
+    leadMat.dispose();
   };
   return visual;
 }

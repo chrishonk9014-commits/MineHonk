@@ -4,6 +4,7 @@
  * into client state. The server stays authoritative for everything; the
  * client only predicts movement, mining progress and placements.
  */
+import { CAVE_BIOMES } from '../../common/gen/caves/caveBiomes';
 import type { ClientConnection } from '../net/ClientConnection';
 import type { C2S, S2C, PlayerStats, WorldInfo, AbilitiesMsg, WindowKind } from '../../common/net/protocol';
 import { ClientWorld } from '../world/ClientWorld';
@@ -18,15 +19,16 @@ import { SignEditor, PlayerList } from '../ui/Overlays';
 import type { Input } from '../input/Input';
 import type { Settings } from '../settings';
 import type { AudioEngine } from '../audio/Audio';
-import { MusicPlayer } from '../audio/Audio';
+import { MusicPlayer, discTitle } from '../audio/Audio';
 import type { Slot, ItemStack } from '../../common/game/itemstack';
 import type { GameMode } from '../../common/game/gamemode';
 import type { DimensionId } from '../../common/data/biomes';
 import { items, itemById } from '../../common/registry/items';
-import { blocks, blockOf, STATE_BLOCK, STATE_FLUID } from '../../common/registry/blocks';
+import { blocks, blockOf, STATE_BLOCK, STATE_FLUID, STATE_SOLID } from '../../common/registry/blocks';
 import { lookDirection, rayBox } from './look';
 import { entityInfo } from '../../common/data/entities';
 import { raycastBlocks } from '../../common/physics/raycast';
+import { newBody } from '../../common/physics/movement';
 import { el } from '../ui/dom';
 import { attachPlayerPreview } from '../render/PlayerPreview';
 import { chunkIndex } from '../../common/world/constants';
@@ -34,6 +36,7 @@ import { enchantLevel } from '../../common/game/enchanting';
 import type { AdminAction } from '../../common/game/admin';
 import type { AdminReply } from '../ui/AdminPanel';
 import { keyName } from '../ui/Screens';
+import { Navigator, type Instrument } from '../ui/Navigator';
 
 export interface GameHost {
   openPause(): void;
@@ -70,6 +73,15 @@ export class Game {
   readonly interaction: BlockInteraction;
   readonly renderer: WorldRenderer;
   readonly hud = new Hud();
+  /** Compass needles and the clock dial for held instruments. */
+  private readonly navigator = new Navigator();
+  /** Dark vignette with a round view while looking through a spyglass. */
+  private readonly scopeOverlay = el('div', { class: 'spyglass-overlay hidden' });
+  private scoping = false;
+  private scopeZoom = 1;
+  /** World spawn (compasses) and the last death (Recovery Compass). */
+  private worldSpawn: [number, number, number] = [0, 64, 0];
+  private deathPos: { dim: DimensionId; x: number; y: number; z: number } | null = null;
   readonly chat = new Chat();
   readonly entities = new Map<number, ClientEntity>();
   readonly root = el('div', { class: 'layer' });
@@ -120,10 +132,15 @@ export class Game {
   private hurtTilt = 0;
   private shake = 0;
   private eyeCur = 1.62;
+  /** Interpolation factor of the frame being drawn. */
+  private lastAlpha = 1;
   private eyePrev = 1.62;
   private stepDist = 0;
   private caveMood = 0;
   private usingItem = false;
+  private wasSneak = false;
+  /** Item number -> client tick until which it can't be used (knocked-aside shield...). */
+  private readonly cooldowns = new Map<number, { until: number; total: number }>();
   private useRepeat = 0;
   private lastSwingSent = 0;
   private entityTarget: ClientEntity | null = null;
@@ -138,6 +155,9 @@ export class Game {
   private readonly adminWaiters = new Map<number, { done: (r: AdminReply) => void; progress?: (r: AdminReply) => void }>();
   private lastDebugUpdate = 0;
   private musicTimer = 0;
+  /** Cave biome the server says we are in (0 = none) and how far the view has blended into it. */
+  caveBiome = 0;
+  private caveBlend = 0;
 
   constructor(
     readonly canvas: HTMLCanvasElement,
@@ -150,6 +170,23 @@ export class Game {
     readonly host: GameHost,
   ) {
     this.player = new LocalPlayer(this.world);
+    this.player.vehiclePos = () => {
+      const v = this.player.vehicle;
+      const e = v ? this.entities.get(v.id) : undefined;
+      return e ? [e.x, e.y, e.z] : null;
+    };
+    // Elytra in the chest slot that isn't worn down to its last point
+    this.player.sneakSpeed = () => {
+      const legs = this.invSlots[HELMET + 2];
+      const lvl = legs?.tag?.ench?.silent_stride ?? 0;
+      return Math.min(1, 0.3 + 0.15 * lvl);
+    };
+    this.player.canGlide = () => {
+      const c = this.invSlots[HELMET + 1];
+      if (!c) return false;
+      const it = items[c.id];
+      return it?.id === 'elytra' && (c.damage ?? 0) < (it.def.durability ?? 1) - 1;
+    };
     this.renderer = new WorldRenderer(canvas, this.world, assets, settings);
     this.interaction = new BlockInteraction(this.world, this.player, (m) => this.send(m), {
       hitParticles: (s, x, y, z, f) => this.settings.particles !== 'minimal' && this.renderer.particles.digHit(s, x, y, z, f),
@@ -161,7 +198,8 @@ export class Game {
       sound: (n, x, y, z, v, p) => this.audio.play(n, x, y, z, v, p),
       swing: () => this.swing(),
     });
-    this.root.append(this.hud.root, this.chat.root, this.chat.input, this.playerList.root);
+    this.root.append(this.scopeOverlay, this.hud.root, this.chat.root, this.chat.input, this.playerList.root);
+    this.hud.root.append(this.navigator.root);
     ui.append(this.root);
     this.chat.onSend = (text) => this.send({ t: 'chat', text });
     this.chat.onClose = () => {
@@ -195,6 +233,21 @@ export class Game {
 
   held(hand: 0 | 1 = 0): ItemStack | null {
     return (hand === 0 ? this.invSlots[HOTBAR0 + this.selected] : this.invSlots[OFFHAND]) ?? null;
+  }
+
+  /**
+   * How dark the view is: blindness is total; the Darkness effect (Warden,
+   * shriekers) pulses between dim and nearly black. The pulsing strength is
+   * an accessibility setting; with Reduce Motion it holds steady.
+   */
+  private darknessAmount(): number {
+    if (this.effectLevel('blindness') > 0) return 1;
+    if (this.effectLevel('darkness') <= 0) return 0;
+    const k = Math.max(0, Math.min(1, this.settings.darknessPulse ?? 1));
+    if (this.settings.reduceMotion || k === 0) return 0.45;
+    const t = performance.now() / 1000;
+    const pulse = Math.pow((Math.sin(t * 1.6) + 1) / 2, 2);
+    return 0.4 + 0.52 * k * pulse;
   }
 
   private effectLevel(id: string): number {
@@ -317,6 +370,7 @@ export class Game {
         this.player.pitch = m.pitch;
         this.time = m.time;
         this.dayTime = m.dayTime;
+        this.worldSpawn = m.spawn;
         this.loadingTerrain = true;
         this.loadingSince = performance.now();
         this.host.setLoading('Loading terrain...');
@@ -350,6 +404,8 @@ export class Game {
         const k = `${m.x},${m.y},${m.z}`;
         if (m.data) this.blockEntities.set(k, m.data);
         else this.blockEntities.delete(k);
+        // Keep the chunk copy current too (beacon beams and sign text read it)
+        this.world.getChunk(m.x >> 4, m.z >> 4)?.setBlockEntity(m.x & 15, m.y, m.z & 15, (m.data as { type: string } | null) ?? undefined);
         break;
       }
       case 'spawn': {
@@ -371,7 +427,9 @@ export class Game {
         break;
       case 'moves': {
         const l = m.list;
+        const steered = this.player.vehicle?.control ? this.player.vehicle.id : -1;
         for (let i = 0; i + 6 < l.length; i += 7) {
+          if (l[i] === steered) continue;
           const e = this.entities.get(l[i]!);
           if (e) e.setTarget(l[i + 1]!, l[i + 2]!, l[i + 3]!, l[i + 4]!, l[i + 5]!, l[i + 6]!);
         }
@@ -481,6 +539,12 @@ export class Game {
         if (this.settings.particles === 'minimal' && m.kind !== 'explosion') break;
         this.renderer.particles.spawn(m.kind, m.x, m.y, m.z, this.settings.particles === 'decreased' ? Math.ceil(m.count / 3) : m.count, m.spread, m.data);
         break;
+      case 'cave_biome':
+        this.caveBiome = m.id;
+        break;
+      case 'trail':
+        if (this.settings.particles !== 'minimal' || m.kind === 'sonic_boom') this.renderer.particles.trail(m.kind, m.x0, m.y0, m.z0, m.x1, m.y1, m.z1, m.ticks);
+        break;
       case 'teleport':
         this.player.setPos(m.x, m.y, m.z);
         if (m.yaw !== undefined) this.player.yaw = m.yaw;
@@ -577,10 +641,69 @@ export class Game {
       }
       case 'use_result':
         break;
+      case 'record':
+        if (m.track) {
+          this.audio.discs.play(m.x, m.y, m.z, m.track);
+          this.hud.showTitle('', `Now Playing: MineHonk - ${discTitle(m.track)}`, 60);
+        } else this.audio.discs.stop(m.x, m.y, m.z);
+        break;
+      case 'mount':
+        if (m.id === null) {
+          this.player.vehicle = null;
+        } else {
+          const body = newBody(m.x ?? 0, m.y ?? 0, m.z ?? 0, m.width ?? 1, m.height ?? 1);
+          body.stepHeight = 1.1;
+          this.player.vehicle = { id: m.id, control: !!m.control, seat: m.seat ?? 0.7, speed: m.speed ?? 0.1, jump: m.jump ?? 0, body, yaw: m.yaw ?? 0 };
+        }
+        break;
+      case 'vehicle_pos': {
+        const v = this.player.vehicle;
+        if (v) {
+          v.body.x = m.x;
+          v.body.y = m.y;
+          v.body.z = m.z;
+          v.body.vx = v.body.vy = v.body.vz = 0;
+        }
+        break;
+      }
+      case 'death_pos':
+        this.deathPos = m.pos;
+        break;
+      case 'boost':
+        if (this.player.gliding) this.player.boostTicks = Math.max(this.player.boostTicks, m.ticks);
+        break;
+      case 'cooldown': {
+        this.cooldowns.set(m.item, { until: this.tickNo + m.ticks, total: m.ticks });
+        const held = this.held();
+        if (this.usingItem && (held?.id === m.item || (!held && this.held(1)?.id === m.item))) {
+          this.usingItem = false;
+          this.renderer.hand.using = 0;
+          this.send({ t: 'use', hand: 0, action: 'release' });
+        }
+        break;
+      }
       case 'debug':
         this.debugData = m.data;
         break;
     }
+  }
+
+  private onCooldown(item: number): boolean {
+    const c = this.cooldowns.get(item);
+    if (!c) return false;
+    if (c.until <= this.tickNo) {
+      this.cooldowns.delete(item);
+      return false;
+    }
+    return true;
+  }
+
+  /** Remaining cooldown fraction (0..1) for a slot's item. */
+  private cooldownFraction(s: Slot): number {
+    if (!s) return 0;
+    const c = this.cooldowns.get(s.id);
+    if (!c || c.until <= this.tickNo) return 0;
+    return (c.until - this.tickNo) / Math.max(1, c.total);
   }
 
   private setAbilities(a: AbilitiesMsg): void {
@@ -596,6 +719,7 @@ export class Game {
 
   private clearWorld(): void {
     this.world.clear();
+    this.audio.discs.stopAll();
     for (const id of [...this.entities.keys()]) this.removeEntity(id);
     this.otherDigs.clear();
     this.blockEntities.clear();
@@ -730,7 +854,14 @@ export class Game {
     // Hunger prevents sprinting
     if (this.survivalHud && this.stats.food <= 6 && !p.abilities.mayFly) sprint = false;
     const wasFlying = p.flying;
+    // Sneak gets off a mount
+    const sneakPressed = sneak && !this.wasSneak;
+    this.wasSneak = sneak;
+    if (p.vehicle && sneakPressed) this.send({ t: 'dismount' });
+    if (p.vehicle) sneak = false;
     const move = p.tick({ forward, strafe, jump, sneak, sprint: sprint && !(this.survivalHud && this.stats.food <= 6), jumpPressed, forwardPressed });
+    const v = p.vehicle;
+    if (v?.control) this.send({ t: 'vehicle_move', x: v.body.x, y: v.body.y, z: v.body.z, yaw: v.yaw });
     if (this.survivalHud && this.stats.food <= 6 && !p.abilities.mayFly) p.sprinting = false;
     if (p.flying !== wasFlying) this.send({ t: 'set_flying', flying: p.flying });
     if (move) this.send(move);
@@ -759,7 +890,8 @@ export class Game {
       if (!useHeld && this.usingItem) {
         this.usingItem = false;
         this.renderer.hand.using = 0;
-        this.send({ t: 'use', hand: 0, action: 'release' });
+        if (this.scoping) this.scoping = false;
+        else this.send({ t: 'use', hand: 0, action: 'release' });
       }
       if (!useHeld) this.useRepeat = 0;
     } else if (this.interaction.dig) this.interaction.tickMining(null, false, false, 0, 0, false);
@@ -770,6 +902,20 @@ export class Game {
     this.time++;
     // Entities & effects
     for (const e of this.entities.values()) e.tick();
+    // The mount this client steers is drawn where the local simulation has it
+    if (v?.control) {
+      const e = this.entities.get(v.id);
+      if (e) {
+        e.px = e.x;
+        e.py = e.y;
+        e.pz = e.z;
+        e.x = e.tx = v.body.x;
+        e.y = e.ty = v.body.y;
+        e.z = e.tz = v.body.z;
+        e.yaw = e.tyaw = e.headYaw = e.theadYaw = v.yaw;
+        e.steps = 0;
+      }
+    }
     this.renderer.particles.tick();
     this.renderer.hand.tick();
     this.renderer.hand.setItem(this.held()?.id ?? 0);
@@ -787,6 +933,7 @@ export class Game {
       {
         stats: this.stats,
         hotbar: this.invSlots.slice(HOTBAR0, HOTBAR0 + 9),
+        cooldowns: this.invSlots.slice(HOTBAR0, HOTBAR0 + 9).map((st) => this.cooldownFraction(st)),
         offhand: this.invSlots[OFFHAND] ?? null,
         selected: this.selected,
         survival: this.survivalHud,
@@ -795,7 +942,28 @@ export class Game {
       },
       this.tickNo,
     );
+    this.navigator.update(this.instrument(), this.player.body.x, this.player.body.z, this.player.yaw, this.tickNo);
     this.checkLoading();
+  }
+
+  /** The instrument for the held compass or clock (main hand first). */
+  private instrument(): Instrument | null {
+    for (const st of [this.held(), this.held(1)]) {
+      if (!st) continue;
+      const id = items[st.id]?.id;
+      const overworldLike = this.dimension === 'overworld' || this.dimension === 'farlands';
+      if (id === 'clock') return { kind: 'clock', dayTime: overworldLike ? this.dayTime : null };
+      if (id === 'compass') {
+        const lode = st.tag?.data?.lodestone as number[] | undefined;
+        if (lode) return { kind: 'needle', target: st.tag?.data?.dim === this.dimension ? [lode[0]! + 0.5, lode[2]! + 0.5] : null, colors: { face: '#d8d8d8', rim: '#6a6a6a', tip: '#c02020' } };
+        return { kind: 'needle', target: this.dimension === 'overworld' ? [this.worldSpawn[0] + 0.5, this.worldSpawn[2] + 0.5] : null, colors: { face: '#d8d8d8', rim: '#8a8a8a', tip: '#d02020' } };
+      }
+      if (id === 'recovery_compass') {
+        const d = this.deathPos;
+        return { kind: 'needle', target: d && d.dim === this.dimension ? [d.x + 0.5, d.z + 0.5] : null, colors: { face: '#0e2a30', rim: '#1f4a52', tip: '#3ae0d0' } };
+      }
+    }
+    return null;
   }
 
   private wasForward = false;
@@ -894,9 +1062,37 @@ export class Game {
     }
   }
 
+  /** Cave biome ambience: drifting particles and biome sounds around the player. */
+  private caveAmbience(): void {
+    const cb = this.dimension === 'overworld' ? this.caveBiome : 0;
+    this.caveBlend += ((cb ? 1 : 0) - this.caveBlend) * 0.04;
+    if (!cb) return;
+    const info = CAVE_BIOMES[cb];
+    const b = this.player.body;
+    if (info?.particle && this.settings.particles !== 'minimal' && this.tickNo % (this.settings.particles === 'decreased' ? 6 : 2) === 0) {
+      const x = b.x + (Math.random() - 0.5) * 16;
+      const y = b.y + (Math.random() - 0.3) * 8;
+      const z = b.z + (Math.random() - 0.5) * 16;
+      if (!STATE_SOLID[this.world.getState(Math.floor(x), Math.floor(y), Math.floor(z))]) this.renderer.particles.spawn(info.particle, x, y, z, 1, 0.2);
+    }
+    // Each biome has its own sounds
+    if (this.tickNo % 40 === 0 && Math.random() < 0.35) {
+      const snd = ['', 'cave.drip', 'cave.rumble', 'lush.chirp', 'mushroom.pop', 'crystal.chime', 'cave.drip', 'lava.pop', 'frozen.wind', 'deep_dark.hum'][cb];
+      if (snd) this.audio.play(snd, b.x + (Math.random() - 0.5) * 20, b.y + (Math.random() - 0.5) * 6, b.z + (Math.random() - 0.5) * 20, 0.6, 0.85 + Math.random() * 0.3, 'ambient');
+    }
+  }
+
+  /** Cave fog for the renderer: colour, how thick, and how far we are into it. */
+  caveFog(): { color: number; density: number; amount: number } | undefined {
+    if (this.caveBlend < 0.01) return undefined;
+    const info = CAVE_BIOMES[this.caveBiome] ?? CAVE_BIOMES[1]!;
+    return { color: info.fog, density: info.fogDensity, amount: this.caveBlend };
+  }
+
   private ambience(): void {
     const p = this.player;
     const b = p.body;
+    this.caveAmbience();
     const light = this.world.getLight(Math.floor(b.x), Math.floor(b.y + 1.6), Math.floor(b.z));
     const skyLight = light >> 4;
     if (this.dimension === 'overworld') {
@@ -920,7 +1116,7 @@ export class Game {
     if (++this.musicTimer >= 20) {
       this.musicTimer = 0;
       const boss = this.hud.hasBoss();
-      this.audio.music.update(MusicPlayer.moodFor(this.dimension, this.player.gamemode === 'creative', p.body.eyesInWater, boss));
+      this.audio.music.update(MusicPlayer.moodFor(this.dimension, this.player.gamemode === 'creative', p.body.eyesInWater, boss, this.caveBiome));
     }
   }
 
@@ -1044,6 +1240,7 @@ export class Game {
     if (i < 0 || i > 8 || i === this.selected) return;
     this.selected = i;
     this.send({ t: 'hotbar', slot: i });
+    this.scoping = false;
     if (this.usingItem) {
       this.usingItem = false;
       this.renderer.hand.using = 0;
@@ -1093,6 +1290,8 @@ export class Game {
     if (first && held) {
       const idef = items[held.id]!.def;
       if (idef.block) return true;
+      // Launched from the block face by the server
+      if (idef.use === 'firework') return true;
       if (idef.food || idef.use === 'bow' || idef.use === 'shield' || idef.use === 'crossbow' || idef.use === 'trident') {
         this.startUsingItem();
         return true;
@@ -1110,6 +1309,13 @@ export class Game {
       return;
     }
     const def = items[held.id]!.def;
+    if (this.onCooldown(held.id)) return;
+    if (def.use === 'spyglass') {
+      this.usingItem = true;
+      this.scoping = true;
+      this.audio.play('spyglass.use', NaN, NaN, NaN, 0.6, 1, 'ui');
+      return;
+    }
     this.send({ t: 'use', hand: 0, action: 'start' });
     const overTime = !!def.food || def.use === 'bow' || def.use === 'shield' || def.use === 'crossbow' || def.use === 'trident' || def.use === 'potion';
     if (overTime) {
@@ -1169,13 +1375,15 @@ export class Game {
       if (hit) camDist = Math.max(0.3, Math.hypot(hit.px - ex, hit.py - ey, hit.pz - ez) - 0.3);
     }
     const nv = this.effectLevel('night_vision') > 0 ? 1 : 0;
+    this.scopeZoom += ((this.scoping ? 0.1 : 1) - this.scopeZoom) * Math.min(1, dt / 60);
+    this.scopeOverlay.classList.toggle('hidden', !this.scoping);
     const fs: FrameState = {
       x: ex,
       y: ey,
       z: ez,
       yaw: p.yaw,
       pitch: p.pitch,
-      fovMod: p.fovMod,
+      fovMod: p.fovMod * this.scopeZoom,
       bobPhase: walk,
       bobAmount: bob,
       dayTime: this.dayTime + alpha,
@@ -1189,17 +1397,38 @@ export class Game {
       target: t && !this.hudHidden ? { x: t.x, y: t.y, z: t.z, state: t.state } : null,
       crack,
       thirdPerson: this.thirdPerson,
-      showHand: !this.hudHidden && p.gamemode !== 'spectator',
+      showHand: !this.hudHidden && p.gamemode !== 'spectator' && !this.scoping,
       nightVision: nv,
       flash: this.flash,
       shake: this.shake,
-      darkness: this.effectLevel('darkness') > 0 || this.effectLevel('blindness') > 0 ? 1 : 0,
+      darkness: this.darknessAmount(),
+      cave: this.caveFog(),
       hurtTilt: this.hurtTilt,
       camDist,
       portal: this.portalFx,
       nausea: this.effectLevel('nausea') > 0 && !this.settings.reduceMotion ? 1 : 0,
       portalColor: this.portalKind === 'far_portal' ? 0x2ad7c2 : 0x8a2be2,
     };
+    // Lines (fishing, leads) end at the local player's hand: lower right of the view
+    const game = this;
+    this.renderer.entities.local ??= {
+      get id() {
+        return game.player.entityId;
+      },
+      hand: () => {
+        const [ex, ey, ez] = game.eyePos(game.lastAlpha);
+        const yaw = game.player.yaw;
+        const pitch = game.player.pitch;
+        const cp = Math.cos(pitch);
+        const fx = -Math.sin(yaw) * cp;
+        const fy = -Math.sin(pitch);
+        const fz = -Math.cos(yaw) * cp;
+        const rx = -Math.cos(yaw);
+        const rz = Math.sin(yaw);
+        return [ex + fx * 0.5 - rx * 0.3, ey + fy * 0.5 - 0.25, ez + fz * 0.5 - rz * 0.3];
+      },
+    };
+    this.lastAlpha = alpha;
     // Local player model (third person)
     this.renderer.entities.update(this.entities.values(), alpha, this.tickNo + alpha, (x, y, z) => this.renderer.lightAt(x, y, z));
     this.renderer.render(fs);

@@ -219,7 +219,8 @@ function tx(def: BlockDef, key: string, fallback?: string): string {
 }
 
 function cubeTextures(def: BlockDef, state: number): { tex: string[]; rot: number[]; tint: TintKind[] } {
-  const all = def.tex.all;
+  // Blocks with a lit look (redstone lamp)
+  const all = def.tex.on && getProp(state, 'lit') === 'true' ? def.tex.on : def.tex.all;
   const top = def.tex.top ?? all ?? def.tex.side!;
   const bottom = def.tex.bottom ?? (def.tex.top && !def.tex.all ? def.tex.top : undefined) ?? all ?? top;
   const side = def.tex.side ?? all ?? top;
@@ -261,7 +262,7 @@ function cubeTextures(def: BlockDef, state: number): { tex: string[]; rot: numbe
       tex[4] = front;
     } else tex[2] = front;
   }
-  if (def.id === 'barrel' && facing) {
+  if ((def.id === 'barrel' || def.id === 'shulker_box') && facing) {
     const fi = ['down', 'up', 'north', 'south', 'west', 'east'].indexOf(facing);
     const opp = fi ^ 1;
     const t = def.tex.top!;
@@ -597,6 +598,31 @@ function signModel(state: number, wall: boolean): ModelQuad[] {
   }));
 }
 
+/** Redstone dust: a dot with arms to connected sides, climbing walls where it goes up. */
+function wireModel(def: BlockDef, state: number): ModelQuad[] {
+  const on = parseInt(getProp(state, 'power') ?? '0', 10) > 0;
+  const line = on ? def.tex.on! : def.tex.all!;
+  const dot = on ? def.tex.on_dot! : def.tex.dot!;
+  const y = 0.25;
+  const q: ModelQuad[] = [];
+  q.push(...element([0, y, 0], [16, y, 16], { up: { tex: dot }, down: { tex: dot } }));
+  const dirs: [string, number][] = [
+    ['north', 0],
+    ['east', 90],
+    ['south', 180],
+    ['west', 270],
+  ];
+  for (const [d, deg] of dirs) {
+    const v = getProp(state, d);
+    if (v === 'none') continue;
+    // Arm from the centre to the north edge, rotated into place
+    const arm = element([0, y + 0.01, 0], [16, y + 0.01, 8], { up: { tex: line, uv: [0, 0, 16, 8], rot: 0 }, down: { tex: line, uv: [0, 0, 16, 8] } });
+    q.push(...rotY(arm, deg));
+    if (v === 'up') q.push(...rotY(element([0, 0, 0.3], [16, 16, 0.3], { south: { tex: line }, north: { tex: line } }), deg));
+  }
+  return q;
+}
+
 function custom(def: BlockDef, state: number): ModelQuad[] {
   switch (def.id) {
     case 'scaffolding':
@@ -605,12 +631,71 @@ function custom(def: BlockDef, state: number): ModelQuad[] {
       const bites = parseInt(getProp(state, 'bites') ?? '0', 10);
       return element([1 + bites * 2, 0, 1], [15, 8, 15], { up: { tex: def.tex.top! }, down: { tex: def.tex.bottom! }, north: { tex: def.tex.side! }, south: { tex: def.tex.side! }, west: { tex: bites > 0 ? def.tex.inner! : def.tex.side! }, east: { tex: def.tex.side! } });
     }
-    case 'flower_pot':
-      return box([5, 0, 5], [11, 6, 11], def.tex.all!);
+    case 'flower_pot': {
+      const q = box([5, 0, 5], [11, 6, 11], def.tex.all!);
+      const plant = getProp(state, 'plant');
+      if (plant && plant !== 'none') {
+        const pb = blocks.find((b) => b.id === plant);
+        const tex = pb?.def.tex.all ?? pb?.def.tex.side;
+        if (tex) {
+          // The plant sits in the soil, a little smaller than in the ground
+          const c = cross(tex, pb!.def.tint ?? 'none', 0.75, 0.2).map((qq) => ({ ...qq, pos: qq.pos.map(([px, py, pz]) => [0.5 + (px - 0.5) * 0.75, 0.25 + py, 0.5 + (pz - 0.5) * 0.75] as V3) as [V3, V3, V3, V3] }));
+          q.push(...c);
+        }
+      }
+      return q;
+    }
+    case 'candle': {
+      // One to four candles grouped on the block, like a little cluster
+      const n = parseInt(getProp(state, 'candles') ?? '1', 10);
+      const tex = getProp(state, 'lit') === 'true' ? def.tex.lit! : def.tex.all!;
+      const spots: [number, number, number][][] = [
+        [[7, 7, 6]],
+        [[5, 7, 6], [9, 6, 5]],
+        [[5, 8, 6], [9, 8, 5], [7, 5, 4]],
+        [[5, 5, 6], [9, 5, 5], [5, 9, 4], [9, 9, 3]],
+      ];
+      const out: ModelQuad[] = [];
+      for (const [cx, cz, h] of spots[n - 1]!) {
+        const sides = { tex, uv: [6, 16 - h, 8, 16] as [number, number, number, number] };
+        out.push(...element([cx, 0, cz], [cx + 2, h, cz + 2], { up: { tex, uv: [6, 6, 8, 8] }, north: sides, south: sides, west: sides, east: sides }));
+        // Wick and flame on a small cross above the wax
+        out.push(
+          ...cross(tex, 'none', 1, 0).map((q) => ({
+            ...q,
+            pos: q.pos.map(([px, py, pz]) => [(cx + 1) / 16 + (px - 0.5) * 0.25, h / 16 + py * 0.375, (cz + 1) / 16 + (pz - 0.5) * 0.25] as V3) as [V3, V3, V3, V3],
+            uv: [[6 / 16, 0], [6 / 16, 6 / 16], [10 / 16, 6 / 16], [10 / 16, 0]] as [UV, UV, UV, UV],
+          })),
+        );
+      }
+      return out;
+    }
+    case 'big_dripleaf': {
+      // A stem up to a wide leaf that droops as it tilts
+      const tilt = getProp(state, 'tilt');
+      const drop = tilt === 'full' ? 4 : tilt === 'partial' ? 2 : 0;
+      const leaf = element([0, 15 - drop, 0], [16, 15 - drop, 16], { up: { tex: def.tex.top! }, down: { tex: def.tex.top! } });
+      const rim = element([0, 13 - drop, 0], [16, 15 - drop, 16], { north: { tex: def.tex.side! }, south: { tex: def.tex.side! }, west: { tex: def.tex.side! }, east: { tex: def.tex.side! } });
+      const stem = cross(def.tex.stem!, 'none', 0.85, 0.3);
+      return [...rotY([...leaf, ...rim], facingDeg(getProp(state, 'facing'))), ...stem];
+    }
+    case 'sculk_shrieker': {
+      // A sculk base with a bony, open-mouthed top
+      const base = element([0, 0, 0], [16, 8, 16], { up: { tex: def.tex.top! }, down: { tex: def.tex.bottom!, cull: 'down' }, north: { tex: def.tex.side!, cull: 'north' }, south: { tex: def.tex.side!, cull: 'south' }, west: { tex: def.tex.side!, cull: 'west' }, east: { tex: def.tex.side!, cull: 'east' } });
+      const inner = element([1, 8, 1], [15, 15, 15], { north: { tex: def.tex.inner! }, south: { tex: def.tex.inner! }, west: { tex: def.tex.inner! }, east: { tex: def.tex.inner! } });
+      return [...base, ...inner];
+    }
+    case 'conduit': {
+      // A small cage floating in the middle of the block
+      const t = def.tex.all!;
+      return box([5, 5, 5], [11, 11, 11], t);
+    }
     case 'stonecutter':
       return [...element([0, 0, 0], [16, 9, 16], { up: { tex: def.tex.top! }, down: { tex: def.tex.bottom!, cull: 'down' }, north: { tex: def.tex.side!, cull: 'north' }, south: { tex: def.tex.side!, cull: 'south' }, west: { tex: def.tex.side!, cull: 'west' }, east: { tex: def.tex.side!, cull: 'east' } })];
+    case 'redstone_wire':
+      return wireModel(def, state);
     case 'sculk_sensor':
-      return element([0, 0, 0], [16, 8, 16], { up: { tex: def.tex.top! }, down: { tex: def.tex.bottom!, cull: 'down' }, north: { tex: def.tex.side!, cull: 'north' }, south: { tex: def.tex.side!, cull: 'south' }, west: { tex: def.tex.side!, cull: 'west' }, east: { tex: def.tex.side!, cull: 'east' } });
+      return element([0, 0, 0], [16, 8, 16], { up: { tex: getProp(state, 'phase') === 'active' ? def.tex.on! : def.tex.top! }, down: { tex: def.tex.bottom!, cull: 'down' }, north: { tex: def.tex.side!, cull: 'north' }, south: { tex: def.tex.side!, cull: 'south' }, west: { tex: def.tex.side!, cull: 'west' }, east: { tex: def.tex.side!, cull: 'east' } });
     case 'chorus_plant': {
       const q = box([4, 4, 4], [12, 12, 12], def.tex.all!);
       const arms: [string, V3, V3][] = [
@@ -687,9 +772,9 @@ function bakeState(state: number): BakedModel {
     case 'trapdoor':
       return quads(trapdoorModel(def, state));
     case 'torch':
-      return quads(torchModel(def.tex.all!));
+      return quads(torchModel(getProp(state, 'lit') === 'false' && def.tex.off ? def.tex.off : def.tex.all!));
     case 'wall_torch':
-      return quads(wallTorchModel(def.tex.all!, getProp(state, 'facing')!));
+      return quads(wallTorchModel(getProp(state, 'lit') === 'false' && def.tex.off ? def.tex.off : def.tex.all!, getProp(state, 'facing')!));
     case 'ladder':
       return quads(ladderModel(def.tex.all!, getProp(state, 'facing')!));
     case 'carpet':

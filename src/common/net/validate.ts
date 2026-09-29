@@ -26,7 +26,7 @@ export function validateC2S(raw: unknown): C2S | null {
     case 'move':
       if (!inRange(m.x, -COORD, COORD) || !inRange(m.y, -512, 1024) || !inRange(m.z, -COORD, COORD)) return null;
       if (!isNum(m.yaw) || !inRange(m.pitch, -Math.PI, Math.PI) || !isBool(m.onGround) || !isBool(m.flying) || !isBool(m.sneak) || !isBool(m.sprint) || !isInt(m.seq)) return null;
-      return { t: 'move', x: m.x, y: m.y, z: m.z, yaw: m.yaw, pitch: m.pitch, onGround: m.onGround, flying: m.flying, sneak: m.sneak, sprint: m.sprint, seq: m.seq };
+      return { t: 'move', x: m.x, y: m.y, z: m.z, yaw: m.yaw, pitch: m.pitch, onGround: m.onGround, flying: m.flying, sneak: m.sneak, sprint: m.sprint, seq: m.seq, glide: m.glide === true };
     case 'dig':
       if (m.action !== 'start' && m.action !== 'abort' && m.action !== 'finish') return null;
       if (!isInt(m.x) || !isInt(m.y) || !isInt(m.z) || !inRange(m.face, 0, 5) || !isInt(m.face)) return null;
@@ -104,6 +104,11 @@ export function validateC2S(raw: unknown): C2S | null {
       if (!action) return null;
       return { t: 'admin', req: m.req, action };
     }
+    case 'vehicle_move':
+      if (!inRange(m.x, -COORD, COORD) || !inRange(m.y, -512, 1024) || !inRange(m.z, -COORD, COORD) || !isNum(m.yaw)) return null;
+      return { t: 'vehicle_move', x: m.x, y: m.y, z: m.z, yaw: m.yaw };
+    case 'dismount':
+      return { t: 'dismount' };
     default:
       return null;
   }

@@ -436,6 +436,39 @@ export function registerDeco(r: PainterRegistry): void {
       }
     }
   });
+  r.add('big_dripleaf_top', (t) => {
+    t.clear();
+    for (let y = 1; y < 15; y++) for (let x = 1; x < 15; x++) {
+      const edge = x === 1 || y === 1 || x === 14 || y === 14;
+      t.set(x, y, edge ? hex(0x4a8a2a) : (x + y) % 5 === 0 ? hex(0x5aa034) : hex(0x6ab83e));
+    }
+    for (let i = 2; i < 14; i++) t.set(7, i, hex(0x4a8a2a));
+  });
+  r.add('big_dripleaf_side', (t) => {
+    t.clear();
+    t.rect(0, 0, 16, 2, hex(0x4a8a2a));
+  });
+  r.add('big_dripleaf_stem', (t) => {
+    t.clear();
+    for (let y = 0; y < 16; y++) t.set(7 + (y % 6 === 0 ? 1 : 0), y, hex(0x5a9a30));
+  });
+  r.add('small_dripleaf', (t) => {
+    t.clear();
+    for (let y = 6; y < 16; y++) t.set(7, y, hex(0x5a9a30));
+    t.mask(['..aaaa....', '.abbbba...', 'abbbbbba..', '.aaaaaa...'], { a: hex(0x4a8a2a), b: hex(0x6ab83e) }, 2, 3);
+    t.mask(['....aaa', '...abba', '....aaa'], { a: hex(0x4a8a2a), b: hex(0x6ab83e) }, 7, 8);
+  });
+  r.add('glowshroom', (t) => {
+    // Original: a pale stalk under a glowing teal cap
+    t.clear();
+    for (let y = 9; y < 16; y++) t.set(7, y, hex(0xd8d0c0));
+    t.set(8, 12, hex(0xc8c0b0));
+    t.mask(['...aaaa...', '.abbbbba..', 'abbccbbba.', 'aaaaaaaaa.'], { a: hex(0x2a8a9a), b: hex(0x4ae8e0), c: hex(0xc8fff8) }, 3, 5);
+  });
+  r.add('glowshroom_block', (t) => {
+    blotchy(t, [hex(0x2a8a9a), hex(0x3ab8c0), hex(0x4ae8e0)], 1, 1);
+    for (let i = 0; i < 9; i++) t.set(t.rng.int(16), t.rng.int(16), hex(0xc8fff8));
+  });
   r.add('spore_blossom', (t) => {
     t.clear();
     for (let a = 0; a < 8; a++) {
@@ -464,6 +497,20 @@ export function registerDeco(r: PainterRegistry): void {
   ];
   for (const [n, stages, leaf, fruit] of cropSpec) {
     for (let s = 0; s < stages; s++) r.add(`${n}_stage${s}`, (t) => crop(t, s, stages - 1, leaf, fruit, n));
+  }
+  // Melon and pumpkin stems: a vine that grows taller and yellows as it ripens
+  for (let s = 0; s < 8; s++) {
+    r.add(`stem_stage${s}`, (t) => {
+      t.clear();
+      const h = 2 + s * 2;
+      const k = s / 7;
+      const col: RGB = [Math.round(0x4a + (0xc8 - 0x4a) * k), Math.round(0x9a + (0xa0 - 0x9a) * k), Math.round(0x2a + (0x20 - 0x2a) * k)];
+      for (let y = 16 - h; y < 16; y++) t.set(7 + ((y >> 2) & 1), y, col);
+      for (let i = 0; i < Math.min(3, s); i++) {
+        const ly = 16 - h + 3 + i * 4;
+        if (ly < 15) t.set(i % 2 ? 9 : 6, ly, shade(col, 0.8));
+      }
+    });
   }
 
   // Functional
@@ -655,6 +702,36 @@ export function registerDeco(r: PainterRegistry): void {
     t.set(7, 5, flame[1]!);
   };
   r.add('torch', torch([hex(0xffe066), hex(0xffae2a), hex(0xfff8d0)], hex(0x6b5433)));
+  r.add('redstone_torch', torch([hex(0xff6a4a), hex(0xe01a0a), hex(0xffc0a0)], hex(0x6b5433)));
+  r.add('redstone_torch_off', torch([hex(0x5a2a22), hex(0x4a1410), hex(0x6a3a30)], hex(0x6b5433)));
+  // Redstone dust: a dot and a line (along Z), dim when unpowered and bright when powered
+  const dust = (bright: boolean, line: boolean) => (t: Tex) => {
+    t.clear();
+    const cols = bright ? [hex(0xff2a10), hex(0xd81a08), hex(0xff7a50)] : [hex(0x5a0a06), hex(0x480604), hex(0x7a1a10)];
+    for (let y = 0; y < 16; y++)
+      for (let x = 0; x < 16; x++) {
+        const inLine = line ? x >= 6 && x <= 9 : Math.hypot(x - 7.5, y - 7.5) < 3.2;
+        if (!inLine) continue;
+        const r = t.rng.next();
+        if (line && (x === 6 || x === 9) && r < 0.35) continue;
+        t.set(x, y, r < 0.15 ? cols[2]! : r < 0.55 ? cols[0]! : cols[1]!);
+      }
+  };
+  r.add('redstone_dust_dot', dust(false, false));
+  r.add('redstone_dust_line', dust(false, true));
+  r.add('redstone_dust_dot_on', dust(true, false));
+  r.add('redstone_dust_line_on', dust(true, true));
+  // Redstone lamp: glass-framed coils, glowing amber when lit
+  const lamp = (lit: boolean) => (t: Tex) => {
+    const base = lit ? [hex(0xc8782a), hex(0xf0a840), hex(0xffe0a0)] : [hex(0x4a2a18), hex(0x6a3a20), hex(0x8a5a38)];
+    voronoi(t, 9, (x, y, c) => {
+      const e = c.d2 - c.d1;
+      t.set(x, y, e < 0.7 ? base[0]! : c.d1 < 1.5 ? base[2]! : base[1]!);
+    });
+    frame(t, lit ? hex(0x8a5a2a) : hex(0x3a2418));
+  };
+  r.add('redstone_lamp', lamp(false));
+  r.add('redstone_lamp_on', lamp(true));
   r.add('soul_torch', torch([hex(0x8af0f8), hex(0x3ac8e0), hex(0xe0ffff)], hex(0x6b5433)));
   const lantern = (glow: RGB) => (t: Tex) => {
     t.clear();
@@ -811,6 +888,80 @@ export function registerDeco(r: PainterRegistry): void {
     frame(t, hex(0x6a3aa8), 3);
   });
   r.add('respawn_anchor_bottom', (t) => blotchy(t, [hex(0x14101c), hex(0x1c1628), hex(0x241c34)], 1, 0.8));
+  // Candle: cream wax with a dark wick; the lit variant carries a small flame
+  const candleTex = (lit: boolean) => (t: Tex): void => {
+    t.clear();
+    const wax = [hex(0xe8dcb8), hex(0xf4ecd0), hex(0xd8c8a0)];
+    for (let y = 6; y < 16; y++) for (let x = 6; x < 10; x++) t.set(x, y, wax[(x === 6 ? 2 : x === 9 ? 2 : y === 6 ? 1 : 0)]!);
+    t.set(7, 5, hex(0x2a2a2a));
+    t.set(7, 4, hex(0x3a3a3a));
+    if (lit) {
+      t.set(7, 3, hex(0xffe070));
+      t.set(7, 2, hex(0xfff0a0));
+      t.set(8, 3, hex(0xf0a030));
+      t.set(6, 3, hex(0xf0a030));
+      t.set(7, 1, hex(0xffc040), 200);
+    }
+  };
+  r.add('candle', candleTex(false));
+  r.add('candle_lit', candleTex(true));
+  r.add('honeycomb_block', (t) => {
+    t.fill(hex(0xd8901a));
+    // Hexagon cells
+    for (let y = 0; y < 16; y++)
+      for (let x = 0; x < 16; x++) {
+        const row = Math.floor(y / 4);
+        const ox = row & 1 ? 2 : 0;
+        const cx = (x + ox) % 4;
+        const cy = y % 4;
+        if (cx === 0 || cy === 0) t.set(x, y, hex(0xb86a10));
+        else if (cx === 1 && cy === 1) t.set(x, y, hex(0xf8c040));
+        else t.set(x, y, t.rng.chance(0.2) ? hex(0xe8a828) : hex(0xe09a20));
+      }
+  });
+  const SHULKER = [hex(0x6a4a7a), hex(0x8a6a9a), hex(0x9a7aaa), hex(0x7a5a8a)];
+  r.add('shulker_box_side', (t) => {
+    blotchy(t, SHULKER, 1, 0.5);
+    t.rect(0, 0, 16, 5, hex(0x9a7aaa));
+    t.rect(0, 5, 16, 1, hex(0x3a2a4a));
+    frame(t, hex(0x4a3458));
+  });
+  r.add('shulker_box_top', (t) => {
+    blotchy(t, SHULKER, 1, 0.5);
+    frame(t, hex(0x4a3458));
+    t.rect(3, 3, 10, 10, hex(0x9a7aaa));
+    frame(t, hex(0x5a4468), 3);
+  });
+  r.add('shulker_box_bottom', (t) => {
+    blotchy(t, SHULKER.slice(0, 2), 1, 0.5);
+    frame(t, hex(0x4a3458));
+  });
+  r.add('conduit', (t) => {
+    // Dark wooden cage around a glowing blue eye
+    t.fill(hex(0x5a4028));
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) if ((x + y) % 5 === 0) t.set(x, y, hex(0x3a2818));
+    t.rect(4, 4, 8, 8, hex(0x1a5a8a));
+    t.rect(5, 5, 6, 6, hex(0x2a8ad8));
+    t.rect(6, 6, 4, 4, hex(0x8ae0ff));
+    t.rect(7, 7, 2, 2, hex(0x0a1a2a));
+  });
+  // Froglights: soft glowing blocks with a scaly rim
+  for (const [f, core, rim] of [
+    ['ochre', 0xfbe8a0, 0xd8a040],
+    ['verdant', 0xd8f0b0, 0x6aa84a],
+    ['pearlescent', 0xf8e8f0, 0xb88ab0],
+  ] as const) {
+    r.add(`${f}_froglight_side`, (t) => {
+      blotchy(t, [hex(core), shade(hex(core), 0.95), mix(hex(core), hex(0xffffff), 0.4)], 1, 0.5);
+      for (let y = 0; y < 16; y += 4) for (let x = (y / 4) % 2 ? 2 : 0; x < 16; x += 4) t.set(x, y, shade(hex(core), 0.88));
+      frame(t, hex(rim));
+    });
+    r.add(`${f}_froglight_top`, (t) => {
+      blotchy(t, [hex(core), mix(hex(core), hex(0xffffff), 0.5)], 1, 0.5);
+      frame(t, hex(rim));
+      frame(t, shade(hex(rim), 1.15), 2);
+    });
+  }
   r.add('lodestone_side', (t) => {
     stones(t, STONE_PAL, hex(0x4a4a4a), 6);
     t.rect(0, 5, 16, 2, hex(0x3a3a3a));

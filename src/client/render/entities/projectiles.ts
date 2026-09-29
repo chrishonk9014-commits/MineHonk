@@ -37,12 +37,13 @@ function pixelCanvas(size: number, draw: (g: CanvasRenderingContext2D) => void):
   return c;
 }
 
-registerVisual('arrow', () => {
+registerVisual('arrow', (ent) => {
+  const spectral = ent.meta.spectral === true;
   const group = new THREE.Group();
-  const shaft = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.04, 0.5), new THREE.MeshBasicMaterial({ color: 0x8a6a3a }));
-  const head = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.1), new THREE.MeshBasicMaterial({ color: 0xa0a0a0 }));
+  const shaft = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.04, 0.5), new THREE.MeshBasicMaterial({ color: spectral ? 0xc8a040 : 0x8a6a3a }));
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.1), new THREE.MeshBasicMaterial({ color: spectral ? 0xf8e070 : 0xa0a0a0 }));
   head.position.z = -0.28;
-  const fl = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.02, 0.12), new THREE.MeshBasicMaterial({ color: 0xe8e8e8 }));
+  const fl = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.02, 0.12), new THREE.MeshBasicMaterial({ color: spectral ? 0xfff0a0 : 0xe8e8e8 }));
   fl.position.z = 0.22;
   const fl2 = fl.clone();
   fl2.rotation.z = Math.PI / 2;
@@ -67,6 +68,114 @@ registerVisual('arrow', () => {
         if (o instanceof THREE.Mesh) o.geometry.dispose();
       });
       mats.forEach((m) => m.dispose());
+    },
+  };
+});
+
+// A thrown trident: shaft with three prongs, pointing along its flight
+registerVisual('trident', (ent) => {
+  const group = new THREE.Group();
+  const shaftMat = new THREE.MeshBasicMaterial({ color: 0x3f7f78 });
+  const metalMat = new THREE.MeshBasicMaterial({ color: ent.meta.glint === true ? 0xb8a0ff : 0x9ec8c0 });
+  const shaft = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.9), shaftMat);
+  shaft.position.z = 0.1;
+  const cross = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.05, 0.05), metalMat);
+  cross.position.z = -0.35;
+  group.add(shaft, cross);
+  for (const x of [-0.09, 0, 0.09]) {
+    const prong = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.04, x === 0 ? 0.24 : 0.18), metalMat);
+    prong.position.set(x, 0, x === 0 ? -0.48 : -0.45);
+    group.add(prong);
+  }
+  const mats = [shaftMat, metalMat];
+  const base = mats.map((m) => m.color.clone());
+  return {
+    object: group,
+    update(e: ClientEntity, alpha) {
+      const [x, y, z] = e.lerp(alpha);
+      group.position.set(x, y + 0.1, z);
+      group.rotation.order = 'YXZ';
+      group.rotation.set(-e.pitch, e.yaw, 0);
+    },
+    setBrightness(v) {
+      mats.forEach((m, i) => m.color.copy(base[i]!).multiplyScalar(Math.max(v, 0.3)));
+    },
+    dispose() {
+      group.traverse((o) => {
+        if (o instanceof THREE.Mesh) o.geometry.dispose();
+      });
+      mats.forEach((m) => m.dispose());
+    },
+  };
+});
+
+// A rocket climbing before it bursts
+registerVisual('firework', () =>
+  spriteVisual(
+    pixelCanvas(8, (g) => {
+      g.fillStyle = '#c83a2a';
+      g.fillRect(3, 1, 2, 5);
+      g.fillStyle = '#e8e0c8';
+      g.fillRect(3, 0, 2, 1);
+      g.fillStyle = '#6a4a2a';
+      g.fillRect(3, 6, 2, 2);
+    }),
+    0.35,
+  ),
+);
+
+// Fishing bobber plus the line back to the angler's hand
+registerVisual('fishing_bobber', (ent, ctx) => {
+  const group = new THREE.Group();
+  const bob = spriteVisual(
+    pixelCanvas(8, (g) => {
+      g.fillStyle = '#e8e8e8';
+      g.fillRect(2, 4, 4, 3);
+      g.fillStyle = '#d02020';
+      g.fillRect(2, 1, 4, 3);
+      g.fillStyle = '#202020';
+      g.fillRect(3, 0, 2, 1);
+    }),
+    0.3,
+  );
+  const SEG = 12;
+  const lineGeo = new THREE.BufferGeometry();
+  lineGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array((SEG + 1) * 3), 3));
+  const lineMat = new THREE.LineBasicMaterial({ color: 0x1a1a1a });
+  const line = new THREE.Line(lineGeo, lineMat);
+  line.frustumCulled = false;
+  group.add(bob.object, line);
+  const ownerId = Number(ent.meta.owner ?? 0);
+  return {
+    object: group,
+    update(e: ClientEntity, alpha, time) {
+      bob.update(e, alpha, time);
+      const [bx, by, bz] = e.lerp(alpha);
+      let hand: [number, number, number] | null = ctx.localHand?.(ownerId) ?? null;
+      if (!hand) {
+        const o = ctx.entity?.(ownerId);
+        if (o) {
+          const [ox, oy, oz] = o.lerp(alpha);
+          hand = [ox - Math.cos(o.yaw) * 0.35, oy + 1.2, oz + Math.sin(o.yaw) * 0.35];
+        }
+      }
+      line.visible = !!hand;
+      if (!hand) return;
+      const pos = lineGeo.getAttribute('position') as THREE.BufferAttribute;
+      const sag = Math.min(1.2, Math.hypot(bx - hand[0], bz - hand[2]) * 0.08);
+      for (let i = 0; i <= SEG; i++) {
+        const t = i / SEG;
+        pos.setXYZ(i, hand[0] + (bx - hand[0]) * t, hand[1] + (by + 0.1 - hand[1]) * t - Math.sin(t * Math.PI) * sag, hand[2] + (bz - hand[2]) * t);
+      }
+      pos.needsUpdate = true;
+    },
+    setBrightness(v) {
+      bob.setBrightness(v);
+    },
+    dispose() {
+      bob.dispose();
+      lineGeo.dispose();
+      lineMat.dispose();
     },
   };
 });

@@ -56,7 +56,7 @@ export function selectEnchantments(rng: Random, s: ItemStack, level: number, all
   const candidates = (): { e: EnchantDef; lvl: number; weight: number }[] => {
     const out: { e: EnchantDef; lvl: number; weight: number }[] = [];
     for (const e of ENCHANTMENTS) {
-      if ((e.treasure && !allowTreasure) || !canApply(e, s)) continue;
+      if ((e.treasure && !allowTreasure) || e.exclusive || !canApply(e, s)) continue;
       for (let l = e.maxLevel; l >= 1; l--) {
         if (mod >= e.minCost(l) && mod <= e.maxCost(l)) {
           out.push({ e, lvl: l, weight: e.weight });

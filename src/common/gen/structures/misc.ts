@@ -29,6 +29,9 @@ export interface SingleDef {
   /** Extra chance gate after the biome test. */
   chance?: number;
   maxSlope?: number;
+  /** Underground: height range for the anchor (kept at least 18 blocks under the ground). */
+  minY?: number;
+  maxY?: number;
   build: (b: Builder, rng: Random, seed: number) => void;
   entities?: (x: number, y: number, z: number, rng: Random) => Start['entities'];
 }
@@ -83,7 +86,11 @@ export function single(def: SingleDef): StructureType {
           y = Math.min(200, corners[4]! + 24 + rng.int(20));
           break;
         default:
-          y = 12 + rng.int(Math.max(1, corners[0]! - 30));
+          if (def.minY !== undefined) {
+            const top = Math.min(def.maxY ?? 60, corners[0]! - 18 - def.height);
+            if (top < def.minY) return null;
+            y = def.minY + rng.int(Math.max(1, top - def.minY + 1));
+          } else y = 12 + rng.int(Math.max(1, corners[0]! - 30));
       }
       const seed = hashInts(ctx.seed, x0, y, z0, def.salt);
       const box = boxOf(x0 - 1, y - def.below, z0 - 1, x0 + wsx, y + def.height, z0 + wsz);

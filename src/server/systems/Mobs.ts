@@ -6,6 +6,7 @@
 import type { GameServer } from '../GameServer';
 import type { Dimension } from '../world/Dimension';
 import { Mob, isPlayer, isAlive, type Target } from '../entity/Mob';
+import { ItemEntity } from '../entity/ItemEntity';
 import { LivingEntity, type HurtInfo } from '../entity/Living';
 import type { Entity } from '../entity/Entity';
 import { Projectile, PrimedTnt, type ProjectileKind, type ProjectileHit } from '../entity/Projectile';
@@ -43,6 +44,24 @@ export interface Offer {
 }
 
 /** Monster spawn lists that replace the biome's inside certain structures. */
+/** V2: who lives in each cave biome (by CaveBiome number). The deep dark stays empty. */
+const CAVE_MONSTERS: Record<number, SpawnEntry[]> = {
+  1: [{ mob: 'zombie', weight: 90, min: 2, max: 4 }, { mob: 'skeleton', weight: 90, min: 2, max: 4 }, { mob: 'creeper', weight: 80, min: 1, max: 2 }, { mob: 'spider', weight: 60, min: 1, max: 2 }],
+  2: [{ mob: 'skeleton', weight: 80, min: 2, max: 4 }, { mob: 'zombie', weight: 60, min: 2, max: 3 }, { mob: 'cave_spider', weight: 40, min: 2, max: 3 }, { mob: 'creeper', weight: 40, min: 1, max: 1 }, { mob: 'cave_stalker', weight: 20, min: 1, max: 1 }],
+  3: [{ mob: 'zombie', weight: 60, min: 1, max: 3 }, { mob: 'skeleton', weight: 60, min: 1, max: 3 }, { mob: 'creeper', weight: 40, min: 1, max: 1 }],
+  4: [{ mob: 'spider', weight: 40, min: 1, max: 2 }, { mob: 'zombie', weight: 30, min: 1, max: 2 }],
+  5: [{ mob: 'crystal_mite', weight: 100, min: 2, max: 5 }, { mob: 'skeleton', weight: 30, min: 1, max: 2 }],
+  6: [{ mob: 'zombie', weight: 60, min: 2, max: 4 }, { mob: 'husk', weight: 30, min: 1, max: 3 }, { mob: 'skeleton', weight: 60, min: 2, max: 3 }, { mob: 'drowned', weight: 20, min: 1, max: 2 }],
+  7: [{ mob: 'magma_cube', weight: 80, min: 1, max: 3 }, { mob: 'skeleton', weight: 40, min: 1, max: 2 }, { mob: 'blaze', weight: 5, min: 1, max: 1 }],
+  8: [{ mob: 'stray', weight: 100, min: 2, max: 4 }, { mob: 'skeleton', weight: 30, min: 1, max: 2 }, { mob: 'zombie', weight: 30, min: 1, max: 2 }],
+};
+const CAVE_WATER: Record<number, SpawnEntry[]> = {
+  1: [{ mob: 'glow_squid', weight: 10, min: 1, max: 3 }],
+  2: [{ mob: 'glow_squid', weight: 10, min: 1, max: 3 }],
+  3: [{ mob: 'axolotl', weight: 10, min: 2, max: 4 }, { mob: 'glow_squid', weight: 6, min: 1, max: 3 }, { mob: 'tropical_fish', weight: 8, min: 3, max: 6 }],
+  6: [{ mob: 'glow_squid', weight: 10, min: 1, max: 2 }],
+};
+
 const STRUCTURE_SPAWNS: Record<string, SpawnEntry[]> = {
   nether_fortress: [
     { mob: 'blaze', weight: 10, min: 2, max: 3 },
@@ -58,6 +77,9 @@ const STRUCTURE_SPAWNS: Record<string, SpawnEntry[]> = {
   witch_hut: [{ mob: 'witch', weight: 1, min: 1, max: 1 }],
   pillager_outpost: [{ mob: 'pillager', weight: 1, min: 1, max: 3 }],
 };
+
+/** The froglight a frog of each kind makes from a magma cube. */
+const FROGLIGHT: Record<string, string> = { temperate: 'ochre', warm: 'pearlescent', cold: 'verdant' };
 
 export class MobSystem {
   private readonly rng = new Random();
@@ -108,7 +130,38 @@ export class MobSystem {
         m.persistenceRequired = def.brain === 'golem';
         break;
     }
+    if (def.id === 'horse') {
+      // Each horse is its own: speed and jump strength (averaged, so extremes are rare) and coat
+      m.data.hspeed = 0.1125 + ((r.next() + r.next() + r.next()) / 3) * 0.225;
+      m.data.hjump = 0.4 + ((r.next() + r.next() + r.next()) / 3) * 0.6;
+      m.data.variant = ['chestnut', 'bay', 'black', 'white', 'gray', 'creamy', 'dark_brown'][r.int(7)];
+    }
     if (def.id === 'creeper' && r.chance(0.02)) m.data.charged = true;
+    switch (def.id) {
+      case 'parrot':
+        m.data.variant = ['red', 'blue', 'green', 'cyan', 'gray'][r.int(5)];
+        break;
+      case 'llama':
+        m.data.variant = ['creamy', 'white', 'brown', 'gray'][r.int(4)];
+        break;
+      case 'panda': {
+        // Personalities: brown pandas are rare, aggressive ones fight back
+        const roll = r.next();
+        m.data.variant = roll < 0.02 ? 'brown' : roll < 0.12 ? 'aggressive' : roll < 0.3 ? 'lazy' : roll < 0.45 ? 'playful' : 'normal';
+        break;
+      }
+      case 'axolotl':
+        m.data.variant = r.chance(1 / 1200) ? 'blue' : ['lucy', 'wild', 'gold', 'cyan'][r.int(4)];
+        break;
+      case 'tropical_fish': {
+        const cols = ['white', 'orange', 'magenta', 'light_blue', 'yellow', 'lime', 'pink', 'gray', 'cyan', 'purple', 'blue', 'red', 'black'];
+        m.data.variant = `${['kob', 'stripey', 'flopper', 'sunstreak', 'dasher', 'spotty'][r.int(6)]}:${cols[r.int(cols.length)]}:${cols[r.int(cols.length)]}`;
+        break;
+      }
+      case 'pufferfish':
+        m.data.puff = 0;
+        break;
+    }
     if (opts.data) for (const [k, v] of Object.entries(opts.data)) if (k !== 'profession') m.data[k] = v;
     if (def.category === 'boss') {
       m.persistenceRequired = true;
@@ -125,6 +178,11 @@ export class MobSystem {
     m.setPos(x, y, z);
     m.yaw = this.rng.next() * Math.PI * 2;
     if (opts.persistent) m.persistenceRequired = true;
+    // Frogs take their colour from the climate they hatch in
+    if (type === 'frog' && !m.data.variant) {
+      const t = biomeOf(dim.getBiome(Math.floor(x), Math.floor(z))).temperature;
+      m.data.variant = t < 0.4 ? 'cold' : t > 1 ? 'warm' : 'temperate';
+    }
     dim.addEntity(m);
     return m;
   }
@@ -230,6 +288,13 @@ export class MobSystem {
       installBrain(m);
       return m;
     }
+    if (d.kind === 'projectile') {
+      const pr = Projectile.restoreTrident(d);
+      if (!pr) return null;
+      pr.onHit = (x, hit) => this.onProjectileHit(x, hit);
+      pr.onReturn = (x) => this.tridentReturned(x);
+      return pr;
+    }
     void dim;
     return null;
   }
@@ -291,8 +356,170 @@ export class MobSystem {
       case 'enderman':
         if (m.age % 5 === 0 && (m.target || m.angryAt)) s.particles(m.dim, 'portal', m.x, m.y + 1.5, m.z, 1, 0.5);
         break;
+      case 'warden':
+        s.warden?.tick(m);
+        break;
+      default:
+        this.animalTick(m);
     }
     if (m.data.slowTicks && (m.data.slowTicks = (m.data.slowTicks as number) - 1) <= 0) delete m.data.slowTicks;
+    if (m.data.alarmTicks && (m.data.alarmTicks = (m.data.alarmTicks as number) - 1) <= 0) delete m.data.alarmTicks;
+    if (m.data.glowTicks && (m.data.glowTicks = (m.data.glowTicks as number) - 1) <= 0) {
+      delete m.data.glowTicks;
+      m.metaDirty = true;
+    }
+  }
+
+  /** The newer animals' own habits (parrots, pufferfish, axolotls, pandas, frogs, camels). */
+  private animalTick(m: Mob): void {
+    const s = this.server;
+    switch (m.type) {
+      case 'parrot': {
+        if (m.age % 20 === 0) {
+          // Dances while a record plays nearby
+          const dancing = !!s.gadgets?.recordNear(m.dim, m.x, m.y, m.z, 4);
+          if (!!m.data.dancing !== dancing) {
+            m.data.dancing = dancing || undefined;
+            m.metaDirty = true;
+          }
+        }
+        // Imitates a monster it can hear
+        if (m.age % 40 === 0 && m.rng.chance(1 / 12)) {
+          const near = m.dim.entitiesNear(m.x, m.y, m.z, 20, (e) => e instanceof Mob && !e.dead && e.def.category === 'monster');
+          const pick = near[m.rng.int(Math.max(1, near.length))] as Mob | undefined;
+          if (pick) s.playSound(m.dim, `mob.${pick.soundKey()}.idle`, m.x, m.y + 0.5, m.z, 0.7, 1.7);
+        }
+        break;
+      }
+      case 'pufferfish': {
+        if (m.age % 5 !== 0) break;
+        // Puffs up when something big swims close, and stings what touches it
+        const threat = m.dim.entitiesNear(m.x, m.y, m.z, 2.5, (e) => e !== m && (isPlayer(e) ? !e.dead && e.gamemode !== 'creative' && e.gamemode !== 'spectator' : e instanceof Mob && !e.dead && !e.def.aquatic && e.type !== 'axolotl')).length > 0;
+        const puff = Number(m.data.puff ?? 0);
+        const next = threat ? Math.min(2, puff + 1) : m.age % 40 === 0 ? Math.max(0, puff - 1) : puff;
+        if (next !== puff) {
+          m.data.puff = next;
+          m.body.width = m.body.height = [0.35, 0.5, 0.7][next]!;
+          m.metaDirty = true;
+          s.playSound(m.dim, next > puff ? 'pufferfish.blow_up' : 'pufferfish.blow_out', m.x, m.y, m.z, 0.6, 1);
+        }
+        if (next > 0) {
+          for (const e of m.dim.entitiesNear(m.x, m.y, m.z, 0.8 + next * 0.3, (e) => e !== m && (isPlayer(e) || (e instanceof Mob && !e.def.aquatic && e.type !== 'axolotl')))) {
+            if (isPlayer(e) && (e.dead || e.gamemode === 'creative' || e.gamemode === 'spectator')) continue;
+            if (this.damage(e, 1 + next, { source: 'mob', attacker: m }) > 0) {
+              if (isPlayer(e)) s.interaction.survival.addEffect(e, 'poison', 0, 60 * next);
+              s.playSound(m.dim, 'pufferfish.sting', m.x, m.y, m.z, 1, 1);
+            }
+          }
+        }
+        break;
+      }
+      case 'axolotl': {
+        // Plays dead when badly hurt, healing while it lies still
+        const pd = Number(m.data.playDead ?? 0);
+        if (pd > 0) {
+          m.data.playDead = pd - 1;
+          m.target = null;
+          m.stopNavigation();
+          if (m.age % 20 === 0) m.health = Math.min(m.maxHealth, m.health + 1);
+          if (pd - 1 <= 0) {
+            delete m.data.playDead;
+            m.metaDirty = true;
+          }
+        } else if (s.tickNo - m.lastHurtTick < 2 && m.health < m.maxHealth / 2 && m.body.inWater && m.rng.chance(1 / 3)) {
+          m.data.playDead = 200;
+          m.revengeTarget = null;
+          m.metaDirty = true;
+        }
+        break;
+      }
+      case 'panda': {
+        if (m.age % 20 !== 0) break;
+        // Pandas pick up bamboo and sit down to eat it
+        const eating = Number(m.data.eating ?? 0);
+        if (eating > 0) {
+          m.data.eating = eating - 20;
+          m.stopNavigation();
+          if (m.data.eating as number <= 0) {
+            delete m.data.eating;
+            m.sitting = false;
+            m.metaDirty = true;
+          }
+        } else {
+          const food = m.dim.entitiesNear(m.x, m.y, m.z, 3, (e) => e instanceof ItemEntity && !e.removed && items[e.stack.id]?.id === 'bamboo')[0] as ItemEntity | undefined;
+          if (food) {
+            food.stack.count > 1 ? (food.stack = { ...food.stack, count: food.stack.count - 1 }) : food.remove();
+            m.data.eating = 200;
+            m.sitting = true;
+            m.metaDirty = true;
+            s.playSound(m.dim, 'eat', m.x, m.y + 1, m.z, 0.6, 0.8);
+          } else if (m.data.variant === 'playful' && !m.data.rolling && m.rng.chance(1 / 30)) {
+            m.data.rolling = 30;
+            m.metaDirty = true;
+          } else if (m.data.variant === 'lazy' && m.rng.chance(1 / 20)) {
+            m.sitting = !m.sitting;
+            m.metaDirty = true;
+          }
+        }
+        if (m.data.rolling && (m.data.rolling = (m.data.rolling as number) - 20) <= 0) {
+          delete m.data.rolling;
+          m.metaDirty = true;
+        }
+        // Baby pandas sneeze now and then
+        if (m.baby && m.rng.chance(1 / 300)) {
+          s.playSound(m.dim, 'panda.sneeze', m.x, m.y + 0.5, m.z, 1, 1.4);
+          s.mining.dropItem(m.dim, m.x, m.y + 0.5, m.z, stackOf('slime_ball', 1));
+        }
+        break;
+      }
+      case 'camel':
+        // Camels settle down for long rests
+        if (m.age % 100 === 0 && !m.rider && m.rng.chance(1 / 12)) {
+          m.sitting = !m.sitting;
+          m.stopNavigation();
+          m.metaDirty = true;
+        }
+        break;
+      case 'frog':
+        if (m.data.tongue && (m.data.tongue = (m.data.tongue as number) - 1) <= 0) {
+          delete m.data.tongue;
+          m.metaDirty = true;
+        }
+        break;
+    }
+  }
+
+  /** Cave mob reactions to being hurt: sporelings puff spores, crystal mites call the swarm. */
+  onCaveMobHurt(m: Mob, attacker: Entity): void {
+    const s = this.server;
+    if (m.type === 'sporeling') {
+      if (m.age - Number(m.data.puffedAt ?? -100) < 60) return;
+      m.data.puffedAt = m.age;
+      s.particles(m.dim, 'spore_cloud', m.x, m.y + 0.8, m.z, 30, 1.2);
+      s.playSound(m.dim, 'sporeling.puff', m.x, m.y + 0.8, m.z, 1, 1);
+      for (const p of s.players.values()) {
+        if (p.dim !== m.dim || p.dead || p.distanceSq(m.x, m.y, m.z) > 9) continue;
+        s.interaction.survival.addEffect(p, 'nausea', 0, 160);
+        s.interaction.survival.addEffect(p, 'slowness', 0, 60);
+      }
+      return;
+    }
+    // Crystal mites: the rest of the nest joins in
+    for (const e of m.dim.entitiesNear(m.x, m.y, m.z, 10, (en) => en instanceof Mob && en.type === 'crystal_mite' && !en.dead && en !== m)) {
+      const other = e as Mob;
+      if (!other.target) other.target = attacker as Target;
+    }
+  }
+
+  /** Outlines an entity through walls for a while (spectral arrows, bells). */
+  glow(e: Entity, ticks: number): void {
+    if (isPlayer(e)) {
+      this.server.interaction.survival.addEffect(e, 'glowing', 0, ticks);
+      e.metaDirty = true;
+    } else if (e instanceof Mob) {
+      if (!e.data.glowTicks) e.metaDirty = true;
+      e.data.glowTicks = Math.max(Number(e.data.glowTicks ?? 0), ticks);
+    }
   }
 
   private tickSpawners(dim: Dimension): void {
@@ -382,8 +609,13 @@ export class MobSystem {
     if (!dim.isLoaded(x, z)) return;
     const top = dim.getHeight(x, z);
     let y: number;
-    if (cat === 'creature') y = top;
-    else if (cat === 'water') y = Math.max(1, top - 1 - r.int(8));
+    // V2 overworld: part of the creature and water spawning happens in the caves
+    const caves = dim.id === 'overworld' && !!dim.generator.caves;
+    const underCreature = caves && cat === 'creature' && r.chance(0.3);
+    const underWater = caves && cat === 'water' && r.chance(0.4);
+    if (cat === 'creature' && !underCreature) y = top;
+    else if (cat === 'water' && !underWater) y = Math.max(1, top - 1 - r.int(8));
+    else if (underCreature || underWater) y = 8 + r.int(Math.max(1, Math.min(52, top - 12) - 8));
     else if (!dim.rules.hasSky) {
       // Cavern dimensions: pick one of the column's floors instead of a random height
       const floors: number[] = [];
@@ -400,6 +632,14 @@ export class MobSystem {
       const sl = st ? STRUCTURE_SPAWNS[st] : undefined;
       if (sl) entry = weighted(sl, r);
     }
+    // Cave biomes decide who lives underground (V2)
+    const cb = caves && cat !== 'ambient' && (cat !== 'creature' || underCreature) && (cat !== 'water' || underWater) ? dim.generator.caveBiomeAt!(x, y, z) : 0;
+    if (cb === 9) return; // the deep dark: nothing spawns there
+    if (cb) {
+      if (cat === 'monster' && CAVE_MONSTERS[cb] && r.chance(0.6)) entry = weighted(CAVE_MONSTERS[cb]!, r);
+      else if (cat === 'water') entry = CAVE_WATER[cb] ? weighted(CAVE_WATER[cb]!, r) : null;
+      else if (cat === 'creature') entry = cb === 4 ? { mob: 'sporeling', weight: 1, min: 1, max: 3 } : null;
+    } else if (underCreature || underWater) entry = null;
     // Underground-only spawns
     if (cat === 'ambient' && dim.id === 'overworld' && y < 60) entry = { mob: 'bat', weight: 1, min: 1, max: 2 };
     if (cat === 'monster' && dim.id === 'overworld' && y < 40 && r.chance(0.12)) entry = { mob: 'cave_stalker', weight: 1, min: 1, max: 1 };
@@ -457,7 +697,11 @@ export class MobSystem {
       }
       case 'creature': {
         const id = blocks[STATE_BLOCK[below]!]!.id;
-        return (id === 'grass_block' || id === 'snow_block' || id === 'sand' || id === 'mycelium' || id === 'podzol' || id === 'far_grass_block' || id === 'moss_block') && Math.max(sky, blk) > 8;
+        // Jungle animals also live up in the canopy
+        const canopy = (type === 'parrot' || type === 'ocelot') && id.endsWith('_leaves');
+        // Sporelings live on the mycelium of dark mushroom caves
+        if (type === 'sporeling') return id === 'mycelium' || id === 'moss_block' || STATE_OPAQUE[below] === 1;
+        return (canopy || id === 'grass_block' || id === 'snow_block' || id === 'sand' || id === 'mycelium' || id === 'podzol' || id === 'far_grass_block' || id === 'moss_block') && Math.max(sky, blk) > 8;
       }
       case 'water':
         return STATE_FLUID[dim.getState(x, y, z)] === 1 && STATE_FLUID[dim.getState(x, y + 1, z)] === 1;
@@ -473,6 +717,17 @@ export class MobSystem {
     const s = this.server;
     if (!isAlive(t)) return;
     s.broadcastNear(m.dim, m.x, m.y, m.z, 64, { t: 'anim', id: m.id, anim: 'swing' });
+    // Frogs swallow small slimes whole: slime balls from slimes, froglights from magma cubes
+    if (m.type === 'frog' && t instanceof Mob && (t.type === 'slime' || t.type === 'magma_cube')) {
+      m.data.tongue = 6;
+      m.metaDirty = true;
+      const drop = t.type === 'slime' ? 'slime_ball' : `${FROGLIGHT[String(m.data.variant ?? 'temperate')] ?? 'ochre'}_froglight`;
+      t.remove();
+      s.mining.dropItem(m.dim, m.x, m.y + 0.3, m.z, m.admin || t.admin ? markAdmin(stackOf(drop, 1)) : stackOf(drop, 1));
+      s.playSound(m.dim, 'frog.eat', m.x, m.y, m.z, 1, 1);
+      m.target = null;
+      return;
+    }
     let dmg = m.def.damage ?? 2;
     if (m.def.brain === 'slime') dmg = Math.max(0, Number(m.data.size ?? 1) - (m.type === 'slime' ? 0 : -1)) * (m.type === 'magma_cube' ? 1.5 : 1);
     if (m.held) {
@@ -529,7 +784,7 @@ export class MobSystem {
   damage(t: Entity, amount: number, info: HurtInfo & { kbx?: number; kbz?: number; knockback?: number }): number {
     if (isPlayer(t)) {
       if (info.attacker && isPlayer(info.attacker) && !this.server.level.pvp) return 0;
-      return this.server.interaction.survival.damage(t, amount, { source: info.source as never, attacker: info.attacker, kbx: info.kbx, kbz: info.kbz, knockback: info.knockback });
+      return this.server.interaction.survival.damage(t, amount, { source: info.source as never, attacker: info.attacker, kbx: info.kbx, kbz: info.kbz, knockback: info.knockback, disableShield: info.disableShield, pierceShield: info.pierceShield });
     }
     if (t instanceof LivingEntity) return t.hurt(amount, info);
     return 0;
@@ -566,6 +821,13 @@ export class MobSystem {
         p.damage = m.def.damage ?? 2;
         if (m.type === 'stray') p.data = { slow: true };
         s.playSound(m.dim, 'bow.shoot', m.x, m.y + 1.5, m.z, 1, 1 / (0.8 + m.rng.next() * 0.4));
+        break;
+      }
+      case 'llama_spit': {
+        const p = this.projectile(m.dim, 'snowball', ex, ey - 0.1, ez, m);
+        p.shoot(dx, ty - ey + hd * 0.1, dz, 1.5, inacc, () => m.rng.next());
+        p.data = { spit: true };
+        s.playSound(m.dim, 'llama.spit', m.x, m.y + 1.5, m.z, 1, 0.9 + m.rng.next() * 0.2);
         break;
       }
       case 'small_fireball':
@@ -636,34 +898,15 @@ export class MobSystem {
       return true;
     }
     switch (p.kind) {
+      case 'trident':
+        if (p.item) return this.thrownTridentHit(p, hit);
+        return this.arrowHit(p, hit);
       case 'arrow':
-      case 'trident': {
-        if (e) {
-          if (e === p.owner) return false;
-          const speed = Math.hypot(p.vx, p.vy, p.vz);
-          let dmg = Math.ceil(speed * p.damage);
-          if (p.crit) dmg += Math.floor(Math.random() * (Math.floor(dmg / 2) + 2));
-          const d = Math.hypot(p.vx, p.vz) || 1;
-          const dealt = this.damage(e, dmg, { source: 'arrow', attacker: p.owner, kbx: p.vx / d, kbz: p.vz / d, knockback: 0.3 + p.knockback * 0.6 });
-          if (dealt > 0) {
-            if (p.fire) this.setOnFire(e, 5);
-            if (p.data?.slow && isPlayer(e)) s.interaction.survival.addEffect(e, 'slowness', 0, 600);
-            s.playSound(dim, 'arrow.hit', e.x, e.y + 1, e.z, 1, 1.2);
-            return true;
-          }
-          // Deflected (e.g. blocked): drop
-          p.vx *= -0.1;
-          p.vy *= -0.1;
-          p.vz *= -0.1;
-          return false;
-        }
-        s.playSound(dim, 'arrow.hit', hit.x, hit.y, hit.z, 0.6, 1.2);
-        return false;
-      }
+        return this.arrowHit(p, hit);
       case 'snowball':
       case 'egg':
         if (e && e !== p.owner) {
-          const dmg = p.kind === 'snowball' && (e.type === 'blaze' || e.type === 'ember_beast') ? 3 : 0;
+          const dmg = p.data?.spit ? 1 : p.kind === 'snowball' && (e.type === 'blaze' || e.type === 'ember_beast') ? 3 : 0;
           const d = Math.hypot(p.vx, p.vz) || 1;
           if (dmg > 0) this.damage(e, dmg, { source: 'arrow', attacker: p.owner, kbx: p.vx / d, kbz: p.vz / d, knockback: 0.2 });
           else if (isPlayer(e)) e.send({ t: 'velocity', id: e.id, vx: (p.vx / d) * 0.1, vy: 0.1, vz: (p.vz / d) * 0.1 });
@@ -765,6 +1008,55 @@ export class MobSystem {
     return true;
   }
 
+  /** A thrown trident: fixed damage, then it drops (and returns with Loyalty). */
+  private thrownTridentHit(p: Projectile, hit: ProjectileHit): boolean {
+    const s = this.server;
+    const e = hit.entity;
+    if (e) {
+      if (e === p.owner || p.dealt) return false;
+      const d = Math.hypot(p.vx, p.vz) || 1;
+      const item = p.item!;
+      const ench = e instanceof LivingEntity && e.isUndead() ? 2.5 * enchantLevel(item, 'smite') : 0;
+      this.damage(e, p.damage + enchantLevel(item, 'sharpness') * 0.5 + ench, { source: 'arrow', attacker: p.owner, kbx: p.vx / d, kbz: p.vz / d, knockback: 0.4 });
+      p.dealt = true;
+      p.vx *= -0.01;
+      p.vy *= -0.1;
+      p.vz *= -0.01;
+      s.playSound(p.dim, 'trident.hit', e.x, e.y + 1, e.z, 1, 1);
+      return false;
+    }
+    s.playSound(p.dim, 'trident.hit_ground', hit.x, hit.y, hit.z, 0.8, 1);
+    return false;
+  }
+
+  /** Arrows (and mob-thrown tridents): damage from speed, then stick or drop. */
+  private arrowHit(p: Projectile, hit: ProjectileHit): boolean {
+    const s = this.server;
+    const e = hit.entity;
+    if (e) {
+      if (e === p.owner) return false;
+      const speed = Math.hypot(p.vx, p.vy, p.vz);
+      let dmg = Math.ceil(speed * p.damage);
+      if (p.crit) dmg += Math.floor(Math.random() * (Math.floor(dmg / 2) + 2));
+      const d = Math.hypot(p.vx, p.vz) || 1;
+      const dealt = this.damage(e, dmg, { source: 'arrow', attacker: p.owner, kbx: p.vx / d, kbz: p.vz / d, knockback: 0.3 + p.knockback * 0.6 });
+      if (dealt > 0) {
+        if (p.fire) this.setOnFire(e, 5);
+        if (p.data?.slow && isPlayer(e)) s.interaction.survival.addEffect(e, 'slowness', 0, 600);
+        if (p.data?.spectral) this.glow(e, 200);
+        s.playSound(p.dim, 'arrow.hit', e.x, e.y + 1, e.z, 1, 1.2);
+        return true;
+      }
+      // Deflected (e.g. blocked): drop
+      p.vx *= -0.1;
+      p.vy *= -0.1;
+      p.vz *= -0.1;
+      return false;
+    }
+    s.playSound(p.dim, 'arrow.hit', hit.x, hit.y, hit.z, 0.6, 1.2);
+    return false;
+  }
+
   creeperExplode(m: Mob): void {
     const charged = !!m.data.charged;
     m.dead = true;
@@ -774,6 +1066,7 @@ export class MobSystem {
 
   // ------------------------------------------------------------------ explosions
   explode(dim: Dimension, x: number, y: number, z: number, power: number, fire: boolean, source: Entity | null, cheat = false): void {
+    this.server.sculk?.vibrate(dim, x, y, z, source, 'explosion');
     const s = this.server;
     const cheatDrops = cheat || !!source?.admin;
     const r = this.rng;
@@ -870,7 +1163,7 @@ export class MobSystem {
       if (dim.getBlockEntity(bx, by, bz)) {
         s.interaction.containers.materializeLoot(dim, bx, by, bz, 27, cheatDrops);
         const be = dim.getBlockEntity(bx, by, bz);
-        if (be && Array.isArray((be as { items?: unknown }).items)) s.interaction.spillContainer(dim, bx, by, bz, be);
+        if (be && Array.isArray((be as { items?: unknown }).items)) s.interaction.spillContainer(dim, bx, by, bz, be, id, cheatDrops);
       }
       dim.setBlock(bx, by, bz, 0);
     }
@@ -1001,9 +1294,21 @@ export class MobSystem {
       // Loot from cheat-spawned mobs is cheat-made
       for (const st of drops) s.mining.dropItem(m.dim, m.x, m.y + 0.5, m.z, m.admin ? markAdmin(st) : st);
     }
+    // Fighting alongside an axolotl: it rewards the player who lands the killing blow
+    if (killer) {
+      for (const a of m.dim.entitiesNear(m.x, m.y, m.z, 16, (e) => e instanceof Mob && e.type === 'axolotl' && e.target === m)) {
+        void a;
+        s.interaction.survival.addEffect(killer, 'regeneration', 0, 100);
+        if (!m.admin) s.interaction.grant(killer, 'axolotl_help');
+        killer.effects.delete('mining_fatigue');
+        break;
+      }
+    }
     if (byPlayer && !m.baby) {
       const xp = m.def.xp ?? (m.def.category === 'monster' ? 5 : m.def.category === 'boss' ? 500 : 1 + m.rng.int(3));
-      s.mining.dropXp(m.dim, m.x, m.y + 0.5, m.z, xp, m.admin);
+      // A sculk catalyst nearby drinks the experience and spreads sculk instead
+      if (!s.sculk?.onDeath(m.dim, m.x, m.y, m.z, xp)) s.mining.dropXp(m.dim, m.x, m.y + 0.5, m.z, xp, m.admin);
+      else if (killer && !m.admin) s.interaction.grant(killer, 'catalyst_spread');
     }
     // Slimes split
     if (m.def.brain === 'slime') {
@@ -1021,6 +1326,8 @@ export class MobSystem {
         }
       }
     }
+    if (m.data.saddle) s.mining.dropItem(m.dim, m.x, m.y + 0.5, m.z, stackOf('saddle', 1));
+    s.mounts?.unleash(m, true);
     if (killer) {
       killer.addStat('killed.' + m.type);
       killer.addStat('mob_kills');
@@ -1085,7 +1392,8 @@ export class MobSystem {
     const sprintKb = f > 0.9 && p.sprinting;
     const kbLevel = enchantLevel(held, 'knockback') + (sprintKb ? 1 : 0);
     const dl = lookDir(p.yaw, 0);
-    const dealt = this.damage(target, Math.max(0, dmg), { source: 'player', attacker: p, kbx: dl[0], kbz: dl[2], knockback: 0.4 + kbLevel * 0.5 });
+    const axe = it?.tool?.type === 'axe';
+    const dealt = this.damage(target, Math.max(0, dmg), { source: 'player', attacker: p, kbx: dl[0], kbz: dl[2], knockback: 0.4 + kbLevel * 0.5, disableShield: axe && f > 0.9 ? 100 : undefined });
     if (dealt <= 0 && !(target instanceof PrimedTnt)) {
       s.playSound(p.dim, 'attack.weak', target.x, target.y + 1, target.z, 0.6, 1);
       return;
@@ -1135,6 +1443,8 @@ export class MobSystem {
       const rem = p.inventory.add(st);
       if (rem) s.interaction.dropStack(p, rem);
     };
+    // Riding, saddles and leads
+    if (s.mounts?.interact(p, m, held, slot)) return true;
     // Name tags
     if (id === 'name_tag' && held?.tag?.name) {
       m.customName = String(held.tag.name).slice(0, 32);
@@ -1144,8 +1454,19 @@ export class MobSystem {
       return true;
     }
     // Breeding / taming
+    // Ocelots learn to trust a player who feeds them fish
+    if (m.type === 'ocelot' && !m.data.trusting && m.def.breedItems?.includes(id)) {
+      consume();
+      if (m.rng.chance(1 / 3)) {
+        m.data.trusting = true;
+        m.persistenceRequired = true;
+        m.metaDirty = true;
+        s.particles(m.dim, 'heart', m.x, m.y + 1, m.z, 7, 0.5);
+      } else s.particles(m.dim, 'smoke', m.x, m.y + 1, m.z, 7, 0.5);
+      return true;
+    }
     if (m.def.breedItems?.includes(id) && !m.baby) {
-      if ((m.type === 'wolf' || m.type === 'cat') && !m.owner) {
+      if ((m.type === 'wolf' || m.type === 'cat' || m.type === 'parrot') && !m.owner) {
         if (m.type === 'wolf' && id !== 'bone') return false;
         consume();
         if (m.rng.chance(1 / 3)) {
@@ -1181,7 +1502,7 @@ export class MobSystem {
       return true;
     }
     // Owner toggles sitting
-    if (m.owner === p.uuid && (m.type === 'wolf' || m.type === 'cat')) {
+    if (m.owner === p.uuid && (m.type === 'wolf' || m.type === 'cat' || m.type === 'parrot')) {
       m.sitting = !m.sitting;
       m.stopNavigation();
       m.target = null;
@@ -1378,10 +1699,14 @@ export class MobSystem {
     return true;
   }
 
-  /** Bow released after `ticks` of drawing. */
-  releaseBow(p: ServerPlayer, stack: ItemStack, ticks: number): void {
+  /** Bow (or trident) released after `ticks` of drawing. */
+  releaseBow(p: ServerPlayer, stack: ItemStack, ticks: number, slot = p.selectedSlot): void {
     const s = this.server;
     const def = items[stack.id]!;
+    if (def.id === 'trident') {
+      this.throwTrident(p, stack, ticks, slot);
+      return;
+    }
     if (def.id !== 'bow' && def.id !== 'crossbow') return;
     let f = ticks / 20;
     f = (f * f + f * 2) / 3;
@@ -1390,17 +1715,18 @@ export class MobSystem {
     const infinity = enchantLevel(stack, 'infinity') > 0;
     const creative = p.gamemode === 'creative';
     let arrowSlot = -1;
-    if (!creative) {
-      const order = [40, ...Array.from({ length: 36 }, (_, i) => i)];
-      for (const i of order) {
-        const a = p.inventory.get(i);
-        if (a && items[a.id]!.id === 'arrow') {
-          arrowSlot = i;
-          break;
-        }
+    // Offhand first, then the inventory; creative players shoot plain arrows unless they carry spectral ones
+    const order = [40, ...Array.from({ length: 36 }, (_, i) => i)];
+    for (const i of order) {
+      const a = p.inventory.get(i);
+      const aid = a ? items[a.id]!.id : '';
+      if (aid === 'arrow' || aid === 'spectral_arrow') {
+        arrowSlot = i;
+        break;
       }
-      if (arrowSlot < 0) return;
     }
+    if (arrowSlot < 0 && !creative) return;
+    const spectral = arrowSlot >= 0 && items[p.inventory.get(arrowSlot)!.id]!.id === 'spectral_arrow';
     const [ex, ey, ez] = s.eyePos(p);
     const d = lookDir(p.yaw, p.pitch);
     const pr = this.projectile(p.dim, 'arrow', ex, ey - 0.1, ez, p);
@@ -1409,8 +1735,12 @@ export class MobSystem {
     pr.damage = 2 + (enchantLevel(stack, 'power') ? 0.5 * enchantLevel(stack, 'power') + 0.5 : 0);
     pr.knockback = enchantLevel(stack, 'punch');
     pr.fire = enchantLevel(stack, 'flame') > 0;
-    pr.pickup = !creative && !infinity;
-    if (!creative && !infinity && arrowSlot >= 0) {
+    pr.pickup = !creative && !(infinity && !spectral);
+    if (spectral) {
+      pr.data = { spectral: true };
+      pr.item = stackOf('spectral_arrow', 1);
+    }
+    if (!creative && !(infinity && !spectral) && arrowSlot >= 0) {
       const a = p.inventory.get(arrowSlot)!;
       p.inventory.set(arrowSlot, a.count > 1 ? { ...a, count: a.count - 1 } : null);
     }
@@ -1419,14 +1749,62 @@ export class MobSystem {
     p.addStat('used.bow');
   }
 
-  /** Players pick up arrows stuck in the ground. */
+  /** Throws a trident drawn for at least half a second. */
+  private throwTrident(p: ServerPlayer, stack: ItemStack, ticks: number, slot: number): void {
+    const s = this.server;
+    if (ticks < 10) return;
+    const creative = p.gamemode === 'creative';
+    if (!creative) s.interaction.damageStack(p, slot, 1);
+    const thrown = cloneStack(p.inventory.get(slot) ?? stack);
+    if (!thrown || items[thrown.id]!.id !== 'trident') return;
+    const [ex, ey, ez] = s.eyePos(p);
+    const d = lookDir(p.yaw, p.pitch);
+    const pr = this.projectile(p.dim, 'trident', ex, ey - 0.1, ez, p);
+    pr.shoot(d[0], d[1], d[2], 2.5, 1, () => this.rng.next());
+    pr.damage = 8;
+    pr.item = thrown;
+    pr.loyalty = enchantLevel(thrown, 'loyalty');
+    pr.pickup = !creative;
+    pr.persistent = true;
+    pr.admin = s.interaction.isCheat(p, thrown);
+    pr.onReturn = (x) => this.tridentReturned(x);
+    if (!creative) p.inventory.set(slot, null);
+    s.playSound(p.dim, 'trident.throw', p.x, p.y + 1.5, p.z, 1, 1);
+    p.addStat('used.trident');
+  }
+
+  /** A Loyalty trident reached its thrower: back into the inventory. */
+  private tridentReturned(pr: Projectile): void {
+    const o = pr.owner;
+    if (!pr.item || !o || !isPlayer(o)) return;
+    if (pr.pickup) {
+      const rem = o.inventory.add(pr.item);
+      if (rem) this.server.interaction.dropStack(o, rem);
+    }
+    this.server.playSound(o.dim, 'trident.return', o.x, o.y + 1, o.z, 1, 1);
+  }
+
+  /** Players pick up arrows and tridents stuck in the ground. */
   tickArrowPickup(): void {
     for (const p of this.server.players.values()) {
       if (p.dead || p.gamemode === 'spectator') continue;
       for (const e of p.dim.entitiesNear(p.x, p.y + 1, p.z, 2)) {
-        if (!(e instanceof Projectile) || e.kind !== 'arrow' || !e.stuck || e.removed) continue;
+        if (!(e instanceof Projectile) || !e.stuck || e.removed || e.returning) continue;
+        if (e.kind === 'trident') {
+          // Only the thrower may pick up a Loyalty trident; mob tridents can't be picked up
+          if (!e.item || (e.loyalty > 0 && e.ownerUuid !== p.uuid)) continue;
+          if (e.pickup) {
+            const rem = p.inventory.add(e.item);
+            if (rem) continue;
+          }
+          e.remove();
+          this.server.broadcastNear(p.dim, e.x, e.y, e.z, 32, { t: 'take_item', item: e.id, by: p.id });
+          this.server.playSound(p.dim, 'pop', e.x, e.y, e.z, 0.2, 1.8);
+          continue;
+        }
+        if (e.kind !== 'arrow') continue;
         if (e.pickup && p.gamemode !== 'creative') {
-          const rem = p.inventory.add(stackOf('arrow', 1));
+          const rem = p.inventory.add(e.item ? cloneStack(e.item) : stackOf('arrow', 1));
           if (rem) continue;
         }
         e.remove();

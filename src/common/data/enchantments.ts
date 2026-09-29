@@ -13,6 +13,8 @@ export interface EnchantDef {
   conflicts?: string[];
   treasure?: boolean;
   curse?: boolean;
+  /** Never rolled at random (tables, random loot, trades): only placed by specific loot. */
+  exclusive?: boolean;
 }
 
 const lin = (base: number, per: number) => (l: number): number => base + (l - 1) * per;
@@ -50,6 +52,8 @@ export const ENCHANTMENTS: EnchantDef[] = [
   { id: 'loyalty', name: 'Loyalty', maxLevel: 3, targets: ['trident'], weight: 5, minCost: lin(12, 7), maxCost: () => 50 },
   { id: 'luck_of_the_sea', name: 'Luck of the Sea', maxLevel: 3, targets: ['fishing_rod'], weight: 2, minCost: lin(15, 9), maxCost: lin(65, 9) },
   { id: 'lure', name: 'Lure', maxLevel: 3, targets: ['fishing_rod'], weight: 2, minCost: lin(15, 9), maxCost: lin(65, 9) },
+  // Found only in Ancient Cities: move faster while sneaking
+  { id: 'silent_stride', name: 'Silent Stride', maxLevel: 3, targets: ['leggings'], weight: 1, minCost: lin(25, 25), maxCost: lin(75, 25), treasure: true, exclusive: true },
   { id: 'binding_curse', name: 'Curse of Binding', maxLevel: 1, targets: ['armor'], weight: 1, minCost: () => 25, maxCost: () => 50, treasure: true, curse: true },
   { id: 'vanishing_curse', name: 'Curse of Vanishing', maxLevel: 1, targets: ['breakable'], weight: 1, minCost: () => 25, maxCost: () => 50, treasure: true, curse: true },
 ];

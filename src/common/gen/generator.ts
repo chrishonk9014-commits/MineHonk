@@ -14,12 +14,16 @@ import { OverworldTerrain } from './overworld';
 import { DecorView } from './decorate/view';
 import * as F from './decorate/features';
 import { StructureManager } from './structures/manager';
-import { ProtoCache, cloneChunk, addGenEntities, type DimensionGenerator, type GeneratorOptions, type SpawnPoint } from './pipeline';
+import { caveDecorV2 } from './caves/decor';
+import { ProtoCache, cloneChunk, addGenEntities, LATEST_GENERATOR, type DimensionGenerator, type GeneratorOptions, type SpawnPoint } from './pipeline';
 import { VILLAGE } from './structures/village';
 import { SURFACE_STRUCTURES } from './structures/misc';
 import { MINESHAFT, STRONGHOLD } from './structures/underground';
+import { CAVE_STRUCTURES } from './structures/caves';
+import { ANCIENT_CITY } from './structures/ancientCity';
 import { biomeOf } from '../registry/biomes';
-import { STATE_FLUID } from '../registry/blocks';
+import { STATE_FLUID, STATE_SOLID } from '../registry/blocks';
+import { CAVE_BIOMES } from './caves/caveBiomes';
 import { NetherGenerator } from './nether';
 import { EndGenerator } from './end';
 import { FarlandsGenerator } from './farlands';
@@ -30,6 +34,8 @@ type Stage = (v: DecorView, seed: number, ocx: number, ocz: number) => void;
 
 /** Stages replayed over the 3x3 neighbourhood, in this global order. */
 const NEIGHBOUR_STAGES: Stage[] = [F.lakes, F.geodes, F.ores, F.dungeons, F.springs, F.disks, F.iceFeatures, F.boulders, F.trees];
+/** V2 swaps in the V2 ore table and geodes that stay inside rock. */
+const NEIGHBOUR_STAGES_V2: Stage[] = NEIGHBOUR_STAGES.map((s) => (s === F.ores ? F.oresV2 : s === F.geodes ? F.geodesV2 : s));
 
 export class OverworldGenerator implements DimensionGenerator {
   readonly dimension = 'overworld' as const;
@@ -41,7 +47,7 @@ export class OverworldGenerator implements DimensionGenerator {
     readonly seed: number,
     opts: GeneratorOptions = {},
   ) {
-    this.terrain = new OverworldTerrain(seed);
+    this.terrain = new OverworldTerrain(seed, opts.version ?? LATEST_GENERATOR);
     this.protos = new ProtoCache(600, (cx, cz) => this.terrain.generate(cx, cz));
     const ground = (x: number, z: number): { y: number; water: boolean } => {
       const c = this.protos.get(x >> 4, z >> 4);
@@ -57,7 +63,8 @@ export class OverworldGenerator implements DimensionGenerator {
     };
     this.structures = new StructureManager(
       seed,
-      [VILLAGE, ...SURFACE_STRUCTURES, MINESHAFT, STRONGHOLD],
+      // V2 adds its underground structures after the V1 list, so V1 placements never move
+      [VILLAGE, ...SURFACE_STRUCTURES, MINESHAFT, STRONGHOLD, ...(this.terrain.carver ? [...CAVE_STRUCTURES, ANCIENT_CITY] : [])],
       {
         seed,
         groundY: (x, z) => ground(x, z).y,
@@ -65,6 +72,7 @@ export class OverworldGenerator implements DimensionGenerator {
         biome: (x, z) => biomeOf(this.protos.get(x >> 4, z >> 4).getBiome(x & 15, z & 15)),
         estimateHeight: (x, z) => this.terrain.estimateHeight(x, z),
         estimateBiome: (x, z) => biomeOf(this.terrain.estimateBiome(x, z)),
+        deepDark: (x, z) => this.terrain.caveBiomes?.deepDarkStrength(x, z) ?? -1,
       },
       () => opts.structures !== false,
     );
@@ -75,13 +83,15 @@ export class OverworldGenerator implements DimensionGenerator {
     const c = cloneChunk(proto);
     const v = new DecorView(c, (x, z) => this.protos.get(x, z));
     const seed = this.seed;
-    for (const stage of NEIGHBOUR_STAGES) {
+    for (const stage of this.terrain.carver ? NEIGHBOUR_STAGES_V2 : NEIGHBOUR_STAGES) {
       for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) stage(v, seed, cx + dx, cz + dz);
     }
-    F.caveDecor(v, seed, cx, cz, (x, z) => {
-      const cl = this.terrain.climate.sample(x, z, this.climateScratch);
-      return { humidity: cl.h, continentalness: cl.c, weirdness: cl.w };
-    });
+    if (this.terrain.carver) caveDecorV2(v, seed, cx, cz);
+    else
+      F.caveDecor(v, seed, cx, cz, (x, z) => {
+        const cl = this.terrain.climate.sample(x, z, this.climateScratch);
+        return { humidity: cl.h, continentalness: cl.c, weirdness: cl.w };
+      });
     const starts = this.structures.build(v);
     F.vegetation(v, seed, cx, cz);
     F.freeze(v);
@@ -115,6 +125,18 @@ export class OverworldGenerator implements DimensionGenerator {
 
   biomeAt(x: number, z: number): number {
     return this.terrain.estimateBiome(x, z);
+  }
+
+  get caves(): boolean {
+    return !!this.terrain.carver;
+  }
+
+  caveBiomeAt(x: number, y: number, z: number): number {
+    return this.terrain.caveBiomeAt(x, y, z);
+  }
+
+  inMegaCavern(x: number, y: number, z: number): boolean {
+    return !!this.terrain.carver?.megaAt(x, y, z);
   }
 
   structureAt(x: number, y: number, z: number): string | null {
@@ -155,6 +177,87 @@ export class OverworldGenerator implements DimensionGenerator {
     if (type === 'dungeon') return yield* this.dungeonSteps(x, z);
     const s = yield* this.structures.nearestSteps(type, x, z);
     return s ? { x: s.x, y: s.y, z: s.z } : null;
+  }
+
+  /**
+   * Admin locate for cave features: a cave biome id (see CAVE_BIOMES),
+   * 'mega_cavern' or 'ravine'. Returns an open spot with a floor inside it
+   * (checked against the proto chunk), or null.
+   */
+  *caveSteps(kind: string, x: number, z: number, maxRadius = 3072): Generator<void, { x: number; y: number; z: number } | null> {
+    const carver = this.terrain.carver;
+    if (!carver) return null;
+    if (kind === 'mega_cavern') {
+      const m = carver.nearestMega(x, z);
+      if (!m) return null;
+      yield;
+      return this.caveLanding(m.x, m.y, m.z, 4, 200, (bx, by, bz) => !!carver.megaAt(bx, by + 1, bz), 24) ?? { x: m.x, y: m.y, z: m.z };
+    }
+    if (kind === 'ravine') {
+      const r = carver.nearestRavine(x, z);
+      if (!r) return null;
+      yield;
+      return this.caveLanding(r.x, r.floor + 1, r.z, r.floor - 4, 200) ?? { x: r.x, y: r.floor + 1, z: r.z };
+    }
+    const id = CAVE_BIOMES.findIndex((b) => b.id === kind);
+    if (id <= 0) return null;
+    const ys = [10, 18, 26, 34, 42, 50];
+    const probe = (px: number, pz: number): { x: number; y: number; z: number } | null => {
+      for (const y of ys) {
+        if (this.terrain.caveBiomeAt(px, y, pz) !== id) continue;
+        const spot = this.caveLanding(px, y, pz, y - 10, y + 10, (bx, by, bz) => this.terrain.caveBiomeAt(bx, by, bz) === id);
+        if (spot) return spot;
+      }
+      return null;
+    };
+    const first = probe(x, z);
+    if (first) return first;
+    for (let r = 16; r <= maxRadius; ) {
+      const step = r < 512 ? 16 : 32;
+      for (let i = -r; i < r; i += step) {
+        for (const [px, pz] of [
+          [x + i, z - r],
+          [x + r, z + i],
+          [x - i, z + r],
+          [x - r, z - i],
+        ] as const) {
+          const s = probe(px, pz);
+          if (s) return s;
+          yield;
+        }
+      }
+      r += step;
+    }
+    return null;
+  }
+
+  /**
+   * Air with a solid floor near (x, y, z) in the carved terrain, within
+   * `reach` blocks sideways, optionally only where `accept` agrees.
+   */
+  private caveLanding(x: number, y: number, z: number, yMin: number, yMax: number, accept?: (x: number, y: number, z: number) => boolean, reach = 8): { x: number; y: number; z: number } | null {
+    const lo = Math.max(2, yMin);
+    const hi = Math.min(250, yMax);
+    const at = (bx: number, by: number, bz: number): number => this.protos.get(bx >> 4, bz >> 4).get(bx & 15, by, bz & 15);
+    for (let r = 0; r <= reach; r += 2) {
+      for (let dx = -r; dx <= r; dx += 2)
+        for (let dz = -r; dz <= r; dz += 2) {
+          if (Math.max(Math.abs(dx), Math.abs(dz)) !== r) continue;
+          const bx = Math.floor(x) + dx;
+          const bz = Math.floor(z) + dz;
+          for (let d = 0; d <= 2 * (hi - lo) + 1; d++) {
+            const by = Math.floor(y) + (d & 1 ? -(d + 1) / 2 : d / 2);
+            if (by < lo || by > hi) continue;
+            const f = at(bx, by - 1, bz);
+            const a = at(bx, by, bz);
+            const b = at(bx, by + 1, bz);
+            if (!STATE_SOLID[f] || STATE_FLUID[f] || STATE_SOLID[a] || STATE_FLUID[a] || STATE_SOLID[b] || STATE_FLUID[b]) continue;
+            if (accept && !accept(bx, by, bz)) continue;
+            return { x: bx, y: by, z: bz };
+          }
+        }
+    }
+    return null;
   }
 
   locate(type: string, x: number, z: number): { x: number; y: number; z: number } | null {

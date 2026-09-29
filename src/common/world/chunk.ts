@@ -22,6 +22,8 @@ export class Chunk {
   readonly blockEntities = new Map<number, BlockEntityData>();
   /** Entities placed by world generation, spawned once when the chunk is first generated (not serialised). */
   readonly genEntities: { type: string; x: number; y: number; z: number; data?: Record<string, unknown> }[] = [];
+  /** Cave biome per 4x4x4 cell (proto chunks of V2 worlds only; not serialised). */
+  caveBiomes: Uint8Array | null = null;
   /** Non-air counts per section to free sections that become empty. */
   readonly counts = new Uint16Array(SECTIONS_PER_CHUNK);
 
@@ -205,13 +207,18 @@ export function writeSection(w: ByteWriter, s: Uint16Array): void {
   if (accBits > 0) w.u8(acc & 0xff);
 }
 
-export function readSection(r: ByteReader, maxState = stateCount()): Uint16Array {
+/**
+ * Reads one section. With `remap` the stored ids belong to another block
+ * registry and are translated (see registry/palette.ts).
+ */
+export function readSection(r: ByteReader, maxState = stateCount(), remap?: Uint16Array | null): Uint16Array {
   const n = r.varint();
   if (n < 1 || n > SECTION_VOLUME) throw new Error('bad palette size');
   const palette = new Uint16Array(n);
   for (let i = 0; i < n; i++) {
     const v = r.varint();
-    palette[i] = v < maxState ? v : 0;
+    if (remap) palette[i] = v < remap.length ? remap[v]! : 0;
+    else palette[i] = v < maxState ? v : 0;
   }
   const out = new Uint16Array(SECTION_VOLUME);
   if (n === 1) {
@@ -302,7 +309,7 @@ function readLight(r: ByteReader): Uint8Array {
   return out;
 }
 
-export function decodeChunk(data: Uint8Array): Chunk {
+export function decodeChunk(data: Uint8Array, remap?: Uint16Array | null): Chunk {
   const r = new ByteReader(data);
   const cx = r.i32();
   const cz = r.i32();
@@ -311,7 +318,7 @@ export function decodeChunk(data: Uint8Array): Chunk {
   const mask = r.u16();
   const lmask = r.u16();
   for (let i = 0; i < SECTIONS_PER_CHUNK; i++) {
-    if (mask & (1 << i)) c.sections[i] = readSection(r);
+    if (mask & (1 << i)) c.sections[i] = readSection(r, stateCount(), remap);
   }
   if (flags & 2) {
     for (let i = 0; i < SECTIONS_PER_CHUNK; i++) {

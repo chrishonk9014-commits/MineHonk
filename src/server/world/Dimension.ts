@@ -14,6 +14,7 @@ import { ByteReader, ByteWriter } from '../../common/util/bytes';
 import type { Entity } from '../entity/Entity';
 import type { GameServer } from '../GameServer';
 import type { BlockEntityData } from '../../common/world/chunk';
+import { currentHashValue, V1_HASH } from '../../common/registry/palette';
 
 export interface DimensionRules {
   hasSky: boolean;
@@ -37,7 +38,8 @@ export const DIMENSION_RULES: Record<DimensionId, DimensionRules> = {
 
 type LoadState = 'reading' | 'queued';
 
-export const CHUNK_SAVE_VERSION = 1;
+/** 1: V1 (no registry tag, V1 block ids). 2: tagged with the block registry hash. */
+export const CHUNK_SAVE_VERSION = 2;
 
 export class Dimension implements BlockAccess {
   readonly chunks = new Map<number, Chunk>();
@@ -66,7 +68,7 @@ export class Dimension implements BlockAccess {
     seed: number,
   ) {
     this.rules = DIMENSION_RULES[id];
-    this.generator = createGenerator(id, seed, { structures: server.level.generateStructures !== false });
+    this.generator = createGenerator(id, seed, { structures: server.level.generateStructures !== false, version: server.level.generatorVersion });
     this.light = new LightEngine(
       {
         getChunk: (cx, cz) => this.chunks.get(chunkIndex(cx, cz)),
@@ -176,7 +178,7 @@ export class Dimension implements BlockAccess {
         if (this.loading.get(k) !== 'reading') return;
         if (data) {
           try {
-            const { chunk, entities } = decodeSavedChunk(data, this.rules.hasSky);
+            const { chunk, entities } = decodeSavedChunk(data, this.rules.hasSky, (h) => this.server.registries.remapFor(h));
             if (chunk.cx !== cx || chunk.cz !== cz) throw new Error('chunk coordinate mismatch');
             this.loading.delete(k);
             this.addChunk(chunk);
@@ -390,24 +392,30 @@ export class Dimension implements BlockAccess {
   }
 }
 
-/** Saved chunk payload: deflate( u8 version, varint len, chunk bytes, json entities ). */
+/** Saved chunk payload: deflate( u8 version, u32 registry hash, varint len, chunk bytes, json entities ). */
 export function encodeSavedChunk(c: Chunk, entities: Record<string, unknown>[]): Uint8Array {
   const body = encodeChunk(c, { light: false, blockEntities: true });
   const w = new ByteWriter(body.length + 256);
   w.u8(CHUNK_SAVE_VERSION);
+  w.u32(currentHashValue());
   w.varint(body.length);
   w.bytes(body);
   w.string(JSON.stringify(entities));
   return deflateSync(w.finish(), { level: 6 });
 }
 
-export function decodeSavedChunk(data: Uint8Array, hasSky: boolean): { chunk: Chunk; entities: Record<string, unknown>[] } {
+/**
+ * Reads a saved chunk. `remapFor` translates block ids written by another
+ * registry (V1 chunks carry no tag and always use the V1 registry).
+ */
+export function decodeSavedChunk(data: Uint8Array, hasSky: boolean, remapFor: (hash: number) => Uint16Array | null = () => null): { chunk: Chunk; entities: Record<string, unknown>[] } {
   const raw = inflateSync(data);
   const r = new ByteReader(raw);
   const version = r.u8();
-  if (version !== CHUNK_SAVE_VERSION) throw new Error(`unsupported chunk version ${version}`);
+  if (version !== 1 && version !== CHUNK_SAVE_VERSION) throw new Error(`unsupported chunk version ${version}`);
+  const hash = version === 1 ? V1_HASH : r.u32();
   const len = r.varint();
-  const chunk = decodeChunk(r.bytes(len));
+  const chunk = decodeChunk(r.bytes(len), remapFor(hash));
   (chunk as { hasSky: boolean }).hasSky = hasSky;
   chunk.modified = true;
   chunk.dirty = false;

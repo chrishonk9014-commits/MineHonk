@@ -258,6 +258,14 @@ body {
   position: relative;
   border-right: var(--s) solid rgba(80, 80, 80, 0.7);
 }
+.hotbar .hslot .cooldown {
+  position: absolute;
+  left: calc(var(--s) * 1);
+  right: calc(var(--s) * 1);
+  bottom: calc(var(--s) * 1);
+  background: rgba(255, 255, 255, 0.35);
+  pointer-events: none;
+}
 .hotbar .hslot:last-child {
   border-right: none;
 }
@@ -1584,4 +1592,59 @@ body {
 .admin-empty {
   grid-column: 1 / -1;
   padding: calc(var(--s) * 4);
+}
+
+/* Held compass / clock instrument, right of the hotbar */
+.navigator {
+  position: absolute;
+  bottom: calc(var(--s) * 2);
+  left: calc(50% + var(--s) * 100);
+  width: calc(var(--s) * 20);
+  pointer-events: none;
+  text-align: center;
+}
+.navigator canvas {
+  width: calc(var(--s) * 20);
+  height: calc(var(--s) * 20);
+  image-rendering: pixelated;
+}
+.navigator-label {
+  color: #fff;
+  font-size: calc(var(--s) * 5);
+  line-height: 1;
+  white-space: nowrap;
+}
+.spyglass-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(circle at center, transparent 0, transparent 32vmin, rgba(0, 0, 0, 0.85) 34vmin, #000 44vmin);
+}
+
+/* Beacon */
+.beacon-col {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--s) * 2);
+  min-width: calc(var(--s) * 60);
+}
+.beacon-effect,
+.beacon-confirm {
+  background: #6b6b6b;
+  border: var(--s) solid #2a2a2a;
+  box-shadow: inset var(--s) var(--s) 0 #a0a0a0, inset calc(var(--s) * -1) calc(var(--s) * -1) 0 #404040;
+  color: #fff;
+  padding: calc(var(--s) * 2) calc(var(--s) * 3);
+  font-size: calc(var(--s) * 6);
+  cursor: pointer;
+  text-shadow: calc(var(--s) * 0.6) calc(var(--s) * 0.6) 0 #3a3a3a;
+}
+.beacon-effect.selected {
+  background: #3f8f5f;
+}
+.beacon-effect.locked,
+.beacon-confirm.locked {
+  color: #9a9a9a;
+  cursor: default;
+  background: #4a4a4a;
 }

@@ -1,0 +1,426 @@
+/** Items that did nothing in V1 and work now (shield, trident, spectral arrows, ...). */
+import { describe, it, expect } from 'vitest';
+import { makeServer, join, tick } from '../helpers/testServer';
+import { S } from '../../src/common/registry/blocks';
+import { itemById } from '../../src/common/registry/items';
+import { stackOf } from '../../src/common/game/itemstack';
+import { Projectile } from '../../src/server/entity/Projectile';
+import type { ServerPlayer } from '../../src/server/player/ServerPlayer';
+
+/** Flat stone floor with open air around the player. */
+function arena(player: ServerPlayer, r = 12): number {
+  const cx = Math.floor(player.x);
+  const cz = Math.floor(player.z);
+  const y = Math.floor(player.y);
+  for (let x = cx - r; x <= cx + r; x++)
+    for (let z = cz - r; z <= cz + r; z++) {
+      player.dim.setBlock(x, y - 1, z, S('stone'));
+      for (let h = 0; h < 5; h++) player.dim.setBlock(x, y + h, z, 0);
+    }
+  return y;
+}
+
+describe('shield', () => {
+  it('a raised shield stops a hit from the front but not from behind', async () => {
+    const { server } = await makeServer();
+    const { player, conn } = await join(server);
+    arena(player);
+    player.spawnProtection = 0;
+    player.inventory.set(40, stackOf('shield', 1));
+    player.yaw = 0; // facing north (-Z)
+    server.handle(conn, { t: 'use', hand: 1, action: 'start' });
+    tick(server, 6);
+    const zombie = server.mobs!.spawn(player.dim, 'zombie', player.x, player.y, player.z - 1.5)!;
+    const hp = player.health;
+    server.mobs!.meleeAttack(zombie, player);
+    expect(player.health).toBe(hp);
+    expect(player.inventory.get(40)!.damage ?? 0).toBeGreaterThan(0);
+    // From behind the shield does nothing
+    zombie.setPos(player.x, player.y, player.z + 1.5);
+    player.hurtCooldown = 0;
+    server.mobs!.meleeAttack(zombie, player);
+    expect(player.health).toBeLessThan(hp);
+  });
+
+  it('an axe knocks the shield aside for a while', async () => {
+    const { server } = await makeServer({ pvp: true });
+    const a = await join(server, 'Axer');
+    const b = await join(server, 'Blocker');
+    arena(b.player);
+    b.player.spawnProtection = 0;
+    b.player.setPos(a.player.x, a.player.y, a.player.z - 2);
+    b.player.yaw = Math.PI; // facing south, towards the attacker
+    b.player.inventory.set(40, stackOf('shield', 1));
+    server.handle(b.conn, { t: 'use', hand: 1, action: 'start' });
+    tick(server, 30);
+    a.player.yaw = 0;
+    a.player.inventory.set(a.player.selectedSlot, stackOf('iron_axe', 1));
+    server.handle(a.conn, { t: 'attack', id: b.player.id });
+    expect(b.player.shieldDownUntil).toBeGreaterThan(server.tickNo);
+    expect(b.conn.of('cooldown').length).toBe(1);
+    expect(server.interaction.isUsing(b.player)).toBeUndefined();
+  });
+});
+
+describe('trident', () => {
+  it('can be thrown, hits, and is picked up again', async () => {
+    const { server } = await makeServer();
+    const { player, conn } = await join(server);
+    const y = arena(player, 16);
+    player.inventory.set(player.selectedSlot, stackOf('trident', 1));
+    player.yaw = 0;
+    player.pitch = 0;
+    const cow = server.mobs!.spawn(player.dim, 'cow', player.x, y, player.z - 6)!;
+    cow.noAi = true;
+    const hp = cow.health;
+    server.handle(conn, { t: 'use', hand: 0, action: 'start' });
+    tick(server, 15);
+    server.handle(conn, { t: 'use', hand: 0, action: 'release' });
+    expect(player.inventory.get(player.selectedSlot)).toBeNull();
+    const thrown = [...player.dim.entities.values()].find((e) => e instanceof Projectile && e.kind === 'trident') as Projectile;
+    expect(thrown?.item).toBeTruthy();
+    for (let i = 0; i < 40 && !thrown.stuck; i++) tick(server, 1);
+    expect(cow.health).toBeLessThan(hp);
+    // Walk to it and pick it up
+    player.setPos(thrown.x, y, thrown.z);
+    player.dim.updateBucket(player);
+    tick(server, 2);
+    let back = false;
+    for (let i = 0; i < 36; i++) if (player.inventory.get(i)?.id === itemById.get('trident')!.num) back = true;
+    expect(back).toBe(true);
+  });
+
+  it('a Loyalty trident flies back to its thrower', async () => {
+    const { server } = await makeServer();
+    const { player, conn } = await join(server);
+    arena(player, 16);
+    player.inventory.set(player.selectedSlot, stackOf('trident', 1, { tag: { ench: { loyalty: 3 } } }));
+    player.yaw = 0;
+    player.pitch = -0.2;
+    server.handle(conn, { t: 'use', hand: 0, action: 'start' });
+    tick(server, 12);
+    server.handle(conn, { t: 'use', hand: 0, action: 'release' });
+    expect(player.inventory.get(player.selectedSlot)).toBeNull();
+    tick(server, 200);
+    let back = false;
+    for (let i = 0; i < 36; i++) if (player.inventory.get(i)?.id === itemById.get('trident')!.num) back = true;
+    expect(back).toBe(true);
+  });
+
+  it('stuck tridents are saved with the chunk', async () => {
+    const pr = new Projectile('trident');
+    pr.item = stackOf('trident', 1);
+    pr.stuck = true;
+    pr.setPos(10, 70, 10);
+    const saved = pr.save();
+    expect(saved).toBeTruthy();
+    const back = Projectile.restoreTrident(saved!);
+    expect(back?.item?.id).toBe(itemById.get('trident')!.num);
+  });
+});
+
+describe('spectral arrows', () => {
+  it('are shot from a bow and make the target glow', async () => {
+    const { server } = await makeServer();
+    const { player, conn } = await join(server);
+    const y = arena(player, 16);
+    player.inventory.set(player.selectedSlot, stackOf('bow', 1));
+    player.inventory.set(40, stackOf('spectral_arrow', 4));
+    player.yaw = 0;
+    player.pitch = 0;
+    const cow = server.mobs!.spawn(player.dim, 'cow', player.x, y, player.z - 5)!;
+    cow.noAi = true;
+    server.handle(conn, { t: 'use', hand: 0, action: 'start' });
+    tick(server, 25);
+    server.handle(conn, { t: 'use', hand: 0, action: 'release' });
+    expect(player.inventory.get(40)!.count).toBe(3);
+    tick(server, 20);
+    expect(cow.meta().glowing).toBe(true);
+  });
+});
+
+import { stepGlide, newBody } from '../../src/common/physics/movement';
+import { FishingBobber } from '../../src/server/entity/FishingBobber';
+import { Firework } from '../../src/server/entity/Firework';
+
+describe('elytra', () => {
+  it('glides far forward for little height', () => {
+    const air = { getState: () => 0 };
+    const b = newBody(0, 200, 0);
+    b.vz = -0.5;
+    for (let i = 0; i < 100; i++) stepGlide(air, b, 0, 0.15, false);
+    const fell = 200 - b.y;
+    const went = -b.z;
+    expect(went).toBeGreaterThan(fell * 2);
+    expect(fell).toBeGreaterThan(0);
+  });
+
+  it('a rocket speeds the glider up', () => {
+    const air = { getState: () => 0 };
+    const a = newBody(0, 200, 0);
+    const b = newBody(0, 200, 0);
+    for (let i = 0; i < 20; i++) {
+      stepGlide(air, a, 0, 0, false);
+      stepGlide(air, b, 0, 0, true);
+    }
+    expect(Math.hypot(b.vx, b.vz)).toBeGreaterThan(Math.hypot(a.vx, a.vz) + 0.5);
+  });
+
+  it('the server accepts gliding only with a working Elytra and lets rockets boost it', async () => {
+    const { server } = await makeServer();
+    const { player, conn } = await join(server);
+    arena(player);
+    const move = (glide: boolean) => server.handle(conn, { t: 'move', x: player.x, y: player.y + 2, z: player.z, yaw: 0, pitch: 0, onGround: false, flying: false, sneak: false, sprint: false, seq: player.teleportSeq + 1, glide });
+    move(true);
+    expect(player.gliding).toBe(false);
+    player.inventory.set(38, stackOf('elytra', 1));
+    move(true);
+    expect(player.gliding).toBe(true);
+    expect(player.meta().glide).toBe(true);
+    player.inventory.set(0, stackOf('firework_rocket', 3));
+    player.selectedSlot = 0;
+    server.handle(conn, { t: 'use', hand: 0, action: 'start' });
+    expect(conn.of('boost').length).toBe(1);
+    expect(player.inventory.get(0)!.count).toBe(2);
+    // Worn out: stays at its last point and stops flying
+    player.inventory.set(38, stackOf('elytra', 1, { damage: itemById.get('elytra')!.def.durability! - 1 }));
+    move(true);
+    expect(player.gliding).toBe(false);
+  });
+});
+
+describe('fireworks', () => {
+  it('launch from a block and burst', async () => {
+    const { server } = await makeServer();
+    const { player, conn } = await join(server);
+    const y = arena(player);
+    player.inventory.set(player.selectedSlot, stackOf('firework_rocket', 2));
+    server.handle(conn, { t: 'use_on', x: Math.floor(player.x) + 1, y: y - 1, z: Math.floor(player.z), face: 1, hx: 0.5, hy: 1, hz: 0.5, hand: 0, yaw: 0, pitch: 0.5, seq: 1 });
+    const f = [...player.dim.entities.values()].find((e) => e instanceof Firework) as Firework;
+    expect(f).toBeTruthy();
+    expect(player.inventory.get(player.selectedSlot)!.count).toBe(1);
+    const y0 = f.y;
+    tick(server, 60);
+    expect(f.removed).toBe(true);
+    expect(conn.of('particles').some((m) => m.kind === 'firework')).toBe(true);
+    expect(f.y).toBeGreaterThan(y0 + 5);
+  });
+});
+
+describe('fishing', () => {
+  it('casts into water, waits for a bite and reels in a catch', async () => {
+    const { server } = await makeServer();
+    const { player, conn } = await join(server);
+    const y = arena(player, 10);
+    // A pool in front of the player
+    for (let x = -3; x <= 3; x++) for (let z = -8; z <= -3; z++) {
+      player.dim.setBlock(Math.floor(player.x) + x, y - 1, Math.floor(player.z) + z, S('water'));
+      player.dim.setBlock(Math.floor(player.x) + x, y - 2, Math.floor(player.z) + z, S('water'));
+      player.dim.setBlock(Math.floor(player.x) + x, y - 3, Math.floor(player.z) + z, S('stone'));
+    }
+    player.inventory.set(player.selectedSlot, stackOf('fishing_rod', 1));
+    player.yaw = 0;
+    player.pitch = 0.3;
+    server.handle(conn, { t: 'use', hand: 0, action: 'start' });
+    const b = server.gadgets!.bobberOf(player)!;
+    expect(b).toBeInstanceOf(FishingBobber);
+    for (let i = 0; i < 60; i++) tick(server, 1);
+    expect(b.state).toBe('floating');
+    // Skip the wait: a fish bites now
+    b.wait = 1;
+    for (let i = 0; i < 3 && !b.biting; i++) tick(server, 1);
+    expect(b.biting).toBe(true);
+    const before = [...player.dim.entities.values()].filter((e) => e.type === 'item').length;
+    server.handle(conn, { t: 'use', hand: 0, action: 'start' });
+    expect(b.removed).toBe(true);
+    const after = [...player.dim.entities.values()].filter((e) => e.type === 'item').length;
+    expect(after).toBeGreaterThan(before);
+    expect(player.inventory.get(player.selectedSlot)!.damage).toBe(1);
+  });
+});
+
+describe('jukebox, respawn anchor, bell and compasses', () => {
+  it('plays a disc for nearby players and ejects it again', async () => {
+    const { server } = await makeServer();
+    const { player, conn } = await join(server);
+    const y = arena(player);
+    const jx = Math.floor(player.x) + 2;
+    const jz = Math.floor(player.z);
+    player.dim.setBlock(jx, y, jz, S('jukebox'));
+    player.inventory.set(player.selectedSlot, stackOf('music_disc_echo', 1));
+    server.handle(conn, { t: 'use_on', x: jx, y, z: jz, face: 1, hx: 0.5, hy: 1, hz: 0.5, hand: 0, yaw: 0, pitch: 0.5, seq: 1 });
+    expect(player.inventory.get(player.selectedSlot)).toBeNull();
+    tick(server, 21);
+    expect(conn.of('record').some((m) => m.track === 'echo')).toBe(true);
+    server.handle(conn, { t: 'use_on', x: jx, y, z: jz, face: 1, hx: 0.5, hy: 1, hz: 0.5, hand: 0, yaw: 0, pitch: 0.5, seq: 2 });
+    expect(conn.last('record')!.track).toBeNull();
+    expect([...player.dim.entities.values()].some((e) => e.type === 'item')).toBe(true);
+  });
+
+  it('a charged respawn anchor holds the spawn in the Nether and explodes elsewhere', async () => {
+    const { server } = await makeServer();
+    const { player, conn } = await join(server);
+    const y = arena(player);
+    const ax = Math.floor(player.x) + 3;
+    const az = Math.floor(player.z);
+    player.dim.setBlock(ax, y, az, S('respawn_anchor'));
+    player.inventory.set(player.selectedSlot, stackOf('glowstone', 4));
+    server.handle(conn, { t: 'use_on', x: ax, y, z: az, face: 1, hx: 0.5, hy: 1, hz: 0.5, hand: 0, yaw: 0, pitch: 0.5, seq: 1 });
+    expect(player.dim.blockId(ax, y, az)).toBe('respawn_anchor');
+    expect(player.inventory.get(player.selectedSlot)!.count).toBe(3);
+    // Overworld: using it again (without glowstone) blows it up
+    player.inventory.set(player.selectedSlot, null);
+    server.handle(conn, { t: 'use_on', x: ax, y, z: az, face: 1, hx: 0.5, hy: 1, hz: 0.5, hand: 0, yaw: 0, pitch: 0.5, seq: 2 });
+    expect(player.dim.blockId(ax, y, az)).not.toBe('respawn_anchor');
+    expect(player.spawnPoint).toBeNull();
+  });
+
+  it('a bed that is gone no longer holds the spawn', async () => {
+    const { server } = await makeServer();
+    const { player } = await join(server);
+    player.spawnPoint = { dim: 'overworld', x: player.x + 5.5, y: player.y, z: player.z, forced: false, block: [Math.floor(player.x) + 5, Math.floor(player.y), Math.floor(player.z)] };
+    player.dim.setBlock(Math.floor(player.x) + 5, Math.floor(player.y), Math.floor(player.z), 0);
+    expect(server.gadgets!.claimSpawnBlock(player)).toBe(false);
+  });
+
+  it('a bell reveals nearby monsters', async () => {
+    const { server } = await makeServer();
+    const { player, conn } = await join(server);
+    const y = arena(player);
+    const bx = Math.floor(player.x) + 2;
+    const bz = Math.floor(player.z);
+    player.dim.setBlock(bx, y, bz, S('bell'));
+    const z = server.mobs!.spawn(player.dim, 'zombie', player.x + 8, y, player.z)!;
+    server.handle(conn, { t: 'use_on', x: bx, y, z: bz, face: 2, hx: 0.5, hy: 0.5, hz: 0, hand: 0, yaw: 0, pitch: 0, seq: 1 });
+    expect(z.meta().glowing).toBe(true);
+  });
+
+  it('a compass links to a lodestone and remembers where the player died', async () => {
+    const { server } = await makeServer();
+    const { player, conn } = await join(server);
+    const y = arena(player);
+    const lx = Math.floor(player.x) + 2;
+    const lz = Math.floor(player.z);
+    player.dim.setBlock(lx, y, lz, S('lodestone'));
+    player.inventory.set(player.selectedSlot, stackOf('compass', 1));
+    server.handle(conn, { t: 'use_on', x: lx, y, z: lz, face: 1, hx: 0.5, hy: 1, hz: 0.5, hand: 0, yaw: 0, pitch: 0.5, seq: 1 });
+    expect(player.inventory.get(player.selectedSlot)!.tag?.data?.lodestone).toEqual([lx, y, lz]);
+    player.spawnProtection = 0;
+    server.interaction.survival.damage(player, 1000, { source: 'kill' });
+    expect(player.lastDeath).toBeTruthy();
+    expect(conn.last('death_pos')!.pos).toEqual(player.lastDeath);
+    const saved = server.playerData.serialize(player);
+    expect(saved.lastDeath).toEqual(player.lastDeath);
+  });
+});
+
+describe('riding and leads', () => {
+  it('a saddled pig can be ridden and steered with a Carrot on a Stick', async () => {
+    const { server } = await makeServer();
+    const { player, conn } = await join(server);
+    const y = arena(player, 20);
+    const pig = server.mobs!.spawn(player.dim, 'pig', player.x + 1.5, y, player.z)!;
+    player.inventory.set(player.selectedSlot, stackOf('saddle', 1));
+    server.handle(conn, { t: 'interact', id: pig.id, hand: 0 });
+    expect(pig.data.saddle).toBe(true);
+    player.inventory.set(player.selectedSlot, stackOf('carrot_on_a_stick', 1));
+    server.handle(conn, { t: 'interact', id: pig.id, hand: 0 });
+    expect(player.vehicle).toBe(pig);
+    expect(conn.last('mount')!.id).toBe(pig.id);
+    player.yaw = 0;
+    const z0 = pig.z;
+    tick(server, 60);
+    expect(pig.z).toBeLessThan(z0 - 2);
+    // The rider sits on the pig
+    expect(Math.abs(player.x - pig.x)).toBeLessThan(0.01);
+    expect(player.y).toBeCloseTo(pig.y + 0.3, 1);
+    server.handle(conn, { t: 'dismount' });
+    expect(player.vehicle).toBeNull();
+    expect(pig.rider).toBeNull();
+  });
+
+  it('a tamed, saddled horse is steered by the rider and checked by the server', async () => {
+    const { server } = await makeServer();
+    const { player, conn } = await join(server);
+    const y = arena(player, 20);
+    const horse = server.mobs!.spawn(player.dim, 'horse', player.x + 2, y, player.z)!;
+    horse.owner = player.uuid;
+    horse.data.saddle = true;
+    server.handle(conn, { t: 'interact', id: horse.id, hand: 0 });
+    expect(player.vehicle).toBe(horse);
+    expect(conn.last('mount')!.control).toBe(true);
+    server.handle(conn, { t: 'vehicle_move', x: horse.x, y: horse.y, z: horse.z - 0.6, yaw: 0 });
+    expect(horse.z).toBeCloseTo(player.z, 3);
+    // Too far in one step: corrected
+    const zBefore = horse.z;
+    server.handle(conn, { t: 'vehicle_move', x: horse.x, y: horse.y, z: horse.z - 20, yaw: 0 });
+    expect(horse.z).toBe(zBefore);
+    expect(conn.of('vehicle_pos').length).toBe(1);
+  });
+
+  it('untamed horses buck until they accept the rider', async () => {
+    const { server } = await makeServer();
+    const { player, conn } = await join(server);
+    const y = arena(player, 20);
+    const horse = server.mobs!.spawn(player.dim, 'horse', player.x + 2, y, player.z)!;
+    horse.data.temper = 100;
+    server.handle(conn, { t: 'interact', id: horse.id, hand: 0 });
+    expect(player.vehicle).toBe(horse);
+    expect(conn.last('mount')!.control).toBe(false);
+    tick(server, 25);
+    expect(horse.owner).toBe(player.uuid);
+  });
+
+  it('a lead ties an animal to the player and to a fence', async () => {
+    const { server } = await makeServer();
+    const { player, conn } = await join(server);
+    const y = arena(player, 20);
+    const cow = server.mobs!.spawn(player.dim, 'cow', player.x + 2, y, player.z)!;
+    player.inventory.set(player.selectedSlot, stackOf('lead', 1));
+    server.handle(conn, { t: 'interact', id: cow.id, hand: 0 });
+    expect(cow.data.leash).toBe(player.uuid);
+    // Walk away: the cow is pulled along
+    player.setPos(player.x + 8, y, player.z);
+    player.dim.updateBucket(player);
+    tick(server, 80);
+    expect(Math.hypot(cow.x - player.x, cow.z - player.z)).toBeLessThan(8);
+    // Tie it to a fence
+    const fx = Math.floor(player.x) + 1;
+    const fz = Math.floor(player.z) + 1;
+    player.dim.setBlock(fx, y, fz, S('oak_fence'));
+    server.handle(conn, { t: 'use_on', x: fx, y, z: fz, face: 1, hx: 0.5, hy: 1, hz: 0.5, hand: 0, yaw: 0, pitch: 0.5, seq: 1 });
+    expect(cow.data.leashPos).toEqual([fx, y, fz]);
+    // Breaking the fence frees it and drops the lead
+    player.dim.setBlock(fx, y, fz, 0);
+    tick(server, 4);
+    expect(cow.data.leashPos).toBeUndefined();
+  });
+});
+
+describe('beacon', () => {
+  it('a beacon on a pyramid gives the chosen effect once paid for', async () => {
+    const { server } = await makeServer();
+    const { player, conn } = await join(server);
+    const y = arena(player);
+    const bx = Math.floor(player.x) + 3;
+    const bz = Math.floor(player.z);
+    for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) player.dim.setBlock(bx + dx, y - 1, bz + dz, S('iron_block'));
+    player.dim.setBlock(bx, y, bz, S('beacon'));
+    // Nothing above it
+    for (let yy = y + 1; yy < 256; yy++) player.dim.setBlock(bx, yy, bz, 0);
+    server.handle(conn, { t: 'use_on', x: bx, y, z: bz, face: 1, hx: 0.5, hy: 1, hz: 0.5, hand: 0, yaw: 0, pitch: 0.5, seq: 1 });
+    const w = server.interaction.containers.windowOf(player);
+    expect(w.kind).toBe('beacon');
+    expect(w.props.levels).toBe(1);
+    w.slots[0]!.set(stackOf('iron_ingot', 1));
+    server.handle(conn, { t: 'trade', index: 0 });
+    server.handle(conn, { t: 'trade', index: 20 });
+    expect(w.slots[0]!.get()).toBeNull();
+    expect(player.effects.has('speed')).toBe(true);
+    const be = player.dim.getBlockEntity(bx, y, bz)!;
+    expect(be.beam).toBe(true);
+    // Strength needs a level 3 pyramid
+    server.handle(conn, { t: 'trade', index: 4 });
+    expect(w.props.primary).toBe('speed');
+  });
+});

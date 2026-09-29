@@ -2,7 +2,7 @@
  * The local player: client-side movement prediction using the shared physics.
  * The server validates every position; teleports correct any divergence.
  */
-import { newBody, stepMovement, type Body, updateEnvironment, bodyObstructed } from '../../common/physics/movement';
+import { newBody, stepMovement, stepGlide, type Body, updateEnvironment, bodyObstructed } from '../../common/physics/movement';
 import type { ClientWorld } from '../world/ClientWorld';
 import type { AbilitiesMsg, C2S } from '../../common/net/protocol';
 import type { GameMode } from '../../common/game/gamemode';
@@ -19,7 +19,7 @@ export class LocalPlayer {
   gamemode: GameMode = 'survival';
   entityId = 0;
   seq = 0;
-  lastSent = { x: NaN, y: NaN, z: NaN, yaw: NaN, pitch: NaN, onGround: false, sneak: false, sprint: false, flying: false, ticks: 0 };
+  lastSent = { x: NaN, y: NaN, z: NaN, yaw: NaN, pitch: NaN, onGround: false, sneak: false, sprint: false, flying: false, glide: false, ticks: 0 };
   frozen = true;
   /** Distance walked (for view bobbing). */
   walkDist = 0;
@@ -34,6 +34,21 @@ export class LocalPlayer {
   fovMod = 1;
   /** Active status effects (from the server's stats). */
   effects: { id: string; amp: number }[] = [];
+  /** Gliding on an Elytra. */
+  gliding = false;
+  /** Ticks of firework rocket boost left. */
+  boostTicks = 0;
+  /** Whether the equipped chest item is an Elytra that still flies (set by the game). */
+  canGlide: () => boolean = () => false;
+  /** Sneaking speed factor (Silent Stride on the leggings raises it). */
+  sneakSpeed: () => number = () => 0.3;
+  /**
+   * The mob being ridden. With `control` this client simulates the mount's
+   * body and steers it; otherwise the player sits wherever the server moves it.
+   */
+  vehicle: { id: number; control: boolean; seat: number; speed: number; jump: number; body: Body; yaw: number } | null = null;
+  /** Position of the ridden (uncontrolled) mount's entity, from the game. */
+  vehiclePos: () => [number, number, number] | null = () => null;
 
   constructor(private readonly world: ClientWorld) {}
 
@@ -66,6 +81,7 @@ export class LocalPlayer {
     this.prevWalkDist = this.walkDist;
     this.prevBob = this.bob;
     const loaded = this.world.isLoaded(this.body.x, this.body.z);
+    if (this.vehicle && loaded && !this.dead) return this.tickRiding(input);
     if (!loaded || this.dead || this.sleeping) {
       this.frozen = !loaded;
       return this.dead ? null : this.movePacket(true);
@@ -95,13 +111,27 @@ export class LocalPlayer {
       return e ? e.amp + 1 : 0;
     };
     const speedMul = Math.max(0.1, 1 + eff('speed') * 0.2 - eff('slowness') * 0.15);
-    const res = stepMovement(
-      this.world,
-      this.body,
-      { forward: input.forward, strafe: input.strafe, jump: input.jump, sneak: input.sneak, sprint: this.sprinting, yaw: this.yaw },
-      { flying: this.flying, noClip: this.abilities.noClip, walkSpeed: this.abilities.walkSpeed, flySpeed: this.abilities.flySpeed, speedMul, jumpBoost: eff('jump_boost'), levitation: this.flying ? 0 : eff('levitation'), slowFalling: eff('slow_falling') > 0 },
-      this.eyeHeight,
-    );
+    // Elytra: a jump in mid-air opens the wings; landing, water or flight folds them
+    const b0 = this.body;
+    if (!this.gliding && input.jumpPressed && !b0.onGround && !this.flying && !b0.inWater && !b0.inLava && !b0.onClimbable && this.canGlide()) this.gliding = true;
+    if (this.gliding && (b0.onGround || this.flying || b0.inWater || b0.inLava || !this.canGlide())) {
+      this.gliding = false;
+      this.boostTicks = 0;
+    }
+    let res: ReturnType<typeof stepMovement> | null = null;
+    if (this.gliding) {
+      updateEnvironment(this.world, this.body, this.eyeHeight);
+      stepGlide(this.world, this.body, this.yaw, this.pitch, this.boostTicks > 0);
+      if (this.boostTicks > 0) this.boostTicks--;
+    } else {
+      res = stepMovement(
+        this.world,
+        this.body,
+        { forward: input.forward, strafe: input.strafe, jump: input.jump, sneak: input.sneak, sprint: this.sprinting, yaw: this.yaw },
+        { flying: this.flying, noClip: this.abilities.noClip, walkSpeed: this.abilities.walkSpeed, flySpeed: this.abilities.flySpeed, speedMul, sneakSpeed: this.sneakSpeed(), jumpBoost: eff('jump_boost'), levitation: this.flying ? 0 : eff('levitation'), slowFalling: eff('slow_falling') > 0 },
+        this.eyeHeight,
+      );
+    }
     if (this.flying && this.body.onGround && !this.abilities.noClip && this.gamemode !== 'spectator') this.flying = false;
     // The server computes fall damage itself; locally we only need a fresh count per fall
     if (this.body.onGround) this.body.fallDistance = 0;
@@ -110,7 +140,43 @@ export class LocalPlayer {
     const targetBob = this.body.onGround && !this.flying ? Math.min(0.1, moved) : 0;
     this.bob += (targetBob - this.bob) * 0.4;
     void res;
-    this.fovMod += ((this.sprinting ? 1.12 : 1) * (this.flying ? 1.05 : 1) * (1 + (speedMul - 1) * 0.5) - this.fovMod) * 0.35;
+    const glideFov = this.gliding ? 1 + Math.min(0.25, Math.hypot(this.body.vx, this.body.vy, this.body.vz) * 0.12) : 1;
+    this.fovMod += ((this.sprinting ? 1.12 : 1) * (this.flying ? 1.05 : 1) * (1 + (speedMul - 1) * 0.5) * glideFov - this.fovMod) * 0.35;
+    return this.movePacket(false);
+  }
+
+  /** Riding: steer the mount (controlled) or sit where it is. The rider's feet are on the seat. */
+  private tickRiding(input: { forward: number; strafe: number; jump: boolean; jumpPressed: boolean }): C2S | null {
+    const v = this.vehicle!;
+    this.flying = false;
+    this.gliding = false;
+    this.sprinting = false;
+    this.sneaking = false;
+    if (v.control) {
+      const vb = v.body;
+      // Mounts turn with the camera; they walk forward and sideways, never backwards fast
+      v.yaw = this.yaw;
+      const jump = input.jumpPressed && vb.onGround && v.jump > 0;
+      stepMovement(this.world, vb, { forward: Math.max(-0.3, input.forward), strafe: input.strafe * 0.6, jump: false, sneak: false, sprint: false, yaw: this.yaw }, { flying: false, noClip: false, walkSpeed: v.speed, flySpeed: 0 }, 1);
+      if (jump) vb.vy = v.jump;
+      vb.fallDistance = 0;
+      this.body.x = vb.x;
+      this.body.y = vb.y + v.seat;
+      this.body.z = vb.z;
+    } else {
+      const pos = this.vehiclePos();
+      if (pos) {
+        this.body.x = pos[0];
+        this.body.y = pos[1] + v.seat;
+        this.body.z = pos[2];
+      }
+    }
+    this.body.vx = this.body.vy = this.body.vz = 0;
+    this.body.fallDistance = 0;
+    this.body.onGround = true;
+    const moved = Math.hypot(this.body.x - this.prev.x, this.body.z - this.prev.z);
+    this.bob += (Math.min(0.06, moved) - this.bob) * 0.4;
+    this.fovMod += (1 - this.fovMod) * 0.35;
     return this.movePacket(false);
   }
 
@@ -118,7 +184,7 @@ export class LocalPlayer {
     const b = this.body;
     const ls = this.lastSent;
     ls.ticks++;
-    const changed = b.x !== ls.x || b.y !== ls.y || b.z !== ls.z || this.yaw !== ls.yaw || this.pitch !== ls.pitch || b.onGround !== ls.onGround || this.sneaking !== ls.sneak || this.sprinting !== ls.sprint || this.flying !== ls.flying;
+    const changed = b.x !== ls.x || b.y !== ls.y || b.z !== ls.z || this.yaw !== ls.yaw || this.pitch !== ls.pitch || b.onGround !== ls.onGround || this.sneaking !== ls.sneak || this.sprinting !== ls.sprint || this.flying !== ls.flying || this.gliding !== ls.glide;
     if (!changed && ls.ticks < 20 && !force) return null;
     if (force && !changed && ls.ticks < 20) return null;
     ls.x = b.x;
@@ -130,8 +196,9 @@ export class LocalPlayer {
     ls.sneak = this.sneaking;
     ls.sprint = this.sprinting;
     ls.flying = this.flying;
+    ls.glide = this.gliding;
     ls.ticks = 0;
-    return { t: 'move', x: b.x, y: b.y, z: b.z, yaw: this.yaw, pitch: this.pitch, onGround: b.onGround, flying: this.flying, sneak: this.sneaking, sprint: this.sprinting, seq: this.seq };
+    return { t: 'move', x: b.x, y: b.y, z: b.z, yaw: this.yaw, pitch: this.pitch, onGround: b.onGround, flying: this.flying, sneak: this.sneaking, sprint: this.sprinting, seq: this.seq, glide: this.gliding };
   }
 
   isUnderwater(): boolean {

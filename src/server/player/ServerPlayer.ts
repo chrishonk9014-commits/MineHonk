@@ -7,6 +7,11 @@ import { abilitiesFor, type Abilities, type GameMode } from '../../common/game/g
 import type { AbilitiesMsg, PlayerStats, S2C } from '../../common/net/protocol';
 import type { Slot } from '../../common/game/itemstack';
 import type { DimensionId } from '../../common/data/biomes';
+import { itemById } from '../../common/registry/items';
+
+let elytraNum = -1;
+/** Item number of the Elytra (resolved once). */
+const ELYTRA = (): number => (elytraNum >= 0 ? elytraNum : (elytraNum = itemById.get('elytra')?.num ?? 0));
 
 export const PLAYER_WIDTH = 0.6;
 export const PLAYER_HEIGHT = 1.8;
@@ -86,7 +91,8 @@ export class ServerPlayer extends Entity {
   msgBudget = 0;
   chatBudget = 0;
 
-  spawnPoint: { dim: DimensionId; x: number; y: number; z: number; forced: boolean } | null = null;
+  /** Bed or respawn anchor spawn; `block` is the bed/anchor it depends on. */
+  spawnPoint: { dim: DimensionId; x: number; y: number; z: number; forced: boolean; block?: [number, number, number] } | null = null;
   readonly achievements = new Set<string>();
   /** Cheat bookkeeping that keeps admin actions advancement-neutral. */
   cheat: AdminPlayerState = newAdminState();
@@ -98,6 +104,30 @@ export class ServerPlayer extends Entity {
   portalTicks = 0;
   portalCooldown = 0;
   joinedAt = Date.now();
+  /** Tick until which a knocked-aside shield cannot be raised. */
+  shieldDownUntil = 0;
+  /** Gliding on an Elytra (reported by the client, checked by the server). */
+  gliding = false;
+  /** Horizontal speed of the last move while gliding (for wall impacts). */
+  glideSpeed = 0;
+  glideDirX = 0;
+  glideDirZ = 0;
+  /** Tick until which a firework rocket may push the player faster. */
+  boostUntil = 0;
+  /** The mob this player is riding. */
+  vehicle: Entity | null = null;
+  /** Where the player last died (the Recovery Compass points there). */
+  lastDeath: { dim: DimensionId; x: number; y: number; z: number } | null = null;
+  /** Sculk shrieker warnings (0-4); the fourth calls the Warden. Fades over time. */
+  wardenWarning = 0;
+  wardenWarningAt = 0;
+  /** Shriekers ignore this player until this tick. */
+  shriekCooldownUntil = 0;
+  /** Distance walked since the last footstep vibration. */
+  stepDistance = 0;
+  /** Cave biome the player is in (0 = none) and every cave biome visited so far. */
+  caveBiome = 0;
+  visitedCaveBiomes = new Set<number>();
 
   constructor(
     readonly conn: Connection,
@@ -174,7 +204,13 @@ export class ServerPlayer extends Entity {
   }
 
   override meta(): Record<string, unknown> {
-    return { name: this.name, sneak: this.sneaking, held: this.heldItem()?.id ?? 0 };
+    const m: Record<string, unknown> = { name: this.name, sneak: this.sneaking, held: this.heldItem()?.id ?? 0 };
+    if (this.effects.has('glowing')) m.glowing = true;
+    if (this.gliding) m.glide = true;
+    if (this.vehicle) m.riding = this.vehicle.id;
+    const chest = this.inventory.get(38);
+    if (chest && chest.id === ELYTRA()) m.elytra = true;
+    return m;
   }
 
   override trackingRange(): number {

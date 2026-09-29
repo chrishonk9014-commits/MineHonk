@@ -7,9 +7,10 @@ import { Entity } from './Entity';
 import { raycastBlocks } from '../../common/physics/raycast';
 import { AABB } from '../../common/physics/aabb';
 import { moveBody } from '../../common/physics/movement';
+import { STATE_SOLID, STATE_FLUID } from '../../common/registry/blocks';
 import type { EntitySpawn } from '../../common/net/protocol';
 import { entityInfo } from '../../common/data/entities';
-import type { ItemStack } from '../../common/game/itemstack';
+import { toSaved, fromSaved, type ItemStack, type SavedStack } from '../../common/game/itemstack';
 
 export type ProjectileKind = 'arrow' | 'snowball' | 'egg' | 'ender_pearl' | 'small_fireball' | 'fireball' | 'dragon_fireball' | 'potion' | 'shulker_bullet' | 'rift_bolt' | 'experience_bottle' | 'trident';
 
@@ -57,6 +58,17 @@ export class Projectile extends Entity {
   homing: Entity | null = null;
   life = 1200;
   onHit: ((p: Projectile, hit: ProjectileHit) => boolean) | null = null;
+  /** The stack a thrown trident (or a picked-up arrow) gives back. */
+  item: ItemStack | null = null;
+  /** Loyalty level: the trident flies back to its thrower. */
+  loyalty = 0;
+  returning = false;
+  /** Hit something (tridents drop and, with Loyalty, return). */
+  dealt = false;
+  /** Called when a returning trident reaches its thrower. */
+  onReturn: ((p: Projectile) => void) | null = null;
+  /** Free-form data (spectral arrows, potion effects...). */
+  data?: Record<string, unknown>;
 
   constructor(readonly kind: ProjectileKind) {
     const size = kind === 'fireball' || kind === 'dragon_fireball' ? 1 : kind === 'arrow' || kind === 'trident' ? 0.5 : 0.25;
@@ -76,14 +88,21 @@ export class Projectile extends Entity {
 
   override tick(): void {
     super.tick();
-    if (--this.life <= 0) {
+    // Thrown tridents (the thrower's item) never time out
+    if (--this.life <= 0 && !this.item) {
       this.remove();
+      return;
+    }
+    if (this.loyalty > 0 && !this.returning && (this.dealt || (this.stuck && this.stuckTicks > 10) || this.y < -32)) this.returning = true;
+    if (this.returning) {
+      this.tickReturn();
       return;
     }
     if (this.stuck) {
       this.stuckTicks++;
-      // Fall if the block was removed
-      const s = this.dim.getState(Math.floor(this.x - this.vx * 0.05), Math.floor(this.y - this.vy * 0.05), Math.floor(this.z - this.vz * 0.05));
+      // Fall if the block it is embedded in was removed (a step along its flight direction)
+      const vl = Math.hypot(this.vx, this.vy, this.vz) || 1;
+      const s = this.dim.getState(Math.floor(this.x + (this.vx / vl) * 0.1), Math.floor(this.y + (this.vy / vl) * 0.1), Math.floor(this.z + (this.vz / vl) * 0.1));
       if (s === 0 && this.stuckTicks > 2) {
         this.stuck = false;
         this.vx = this.vy = this.vz = 0;
@@ -122,7 +141,9 @@ export class Projectile extends Entity {
     const ez = z0 + (this.vz / (len || 1)) * travel;
     let best = Infinity;
     const mid = [(x0 + ex) / 2, (y0 + ey) / 2, (z0 + ez) / 2] as const;
-    for (const e of this.dim.entitiesNear(mid[0], mid[1], mid[2], travel / 2 + 3)) {
+    // A trident that already hit something just drops
+    const near = this.dealt ? [] : this.dim.entitiesNear(mid[0], mid[1], mid[2], travel / 2 + 3);
+    for (const e of near) {
       if (e === this || e.removed || e instanceof Projectile) continue;
       if (e === this.owner && this.age < 5) continue;
       if (e.type === 'item' || e.type === 'xp_orb' || e.type === 'falling_block' || e.type === 'tnt') continue;
@@ -139,6 +160,8 @@ export class Projectile extends Entity {
     }
     if (hit) {
       this.setPos(hit.x, hit.y, hit.z);
+      // A projectile clattering against a block is a vibration where it lands
+      if (hit.block) this.dim.server.sculk?.vibrate(this.dim, hit.x, hit.y, hit.z, this.owner, 'projectile');
       const consumed = this.onHit ? this.onHit(this, hit) : true;
       if (consumed) {
         this.remove();
@@ -154,6 +177,18 @@ export class Projectile extends Entity {
         this.setPos(ex, ey, ez);
       }
     } else this.setPos(ex, ey, ez);
+    // Came to rest on the ground (slow drops after hitting something): lie there
+    if ((this.kind === 'arrow' || this.kind === 'trident') && Math.hypot(this.vx, this.vy, this.vz) < 0.25 && this.vy <= 0) {
+      const below = this.dim.getState(Math.floor(this.x), Math.floor(this.y - 0.08), Math.floor(this.z));
+      if (STATE_SOLID[below] && !STATE_FLUID[below]) {
+        this.stuck = true;
+        this.stuckTicks = 0;
+        this.vx = 0;
+        this.vz = 0;
+        this.vy = -1;
+        return;
+      }
+    }
     // Drag & gravity
     const inWater = this.dim.getState(Math.floor(this.x), Math.floor(this.y), Math.floor(this.z)) !== 0 && this.isInFluid();
     const drag = inWater ? 0.6 : this.kind === 'fireball' || this.kind === 'small_fireball' || this.kind === 'dragon_fireball' || this.kind === 'rift_bolt' ? 1 : 0.99;
@@ -171,6 +206,36 @@ export class Projectile extends Entity {
     if (this.crit && this.age % 2 === 0) this.dim.server.particles(this.dim, 'crit', this.x, this.y, this.z, 1, 0.05);
   }
 
+  /** Loyalty: fly straight back to the thrower through anything in the way. */
+  private tickReturn(): void {
+    const o = this.owner ?? (this.ownerUuid ? [...this.dim.server.players.values()].find((p) => p.uuid === this.ownerUuid) ?? null : null);
+    if (!o || o.removed || o.dim !== this.dim || (o as { dead?: boolean }).dead) {
+      // Nobody to return to: wait where it is
+      this.returning = false;
+      this.stuck = true;
+      return;
+    }
+    this.owner = o;
+    this.stuck = false;
+    const dx = o.x - this.x;
+    const dy = o.y + 1.2 - this.y;
+    const dz = o.z - this.z;
+    const d = Math.hypot(dx, dy, dz);
+    if (d < 1.5) {
+      this.onReturn?.(this);
+      this.remove();
+      return;
+    }
+    const sp = Math.min(d, 0.5 + 0.25 * this.loyalty);
+    this.vx = (dx / d) * sp;
+    this.vy = (dy / d) * sp;
+    this.vz = (dz / d) * sp;
+    this.setPos(this.x + this.vx, this.y + this.vy, this.z + this.vz);
+    this.yaw = Math.atan2(-this.vx, -this.vz);
+    this.pitch = -Math.atan2(this.vy, Math.hypot(this.vx, this.vz));
+    if (this.age % 3 === 0) this.dim.server.particles(this.dim, 'magic_crit', this.x, this.y, this.z, 1, 0.1);
+  }
+
   private isInFluid(): boolean {
     const s = this.dim.getState(Math.floor(this.x), Math.floor(this.y), Math.floor(this.z));
     return s !== 0 && this.dim.blockId(Math.floor(this.x), Math.floor(this.y), Math.floor(this.z)) === 'water';
@@ -181,7 +246,33 @@ export class Projectile extends Entity {
     if (this.stuck) m.stuck = true;
     if (this.potion) m.item = this.potion.id;
     if (this.crit) m.crit = true;
+    if (this.data?.spectral) m.spectral = true;
+    if (this.item?.tag?.ench && Object.keys(this.item.tag.ench).length) m.glint = true;
     return m;
+  }
+
+  /** Thrown tridents are the thrower's item: they are saved with the chunk. */
+  override save(): Record<string, unknown> | null {
+    if (this.kind !== 'trident' || !this.item || this.removed) return null;
+    return { kind: 'projectile', type: 'trident', x: this.x, y: this.y, z: this.z, yaw: this.yaw, pitch: this.pitch, stuck: this.stuck, item: toSaved(this.item), owner: this.ownerUuid, loyalty: this.loyalty, pickup: this.pickup };
+  }
+
+  static restoreTrident(d: Record<string, unknown>): Projectile | null {
+    if (d.type !== 'trident') return null;
+    const item = fromSaved(d.item as SavedStack);
+    if (!item) return null;
+    const p = new Projectile('trident');
+    p.setPos(Number(d.x) || 0, Number(d.y) || 0, Number(d.z) || 0);
+    p.yaw = Number(d.yaw) || 0;
+    p.pitch = Number(d.pitch) || 0;
+    p.stuck = d.stuck !== false;
+    p.stuckTicks = 0;
+    p.item = item;
+    p.ownerUuid = typeof d.owner === 'string' ? d.owner : null;
+    p.loyalty = Math.max(0, Math.min(3, Number(d.loyalty) || 0));
+    p.pickup = d.pickup !== false;
+    p.persistent = true;
+    return p;
   }
 
   override spawnPacket(): EntitySpawn {

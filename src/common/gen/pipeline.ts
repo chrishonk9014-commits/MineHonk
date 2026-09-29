@@ -11,7 +11,16 @@ import type { Start } from './structures/manager';
 export interface GeneratorOptions {
   /** Generate villages, temples and other structures (default true). */
   structures?: boolean;
+  /**
+   * World generator version. Unmodified chunks are regenerated from the seed
+   * on every load, so a world keeps the version it was created with:
+   * 1 = V1 terrain, 2 = V2 (the Caves Update). Defaults to the latest.
+   */
+  version?: number;
 }
+
+/** Newest world generator version (new worlds use this). */
+export const LATEST_GENERATOR = 2;
 
 export interface SpawnPoint {
   x: number;
@@ -33,13 +42,28 @@ export interface DimensionGenerator {
   structureTypes?(): string[];
   /** Nearest structure, searched incrementally (yields between steps). */
   locateSteps?(type: string, x: number, z: number): Generator<void, { x: number; y: number; z: number } | null>;
+  /** Admin locate for cave features (cave biome id, 'mega_cavern', 'ravine'). */
+  caveSteps?(kind: string, x: number, z: number): Generator<void, { x: number; y: number; z: number } | null>;
+  /** True when the dimension has the V2 underground (cave biomes, cave spawning). */
+  readonly caves?: boolean;
+  /** Cave biome at a position (V2 overworld; 0 = none). */
+  caveBiomeAt?(x: number, y: number, z: number): number;
+  /** Whether a position lies inside a mega-cavern (V2 overworld). */
+  inMegaCavern?(x: number, y: number, z: number): boolean;
   /** Structure type whose bounds contain the position (used for structure mob spawns). */
   structureAt?(x: number, y: number, z: number): string | null;
 }
 
-/** Small LRU cache for proto chunks. */
+/**
+ * Small LRU cache for proto chunks. Lookups are hot (every block a feature
+ * reads), so recency is an access stamp rather than re-inserting into the map;
+ * the least recently used entry is found only when an insert overflows.
+ */
 export class ProtoCache {
-  private readonly map = new Map<number, Chunk>();
+  private readonly map = new Map<number, { c: Chunk; t: number }>();
+  private clock = 0;
+  private lastKey = NaN;
+  private lastChunk: Chunk | null = null;
 
   constructor(
     private readonly capacity: number,
@@ -48,23 +72,31 @@ export class ProtoCache {
 
   get(cx: number, cz: number): Chunk {
     const k = chunkIndex(cx, cz);
-    let c = this.map.get(k);
-    if (c) {
-      this.map.delete(k);
-      this.map.set(k, c);
-      return c;
+    if (k === this.lastKey && this.lastChunk) return this.lastChunk;
+    let e = this.map.get(k);
+    if (e) e.t = ++this.clock;
+    else {
+      e = { c: this.make(cx, cz), t: ++this.clock };
+      this.map.set(k, e);
+      if (this.map.size > this.capacity) this.evict();
     }
-    c = this.make(cx, cz);
-    this.map.set(k, c);
-    if (this.map.size > this.capacity) {
-      const first = this.map.keys().next().value as number;
-      this.map.delete(first);
-    }
-    return c;
+    this.lastKey = k;
+    this.lastChunk = e.c;
+    return e.c;
+  }
+
+  private evict(): void {
+    // Drop the oldest eighth in one pass so overflow scans stay rare
+    const n = Math.max(1, this.map.size - this.capacity + (this.capacity >> 3));
+    const stamps = [...this.map.values()].map((e) => e.t).sort((a, b) => a - b);
+    const cut = stamps[n - 1]!;
+    for (const [k, e] of this.map) if (e.t <= cut && e.c !== this.lastChunk) this.map.delete(k);
   }
 
   clear(): void {
     this.map.clear();
+    this.lastKey = NaN;
+    this.lastChunk = null;
   }
 }
 

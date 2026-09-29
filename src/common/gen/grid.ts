@@ -33,12 +33,14 @@ export class NoiseGrid {
   }
 
   /**
-   * Expands to per-block values: out[(y * 16 + z) * 16 + x] for y in [0, height).
+   * Expands to per-block values: out[(y * 16 + z) * 16 + x] for y in [0, height)
+   * (only up to about `maxY` when given; rows above are left as they were).
    */
-  expand(out: Float32Array): void {
+  expand(out: Float32Array, maxY = Infinity): void {
     const { nx, ny, cellW, cellH, data, height } = this;
     const cells = nx - 1;
     for (let gy = 0; gy < ny - 1; gy++) {
+      if (gy * cellH > maxY) break;
       for (let gz = 0; gz < cells; gz++) {
         for (let gx = 0; gx < cells; gx++) {
           const i000 = (gy * nx + gz) * nx + gx;

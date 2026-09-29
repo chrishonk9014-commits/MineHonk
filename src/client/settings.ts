@@ -46,6 +46,8 @@ export interface Settings {
   reduceMotion: boolean;
   subtitles: boolean;
   chatOpacity: number;
+  /** How strongly the Darkness effect pulses (0 = a steady dim, 1 = full pulses). */
+  darknessPulse: number;
   autoJump: boolean;
   toggleSprint: boolean;
   toggleSneak: boolean;
@@ -99,6 +101,7 @@ export const DEFAULT_SETTINGS: Settings = {
   reduceMotion: false,
   subtitles: false,
   chatOpacity: 1,
+  darknessPulse: 1,
   autoJump: false,
   toggleSprint: false,
   toggleSneak: false,

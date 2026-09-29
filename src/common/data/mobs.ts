@@ -44,7 +44,17 @@ export type Brain =
   | 'wanderer'
   | 'void_wisp'
   | 'glitch_beast'
-  | 'dragon';
+  | 'dragon'
+  | 'turtle'
+  | 'parrot'
+  | 'ocelot'
+  | 'panda'
+  | 'llama'
+  | 'camel'
+  | 'frog'
+  | 'axolotl'
+  | 'warden'
+  | 'sporeling';
 
 export interface MobDef {
   id: string;
@@ -71,6 +81,8 @@ export interface MobDef {
   fireImmune?: boolean;
   flying?: boolean;
   aquatic?: boolean;
+  /** Breathes air and water: walks on land and swims freely in water. */
+  amphibious?: boolean;
   /** Can be bred with these items (and tempted by them). */
   breedItems?: string[];
   /** Held item given at spawn: [item id, chance]. */
@@ -82,6 +94,8 @@ export interface MobDef {
   /** Plays idle sounds every ~N ticks (average). */
   idleInterval?: number;
   xp?: number;
+  /** Rideable: rider feet height above the mob, who steers ('client': the rider; 'carrot': a Carrot on a Stick), and whether it must be tamed first. */
+  mount?: { seat: number; control: 'client' | 'carrot'; tame: boolean };
 }
 
 const M: MobDef[] = [];
@@ -92,11 +106,11 @@ function mob(d: MobDef): void {
 // --- Passive / farm ----------------------------------------------------------
 mob({ id: 'cow', name: 'Cow', category: 'creature', width: 0.9, height: 1.4, health: 10, speed: 0.1, brain: 'passive', model: 'cow', egg: [0x443626, 0xa1a1a1], breedItems: ['wheat'], babyChance: 0 });
 mob({ id: 'mooshroom', name: 'Mooshroom', category: 'creature', width: 0.9, height: 1.4, health: 10, speed: 0.1, brain: 'passive', model: 'mooshroom', egg: [0xa00f10, 0xb7b7b7], breedItems: ['wheat'] });
-mob({ id: 'pig', name: 'Pig', category: 'creature', width: 0.9, height: 0.9, health: 10, speed: 0.1, brain: 'passive', model: 'pig', egg: [0xf0a5a2, 0xdb635f], breedItems: ['carrot', 'potato', 'beetroot'] });
+mob({ id: 'pig', name: 'Pig', category: 'creature', width: 0.9, height: 0.9, health: 10, speed: 0.1, brain: 'passive', model: 'pig', egg: [0xf0a5a2, 0xdb635f], breedItems: ['carrot', 'potato', 'beetroot'], mount: { seat: 0.3, control: 'carrot', tame: false } });
 mob({ id: 'sheep', name: 'Sheep', category: 'creature', width: 0.9, height: 1.3, health: 8, speed: 0.1, brain: 'sheep', model: 'sheep', egg: [0xe7e7e7, 0xffb5b5], breedItems: ['wheat'] });
 mob({ id: 'chicken', name: 'Chicken', category: 'creature', width: 0.4, height: 0.7, health: 4, speed: 0.1, brain: 'chicken', model: 'chicken', egg: [0xa1a1a1, 0xff0000], breedItems: ['wheat_seeds', 'beetroot_seeds', 'melon_seeds', 'pumpkin_seeds'] });
 mob({ id: 'rabbit', name: 'Rabbit', category: 'creature', width: 0.4, height: 0.5, health: 3, speed: 0.13, brain: 'passive', model: 'rabbit', egg: [0x995f40, 0x734831], breedItems: ['carrot', 'golden_carrot', 'dandelion'] });
-mob({ id: 'horse', name: 'Horse', category: 'creature', width: 1.4, height: 1.6, health: 22, speed: 0.17, brain: 'passive', model: 'horse', egg: [0xc09e7d, 0xeee500], breedItems: ['golden_apple', 'golden_carrot'] });
+mob({ id: 'horse', name: 'Horse', category: 'creature', width: 1.4, height: 1.6, health: 22, speed: 0.17, brain: 'passive', model: 'horse', egg: [0xc09e7d, 0xeee500], breedItems: ['golden_apple', 'golden_carrot'], mount: { seat: 0.7, control: 'client', tame: true } });
 mob({ id: 'goat', name: 'Goat', category: 'creature', width: 0.9, height: 1.3, health: 10, speed: 0.1, damage: 2, brain: 'goat', model: 'goat', egg: [0xa5947c, 0x55493e], breedItems: ['wheat'] });
 mob({ id: 'fox', name: 'Fox', category: 'creature', width: 0.6, height: 0.7, health: 10, speed: 0.15, damage: 2, brain: 'fox', model: 'fox', egg: [0xd5b69f, 0xcc6920], breedItems: ['sweet_berries'] });
 mob({ id: 'wolf', name: 'Wolf', category: 'creature', width: 0.6, height: 0.85, health: 8, speed: 0.15, damage: 4, brain: 'wolf', model: 'wolf', egg: [0xd7d3d3, 0xceaf96], breedItems: ['beef', 'cooked_beef', 'porkchop', 'cooked_porkchop', 'chicken', 'cooked_chicken', 'mutton', 'cooked_mutton', 'rotten_flesh'] });
@@ -110,6 +124,16 @@ mob({ id: 'villager', name: 'Villager', category: 'npc', width: 0.6, height: 1.9
 mob({ id: 'iron_golem', name: 'Iron Golem', category: 'npc', width: 1.4, height: 2.7, health: 100, speed: 0.08, damage: 12, knockbackRes: 1, brain: 'golem', model: 'iron_golem', egg: [0xdbcdc1, 0x74a332] });
 mob({ id: 'glitched_cow', name: 'Glitched Cow', category: 'creature', width: 0.9, height: 1.4, health: 12, speed: 0.1, brain: 'passive', model: 'cow', egg: [0x2a9d8f, 0xff00ff], farlands: true, breedItems: ['glitch_berry'] });
 mob({ id: 'glitched_sheep', name: 'Glitched Sheep', category: 'creature', width: 0.9, height: 1.3, health: 10, speed: 0.1, brain: 'sheep', model: 'sheep', egg: [0x7a3fe4, 0x00ffcc], farlands: true, breedItems: ['glitch_berry'] });
+mob({ id: 'turtle', name: 'Turtle', category: 'creature', width: 1.2, height: 0.4, health: 30, speed: 0.05, brain: 'turtle', model: 'turtle', egg: [0xe7e7e7, 0x00afaf], amphibious: true, breedItems: ['seagrass'], idleInterval: 400 });
+mob({ id: 'parrot', name: 'Parrot', category: 'creature', width: 0.5, height: 0.9, health: 6, speed: 0.2, brain: 'parrot', model: 'parrot', egg: [0x0da70b, 0xff0000], flying: true, breedItems: ['wheat_seeds', 'melon_seeds', 'pumpkin_seeds', 'beetroot_seeds'] });
+mob({ id: 'ocelot', name: 'Ocelot', category: 'creature', width: 0.6, height: 0.7, health: 10, speed: 0.2, damage: 3, brain: 'ocelot', model: 'ocelot', egg: [0xefde7d, 0x564434], breedItems: ['cod', 'salmon'] });
+mob({ id: 'panda', name: 'Panda', category: 'creature', width: 1.3, height: 1.25, health: 20, speed: 0.1, damage: 6, brain: 'panda', model: 'panda', egg: [0xe7e7e7, 0x1b1b22], breedItems: ['bamboo'], idleInterval: 300 });
+mob({ id: 'llama', name: 'Llama', category: 'creature', width: 0.9, height: 1.87, health: 22, speed: 0.12, damage: 1, brain: 'llama', model: 'llama', egg: [0xc09e7d, 0x995f40], breedItems: ['hay_block', 'wheat'] });
+mob({ id: 'camel', name: 'Camel', category: 'creature', width: 1.7, height: 2.375, health: 32, speed: 0.09, brain: 'camel', model: 'camel', egg: [0xfcc369, 0xcb9337], breedItems: ['cactus'], mount: { seat: 1.6, control: 'client', tame: false }, idleInterval: 400 });
+mob({ id: 'frog', name: 'Frog', category: 'creature', width: 0.5, height: 0.5, health: 10, speed: 0.1, brain: 'frog', model: 'frog', egg: [0xd07444, 0xffc77c], amphibious: true, breedItems: ['slime_ball'] });
+mob({ id: 'axolotl', name: 'Axolotl', category: 'water', width: 0.75, height: 0.42, health: 14, speed: 0.1, damage: 2, brain: 'axolotl', model: 'axolotl', egg: [0xfbc1e3, 0xa62d74], amphibious: true, breedItems: ['tropical_fish'] });
+mob({ id: 'tropical_fish', name: 'Tropical Fish', category: 'water', width: 0.5, height: 0.4, health: 3, speed: 0.08, brain: 'fish', model: 'tropical_fish', egg: [0xef6915, 0xfff9ef], aquatic: true });
+mob({ id: 'pufferfish', name: 'Pufferfish', category: 'water', width: 0.7, height: 0.7, health: 3, speed: 0.06, brain: 'fish', model: 'pufferfish', egg: [0xf6b201, 0x37c3f2], aquatic: true });
 
 // --- Hostile --------------------------------------------------------------------
 mob({ id: 'zombie', name: 'Zombie', category: 'monster', width: 0.6, height: 1.95, health: 20, speed: 0.1, damage: 3, armor: 2, followRange: 35, brain: 'zombie', model: 'zombie', egg: [0x00afaf, 0x799c65], undead: true, burnsInDay: true, babyChance: 0.05, equipment: [['iron_shovel', 0.02], ['iron_sword', 0.01]], maxSpawnLight: 0 });
@@ -149,6 +173,14 @@ mob({ id: 'farlands_wanderer', name: 'Farlands Wanderer', category: 'monster', w
 mob({ id: 'glitch_zombie', name: 'Glitched Zombie', category: 'monster', width: 0.6, height: 1.95, health: 24, speed: 0.11, damage: 4, armor: 2, brain: 'zombie', model: 'glitch_zombie', egg: [0x00afaf, 0xff00ff], undead: true, farlands: true, maxSpawnLight: 7 });
 mob({ id: 'glitch_skeleton', name: 'Glitched Skeleton', category: 'monster', width: 0.6, height: 1.99, health: 22, speed: 0.1, damage: 3, brain: 'skeleton', model: 'glitch_skeleton', egg: [0xc1c1c1, 0xff00ff], undead: true, farlands: true, equipment: [['bow', 1]], maxSpawnLight: 7 });
 mob({ id: 'void_wisp', name: 'Void Wisp', category: 'monster', width: 0.5, height: 0.5, health: 8, speed: 0.12, damage: 3, brain: 'void_wisp', model: 'void_wisp', egg: [0x05030a, 0x9a4dff], flying: true, farlands: true, maxSpawnLight: 15 });
+// --- Cave mobs (V2) ---------------------------------------------------------------
+mob({ id: 'glow_squid', name: 'Glow Squid', category: 'water', width: 0.8, height: 0.8, health: 10, speed: 0.05, brain: 'squid', model: 'glow_squid', egg: [0x095656, 0x85f1bc], aquatic: true, idleInterval: 400 });
+/** Crystal caves: small crystal-backed critters that swarm when one is hit. */
+mob({ id: 'crystal_mite', name: 'Crystal Mite', category: 'monster', width: 0.5, height: 0.4, health: 8, speed: 0.13, damage: 2, brain: 'silverfish', model: 'crystal_mite', egg: [0x5c3f99, 0xc6a8ff], arthropod: true, maxSpawnLight: 12 });
+/** Mushroom caves: a shy walking mushroom that puffs a dizzying spore cloud when hurt. */
+mob({ id: 'sporeling', name: 'Sporeling', category: 'creature', width: 0.6, height: 1.1, health: 14, speed: 0.08, damage: 3, brain: 'sporeling', model: 'sporeling', egg: [0xd8d0c0, 0x2a8a9a], idleInterval: 300 });
+/** Blind guardian of the deep dark, called up by sculk shriekers. */
+mob({ id: 'warden', name: 'Warden', category: 'monster', width: 0.9, height: 2.9, eye: 2.6, health: 500, speed: 0.13, damage: 30, knockbackRes: 1, followRange: 48, brain: 'warden', model: 'warden', egg: [0x0f4649, 0x39d6e0], idleInterval: 160, xp: 5 });
 /** The Farlands' corrupted guardian. */
 mob({ id: 'glitch_beast', name: 'Glitch Beast', category: 'boss', width: 2.2, height: 3.4, health: 400, speed: 0.12, damage: 14, armor: 12, knockbackRes: 1, followRange: 64, brain: 'glitch_beast', model: 'glitch_beast', egg: [0x0b0b12, 0x00ffd0], farlands: true, fireImmune: true });
 mob({ id: 'ender_dragon', name: 'Ender Dragon', category: 'boss', width: 16, height: 8, health: 200, speed: 0.3, damage: 10, knockbackRes: 1, followRange: 150, brain: 'dragon', model: 'ender_dragon', egg: [0x1c1c1c, 0xe079fa], fireImmune: true, flying: true });

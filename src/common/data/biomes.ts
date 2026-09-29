@@ -173,7 +173,7 @@ ow({ id: 'sparse_jungle', name: 'Sparse Jungle', category: 'jungle', temperature
 ow({ id: 'bamboo_jungle', name: 'Bamboo Jungle', category: 'jungle', temperature: 0.95, downfall: 0.9, precipitation: 'rain', grass: 0x59c93c, foliage: 0x30bb0b, water: 0x14a2c5, surface: { top: 'podzol', filler: 'dirt', depth: 3 }, trees: [{ kind: 'jungle', weight: 1 }, { kind: 'jungle_bush', weight: 3 }], treeDensity: 4, grassDensity: 0.3, rare: true });
 
 // --- Cave biomes (underground decoration) ---------------------------------------
-ow({ id: 'lush_caves', name: 'Lush Caves', category: 'underground', temperature: 0.5, downfall: 0.5, precipitation: 'rain', grass: 0x8eb971, foliage: 0x71a74d, water: 0x3f76e4, surface: GRASS, spawns: { creature: [{ mob: 'axolotl', weight: 10, min: 4, max: 6 }], monster: DEFAULT_MONSTERS } });
+ow({ id: 'lush_caves', name: 'Lush Caves', category: 'underground', temperature: 0.5, downfall: 0.5, precipitation: 'rain', grass: 0x8eb971, foliage: 0x71a74d, water: 0x3f76e4, surface: GRASS, spawns: { water: [{ mob: 'axolotl', weight: 10, min: 4, max: 6 }], monster: DEFAULT_MONSTERS } });
 ow({ id: 'dripstone_caves', name: 'Dripstone Caves', category: 'underground', temperature: 0.8, downfall: 0.4, precipitation: 'rain', grass: 0x91bd59, foliage: 0x77ab2f, water: 0x3f76e4, surface: GRASS, spawns: { monster: [...DEFAULT_MONSTERS, { mob: 'drowned', weight: 95, min: 4, max: 4 }, { mob: 'cave_stalker', weight: 10, min: 1, max: 1 }] } });
 ow({ id: 'deep_dark', name: 'Deep Dark', category: 'underground', temperature: 0.8, downfall: 0.4, precipitation: 'rain', grass: 0x91bd59, foliage: 0x77ab2f, water: 0x3f76e4, surface: GRASS, rare: true, spawns: { creature: [], monster: [{ mob: 'cave_stalker', weight: 20, min: 1, max: 1 }] } });
 

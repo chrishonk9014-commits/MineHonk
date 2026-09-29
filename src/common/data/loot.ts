@@ -40,22 +40,27 @@ export const LOOT_TABLES: Record<string, LootTable> = {
   'mob/chicken': { xp: [1, 3], pools: [{ rolls: 1, entries: [mob('feather', 0, 2)] }, { rolls: 1, entries: [mob('chicken', 1, 1, { functions: [{ fn: 'smelt' }] })] }] },
   'mob/rabbit': { xp: [1, 3], pools: [{ rolls: 1, entries: [mob('rabbit_hide', 0, 1)] }, { rolls: 1, entries: [mob('rabbit', 0, 1, { functions: [{ fn: 'smelt' }] })] }, { rolls: 1, conditions: [{ c: 'killed_by_player' }, { c: 'chance', chance: 0.1, lootingBonus: 0.03 }], entries: [{ item: 'rabbit_foot' }] }] },
   'mob/horse': { xp: [1, 3], pools: [{ rolls: 1, entries: [mob('leather', 0, 2)] }] },
+  'mob/goat': { xp: [1, 3], pools: [] },
+  'mob/glow_squid': { xp: [1, 3], pools: [{ rolls: 1, entries: [mob('glow_ink_sac', 1, 3)] }] },
+  'mob/crystal_mite': { xp: [2, 4], pools: [{ rolls: 1, entries: [mob('amethyst_shard', 0, 1)] }, { rolls: 1, conditions: [{ c: 'chance', chance: 0.15 }], entries: [{ item: 'lumen_shard' }] }] },
+  'mob/sporeling': { xp: [1, 3], pools: [{ rolls: 1, entries: [mob('glowshroom', 0, 2)] }, { rolls: 1, entries: [{ item: 'red_mushroom', weight: 1 }, { item: 'brown_mushroom', weight: 1 }] }] },
+  'mob/warden': { xp: [5, 5], pools: [{ rolls: 1, entries: [{ item: 'sculk_catalyst' }] }] },
+  'mob/turtle': { xp: [1, 3], pools: [{ rolls: 1, entries: [mob('seagrass', 0, 2)] }] },
+  'mob/parrot': { xp: [1, 3], pools: [{ rolls: 1, entries: [mob('feather', 1, 2)] }] },
+  'mob/ocelot': { xp: [1, 3], pools: [] },
+  'mob/panda': { xp: [1, 3], pools: [{ rolls: 1, entries: [mob('bamboo', 0, 2)] }] },
   'mob/llama': { xp: [1, 3], pools: [{ rolls: 1, entries: [mob('leather', 0, 2)] }] },
   'mob/camel': { xp: [1, 3], pools: [] },
-  'mob/goat': { xp: [1, 3], pools: [] },
+  'mob/frog': { xp: [1, 3], pools: [] },
+  'mob/axolotl': { xp: [1, 3], pools: [] },
+  'mob/tropical_fish': { xp: [1, 3], pools: [{ rolls: 1, entries: [{ item: 'tropical_fish' }] }, { rolls: 1, conditions: [{ c: 'chance', chance: 0.05 }], entries: [{ item: 'bone_meal' }] }] },
+  'mob/pufferfish': { xp: [1, 3], pools: [{ rolls: 1, entries: [{ item: 'pufferfish' }] }, { rolls: 1, conditions: [{ c: 'chance', chance: 0.05 }], entries: [{ item: 'bone_meal' }] }] },
   'mob/squid': { xp: [1, 3], pools: [{ rolls: 1, entries: [mob('ink_sac', 1, 3)] }] },
   'mob/cod': { xp: [1, 3], pools: [{ rolls: 1, entries: [{ item: 'cod', functions: [{ fn: 'smelt' }] }] }, { rolls: 1, conditions: [{ c: 'chance', chance: 0.05 }], entries: [{ item: 'bone_meal' }] }] },
   'mob/salmon': { xp: [1, 3], pools: [{ rolls: 1, entries: [{ item: 'salmon', functions: [{ fn: 'smelt' }] }] }] },
-  'mob/tropical_fish': { xp: [1, 3], pools: [{ rolls: 1, entries: [{ item: 'tropical_fish' }] }] },
-  'mob/pufferfish': { xp: [1, 3], pools: [{ rolls: 1, entries: [{ item: 'pufferfish' }] }] },
-  'mob/turtle': { xp: [1, 3], pools: [{ rolls: 1, entries: [mob('scute', 0, 1)] }] },
   'mob/fox': { xp: [1, 3], pools: [] },
   'mob/wolf': { xp: [1, 3], pools: [] },
   'mob/polar_bear': { xp: [1, 3], pools: [{ rolls: 1, entries: [mob('cod', 0, 2, { weight: 3 }), mob('salmon', 0, 2)] }] },
-  'mob/parrot': { xp: [1, 3], pools: [{ rolls: 1, entries: [mob('feather', 1, 2)] }] },
-  'mob/panda': { xp: [1, 3], pools: [] },
-  'mob/frog': { xp: [1, 3], pools: [] },
-  'mob/axolotl': { xp: [1, 3], pools: [] },
   'mob/bat': { xp: [0, 0], pools: [] },
   'mob/villager': { xp: [0, 0], pools: [] },
   'mob/glitched_cow': { xp: [2, 4], pools: [{ rolls: 1, entries: [mob('leather', 0, 2)] }, { rolls: 1, entries: [mob('beef', 1, 3, { functions: [{ fn: 'smelt' }] })] }, { rolls: 1, conditions: [{ c: 'chance', chance: 0.15 }], entries: [{ item: 'glitch_berry' }] }] },
@@ -103,6 +108,27 @@ export const LOOT_TABLES: Record<string, LootTable> = {
   'mob/ender_dragon': { xp: 12000, pools: [{ rolls: 1, entries: [e('dragon_scale', 1, [3, 6])] }, { rolls: 1, entries: [e('dragon_breath', 1, [2, 4])] }] },
   'mob/wither': { xp: 50, pools: [{ rolls: 1, entries: [e('nether_star', 1)] }] },
 
+  // --- Fishing (fish, junk, treasure; Luck of the Sea shifts towards treasure) ---
+  'gameplay/fishing': {
+    pools: [
+      {
+        rolls: 1,
+        entries: [
+          { table: 'gameplay/fishing/fish', weight: 85 },
+          { table: 'gameplay/fishing/junk', weight: 10 },
+          { table: 'gameplay/fishing/treasure', weight: 5 },
+        ],
+      },
+    ],
+  },
+  'gameplay/fishing/fish': { pools: [{ rolls: 1, entries: [e('cod', 60), e('salmon', 25), e('tropical_fish', 2), e('pufferfish', 13)] }] },
+  'gameplay/fishing/junk': {
+    pools: [{ rolls: 1, entries: [e('lily_pad', 17), e('leather_boots', 10, 1, { functions: [{ fn: 'damage', min: 0, max: 0.9 }] }), e('leather', 10), e('bone', 10), e('potion', 10, 1, { functions: [{ fn: 'potion', potion: 'water' }] }), e('string', 5), e('fishing_rod', 2, 1, { functions: [{ fn: 'damage', min: 0, max: 0.9 }] }), e('bowl', 10), e('stick', 5), e('ink_sac', 10), e('rotten_flesh', 10)] }],
+  },
+  'gameplay/fishing/treasure': {
+    pools: [{ rolls: 1, entries: [ench('bow', 1, [30, 30]), book(1), ench('fishing_rod', 1, [30, 30]), e('name_tag', 1), e('nautilus_shell', 1), e('saddle', 1), e('heart_of_the_sea', 0)] }],
+  },
+
   // --- Structure chests -------------------------------------------------------------
   'chest/bonus': {
     pools: [
@@ -139,7 +165,7 @@ export const LOOT_TABLES: Record<string, LootTable> = {
   },
   'chest/village': {
     pools: [
-      { rolls: [3, 8], entries: [e('iron_ingot', 10, [1, 5]), e('bread', 15, [1, 4]), e('apple', 15, [1, 5]), e('wheat', 10, [2, 8]), e('iron_pickaxe', 5), e('iron_sword', 5), e('iron_chestplate', 5), e('iron_helmet', 5), e('iron_leggings', 5), e('iron_boots', 5), e('obsidian', 5, [3, 7]), e('oak_sapling', 5, [3, 7]), e('emerald', 3, [1, 3]), e('potato', 10, [1, 7]), e('carrot', 10, [1, 7]), e('torch', 10, [2, 8])] },
+      { rolls: [3, 8], entries: [e('honeycomb', 6, [1, 4]), e('iron_ingot', 10, [1, 5]), e('bread', 15, [1, 4]), e('apple', 15, [1, 5]), e('wheat', 10, [2, 8]), e('iron_pickaxe', 5), e('iron_sword', 5), e('iron_chestplate', 5), e('iron_helmet', 5), e('iron_leggings', 5), e('iron_boots', 5), e('obsidian', 5, [3, 7]), e('oak_sapling', 5, [3, 7]), e('emerald', 3, [1, 3]), e('potato', 10, [1, 7]), e('carrot', 10, [1, 7]), e('torch', 10, [2, 8])] },
     ],
   },
   'chest/stronghold_corridor': {
@@ -179,16 +205,118 @@ export const LOOT_TABLES: Record<string, LootTable> = {
   },
   'chest/igloo': { pools: [{ rolls: [2, 8], entries: [e('apple', 15, [1, 3]), e('coal', 15, [1, 4]), e('gold_nugget', 10, [1, 3]), e('stone_axe', 2), e('rotten_flesh', 10), e('emerald', 1), e('wheat', 10, [2, 3])] }, { rolls: 1, entries: [e('golden_apple', 1)] }] },
   'chest/shipwreck': { pools: [{ rolls: [3, 6], entries: [e('iron_ingot', 90, [1, 5]), e('iron_nugget', 50, [1, 10]), e('emerald', 40, [1, 5]), e('diamond', 5), e('gold_ingot', 10, [1, 5]), e('gold_nugget', 50, [1, 10]), e('experience_bottle', 5), e('lapis_lazuli', 20, [1, 10]), e('paper', 20, [1, 12]), e('bread', 8, [1, 3])] }] },
+  // --- V2 underground structures ------------------------------------------
+  'chest/underground_ruins': {
+    pools: [
+      { rolls: 1, entries: [book(10), e('name_tag', 6), e('golden_apple', 4), e('lantern', 6), none(8)] },
+      { rolls: [3, 6], entries: [e('iron_ingot', 12, [1, 4]), e('gold_ingot', 6, [1, 3]), e('emerald', 4, [1, 3]), e('bone', 10, [2, 6]), e('candle', 8, [1, 3]), e('lumen_shard', 6, [1, 4]), e('amethyst_shard', 6, [1, 4]), e('coal', 10, [2, 6]), e('bread', 8, [1, 3])] },
+    ],
+  },
+  'chest/buried_temple': {
+    pools: [
+      { rolls: 1, entries: [e('golden_apple', 15), e('enchanted_golden_apple', 2), book(20), e('diamond', 8, [1, 3]), e('music_disc_deepcave', 3), e('echo_shard', 3, [1, 2]), none(10)] },
+      { rolls: [3, 6], entries: [e('gold_ingot', 15, [2, 6]), e('emerald', 10, [1, 4]), e('lapis_lazuli', 10, [3, 9]), e('redstone', 8, [3, 9]), e('bone', 12, [2, 5]), e('rotten_flesh', 8, [2, 5]), e('iron_ingot', 10, [1, 4]), e('candle', 6, [1, 4])] },
+    ],
+  },
+  'chest/hidden_chamber': {
+    pools: [
+      { rolls: 1, entries: [e('diamond', 6, [1, 3]), book(10), e('name_tag', 5), e('compass', 4), e('clock', 4), e('recovery_compass', 1)] },
+      { rolls: [2, 5], entries: [e('emerald', 10, [1, 5]), e('gold_ingot', 10, [2, 5]), e('iron_ingot', 12, [2, 6]), e('lumen_shard', 8, [2, 5]), e('experience_bottle', 6, [1, 3]), e('ender_pearl', 4, [1, 2])] },
+    ],
+  },
+  'chest/treasure_room': {
+    pools: [
+      { rolls: 1, entries: [e('enchanted_golden_apple', 3), e('totem_of_undying', 2), e('netherite_scrap', 3, [1, 2]), ench('diamond_pickaxe', 4, [25, 39]), book(6)] },
+      { rolls: [4, 8], entries: [e('gold_ingot', 20, [3, 8]), e('emerald', 15, [2, 6]), e('diamond', 10, [1, 4]), e('gold_block', 4), e('iron_ingot', 10, [3, 8]), e('golden_carrot', 8, [2, 6]), e('experience_bottle', 6, [2, 5])] },
+    ],
+  },
+  'chest/abandoned_lab': {
+    pools: [
+      {
+        rolls: [3, 6],
+        entries: [
+          e('redstone', 14, [4, 12]),
+          e('glowstone_dust', 10, [3, 8]),
+          e('potion', 6, 1, { functions: [{ fn: 'potion', potion: 'healing' }] }),
+          e('potion', 5, 1, { functions: [{ fn: 'potion', potion: 'night_vision' }] }),
+          e('potion', 5, 1, { functions: [{ fn: 'potion', potion: 'swiftness' }] }),
+          e('lumen_shard', 8, [2, 6]),
+          e('glass_bottle', 8, [2, 6]),
+          e('nether_wart', 5, [1, 4]),
+          e('blaze_powder', 3, [1, 3]),
+          e('spider_eye', 6, [1, 3]),
+          e('fermented_spider_eye', 4, [1, 2]),
+          e('ender_pearl', 3),
+          e('experience_bottle', 5, [1, 4]),
+        ],
+      },
+    ],
+  },
+  'chest/cave_shrine': {
+    pools: [
+      { rolls: 1, entries: [book(8), e('golden_carrot', 6, [2, 5]), e('experience_bottle', 5, [2, 4]), e('echo_shard', 1)] },
+      { rolls: [2, 4], entries: [e('amethyst_shard', 10, [2, 6]), e('lumen_shard', 10, [2, 6]), e('glow_berries', 8, [3, 8]), e('candle', 8, [1, 4]), e('glowstone_dust', 5, [2, 5])] },
+    ],
+  },
+  'chest/monster_chamber': {
+    pools: [
+      { rolls: [1, 2], entries: [e('saddle', 12), e('golden_apple', 10), e('music_disc_ember', 4), e('music_disc_drift', 4), e('name_tag', 12), book(10), ench('iron_sword', 6, [10, 25])] },
+      { rolls: [2, 5], entries: [e('iron_ingot', 10, [1, 4]), e('gold_ingot', 6, [1, 4]), e('bread', 16), e('wheat', 12, [1, 4]), e('coal', 10, [1, 4]), e('redstone', 10, [1, 4])] },
+      { rolls: 3, entries: [e('bone', 10, [1, 8]), e('gunpowder', 10, [1, 8]), e('rotten_flesh', 10, [1, 8]), e('string', 10, [1, 8])] },
+    ],
+  },
+  // --- Ancient City -------------------------------------------------------
+  'chest/ancient_city': {
+    pools: [
+      {
+        rolls: [5, 10],
+        entries: [
+          e('enchanted_golden_apple', 1),
+          e('disc_fragment', 3, [1, 3]),
+          e('music_disc_echo', 2),
+          e('compass', 2),
+          e('sculk_catalyst', 2),
+          e('name_tag', 2),
+          ench('diamond_hoe', 2, [30, 50]),
+          ench('diamond_leggings', 2, [30, 50]),
+          e('book', 3, 1, { functions: [{ fn: 'set_enchant', id: 'silent_stride', levels: [1, 3] }] }),
+          e('book', 3, 1, { functions: [{ fn: 'enchant_levels', levels: [30, 50], treasure: true }] }),
+          e('sculk', 3, [4, 10]),
+          e('sculk_sensor', 3, [1, 3]),
+          e('candle', 3, [1, 4]),
+          e('amethyst_shard', 3, [1, 15]),
+          e('experience_bottle', 3, [1, 3]),
+          e('glow_berries', 3, [1, 15]),
+          ench('iron_leggings', 4, [20, 39]),
+          e('echo_shard', 4, [1, 3]),
+          e('potion', 5, 1, { functions: [{ fn: 'potion', potion: 'regeneration' }] }),
+          e('bone', 5, [1, 15]),
+          e('soul_torch', 5, [1, 15]),
+          e('coal', 7, [6, 15]),
+        ],
+      },
+    ],
+  },
+  'chest/ancient_city_ice': {
+    pools: [
+      { rolls: [4, 10], entries: [e('baked_potato', 1, [1, 10]), e('bread', 1, [1, 10]), e('golden_carrot', 1, [1, 4]), e('packed_ice', 2, [2, 6]), e('snowball', 2, [2, 6])] },
+    ],
+  },
+  /** The sealed vault under the gate: the city's unique reward. */
+  'chest/ancient_city_vault': {
+    pools: [
+      { rolls: 1, entries: [e('resonance_charm', 1)] },
+      { rolls: 1, entries: [e('music_disc_hollow', 1), e('disc_fragment', 2, [3, 5])] },
+      { rolls: [2, 4], entries: [e('echo_shard', 4, [2, 4]), e('book', 3, 1, { functions: [{ fn: 'set_enchant', id: 'silent_stride', levels: [2, 3] }] }), e('diamond', 3, [3, 6]), e('experience_bottle', 3, [3, 6])] },
+    ],
+  },
   'chest/buried_treasure': { pools: [{ rolls: 1, entries: [e('heart_of_the_sea', 1)] }, { rolls: [5, 8], entries: [e('iron_ingot', 20, [1, 4]), e('gold_ingot', 10, [1, 4]), e('tnt', 5, [1, 2]), e('emerald', 5, [4, 8]), e('diamond', 5, [1, 2]), e('prismarine_crystals', 5, [1, 5]), e('cooked_cod', 5, [2, 4])] }] },
   'chest/pillager_outpost': { pools: [{ rolls: [2, 3], entries: [e('wheat', 7, [3, 5]), e('carrot', 5, [3, 5]), e('potato', 5, [2, 5])] }, { rolls: [1, 3], entries: [e('dark_oak_log', 1, [2, 3]), e('experience_bottle', 1), e('string', 4, [1, 6]), e('arrow', 4, [2, 7]), e('tripwire_hook', 0), e('iron_ingot', 3, [1, 3]), book(1)] }, { rolls: [0, 1], entries: [e('crossbow', 1)] }] },
-  'chest/ancient_city': {
-    pools: [{ rolls: [5, 10], entries: [e('enchanted_golden_apple', 1, [1, 2]), e('music_disc_deepcave', 2), e('echo_shard', 4, [1, 3]), ench('diamond_leggings', 3, [30, 50]), e('sculk', 3, [4, 10]), e('candle', 0), e('amethyst_shard', 3, [1, 15]), e('experience_bottle', 3, [1, 3]), e('glow_berries', 3, [1, 15]), ench('iron_leggings', 2, [20, 39]), e('book', 5, [3, 10]), e('bone', 5, [1, 15]), e('soul_torch', 4, [1, 15]), e('coal', 7, [6, 15])] }],
-  },
   'chest/ocean_ruin': { pools: [{ rolls: [2, 5], entries: [e('coal', 10, [1, 4]), e('wheat', 10, [2, 3]), e('gold_nugget', 10, [1, 3]), e('emerald', 5), e('iron_ingot', 5), book(5), e('heart_of_the_sea', 1)] }] },
   'chest/witch_hut': { pools: [{ rolls: [2, 5], entries: [e('glowstone_dust', 10, [1, 3]), e('redstone', 10, [1, 3]), e('spider_eye', 10, [1, 2]), e('sugar', 10, [1, 3]), e('glass_bottle', 10, [1, 3]), e('fermented_spider_eye', 3)] }] },
   // Original structures
   'chest/sky_shrine': { pools: [{ rolls: [3, 6], entries: [e('feather', 20, [3, 8]), e('sky_ray_membrane', 8, [1, 2]), e('diamond', 4, [1, 2]), e('emerald', 8, [1, 4]), e('golden_apple', 6), ench('iron_boots', 6, [15, 30]), book(6), e('ender_pearl', 6, [1, 2])] }] },
-  'chest/overgrown_ruin': { pools: [{ rolls: [3, 7], entries: [e('bone', 20, [1, 6]), e('iron_nugget', 20, [3, 12]), e('emerald', 8, [1, 3]), e('sunroot_seeds', 12, [2, 5]), e('glowbell', 10, [1, 3]), e('golden_carrot', 6, [1, 4]), book(4), e('gold_ingot', 8, [1, 3])] }] },
+  'chest/overgrown_ruin': { pools: [{ rolls: [3, 7], entries: [e('honeycomb', 10, [1, 5]), e('candle', 6, [1, 3]), e('bone', 20, [1, 6]), e('iron_nugget', 20, [3, 12]), e('emerald', 8, [1, 3]), e('sunroot_seeds', 12, [2, 5]), e('glowbell', 10, [1, 3]), e('golden_carrot', 6, [1, 4]), book(4), e('gold_ingot', 8, [1, 3])] }] },
   'chest/stalker_den': { pools: [{ rolls: [3, 6], entries: [e('bone', 25, [2, 8]), e('stalker_fang', 10, [1, 3]), e('iron_ingot', 15, [2, 5]), e('diamond', 6, [1, 3]), e('echo_shard', 3, [1, 2]), ench('iron_sword', 5, [15, 30]), e('music_disc_deepcave', 2)] }] },
   'chest/ember_forge': { pools: [{ rolls: [3, 6], entries: [e('cinder', 25, [2, 6]), e('ember_core', 4), e('netherite_scrap', 3), e('gold_ingot', 20, [2, 6]), e('blaze_rod', 10, [1, 3]), ench('golden_sword', 6, [20, 30]), e('ember_pepper', 15, [2, 5])] }] },
   'chest/farlands_ruin': {

@@ -1,3 +1,4 @@
+import { GENERATOR_VERSION } from '../../src/server/world/LevelData';
 import { describe, it, expect } from 'vitest';
 import { makeServer, join } from '../helpers/testServer';
 import { MemoryStorage } from '../../src/server/storage/Storage';
@@ -62,7 +63,7 @@ describe('persistence hardening', () => {
   it('keeps the V2 generator, Warden warnings and visited cave biomes across restarts', async () => {
     const storage = new MemoryStorage();
     const { server } = await makeServer({}, storage);
-    expect(server.level.generatorVersion).toBe(2);
+    expect(server.level.generatorVersion).toBe(GENERATOR_VERSION);
     expect(server.overworld.generator.caves).toBe(true);
     const { player } = await join(server, 'Caver');
     player.wardenWarning = 2;
@@ -70,7 +71,7 @@ describe('persistence hardening', () => {
     player.visitedCaveBiomes.add(9);
     await server.stop();
     const { server: s2 } = await makeServer({}, storage);
-    expect(s2.level.generatorVersion).toBe(2);
+    expect(s2.level.generatorVersion).toBe(GENERATOR_VERSION);
     const { player: p2 } = await join(s2, 'Caver');
     expect(p2.wardenWarning).toBe(2);
     expect([...p2.visitedCaveBiomes].sort()).toEqual([3, 9]);

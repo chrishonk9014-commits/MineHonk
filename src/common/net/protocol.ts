@@ -65,6 +65,8 @@ export interface PlayerStats {
   maxAir: number;
   armor: number;
   effects: { id: string; amp: number; ticks: number }[];
+  /** Freezing in powder snow (0..1; absent when warm). */
+  freeze?: number;
 }
 
 export interface WorldInfo {

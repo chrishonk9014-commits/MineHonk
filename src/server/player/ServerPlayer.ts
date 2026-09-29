@@ -208,6 +208,7 @@ export class ServerPlayer extends Entity {
       maxAir: this.maxAir,
       armor: this.armorCache,
       effects: [...this.effects.entries()].map(([id, e]) => ({ id, amp: e.amp, ticks: e.ticks })),
+      freeze: this.freezeTicks ? Math.round((this.freezeTicks / 140) * 20) / 20 : undefined,
     };
   }
 

@@ -331,6 +331,14 @@ export const LOOT_TABLES: Record<string, LootTable> = {
       { rolls: 1, conditions: [{ c: 'chance', chance: 0.08 }], entries: [e('music_disc_overflow', 1)] },
     ],
   },
+  // V3: ruins in the corrupted caves
+  'chest/corrupted_cache': {
+    pools: [
+      { rolls: [3, 6], entries: [e('glitch_shard', 20, [1, 3]), e('data_fragment', 15, [1, 2]), e('diamond', 10, [1, 3]), e('gold_ingot', 15, [2, 6]), e('redstone', 15, [4, 12]), e('emerald', 10, [1, 4]), e('ender_pearl', 10, [1, 2]), book(10)] },
+      { rolls: 1, conditions: [{ c: 'chance', chance: 0.25 }], entries: [e('farlands_compass', 1)] },
+      { rolls: 1, conditions: [{ c: 'chance', chance: 0.06 }], entries: [e('music_disc_overflow', 1)] },
+    ],
+  },
   'chest/farlands_vault': {
     pools: [
       { rolls: 1, entries: [e('glitched_ingot', 1, [1, 2])] },

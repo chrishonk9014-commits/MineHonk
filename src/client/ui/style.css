@@ -1621,6 +1621,24 @@ body {
   background: radial-gradient(circle at center, transparent 0, transparent 32vmin, rgba(0, 0, 0, 0.85) 34vmin, #000 44vmin);
 }
 
+/* Powder snow: frost at the edges while freezing, white-out when buried */
+.frost-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.4s;
+  background:
+    radial-gradient(ellipse at center, transparent 45%, rgba(190, 225, 255, 0.35) 70%, rgba(235, 248, 255, 0.85) 100%),
+    repeating-linear-gradient(115deg, transparent 0 7px, rgba(255, 255, 255, 0.08) 7px 8px);
+}
+.powder-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: rgba(236, 244, 250, 0.93);
+}
+
 /* Beacon */
 .beacon-col {
   display: flex;

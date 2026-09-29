@@ -91,7 +91,11 @@ export class Progression {
     if (!p.visitedCaveBiomes.has(cb)) {
       p.visitedCaveBiomes.add(cb);
       it.grant(p, 'enter_cave_biome');
-      if (p.visitedCaveBiomes.size >= 9) it.grant(p, 'all_cave_biomes');
+      // The nine biomes of the Caves Update (the corrupted caves are a secret of their own)
+      let n = 0;
+      for (let i = 1; i <= 9; i++) if (p.visitedCaveBiomes.has(i)) n++;
+      if (n >= 9) it.grant(p, 'all_cave_biomes');
+      if (cb === 10) it.grant(p, 'find_corrupted_cave');
     }
     if (g.inMegaCavern?.(p.x, p.y, p.z)) it.grant(p, 'find_mega_cavern');
   }

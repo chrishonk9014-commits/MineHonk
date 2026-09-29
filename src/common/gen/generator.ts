@@ -17,7 +17,7 @@ import { StructureManager } from './structures/manager';
 import { caveDecorV2 } from './caves/decor';
 import { ProtoCache, cloneChunk, addGenEntities, LATEST_GENERATOR, type DimensionGenerator, type GeneratorOptions, type SpawnPoint } from './pipeline';
 import { VILLAGE } from './structures/village';
-import { SURFACE_STRUCTURES } from './structures/misc';
+import { SURFACE_STRUCTURES, SURFACE_STRUCTURES_V3 } from './structures/misc';
 import { MINESHAFT, STRONGHOLD } from './structures/underground';
 import { CAVE_STRUCTURES } from './structures/caves';
 import { ANCIENT_CITY } from './structures/ancientCity';
@@ -64,7 +64,7 @@ export class OverworldGenerator implements DimensionGenerator {
     this.structures = new StructureManager(
       seed,
       // V2 adds its underground structures after the V1 list, so V1 placements never move
-      [VILLAGE, ...SURFACE_STRUCTURES, MINESHAFT, STRONGHOLD, ...(this.terrain.carver ? [...CAVE_STRUCTURES, ANCIENT_CITY] : [])],
+      [VILLAGE, ...(this.terrain.corrupted ? SURFACE_STRUCTURES_V3 : SURFACE_STRUCTURES), MINESHAFT, STRONGHOLD, ...(this.terrain.carver ? [...CAVE_STRUCTURES, ANCIENT_CITY] : [])],
       {
         seed,
         groundY: (x, z) => ground(x, z).y,
@@ -86,7 +86,7 @@ export class OverworldGenerator implements DimensionGenerator {
     for (const stage of this.terrain.carver ? NEIGHBOUR_STAGES_V2 : NEIGHBOUR_STAGES) {
       for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) stage(v, seed, cx + dx, cz + dz);
     }
-    if (this.terrain.carver) caveDecorV2(v, seed, cx, cz);
+    if (this.terrain.carver) caveDecorV2(v, seed, cx, cz, !!this.terrain.corrupted);
     else
       F.caveDecor(v, seed, cx, cz, (x, z) => {
         const cl = this.terrain.climate.sample(x, z, this.climateScratch);
@@ -95,6 +95,8 @@ export class OverworldGenerator implements DimensionGenerator {
     const starts = this.structures.build(v);
     F.vegetation(v, seed, cx, cz);
     F.freeze(v);
+    // V3: glitched portals and corrupted ruins' chests go on top of everything
+    this.terrain.corrupted?.late(v, cx, cz, 'chest/corrupted_cache');
     c.recount();
     c.recomputeHeightmap();
     // Structure entities (villagers, witches ...) that stand in this chunk
@@ -170,11 +172,12 @@ export class OverworldGenerator implements DimensionGenerator {
   }
 
   structureTypes(): string[] {
-    return [...this.structures.typeIds(), 'dungeon'];
+    return [...this.structures.typeIds(), 'dungeon', ...(this.terrain.corrupted ? ['glitched_portal'] : [])];
   }
 
   *locateSteps(type: string, x: number, z: number): Generator<void, { x: number; y: number; z: number } | null> {
     if (type === 'dungeon') return yield* this.dungeonSteps(x, z);
+    if (type === 'glitched_portal') return this.terrain.corrupted?.nearestPortal(x, z) ?? null;
     const s = yield* this.structures.nearestSteps(type, x, z);
     return s ? { x: s.x, y: s.y, z: s.z } : null;
   }
@@ -187,6 +190,15 @@ export class OverworldGenerator implements DimensionGenerator {
   *caveSteps(kind: string, x: number, z: number, maxRadius = 3072): Generator<void, { x: number; y: number; z: number } | null> {
     const carver = this.terrain.carver;
     if (!carver) return null;
+    const corrupted = this.terrain.corrupted;
+    if (kind === 'corrupted_caves' || kind === 'glitched_portal') {
+      if (!corrupted) return null;
+      if (kind === 'glitched_portal') return corrupted.nearestPortal(x, z);
+      const zone = corrupted.nearest(x, z);
+      if (!zone) return null;
+      yield;
+      return this.caveLanding(zone.x, zone.y, zone.z, zone.y - 20, zone.y + 10, (bx, by, bz) => corrupted.inside(bx, by, bz), 24) ?? { x: zone.x, y: zone.y, z: zone.z };
+    }
     if (kind === 'mega_cavern') {
       const m = carver.nearestMega(x, z);
       if (!m) return null;
@@ -261,6 +273,11 @@ export class OverworldGenerator implements DimensionGenerator {
   }
 
   locate(type: string, x: number, z: number): { x: number; y: number; z: number } | null {
+    if (type === 'glitched_portal') return this.terrain.corrupted?.nearestPortal(x, z) ?? null;
+    if (type === 'corrupted_caves') {
+      const zone = this.terrain.corrupted?.nearest(x, z);
+      return zone ? { x: zone.x, y: zone.y, z: zone.z } : null;
+    }
     const s = this.structures.nearest(type, x, z, type === 'stronghold' ? 0 : 12);
     return s ? { x: s.x, y: s.y, z: s.z } : null;
   }

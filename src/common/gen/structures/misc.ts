@@ -640,56 +640,77 @@ export const STALKER_DEN = single({
  * The glitched ruin: a rare, half-corrupted structure that holds a dormant
  * gateway frame to the Farlands. Corrupted blocks bleed into the terrain.
  */
-export const GLITCHED_RUIN = single({
-  id: 'glitched_ruin',
-  spacing: 72,
-  separation: 16,
-  salt: 0x6117c4,
-  sx: 13,
-  sz: 13,
-  height: 12,
-  below: 4,
-  y: 'surface',
-  biome: (b) => b.dimension === 'overworld' && !b.id.includes('ocean') && b.id !== 'river',
-  maxSlope: 10,
-  build(b, rng, seed) {
-    const corrupted = S('corrupted_stone');
-    const farstone = S('farstone_bricks');
-    const stat = S('static_block');
-    // Corruption patch spreading into the ground
-    for (let z = -2; z < 15; z++)
-      for (let x = -2; x < 15; x++) {
-        const d = Math.hypot(x - 6, z - 6);
-        const n = (hashInts(seed, x, z) & 255) / 255;
-        if (d > 7 + n * 2) continue;
-        for (let y = -3; y <= 0; y++) if (STATE_SOLID[b.proto(x, y - 1, z)] && !STATE_FLUID[b.proto(x, y - 1, z)] && n < 0.8) b.set(x, y - 1, z, n < 0.15 ? stat : corrupted);
+function glitchedRuin(withFrame: boolean): StructureType {
+  return single({
+    id: 'glitched_ruin',
+    spacing: 72,
+    separation: 16,
+    salt: 0x6117c4,
+    sx: 13,
+    sz: 13,
+    height: 12,
+    below: 4,
+    y: 'surface',
+    biome: (b) => b.dimension === 'overworld' && !b.id.includes('ocean') && b.id !== 'river',
+    maxSlope: 10,
+    build(b, rng, seed) {
+      const corrupted = S('corrupted_stone');
+      const farstone = S('farstone_bricks');
+      const stat = S('static_block');
+      // Corruption patch spreading into the ground
+      for (let z = -2; z < 15; z++)
+        for (let x = -2; x < 15; x++) {
+          const d = Math.hypot(x - 6, z - 6);
+          const n = (hashInts(seed, x, z) & 255) / 255;
+          if (d > 7 + n * 2) continue;
+          for (let y = -3; y <= 0; y++) if (STATE_SOLID[b.proto(x, y - 1, z)] && !STATE_FLUID[b.proto(x, y - 1, z)] && n < 0.8) b.set(x, y - 1, z, n < 0.15 ? stat : corrupted);
+        }
+      b.clearAbove(1, 1, 11, 11, 0, 11);
+      // Platform
+      b.fill(2, -1, 2, 10, -1, 10, farstone);
+      // Floating, misaligned fragments
+      for (let i = 0; i < 9; i++) {
+        const x = rng.int(13);
+        const z = rng.int(13);
+        const y = 3 + rng.int(7);
+        b.fill(x, y, z, x + rng.int(2), y, z + rng.int(2), rng.chance(0.3) ? stat : corrupted);
       }
-    b.clearAbove(1, 1, 11, 11, 0, 11);
-    // Platform
-    b.fill(2, -1, 2, 10, -1, 10, farstone);
-    // Floating, misaligned fragments
-    for (let i = 0; i < 9; i++) {
-      const x = rng.int(13);
-      const z = rng.int(13);
-      const y = 3 + rng.int(7);
-      b.fill(x, y, z, x + rng.int(2), y, z + rng.int(2), rng.chance(0.3) ? stat : corrupted);
-    }
-    // Dormant gateway frame (activated with a Corrupted Eye)
-    const frame = S('far_portal_frame');
-    for (let x = 4; x <= 8; x++) {
-      b.set(x, 0, 6, frame);
-      b.set(x, 6, 6, frame);
-    }
-    for (let y = 1; y <= 5; y++) {
-      b.set(4, y, 6, frame);
-      b.set(8, y, 6, frame);
-    }
-    b.set(4, 7, 6, S('data_crystal'));
-    b.set(8, 7, 6, S('data_crystal'));
-    b.chest(6, 0, 9, 'north', 'chest/farlands_ruin', lootSeed(b, 6, 0, 9, seed));
-    b.set(2, 0, 2, S('glitch_ore'));
-  },
-  entities: (x, y, z) => [{ type: 'farlands_wanderer', x: x + 3, y, z: z + 3 }],
-});
+      if (withFrame) {
+        // Dormant gateway frame (activated with a Corrupted Eye)
+        const frame = S('far_portal_frame');
+        for (let x = 4; x <= 8; x++) {
+          b.set(x, 0, 6, frame);
+          b.set(x, 6, 6, frame);
+        }
+        for (let y = 1; y <= 5; y++) {
+          b.set(4, y, 6, frame);
+          b.set(8, y, 6, frame);
+        }
+      } else {
+        // V3: the gateway fell here long ago; only toppled pieces remain (the living ones are underground)
+        const frame = S('far_portal_frame');
+        for (const [x, z] of [
+          [4, 6],
+          [5, 6],
+          [6, 7],
+          [8, 5],
+          [9, 5],
+        ] as const)
+          b.set(x, 0, z, frame);
+        b.set(7, 1, 6, frame);
+      }
+      b.set(4, 7, 6, S('data_crystal'));
+      b.set(8, 7, 6, S('data_crystal'));
+      b.chest(6, 0, 9, 'north', 'chest/farlands_ruin', lootSeed(b, 6, 0, 9, seed));
+      b.set(2, 0, 2, S('glitch_ore'));
+    },
+    entities: (x, y, z) => [{ type: 'farlands_wanderer', x: x + 3, y, z: z + 3 }],
+  });
+}
+
+export const GLITCHED_RUIN = glitchedRuin(true);
+/** V3 worlds: same places, but the working portals moved into the corrupted caves. */
+export const GLITCHED_RUIN_V3 = glitchedRuin(false);
 
 export const SURFACE_STRUCTURES: StructureType[] = [DESERT_TEMPLE, JUNGLE_TEMPLE, WITCH_HUT, IGLOO, RUINED_PORTAL, SHIPWRECK, OCEAN_RUIN, BURIED_TREASURE, OUTPOST, SKY_SHRINE, OVERGROWN_RUIN, STALKER_DEN, GLITCHED_RUIN];
+export const SURFACE_STRUCTURES_V3: StructureType[] = SURFACE_STRUCTURES.map((t) => (t === GLITCHED_RUIN ? GLITCHED_RUIN_V3 : t));

@@ -323,7 +323,7 @@ const SCALES: Record<Mood, { root: number; scale: number[]; tempo: number; densi
 };
 
 /** Music for each cave biome number (see CaveBiome). */
-const CAVE_MOODS: Mood[] = ['calm', 'caves', 'caves', 'lush', 'mushroom', 'crystal', 'caves', 'lava_caves', 'frozen', 'deep_dark'];
+const CAVE_MOODS: Mood[] = ['calm', 'caves', 'caves', 'lush', 'mushroom', 'crystal', 'caves', 'lava_caves', 'frozen', 'deep_dark', 'farlands'];
 
 export class MusicPlayer {
   private playingUntil = 0;

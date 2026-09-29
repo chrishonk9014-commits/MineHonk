@@ -80,6 +80,9 @@ export class Game {
   private readonly navigator = new Navigator();
   /** Dark vignette with a round view while looking through a spyglass. */
   private readonly scopeOverlay = el('div', { class: 'spyglass-overlay hidden' });
+  /** Frost creeping in from the edges while freezing, and white-out when buried in powder snow. */
+  private readonly frostOverlay = el('div', { class: 'frost-overlay' });
+  private readonly powderOverlay = el('div', { class: 'powder-overlay hidden' });
   private scoping = false;
   private scopeZoom = 1;
   /** World spawn (compasses) and the last death (Recovery Compass). */
@@ -187,6 +190,7 @@ export class Game {
       const lvl = legs?.tag?.ench?.silent_stride ?? 0;
       return Math.min(1, 0.3 + 0.15 * lvl);
     };
+    this.player.powderWalk = () => items[this.invSlots[HELMET + 3]?.id ?? -1]?.id === 'leather_boots';
     this.player.canGlide = () => {
       const c = this.invSlots[HELMET + 1];
       if (!c) return false;
@@ -204,7 +208,7 @@ export class Game {
       sound: (n, x, y, z, v, p) => this.audio.play(n, x, y, z, v, p),
       swing: () => this.swing(),
     });
-    this.root.append(this.scopeOverlay, this.hud.root, this.chat.root, this.chat.input, this.playerList.root);
+    this.root.append(this.scopeOverlay, this.frostOverlay, this.powderOverlay, this.hud.root, this.chat.root, this.chat.input, this.playerList.root);
     this.hud.root.append(this.navigator.root);
     this.glitchHud = new GlitchHud(this.root, settings);
     this.endingCard = new EndingCard(this.root, settings);
@@ -1095,7 +1099,7 @@ export class Game {
     }
     // Each biome has its own sounds
     if (this.tickNo % 40 === 0 && Math.random() < 0.35) {
-      const snd = ['', 'cave.drip', 'cave.rumble', 'lush.chirp', 'mushroom.pop', 'crystal.chime', 'cave.drip', 'lava.pop', 'frozen.wind', 'deep_dark.hum'][cb];
+      const snd = ['', 'cave.drip', 'cave.rumble', 'lush.chirp', 'mushroom.pop', 'crystal.chime', 'cave.drip', 'lava.pop', 'frozen.wind', 'deep_dark.hum', 'glitch.static'][cb];
       if (snd) this.audio.play(snd, b.x + (Math.random() - 0.5) * 20, b.y + (Math.random() - 0.5) * 6, b.z + (Math.random() - 0.5) * 20, 0.6, 0.85 + Math.random() * 0.3, 'ambient');
     }
   }
@@ -1483,6 +1487,9 @@ export class Game {
     const nv = this.effectLevel('night_vision') > 0 ? 1 : 0;
     this.scopeZoom += ((this.scoping ? 0.1 : 1) - this.scopeZoom) * Math.min(1, dt / 60);
     this.scopeOverlay.classList.toggle('hidden', !this.scoping);
+    const frost = this.stats?.freeze ?? 0;
+    this.frostOverlay.style.opacity = frost > 0 && this.thirdPerson === 0 ? String(Math.min(1, frost)) : '0';
+    this.powderOverlay.classList.toggle('hidden', !p.body.headInPowder || this.thirdPerson !== 0);
     const fs: FrameState = {
       x: ex,
       y: ey,

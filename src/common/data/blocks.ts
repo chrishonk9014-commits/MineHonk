@@ -940,6 +940,9 @@ cube('fractal_glass', 0.5, 'glass', { layer: 'translucent', light: 4, drops: { i
 cube('echo_lamp', 0.5, 'glass', { light: 15 });
 add({ id: 'far_portal', name: 'Farlands Portal', hardness: -1, sound: 'glass', model: 'portal', props: { axis: ['x', 'z'] }, tex: { all: 'far_portal' }, light: 12, collide: false, drops: 'none', item: false, creative: 'hidden' });
 cube('far_portal_frame', -1, 'glitch', { resistance: 3600000, name: 'Corrupted Bedrock', drops: 'none', creative: 'building' });
+// V3: the Glitched Portal's broken frame (a Corrupted Eye sits in its socket) and the black of the void
+add({ id: 'glitched_portal_frame', name: 'Glitched Portal Frame', hardness: -1, resistance: 3600000, sound: 'glitch', model: 'cube', props: { part: ['frame', 'cracked', 'socket', 'eye'] }, tex: { all: 'glitched_portal_frame', cracked: 'glitched_portal_frame_cracked', socket: 'glitched_portal_frame_socket', eye: 'glitched_portal_frame_eye' }, light: 4, drops: 'none', creative: 'building', mapColor: 0x2a0a3a });
+cube('null_block', 30, 'glitch', { tool: 'pickaxe', harvestLevel: 3, requiresTool: true, resistance: 1200, name: 'Null', mapColor: 0x000000 });
 add({ id: 'data_crystal', name: 'Data Crystal', hardness: 3, sound: 'glass', model: 'cross', tex: { all: 'data_crystal' }, light: 11, tool: 'pickaxe', drops: { item: 'data_fragment' } });
 cube('stretched_sand', 0.5, 'sand', { tool: 'shovel', gravity: false, name: 'Stretched Sand' });
 cube('missing_block', 1, 'glitch', { tool: 'pickaxe', name: 'Missing Block' });

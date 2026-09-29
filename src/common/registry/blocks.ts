@@ -217,6 +217,11 @@ function applyStateOverrides(bt: BlockType): void {
       STATE_LIGHT[s] = getProp(s, 'eye') === 'true' ? 1 : 0;
     }
   }
+  if (def.id === 'glitched_portal_frame') {
+    for (let s = bt.baseState; s < bt.baseState + bt.stateCount; s++) {
+      if (getProp(s, 'part') === 'eye') STATE_LIGHT[s] = 11;
+    }
+  }
   if (def.id === 'campfire' || def.id === 'soul_campfire') {
     for (let s = bt.baseState; s < bt.baseState + bt.stateCount; s++) {
       if (getProp(s, 'lit') === 'false') STATE_LIGHT[s] = 0;

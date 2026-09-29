@@ -219,8 +219,9 @@ function tx(def: BlockDef, key: string, fallback?: string): string {
 }
 
 function cubeTextures(def: BlockDef, state: number): { tex: string[]; rot: number[]; tint: TintKind[] } {
-  // Blocks with a lit look (redstone lamp)
-  const all = def.tex.on && getProp(state, 'lit') === 'true' ? def.tex.on : def.tex.all;
+  // Blocks with a lit look (redstone lamp) or a texture per part (glitched portal frame)
+  const part = def.props?.part ? getProp(state, 'part') : undefined;
+  const all = def.tex.on && getProp(state, 'lit') === 'true' ? def.tex.on : part && def.tex[String(part)] ? def.tex[String(part)] : def.tex.all;
   const top = def.tex.top ?? all ?? def.tex.side!;
   const bottom = def.tex.bottom ?? (def.tex.top && !def.tex.all ? def.tex.top : undefined) ?? all ?? top;
   const side = def.tex.side ?? all ?? top;

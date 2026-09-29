@@ -54,6 +54,8 @@ const CAVE_MONSTERS: Record<number, SpawnEntry[]> = {
   6: [{ mob: 'zombie', weight: 60, min: 2, max: 4 }, { mob: 'husk', weight: 30, min: 1, max: 3 }, { mob: 'skeleton', weight: 60, min: 2, max: 3 }, { mob: 'drowned', weight: 20, min: 1, max: 2 }],
   7: [{ mob: 'magma_cube', weight: 80, min: 1, max: 3 }, { mob: 'skeleton', weight: 40, min: 1, max: 2 }, { mob: 'blaze', weight: 5, min: 1, max: 1 }],
   8: [{ mob: 'stray', weight: 100, min: 2, max: 4 }, { mob: 'skeleton', weight: 30, min: 1, max: 2 }, { mob: 'zombie', weight: 30, min: 1, max: 2 }],
+  // V3: things that leaked in from the Farlands
+  10: [{ mob: 'glitch_zombie', weight: 60, min: 1, max: 3 }, { mob: 'glitch_skeleton', weight: 50, min: 1, max: 2 }, { mob: 'farlands_wanderer', weight: 25, min: 1, max: 1 }, { mob: 'void_wisp', weight: 30, min: 1, max: 2 }],
 };
 const CAVE_WATER: Record<number, SpawnEntry[]> = {
   1: [{ mob: 'glow_squid', weight: 10, min: 1, max: 3 }],
@@ -638,7 +640,7 @@ export class MobSystem {
     const cb = caves && cat !== 'ambient' && (cat !== 'creature' || underCreature) && (cat !== 'water' || underWater) ? dim.generator.caveBiomeAt!(x, y, z) : 0;
     if (cb === 9) return; // the deep dark: nothing spawns there
     if (cb) {
-      if (cat === 'monster' && CAVE_MONSTERS[cb] && r.chance(0.6)) entry = weighted(CAVE_MONSTERS[cb]!, r);
+      if (cat === 'monster' && CAVE_MONSTERS[cb] && (cb === 10 || r.chance(0.6))) entry = weighted(CAVE_MONSTERS[cb]!, r);
       else if (cat === 'water') entry = CAVE_WATER[cb] ? weighted(CAVE_WATER[cb]!, r) : null;
       else if (cat === 'creature') entry = cb === 4 ? { mob: 'sporeling', weight: 1, min: 1, max: 3 } : null;
     } else if (underCreature || underWater) entry = null;

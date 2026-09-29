@@ -509,6 +509,99 @@ const EFFECTS: Record<string, { dur: number; recipe: Recipe }> = {
       s.tone({ dur: 5.5, gain: 0.3, f0: 49, f1: 44, wave: 'saw', attack: 1.5, decay: 3, lp: 300 });
     },
   },
+  // V3: the hidden endgame
+  'enderman.voidbound': {
+    dur: 2.6,
+    recipe: (s) => {
+      s.noise({ dur: 2.3, gain: 0.55, attack: 1.2, decay: 0.8, bp: [520, 1.5] });
+      s.tone({ start: 0.2, dur: 2.2, gain: 0.35, f0: 55, f1: 220, wave: 'saw', lp: 900, attack: 1.2, decay: 0.8 });
+      s.voice({ start: 0.95, dur: 1.5, gain: 0.8, f0: 190, f1: 85, formants: [620, 1450], rough: 0.7, vibrato: 0.12 });
+      s.crush(5, 3);
+    },
+  },
+  'voidbound.strike': { dur: 0.5, recipe: (s) => (s.knock({ f: 130, gain: 0.9, decay: 0.05 }), s.tone({ dur: 0.35, gain: 0.4, f0: 1500, f1: 180, wave: 'square', decay: 0.1 }), s.crush(4, 4)) },
+  /** Harsh digital static (WORLD INTEGRITY FAILURE, glitch hits). */
+  'glitch.static': {
+    dur: 1.3,
+    recipe: (s) => {
+      s.noise({ dur: 1.25, gain: 0.8, attack: 0.005, decay: 0.5, hp: 400 });
+      for (let i = 0; i < 7; i++) s.tone({ start: s.rng.next() * 1.1, dur: 0.05 + s.rng.next() * 0.08, gain: 0.4, f0: 200 + s.rng.next() * 3000, wave: 'square', decay: 0.03 });
+      s.crush(3, 8);
+    },
+  },
+  /** The warning before one of The Error's big attacks. */
+  'glitch.warn': {
+    dur: 1,
+    recipe: (s) => {
+      for (let i = 0; i < 3; i++) s.tone({ start: i * 0.28, dur: 0.18, gain: 0.45, f0: 740, f1: 700, wave: 'square', lp: 2500, decay: 0.08 });
+      s.crush(5, 2);
+    },
+  },
+  /** A low, uneasy hum around a glitched portal. */
+  'glitch.hum': {
+    dur: 3.2,
+    recipe: (s) => {
+      s.tone({ dur: 3.1, gain: 0.35, f0: 47, f1: 51, wave: 'saw', lp: 260, attack: 0.8, decay: 1.6, vibrato: 0.03, vibratoRate: 2 });
+      for (let i = 0; i < 5; i++) s.knock({ start: 0.3 + s.rng.next() * 2.6, f: 1800 + s.rng.next() * 1800, gain: 0.12, decay: 0.008, noise: 0.6 });
+      s.crush(6, 2);
+    },
+  },
+  'glitch.portal_on': {
+    dur: 3.2,
+    recipe: (s) => {
+      [110, 165, 220, 330].forEach((f, i) => s.tone({ start: i * 0.25, dur: 2.8 - i * 0.25, gain: 0.3, f0: f, f1: f * 1.02, wave: 'saw', lp: 1400, attack: 0.4, decay: 1.4, vibrato: 0.04, vibratoRate: 7 }));
+      s.noise({ dur: 3, gain: 0.35, attack: 1.2, decay: 1.4, bp: [1800, 1] });
+      s.crush(4, 3);
+    },
+  },
+  'farlands.entry': {
+    dur: 3,
+    recipe: (s) => {
+      s.noise({ dur: 2.9, gain: 0.6, attack: 1.6, decay: 1, hp: 300 });
+      s.tone({ dur: 2.8, gain: 0.4, f0: 40, f1: 400, wave: 'square', lp: 1200, attack: 1.4, decay: 1 });
+      s.crush(3, 6);
+    },
+  },
+  // The Error
+  'error.roar': {
+    dur: 2.6,
+    recipe: (s) => {
+      s.voice({ dur: 2.4, gain: 1, f0: 70, f1: 40, formants: [300, 900], rough: 0.9, vibrato: 0.1 });
+      s.noise({ dur: 2.3, gain: 0.5, attack: 0.1, decay: 1.2, lp: 900 });
+      s.crush(3, 6);
+    },
+  },
+  'error.charge': { dur: 1.7, recipe: (s) => (s.tone({ dur: 1.6, gain: 0.55, f0: 70, f1: 900, wave: 'square', lp: 2400, attack: 0.4, decay: 0.2, vibrato: 0.08, vibratoRate: 16 }), s.noise({ dur: 1.5, gain: 0.3, attack: 1, decay: 0.3, bp: [1600, 1] }), s.crush(4, 3)) },
+  'error.laser': {
+    dur: 1.6,
+    recipe: (s) => {
+      s.tone({ dur: 1.5, gain: 0.8, f0: 90, f1: 60, wave: 'saw', lp: 1800, attack: 0.02, decay: 0.6 });
+      s.tone({ dur: 1.5, gain: 0.4, f0: 181, f1: 121, wave: 'square', lp: 2200, attack: 0.02, decay: 0.6 });
+      s.noise({ dur: 1.5, gain: 0.6, attack: 0.01, decay: 0.7, lp: 3000 });
+      s.crush(3, 5);
+    },
+  },
+  'error.teleport': { dur: 0.8, recipe: (s) => (s.tone({ dur: 0.35, gain: 0.5, f0: 200, f1: 2400, wave: 'square', decay: 0.1 }), s.noise({ start: 0.25, dur: 0.5, gain: 0.5, decay: 0.2, hp: 800 }), s.crush(3, 6)) },
+  'error.pulse': { dur: 1.4, recipe: (s) => (s.knock({ f: 55, gain: 1, decay: 0.35 }), s.noise({ dur: 1.3, gain: 0.6, attack: 0.01, decay: 0.8, lp: 600 }), s.tone({ dur: 1.2, gain: 0.4, f0: 120, f1: 30, wave: 'saw', lp: 500, decay: 0.6 }), s.crush(5, 2)) },
+  'error.meteor': { dur: 1.1, recipe: (s) => (s.tone({ dur: 0.7, gain: 0.35, f0: 1800, f1: 300, wave: 'sine', decay: 0.4 }), s.knock({ start: 0.7, f: 70, gain: 1, decay: 0.2 }), s.noise({ start: 0.7, dur: 0.4, gain: 0.6, decay: 0.15, lp: 1500 }), s.crush(4, 3)) },
+  'error.zone': { dur: 1.2, recipe: (s) => (s.noise({ dur: 1.1, gain: 0.4, attack: 0.3, decay: 0.5, bp: [900, 3] }), s.tone({ dur: 1, gain: 0.3, f0: 330, f1: 310, wave: 'square', lp: 1400, attack: 0.2, decay: 0.5 }), s.crush(5, 3)) },
+  'error.phase': {
+    dur: 3,
+    recipe: (s) => {
+      s.voice({ dur: 2.2, gain: 0.9, f0: 60, f1: 120, formants: [350, 1100], rough: 0.9, vibrato: 0.2 });
+      s.noise({ dur: 2.8, gain: 0.5, attack: 0.05, decay: 1.5, hp: 200 });
+      s.crush(3, 8);
+    },
+  },
+  'error.death': {
+    dur: 6,
+    recipe: (s) => {
+      s.voice({ dur: 3, gain: 1, f0: 140, f1: 30, formants: [420, 1200], rough: 1, vibrato: 0.25 });
+      s.noise({ dur: 5.8, gain: 0.7, attack: 0.3, decay: 3, lp: 1800 });
+      for (let i = 0; i < 12; i++) s.tone({ start: 2 + s.rng.next() * 3.5, dur: 0.1, gain: 0.4, f0: 100 + s.rng.next() * 2500, wave: 'square', decay: 0.05 });
+      s.crush(3, 10);
+    },
+  },
   // Cave biome ambience: one-shots scattered around the listener
   'cave.drip': { dur: 0.7, recipe: (s) => (s.tone({ dur: 0.09, gain: 0.5, f0: 1400 + s.rng.next() * 900, f1: 2600, wave: 'sine', decay: 0.03 }), s.bell({ start: 0.08, f: 900 + s.rng.next() * 500, ratios: [1, 2.4], gain: 0.12, decay: 0.25, dur: 0.6 })) },
   'cave.rumble': { dur: 3.5, recipe: (s) => (s.noise({ dur: 3.3, gain: 0.55, attack: 0.8, decay: 2, lp: 160, hp: 20 }), s.knock({ start: 0.4 + s.rng.next(), f: 70, gain: 0.4, decay: 0.2 })) },

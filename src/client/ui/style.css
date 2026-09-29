@@ -1648,3 +1648,156 @@ body {
   cursor: default;
   background: #4a4a4a;
 }
+
+/* ------------------------------------------------------------------ V3: glitch interface */
+.glitch-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 40;
+  overflow: hidden;
+}
+/* The HUD shifting and dimming while the player is glitched (no brightness flashes) */
+.hud-glitch .hud,
+.hud-glitch .hotbar,
+.hud-glitch .boss-bars {
+  transform: translate(calc(var(--s) * 3), calc(var(--s) * -1)) skewX(-6deg);
+  opacity: 0.7;
+  filter: hue-rotate(250deg) saturate(1.6);
+}
+.glitch-frag {
+  position: absolute;
+  font-size: calc(var(--s) * 7);
+  color: #ff5ae0;
+  background: rgba(10, 0, 16, 0.75);
+  padding: 0 calc(var(--s) * 2);
+  text-shadow: calc(var(--s) * -1) 0 0 #3af0ff, var(--s) 0 0 #ff2a6a;
+  white-space: nowrap;
+}
+.glitch-hit-text {
+  position: absolute;
+  font-size: calc(var(--s) * 16);
+  color: #ffffff;
+  letter-spacing: calc(var(--s) * 1);
+  text-shadow: calc(var(--s) * -2) 0 0 #3af0ff, calc(var(--s) * 2) 0 0 #ff2a6a;
+  animation: glitch-jitter 0.18s steps(2) infinite;
+  white-space: nowrap;
+}
+.glitch-hit-text.calm {
+  animation: none;
+}
+.glitch-integrity {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.55) 0 calc(var(--s) * 2), rgba(20, 0, 30, 0.6) calc(var(--s) * 2) calc(var(--s) * 4));
+  transition: opacity 0.4s;
+}
+.glitch-integrity.fade {
+  opacity: 0;
+}
+.glitch-integrity-text {
+  position: relative;
+  font-size: calc(var(--s) * 22);
+  color: #ffffff;
+  letter-spacing: calc(var(--s) * 2);
+  text-shadow: calc(var(--s) * -3) 0 0 #3af0ff, calc(var(--s) * 3) 0 0 #ff2a6a;
+  animation: glitch-jitter 0.22s steps(2) infinite;
+}
+.glitch-integrity.calm .glitch-integrity-text {
+  animation: none;
+}
+@keyframes glitch-jitter {
+  0% {
+    transform: translate(0, 0) skewX(0deg);
+  }
+  50% {
+    transform: translate(calc(var(--s) * -3), calc(var(--s) * 1)) skewX(-8deg);
+  }
+  100% {
+    transform: translate(calc(var(--s) * 2), 0) skewX(4deg);
+  }
+}
+
+/* ------------------------------------------------------------------ V3: ending cards */
+.ending-card {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 1.4s ease;
+  z-index: 50;
+  pointer-events: none;
+}
+.ending-card.in {
+  opacity: 1;
+}
+.ending-card.out {
+  opacity: 0;
+  transition: opacity 1.5s ease;
+}
+.ending-inner {
+  text-align: center;
+  padding: calc(var(--s) * 24);
+}
+.ending-head {
+  font-size: calc(var(--s) * 9);
+  letter-spacing: calc(var(--s) * 4);
+  color: #c8c8c8;
+  margin-bottom: calc(var(--s) * 8);
+}
+.ending-title {
+  position: relative;
+  font-size: calc(var(--s) * 30);
+  line-height: 1.15;
+  text-shadow: calc(var(--s) * 3) calc(var(--s) * 3) 0 #2a2a2a;
+}
+.ending-line {
+  margin-top: calc(var(--s) * 12);
+  font-size: calc(var(--s) * 9);
+  color: #e8e8e8;
+}
+.ending-mark {
+  margin-top: calc(var(--s) * 24);
+  font-size: calc(var(--s) * 7);
+  color: rgba(255, 255, 255, 0.45);
+  letter-spacing: calc(var(--s) * 3);
+}
+.ending-calm {
+  background: radial-gradient(ellipse at center, rgba(10, 6, 20, 0.55) 0%, rgba(0, 0, 0, 0.88) 75%);
+}
+.ending-calm .ending-title {
+  color: #f4e8ff;
+  text-shadow: calc(var(--s) * 3) calc(var(--s) * 3) 0 #2a1a3a, 0 0 calc(var(--s) * 12) rgba(224, 121, 250, 0.45);
+}
+.ending-glitch {
+  background: rgba(2, 0, 6, 0.9);
+}
+.ending-glitch .ending-head {
+  color: #b070e0;
+}
+.ending-glitch .ending-title {
+  color: #ffffff;
+  text-shadow: calc(var(--s) * -3) 0 0 #3af0ff, calc(var(--s) * 3) 0 0 #ff2a6a;
+  animation: glitch-jitter 0.6s steps(2) infinite;
+}
+.ending-glitch.calm .ending-title,
+.ending-error.calm .ending-title {
+  animation: none;
+}
+.ending-error {
+  background: repeating-conic-gradient(rgba(224, 32, 200, 0.14) 0 25%, rgba(0, 0, 0, 0.9) 0 50%) 0 0 / calc(var(--s) * 32) calc(var(--s) * 32), rgba(0, 0, 0, 0.85);
+}
+.ending-error .ending-head {
+  color: #ff5ae0;
+}
+.ending-error .ending-title {
+  color: #ffffff;
+  font-size: calc(var(--s) * 36);
+  text-shadow: calc(var(--s) * -3) 0 0 #ff2a6a, calc(var(--s) * 3) 0 0 #7a2ad0;
+  animation: glitch-jitter 1.2s steps(2) infinite;
+}

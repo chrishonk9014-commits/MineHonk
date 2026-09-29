@@ -48,6 +48,11 @@ export interface Settings {
   chatOpacity: number;
   /** How strongly the Darkness effect pulses (0 = a steady dim, 1 = full pulses). */
   darknessPulse: number;
+  /**
+   * Glitch screen effects (V3): 'full', 'reduced' (gentler, slower, no
+   * screen tearing) or 'off' (no distortion; only brief text and fades).
+   */
+  glitchFx: 'full' | 'reduced' | 'off';
   autoJump: boolean;
   toggleSprint: boolean;
   toggleSneak: boolean;
@@ -102,6 +107,7 @@ export const DEFAULT_SETTINGS: Settings = {
   subtitles: false,
   chatOpacity: 1,
   darknessPulse: 1,
+  glitchFx: 'full',
   autoJump: false,
   toggleSprint: false,
   toggleSneak: false,

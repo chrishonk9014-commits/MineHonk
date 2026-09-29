@@ -99,7 +99,7 @@ export class EndgameSystem {
       p.inventory.set(slot, stack.count > 1 ? { ...stack, count: stack.count - 1 } : null);
       this.server.interaction.syncInventory(p);
     }
-    this.server.playSound(target.dim, 'glass.break', target.x, target.y + 1, target.z, 0.7, 0.6);
+    this.server.playSound(target.dim, 'break.glass', target.x, target.y + 1, target.z, 0.7, 0.6);
     if (target.type === 'enderman') this.transform(target, p, cheat);
     else this.oddReaction(target);
     return true;

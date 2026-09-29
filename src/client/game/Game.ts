@@ -37,6 +37,9 @@ import type { AdminAction } from '../../common/game/admin';
 import type { AdminReply } from '../ui/AdminPanel';
 import { keyName } from '../ui/Screens';
 import { Navigator, type Instrument } from '../ui/Navigator';
+import * as THREE from 'three';
+import { GlitchHud } from '../ui/GlitchHud';
+import { EndingCard } from '../ui/EndingCard';
 
 export interface GameHost {
   openPause(): void;
@@ -85,6 +88,9 @@ export class Game {
   readonly chat = new Chat();
   readonly entities = new Map<number, ClientEntity>();
   readonly root = el('div', { class: 'layer' });
+  /** Glitch effects on the interface and the ending cards (V3). */
+  private readonly glitchHud: GlitchHud;
+  private readonly endingCard: EndingCard;
   private readonly playerList = new PlayerList();
 
   // Server-provided state
@@ -200,6 +206,8 @@ export class Game {
     });
     this.root.append(this.scopeOverlay, this.hud.root, this.chat.root, this.chat.input, this.playerList.root);
     this.hud.root.append(this.navigator.root);
+    this.glitchHud = new GlitchHud(this.root, settings);
+    this.endingCard = new EndingCard(this.root, settings);
     ui.append(this.root);
     this.chat.onSend = (text) => this.send({ t: 'chat', text });
     this.chat.onClose = () => {
@@ -544,6 +552,13 @@ export class Game {
         break;
       case 'trail':
         if (this.settings.particles !== 'minimal' || m.kind === 'sonic_boom') this.renderer.particles.trail(m.kind, m.x0, m.y0, m.z0, m.x1, m.y1, m.z1, m.ticks);
+        break;
+      case 'ending':
+        this.endingCard.show(m);
+        this.audio.play(m.style === 'calm' ? 'challenge.complete' : 'glitch.static', NaN, NaN, NaN, m.style === 'calm' ? 0.7 : 0.35, m.style === 'calm' ? 0.9 : 0.6, 'ui');
+        break;
+      case 'fx':
+        this.onFx(m);
         break;
       case 'teleport':
         this.player.setPos(m.x, m.y, m.z);
@@ -920,6 +935,9 @@ export class Game {
     this.renderer.hand.tick();
     this.renderer.hand.setItem(this.held()?.id ?? 0);
     this.hud.tick();
+    this.renderer.glitch.tick();
+    this.glitchHud.tick(this.renderer.glitch.corrupting);
+    this.voidAura();
     if (this.flash > 0) this.flash = Math.max(0, this.flash - 0.1);
     if (this.hurtTilt > 0) this.hurtTilt = Math.max(0, this.hurtTilt - 0.12);
     if (this.shake > 0) this.shake = Math.max(0, this.shake - 0.05);
@@ -1079,6 +1097,94 @@ export class Game {
     if (this.tickNo % 40 === 0 && Math.random() < 0.35) {
       const snd = ['', 'cave.drip', 'cave.rumble', 'lush.chirp', 'mushroom.pop', 'crystal.chime', 'cave.drip', 'lava.pop', 'frozen.wind', 'deep_dark.hum'][cb];
       if (snd) this.audio.play(snd, b.x + (Math.random() - 0.5) * 20, b.y + (Math.random() - 0.5) * 6, b.z + (Math.random() - 0.5) * 20, 0.6, 0.85 + Math.random() * 0.3, 'ambient');
+    }
+  }
+
+  /**
+   * Screen and world effects from the server (V3): glitches, the End going
+   * silent and corrupting, the integrity failure, warnings and attacks.
+   */
+  private onFx(m: Extract<S2C, { t: 'fx' }>): void {
+    const g = this.renderer.glitch;
+    const wf = this.renderer.worldFx;
+    const now = this.tickNo / 20;
+    const secs = (m.ticks ?? 20) / 20;
+    switch (m.kind) {
+      case 'glitch':
+        g.pulse(m.strength ?? 0.5, m.ticks ?? 20);
+        if ((m.strength ?? 0.5) >= 0.5) this.audio.play('glitch.static', NaN, NaN, NaN, 0.35, 0.8 + Math.random() * 0.4, 'ui');
+        break;
+      case 'silence':
+        this.audio.silence(true, 0.25);
+        break;
+      case 'unsilence':
+        this.audio.silence(false, secs);
+        break;
+      case 'corrupt_world':
+        g.corruptWorld(m.strength ?? 0.7, m.ticks ?? 100);
+        break;
+      case 'integrity':
+        g.pulse(1, m.ticks ?? 40);
+        this.glitchHud.integrity(m.text ?? 'ERROR', m.ticks ?? 40);
+        this.audio.playThrough('glitch.static', 0.8);
+        break;
+      case 'player_glitch':
+        g.playerHit();
+        this.glitchHud.playerHit();
+        this.audio.playThrough('glitch.static', 0.6);
+        break;
+      case 'stabilize':
+        g.stabilize();
+        this.glitchHud.clear();
+        this.audio.silence(false, 1);
+        break;
+      case 'warn_circle':
+        wf.warnCircle(m.id, m.x ?? 0, m.y ?? 0, m.z ?? 0, m.r ?? 2, secs, now);
+        break;
+      case 'warn_end':
+      case 'zone_end':
+        if (m.id !== undefined) wf.remove(m.id);
+        break;
+      case 'warn_beam':
+      case 'laser':
+        wf.beam(m.id, new THREE.Vector3(m.x ?? 0, m.y ?? 0, m.z ?? 0), new THREE.Vector3(m.x1 ?? 0, m.y1 ?? 0, m.z1 ?? 0), secs, now, m.kind === 'warn_beam');
+        if (m.kind === 'laser') g.pulse(0.35, 12);
+        break;
+      case 'zone':
+        wf.zone(m.id, m.x ?? 0, m.y ?? 0, m.z ?? 0, m.r ?? 3, m.ticks === undefined ? Infinity : secs, now);
+        break;
+      case 'pulse':
+        wf.pulse(m.x ?? 0, m.y ?? 0, m.z ?? 0, m.r ?? 20, secs, now);
+        break;
+      case 'afterimage': {
+        const obj = m.id !== undefined ? this.renderer.entities.objectOf(m.id) : null;
+        if (obj) wf.afterimage(obj, secs, now);
+        break;
+      }
+      case 'portal_on':
+        g.pulse(0.6, 30);
+        this.audio.play('glitch.portal_on', m.x ?? NaN, m.y ?? NaN, m.z ?? NaN, 1.5, 1);
+        break;
+      case 'farlands_entry':
+        g.pulse(1, m.ticks ?? 50);
+        this.glitchHud.fragments(10);
+        this.audio.playThrough('farlands.entry', 0.7);
+        break;
+      case 'boss_death':
+        g.pulse(1, m.ticks ?? 80);
+        g.corruptWorld(0.9, m.ticks ?? 80);
+        break;
+    }
+  }
+
+  /** Voidbound Endermen trail dark violet motes (client-side, no network). */
+  private voidAura(): void {
+    if (this.settings.particles === 'minimal' || this.tickNo % 3 !== 0) return;
+    const p = this.player.body;
+    for (const e of this.entities.values()) {
+      if (e.type !== 'enderman' || !e.meta?.voidbound) continue;
+      if ((e.x - p.x) ** 2 + (e.z - p.z) ** 2 > 48 * 48) continue;
+      this.renderer.particles.spawn('void_aura', e.x, e.y + 1.6, e.z, this.settings.particles === 'decreased' ? 1 : 2, 0.5);
     }
   }
 

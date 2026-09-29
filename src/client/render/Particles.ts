@@ -314,6 +314,20 @@ export class Particles {
         case 'snowflake':
           this.add({ x: x + ox, y: y + oy, z: z + oz, vx: (Math.random() - 0.5) * 0.012, vy: -0.012, vz: (Math.random() - 0.5) * 0.012, maxLife: 80 + Math.random() * 40, size: 0.05, r: 0.92, g: 0.96, b: 1, drag: 0.99, collide: true, fade: true });
           break;
+        case 'void_aura':
+          // Voidbound Endermen: dark violet and black motes drifting up
+          this.add({ x: x + ox, y: y + oy, z: z + oz, vx: (Math.random() - 0.5) * 0.01, vy: 0.012 + Math.random() * 0.01, vz: (Math.random() - 0.5) * 0.01, maxLife: 30 + Math.random() * 30, size: 0.07, r: Math.random() < 0.4 ? 0.05 : 0.55, g: 0.05, b: Math.random() < 0.4 ? 0.08 : 0.9, emissive: true, fade: true, drag: 0.98 });
+          break;
+        case 'void_burst': {
+          // A burst of violet shards and square black flecks thrown outwards
+          const a = Math.random() * Math.PI * 2;
+          const u = Math.random() * 2 - 1;
+          const rr = Math.sqrt(1 - u * u);
+          const sp = 0.12 + Math.random() * 0.12;
+          const dark = Math.random() < 0.35;
+          this.add({ x: x + ox * 0.3, y: y + oy * 0.3, z: z + oz * 0.3, vx: rr * Math.cos(a) * sp, vy: u * sp, vz: rr * Math.sin(a) * sp, maxLife: 18 + Math.random() * 16, size: dark ? 0.12 : 0.09, r: dark ? 0.02 : 0.75, g: dark ? 0.0 : 0.2, b: dark ? 0.04 : 1, emissive: !dark, fade: true, drag: 0.9 });
+          break;
+        }
         case 'rain_splash':
           this.add({ x, y, z, vx: ox * 0.05, vy: 0.06, vz: oz * 0.05, maxLife: 6, size: 0.05, r: 0.6, g: 0.7, b: 1, gravity: 0.02 });
           break;

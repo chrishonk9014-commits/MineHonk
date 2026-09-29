@@ -169,7 +169,8 @@ interface MobVisualDef {
   nameY?: number;
   /** Extra per-frame effects. */
   extra?: (m: BoxModel, e: ClientEntity, time: number) => void;
-  glow?: boolean;
+  /** Full-bright (can depend on the entity, e.g. a Voidbound Enderman). */
+  glow?: boolean | ((e: ClientEntity) => boolean);
   transparent?: boolean;
 }
 
@@ -758,25 +759,47 @@ V.spider = {
 };
 V.cave_spider = { ...V.spider!, scale: 0.7 };
 V.enderman = {
-  parts: () => [
-    { name: 'body', pivot: [0, 30, 0], from: [-4, 0, -2], size: [8, 12, 4], colors: { all: '#161616' } },
-    { name: 'head', parent: 'body', pivot: [0, 12, 0], from: [-4, 0, -4], size: [8, 8, 8], colors: { all: '#161616' }, paint: (p) => {
-      p.px('front', 0, 4, '#e080f0', 3, 1);
-      p.px('front', 5, 4, '#e080f0', 3, 1);
-      p.px('front', 1, 4, '#b040d0');
-      p.px('front', 6, 4, '#b040d0');
-    } },
-    { name: 'rightArm', parent: 'body', pivot: [-5, 10, 0], from: [-1, -28, -1], size: [2, 30, 2], colors: { all: '#161616' } },
-    { name: 'leftArm', parent: 'body', pivot: [5, 10, 0], from: [-1, -28, -1], size: [2, 30, 2], colors: { all: '#161616' } },
-    { name: 'rightLeg', pivot: [-2, 30, 0], from: [-1, -30, -1], size: [2, 30, 2], colors: { all: '#161616' } },
-    { name: 'leftLeg', pivot: [2, 30, 0], from: [-1, -30, -1], size: [2, 30, 2], colors: { all: '#161616' } },
-  ],
+  // Voidbound (changed by the mysterious potion): darker, cracked with violet, eyes burning
+  variant: (e) => (e.meta.voidbound ? 'void' : 'plain'),
+  parts: (e) => {
+    const vb = !!e.meta.voidbound;
+    const skin = vb ? '#0e0616' : '#161616';
+    const cracks = (p: FacePainter): void => {
+      if (vb) p.speckle('all', '#4a1a78', 0.07);
+    };
+    return [
+      { name: 'body', pivot: [0, 30, 0], from: [-4, 0, -2], size: [8, 12, 4], colors: { all: skin }, paint: cracks },
+      { name: 'head', parent: 'body', pivot: [0, 12, 0], from: [-4, 0, -4], size: [8, 8, 8], colors: { all: skin }, paint: (p) => {
+        if (vb) {
+          cracks(p);
+          p.px('front', 0, 3, '#ff5ae8', 3, 2);
+          p.px('front', 5, 3, '#ff5ae8', 3, 2);
+          p.px('front', 1, 4, '#ffffff');
+          p.px('front', 6, 4, '#ffffff');
+          p.px('front', 1, 5, '#7a2ad0', 1, 2);
+          p.px('front', 6, 5, '#7a2ad0', 1, 2);
+        } else {
+          p.px('front', 0, 4, '#e080f0', 3, 1);
+          p.px('front', 5, 4, '#e080f0', 3, 1);
+          p.px('front', 1, 4, '#b040d0');
+          p.px('front', 6, 4, '#b040d0');
+        }
+      } },
+      { name: 'rightArm', parent: 'body', pivot: [-5, 10, 0], from: [-1, -28, -1], size: [2, 30, 2], colors: { all: skin }, paint: cracks },
+      { name: 'leftArm', parent: 'body', pivot: [5, 10, 0], from: [-1, -28, -1], size: [2, 30, 2], colors: { all: skin }, paint: cracks },
+      { name: 'rightLeg', pivot: [-2, 30, 0], from: [-1, -30, -1], size: [2, 30, 2], colors: { all: skin }, paint: cracks },
+      { name: 'leftLeg', pivot: [2, 30, 0], from: [-1, -30, -1], size: [2, 30, 2], colors: { all: skin }, paint: cracks },
+    ];
+  },
   anim: (m, e, alpha) => {
     animateHumanoid(m, e, alpha);
     const head = m.part('head');
     if (head) head.position.y = (12 + (e.meta.angry === true ? 2 : 0)) / 16;
-    m.root.position.x = e.meta.angry === true ? (Math.random() - 0.5) * 0.04 : 0;
+    // A Voidbound Enderman never stands quite still
+    const jitter = e.meta.angry === true ? 0.04 : e.meta.voidbound ? 0.025 : 0;
+    m.root.position.x = jitter ? (Math.random() - 0.5) * jitter : 0;
   },
+  glow: (e) => !!e.meta.voidbound,
   nameY: 3.2,
 };
 V.slime = {
@@ -1772,8 +1795,9 @@ function makeVisual(def: MobVisualDef, e: ClientEntity, ctx: VisualContext): Ent
     arm.add(plane);
   }
   const baseSet = visual.setBrightness.bind(visual);
+  const glow = typeof def.glow === 'function' ? def.glow(e) : !!def.glow;
   visual.setBrightness = (v) => {
-    const b = def.glow ? Math.max(v, 0.85) : v;
+    const b = glow ? Math.max(v, 0.85) : v;
     baseSet(b);
     heldMat?.color.setScalar(b);
   };

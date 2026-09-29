@@ -19,6 +19,8 @@ import type { Settings } from '../settings';
 import { selectionShape } from '../../common/physics/shapes';
 import { BeaconBeams } from './BeaconBeams';
 import { SignText } from './SignText';
+import { GlitchFX } from './GlitchFX';
+import { WorldFX } from './WorldFX';
 
 export interface GameAssets {
   blockAtlas: THREE.Texture;
@@ -78,6 +80,11 @@ export class WorldRenderer {
   readonly hand: HandRenderer;
   readonly beams: BeaconBeams;
   readonly signs: SignText;
+  /** Glitch screen effects and world corruption (V3). */
+  readonly glitch: GlitchFX;
+  /** Warning rings, danger zones, lasers, shockwaves and afterimages (V3). */
+  readonly worldFx = new WorldFX();
+  private lastFrameAt = 0;
   private readonly caveColor = new THREE.Color();
   readonly atlas: AtlasLookup;
   private readonly selection: THREE.LineSegments;
@@ -114,7 +121,8 @@ export class WorldRenderer {
     this.hand = new HandRenderer(assets.icons, (n) => this.blockTexture(n));
     this.beams = new BeaconBeams(world);
     this.signs = new SignText(world);
-    this.scene.add(this.sky.group, this.sky.cloudGroup, this.chunks.group, this.entities.group, this.particles.mesh, this.weather.mesh, this.beams.group, this.signs.group);
+    this.glitch = new GlitchFX(settings);
+    this.scene.add(this.sky.group, this.sky.cloudGroup, this.chunks.group, this.entities.group, this.particles.mesh, this.weather.mesh, this.beams.group, this.signs.group, this.glitch.group, this.worldFx.group);
 
     const selMat = new THREE.LineBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.45 });
     this.selection = new THREE.LineSegments(new THREE.BufferGeometry(), selMat);
@@ -293,6 +301,7 @@ export class WorldRenderer {
       cam.position.x += (Math.random() - 0.5) * f.shake * 0.2;
       cam.position.y += (Math.random() - 0.5) * f.shake * 0.2;
     }
+    this.glitch.jolt(cam);
     // Nausea: a slow roll and breathing field of view
     const nausea = f.nausea ?? 0;
     if (nausea > 0) cam.rotation.z += Math.sin(f.time * 0.12) * 0.12 * nausea;
@@ -356,12 +365,19 @@ export class WorldRenderer {
     this.renderer.setClearColor(fog);
 
     this.chunks.update(cam, f.time);
+    const now = performance.now();
+    const dt = this.lastFrameAt ? Math.min(0.1, (now - this.lastFrameAt) / 1000) : 0.016;
+    this.lastFrameAt = now;
+    this.glitch.updateWorld(this.chunks.group, this.sky.group, cam, dt);
+    this.worldFx.update(f.time / 20);
     this.beams.update(cam.position.x, cam.position.z, f.time);
     this.signs.update(cam.position.x, cam.position.y, cam.position.z, (x, y, z) => this.lightAt(x, y, z));
     this.updateSelection(f.target);
     this.updateCracks(f.crack);
     this.particles.update((x, y, z) => this.lightAt(x, y, z));
 
+    // While glitching, the frame renders into the effect target and is composited at the end
+    const fx = this.glitch.begin(this.renderer);
     this.renderer.clear();
     if (!this.warmed) this.warmUp(cam);
     this.renderer.render(this.scene, cam);
@@ -391,9 +407,13 @@ export class WorldRenderer {
       this.renderer.clearDepth();
       this.renderer.render(this.overlayScene, this.overlayCam);
     }
+    if (fx) this.glitch.end(this.renderer);
+    this.glitch.afterRender();
   }
 
   dispose(): void {
+    this.glitch.dispose();
+    this.worldFx.clear();
     this.chunks.dispose();
     this.beams.dispose();
     this.signs.dispose();

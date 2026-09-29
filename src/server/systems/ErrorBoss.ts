@@ -478,14 +478,15 @@ export class ErrorBossSystem {
       case 'pulse': {
         anim('charge');
         s.playSound(f.dim, 'error.charge', m.x, m.y + 4, m.z, 4, 0.6);
-        this.fx(f, { kind: 'warn_circle', id: this.nextFx++, x: m.x, y: Math.floor(m.y), z: m.z, r: 4, ticks: tele });
+        // The whole floor the shockwave will sweep lights up: jump when it reaches you
+        this.fx(f, { kind: 'warn_circle', id: this.nextFx++, x: m.x, y: Math.floor(m.y), z: m.z, r: f.arena.r - 2, ticks: tele });
         f.hazards.push({ kind: 'pulse', id: this.nextFx++, at: now + tele, until: now + tele + 30, x: m.x, y: Math.floor(m.y), z: m.z, r: f.arena.r - 2, dmg: 6 + f.phase, hit: new Set() });
         break;
       }
       case 'clones': {
         anim('cast');
         for (let i = 0; i < 2; i++) {
-          const spot = this.arenaSpot(f, 8, f.arena.r - 6);
+          const spot = this.arenaSpot(f, 8, f.arena.r - 9);
           const c = s.mobs?.spawn(f.dim, 'the_error', spot.x, spot.y, spot.z, { reason: 'boss', data: { clone: true } });
           if (!c) continue;
           c.noAi = true;
@@ -558,10 +559,11 @@ export class ErrorBossSystem {
     s.playSound(f.dim, 'error.teleport', m.x, m.y + 8, m.z, 4, 1);
     s.particles(f.dim, 'glitch', m.x, m.y + 8, m.z, 60, 3);
     // Somewhere on the arena away from the players
-    let best = this.arenaSpot(f, 6, f.arena.r - 6);
+    // (clear of the broken pillars around the edge)
+    let best = this.arenaSpot(f, 6, f.arena.r - 9);
     let bd = -1;
     for (let i = 0; i < 6; i++) {
-      const c = this.arenaSpot(f, 6, f.arena.r - 6);
+      const c = this.arenaSpot(f, 6, f.arena.r - 9);
       let d = Infinity;
       for (const p of players) d = Math.min(d, Math.hypot(p.x - c.x, p.z - c.z));
       if (d > bd) {

@@ -1,6 +1,6 @@
 import { GENERATOR_VERSION } from '../../src/server/world/LevelData';
 import { describe, it, expect } from 'vitest';
-import { makeServer, join } from '../helpers/testServer';
+import { makeServer, join, tick } from '../helpers/testServer';
 import { MemoryStorage } from '../../src/server/storage/Storage';
 import { GameServer } from '../../src/server/GameServer';
 
@@ -98,7 +98,7 @@ describe('persistence hardening', () => {
     server.endings!.state.farlandsAccess = true;
     server.endings!.reach(player, 'dragon');
     const m = server.mobs!.spawn(player.dim, 'the_error', player.x + 10, player.y, player.z, { reason: 'boss' })!;
-    for (let i = 0; i < 25; i++) server.tick();
+    tick(server, 25);
     const f = server.errorBoss!.fight!;
     expect(f.boss).toBe(m);
     m.health = 250;
@@ -117,7 +117,7 @@ describe('persistence hardening', () => {
     expect(p2.endings.has('dragon')).toBe(true);
     // Saved at 90; joining runs a few ticks, which thaw it a little
     expect(p2.freezeTicks).toBeGreaterThan(50);
-    for (let i = 0; i < 25; i++) s2.tick();
+    tick(s2, 25);
     const f2 = s2.errorBoss!.fight!;
     expect(f2.boss?.type).toBe('the_error');
     expect(f2.boss!.health).toBe(250);

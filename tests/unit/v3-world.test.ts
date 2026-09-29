@@ -62,6 +62,20 @@ describe('V3 generation', () => {
     expect(Math.hypot(loc.x - p.x, loc.z - p.z)).toBeLessThan(6);
   }, 60000);
 
+  it('keeps water and lava out of corrupted caves (decoration lakes and springs included)', async () => {
+    const { STATE_FLUID } = await import('../../src/common/registry/blocks');
+    const { CorruptedCaves } = await import('../../src/common/gen/caves/corrupted');
+    const g = new OverworldGenerator(seedFromString('corrupt-1'));
+    const z = g.terrain.corrupted!.nearest(0, 0)!;
+    let n = 0;
+    for (let cz = (z.z >> 4) - 3; cz <= (z.z >> 4) + 3; cz++)
+      for (let cx = (z.x >> 4) - 3; cx <= (z.x >> 4) + 3; cx++) {
+        const c = g.generate(cx, cz);
+        for (let y = 1; y < 90; y++) for (let lz = 0; lz < 16; lz++) for (let lx = 0; lx < 16; lx++) if (STATE_FLUID[c.get(lx, y, lz)] && CorruptedCaves.dist(z, cx * 16 + lx, y, cz * 16 + lz) < 1.3) n++;
+      }
+    expect(n).toBe(0);
+  }, 60000);
+
   it('frozen caves trade lava for powder snow in new worlds only', () => {
     const seed = seedFromString('v2-regression');
     const v3 = new OverworldGenerator(seed);

@@ -414,7 +414,8 @@ export class Survival {
     updateEnvironment(p.dim, b, p.eyeHeight);
     // Air / drowning (buried in powder snow there is no air either)
     if (b.headInPowder) {
-      p.air -= 2;
+      // Air runs out twice as fast as underwater; once gone it hurts like drowning
+      p.air -= p.air > 0 ? 2 : 1;
       if (p.air <= -20) {
         p.air = 0;
         this.damage(p, 2, { source: 'suffocate' });

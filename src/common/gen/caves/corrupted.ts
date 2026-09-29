@@ -580,6 +580,23 @@ export class CorruptedCaves {
     const bz = cz << 4;
     const zone = this.zoneAt(bx + 8, bz + 8);
     if (!zone || !this.touches(zone, bx, bz)) return;
+    // Lava lakes and springs from the decoration stages don't belong here:
+    // pools in the cavern become void-black, anything in the walls is sealed
+    const t = states();
+    const yLo = Math.max(5, Math.floor(zone.y - (zone.rv * Math.sqrt(BAND)) / 1.4) - 1);
+    const yHi = Math.min(250, Math.ceil(zone.y + zone.rv * Math.sqrt(BAND)) + 1);
+    for (let lz = 0; lz < 16; lz++)
+      for (let lx = 0; lx < 16; lx++) {
+        const hx = (bx + lx - zone.x) / zone.rh;
+        const hz = (bz + lz - zone.z) / zone.rh;
+        if (hx * hx + hz * hz > BAND) continue;
+        for (let y = yLo; y <= yHi; y++) {
+          if (!STATE_FLUID[v.target.get(lx, y, lz)]) continue;
+          const d = CorruptedCaves.dist(zone, bx + lx, y, bz + lz);
+          if (d < 1.05) v.target.setRaw(lx, y, lz, t.nul);
+          else if (d < BAND) v.target.setRaw(lx, y, lz, t.corrupted);
+        }
+      }
     if (zone.portal) stampPortal(zone, (x, y, z, s) => v.set(x, y, z, s));
     for (const c of zone.chests) {
       if (!v.inside(c.x, c.z)) continue;

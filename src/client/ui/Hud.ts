@@ -235,7 +235,7 @@ export class Hud {
     this.toastQueue.push({ t1, t2 });
   }
 
-  setBoss(id: number, action: 'add' | 'update' | 'remove', title?: string, progress?: number): void {
+  setBoss(id: number, action: 'add' | 'update' | 'remove', title?: string, progress?: number, color?: string): void {
     let b = this.bossBars.get(id);
     if (action === 'remove') {
       b?.remove();
@@ -243,7 +243,7 @@ export class Hud {
       return;
     }
     if (!b) {
-      b = el('div', { class: 'boss-bar' }, el('div', { class: 'shadow', style: { textAlign: 'center' } }), el('div', { class: 'bar' }, el('div')));
+      b = el('div', { class: color === 'glitch' ? 'boss-bar boss-glitch' : 'boss-bar' }, el('div', { class: 'shadow', style: { textAlign: 'center' } }), el('div', { class: 'bar' }, el('div')));
       this.bossBars.set(id, b);
       this.bosses.append(b);
     }

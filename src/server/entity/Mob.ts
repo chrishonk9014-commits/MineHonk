@@ -436,6 +436,11 @@ export class Mob extends LivingEntity {
     if (this.def.fireImmune && (src === 'fire' || src === 'lava' || src === 'in_fire' || src === 'magma')) return 0;
     // Emerging or burrowing Wardens (and other scripted moments) can't be hurt
     if (this.data.untouchable && src !== 'void' && src !== 'kill') return 0;
+    // The Error shrugs off most of a hit unless its core is exposed
+    if (this.type === 'the_error') {
+      amount = this.dim.server.errorBoss?.scaleDamage(this, amount, info) ?? amount;
+      if (amount <= 0) return 0;
+    }
     if (this.invulnerableTicks > 10 && src !== 'void' && src !== 'kill') {
       const last = (this.data.lastHurtAmount as number) ?? 0;
       if (amount <= last) return 0;

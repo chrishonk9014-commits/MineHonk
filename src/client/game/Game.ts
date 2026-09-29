@@ -598,7 +598,7 @@ export class Game {
         this.host.setLoading(m.dimension === 'nether' ? 'Entering the Nether...' : m.dimension === 'end' ? 'Entering the End...' : m.dimension === 'farlands' ? 'Entering the Farlands...' : 'Returning...');
         break;
       case 'boss':
-        this.hud.setBoss(m.id, m.action, m.title, m.progress);
+        this.hud.setBoss(m.id, m.action, m.title, m.progress, m.color);
         break;
       case 'death':
         this.player.dead = true;

@@ -45,6 +45,7 @@ export type Brain =
   | 'void_wisp'
   | 'glitch_beast'
   | 'dragon'
+  | 'the_error'
   | 'turtle'
   | 'parrot'
   | 'ocelot'
@@ -183,6 +184,8 @@ mob({ id: 'sporeling', name: 'Sporeling', category: 'creature', width: 0.6, heig
 mob({ id: 'warden', name: 'Warden', category: 'monster', width: 0.9, height: 2.9, eye: 2.6, health: 500, speed: 0.13, damage: 30, knockbackRes: 1, followRange: 48, brain: 'warden', model: 'warden', egg: [0x0f4649, 0x39d6e0], idleInterval: 160, xp: 5 });
 /** The Farlands' corrupted guardian. */
 mob({ id: 'glitch_beast', name: 'Glitch Beast', category: 'boss', width: 2.2, height: 3.4, health: 400, speed: 0.12, damage: 14, armor: 12, knockbackRes: 1, followRange: 64, brain: 'glitch_beast', model: 'glitch_beast', egg: [0x0b0b12, 0x00ffd0], farlands: true, fireImmune: true });
+// V3: the Farlands boss, a giant glitched figure driven by its own controller (ErrorBoss.ts)
+mob({ id: 'the_error', name: 'The Error', category: 'boss', width: 3.4, height: 18, health: 600, speed: 0, damage: 12, armor: 8, knockbackRes: 1, followRange: 96, brain: 'the_error', model: 'the_error', egg: [0x07030c, 0xff2bd6], fireImmune: true, farlands: true });
 mob({ id: 'ender_dragon', name: 'Ender Dragon', category: 'boss', width: 16, height: 8, health: 200, speed: 0.3, damage: 10, knockbackRes: 1, followRange: 150, brain: 'dragon', model: 'ender_dragon', egg: [0x1c1c1c, 0xe079fa], fireImmune: true, flying: true });
 
 export const MOB_DEFS: readonly MobDef[] = M;

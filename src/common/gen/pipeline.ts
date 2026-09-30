@@ -15,13 +15,15 @@ export interface GeneratorOptions {
    * World generator version. Unmodified chunks are regenerated from the seed
    * on every load, so a world keeps the version it was created with:
    * 1 = V1 terrain, 2 = V2 (the Caves Update), 3 = V3 (corrupted caves,
-   * glitched portals, powder snow ice caves). Defaults to the latest.
+   * glitched portals, powder snow ice caves), 4 = V4 (the World Update),
+   * 5 = V4 temples and bunkers (temple trials, the desert pyramid, bunkers
+   * with random layouts and biome styles). Defaults to the latest.
    */
   version?: number;
 }
 
 /** Newest world generator version (new worlds use this). */
-export const LATEST_GENERATOR = 4;
+export const LATEST_GENERATOR = 5;
 
 export interface SpawnPoint {
   x: number;

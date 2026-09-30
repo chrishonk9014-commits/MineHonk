@@ -11,7 +11,7 @@ import type { ItemStack } from '../../common/game/itemstack';
 import { POTIONS } from '../../common/data/potions';
 import { ENCHANTMENTS } from '../../common/data/enchantments';
 import { MOB_DEFS } from '../../common/data/mobs';
-import { structureName, TIME_PRESETS, ADMIN_DIMENSIONS, type AdminAction, type AdminCatalog, type LocateResult } from '../../common/game/admin';
+import { structureName, TIME_PRESETS, ADMIN_DIMENSIONS, type AdminAction, type AdminCatalog, type LocateResult, type V4Op } from '../../common/game/admin';
 import type { DimensionId } from '../../common/data/biomes';
 import { ENDINGS } from '../../common/data/endings';
 
@@ -577,15 +577,21 @@ export function adminScreen(host: AdminHost): Screen {
     const state = el('div', { class: 'admin-stats' });
     const showState = (d: unknown): void => {
       if (!d || typeof d !== 'object') return;
-      const st = d as { inErrorBiome: boolean; glitch: { stage: number; done: boolean; fighting: number | null; mobs: number } | null; bunker: { stage: number; done: boolean } | null };
+      const st = d as {
+        inErrorBiome: boolean;
+        glitch: { stage: number; done: boolean; fighting: number | null; mobs: number } | null;
+        bunker: { stage: number; done: boolean; stages: number } | null;
+        temple: { name: string; stage: number; done: boolean; stages: number; run: string | null } | null;
+      };
       clear(state);
       const rows: [string, string][] = [
         ['Glitched Structure', st.glitch ? (st.glitch.done ? 'complete' : st.glitch.fighting ? `stage ${st.glitch.fighting} in progress, ${st.glitch.mobs} left` : `${st.glitch.stage} of 5 stages cleared`) : 'not in an Error Biome chunk'],
-        ['Bunker', st.bunker ? (st.bunker.done ? 'secured' : `objective ${st.bunker.stage} of 4`) : 'not in a bunker'],
+        ['Bunker', st.bunker ? (st.bunker.done ? 'secured' : `objective ${st.bunker.stage} of ${st.bunker.stages}`) : 'not in a bunker'],
+        ['Temple', st.temple ? `${st.temple.name}: ${st.temple.done ? 'complete' : st.temple.run ? `${st.temple.run} in progress` : `${st.temple.stage} of ${st.temple.stages - 1} trials done`}` : 'not in a temple'],
       ];
       for (const [k, v] of rows) state.append(el('div', { class: 'row' }, el('span', { class: 'muted' }, k), el('span', {}, v)));
     };
-    const op = (o: 'status' | 'glitch_start' | 'glitch_clear' | 'glitch_reset' | 'glitch_reward' | 'fluid_rig' | 'bunker_reset'): void => void send({ a: 'v4', op: o }).then((r) => showState(r.data));
+    const op = (o: V4Op): void => void send({ a: 'v4', op: o }).then((r) => showState(r.data));
     const find = (dim: DimensionId, structure: string, label: string): HTMLElement =>
       el('div', { class: 'row' }, el('span', { class: 'label' }, label), btn('Find', () => void send({ a: 'locate_structure', dim, structure }), 'btn chip'), btn('Teleport', () => void send({ a: 'tp_structure', dim, structure }), 'btn chip'));
     const spawn = (mob: string, label: string): HTMLElement => btn(label, () => void send({ a: 'spawn', mob, count: 1 }), 'btn chip');
@@ -603,6 +609,13 @@ export function adminScreen(host: AdminHost): Screen {
           find('overworld', 'sun_monument', 'Sun Monument'),
           find('overworld', 'jungle_shrine', 'Jungle Shrine'),
           find('overworld', 'bunker', 'Bunker'),
+          find('overworld', 'jungle_temple', 'Jungle Temple'),
+          find('overworld', 'desert_pyramid', 'Desert Pyramid'),
+          find('overworld', 'frost_temple', 'Frost Temple'),
+          find('overworld', 'swamp_temple', 'Swamp Temple'),
+          find('overworld', 'badlands_temple', 'Canyon Temple'),
+          find('overworld', 'forest_temple', 'Grove Temple'),
+          find('overworld', 'mountain_temple', 'Mountain Temple'),
           find('overworld', 'stone_circle', 'Stone Circle'),
           find('overworld', 'desert_oasis', 'Desert Oasis'),
           find('overworld', 'lighthouse', 'Lighthouse'),
@@ -620,6 +633,11 @@ export function adminScreen(host: AdminHost): Screen {
         section('Glitched Structure', el('div', { class: 'muted small' }, 'Stand in the Error Biome chunk. Stages started or cleared here are cheats.'), el('div', { class: 'admin-chips' }, btn('Start next stage', () => op('glitch_start'), 'btn chip'), btn('Clear stage', () => op('glitch_clear'), 'btn chip'), btn('Reset structure', () => op('glitch_reset'), 'btn chip'))),
         section('Give', el('div', { class: 'admin-chips' }, btn('Glitched reward roll', () => op('glitch_reward'), 'btn chip'), give('glitched_pickaxe', 'Glitched Pickaxe'), give('glitched_chestplate', 'Glitched Chestplate'), give('bunker_keycard', 'Bunker Keycard'))),
         section('Bunker', btn('Reset this bunker', () => op('bunker_reset'), 'btn chip')),
+        section(
+          'Temple',
+          el('div', { class: 'muted small' }, 'Stand inside a temple (Version 4.5 worlds). Trials completed here are cheats; so is a prize won after them.'),
+          el('div', { class: 'admin-chips' }, btn('Complete current trial', () => op('temple_advance'), 'btn chip'), btn('Reset temple', () => op('temple_reset'), 'btn chip'), give('temple_relic', 'Temple Relic')),
+        ),
         section('Fluids', el('div', { class: 'muted small' }, 'Builds a glass tank beside you where water meets lava sources and flowing lava.'), btn('Build fluid test rig', () => op('fluid_rig'), 'btn chip')),
       ),
     );

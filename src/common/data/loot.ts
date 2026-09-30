@@ -191,6 +191,76 @@ export const LOOT_TABLES: Record<string, LootTable> = {
       { rolls: [4, 7], entries: [e('iron_ingot', 14, [3, 8]), e('gold_ingot', 10, [2, 6]), e('redstone_block', 6, [1, 3]), e('emerald', 8, [2, 5]), e('experience_bottle', 10, [4, 10]), e('golden_apple', 6, [1, 2]), e('totem_of_undying', 1), book(8), e('tnt', 4, [2, 4])] },
     ],
   },
+  // Generator 5 bunkers: the keycard waits in the guard post's chest up top, not inside
+  'chest/bunker_cache': {
+    pools: [
+      { rolls: 1, entries: [e('bunker_keycard', 1)] },
+      { rolls: [2, 4], entries: [e('bread', 12, [1, 3]), e('torch', 12, [4, 10]), e('arrow', 8, [4, 10]), e('iron_ingot', 6, [1, 3]), e('compass', 3), e('cooked_beef', 8, [1, 3]), e('leather_helmet', 3)] },
+    ],
+  },
+  'chest/bunker_locker': { pools: [{ rolls: [2, 5], entries: [e('bread', 12, [1, 3]), e('iron_ingot', 10, [1, 3]), e('arrow', 10, [4, 10]), e('leather_helmet', 4), e('iron_boots', 3), e('torch', 10, [3, 8]), e('redstone', 8, [2, 6]), e('paper', 8, [1, 4])] }] },
+  'chest/bunker_storage': { pools: [{ rolls: [3, 6], entries: [e('bread', 14, [2, 5]), e('potato', 10, [2, 6]), e('coal', 12, [3, 8]), e('iron_ingot', 10, [2, 5]), e('redstone', 10, [3, 8]), e('bucket', 4), e('tnt', 3, [1, 2]), e('glass_bottle', 6, [1, 3])] }] },
+  'chest/bunker_armory': {
+    pools: [
+      { rolls: 1, entries: [e('iron_sword', 6), e('crossbow', 5), e('shield', 5), ench('iron_chestplate', 2, [10, 25]), e('bow', 5)] },
+      { rolls: [2, 4], entries: [e('arrow', 16, [6, 16]), e('iron_helmet', 5), e('iron_leggings', 4), e('iron_boots', 5), e('gunpowder', 8, [2, 5]), e('iron_ingot', 10, [2, 5])] },
+    ],
+  },
+  'chest/bunker_lab': { pools: [{ rolls: [3, 5], entries: [e('glass_bottle', 14, [2, 5]), e('redstone', 12, [3, 8]), e('glowstone_dust', 10, [2, 6]), e('nether_wart', 6, [1, 3]), e('fermented_spider_eye', 6, [1, 2]), e('sugar', 8, [2, 5]), e('experience_bottle', 6, [2, 5]), e('ender_pearl', 3)] }] },
+  // Temple trials: a supply chest by the entrance, the relic's hiding place, and each temple's prize
+  'chest/temple_supplies': {
+    pools: [
+      { rolls: 1, entries: [e('flint_and_steel', 1)] },
+      { rolls: [2, 4], entries: [e('torch', 14, [4, 12]), e('bread', 12, [1, 4]), e('arrow', 10, [4, 12]), e('cooked_beef', 8, [1, 3]), e('golden_carrot', 4, [1, 3])] },
+    ],
+  },
+  'chest/temple_relic': {
+    pools: [
+      { rolls: 1, entries: [e('temple_relic', 1)] },
+      { rolls: [1, 3], entries: [e('gold_nugget', 14, [3, 9]), e('emerald', 6, [1, 2]), e('bone', 10, [1, 4])] },
+    ],
+  },
+  'chest/pyramid': {
+    pools: [
+      { rolls: [3, 6], entries: [e('gold_ingot', 16, [2, 6]), e('emerald', 10, [1, 4]), e('bone', 14, [2, 6]), e('sunstone_shard', 8, [1, 3]), e('golden_apple', 5), e('diamond', 3, [1, 2]), book(6), e('ancient_urn', 4)] },
+    ],
+  },
+  'quest/temple_jungle_temple': {
+    pools: [
+      { rolls: 1, entries: [ench('diamond_sword', 3, [25, 39]), ench('diamond_axe', 2, [25, 39]), ench('bow', 3, [25, 39]), e('totem_of_undying', 2)] },
+      { rolls: [3, 5], entries: [e('emerald', 12, [4, 10]), e('diamond', 8, [2, 4]), e('gold_block', 6, [1, 2]), e('golden_apple', 8, [1, 3]), e('enchanted_golden_apple', 1), e('experience_bottle', 10, [6, 12]), e('jungle_orchid', 6, [2, 4]), book(8)] },
+    ],
+  },
+  'quest/temple_frost_temple': {
+    pools: [
+      { rolls: 1, entries: [ench('diamond_chestplate', 3, [25, 39]), ench('diamond_boots', 3, [25, 39]), ench('bow', 2, [25, 39]), e('totem_of_undying', 2)] },
+      { rolls: [3, 5], entries: [e('diamond', 8, [2, 5]), e('blue_ice', 8, [4, 12]), e('emerald', 10, [3, 8]), e('golden_apple', 8, [1, 3]), e('enchanted_golden_apple', 1), e('experience_bottle', 10, [6, 12]), e('snowberries', 6, [4, 10]), book(8)] },
+    ],
+  },
+  'quest/temple_swamp_temple': {
+    pools: [
+      { rolls: 1, entries: [ench('diamond_helmet', 3, [25, 39]), ench('trident', 1, [20, 35]), ench('diamond_sword', 3, [25, 39]), e('totem_of_undying', 2)] },
+      { rolls: [3, 5], entries: [e('emerald', 12, [4, 10]), e('diamond', 8, [2, 4]), e('slime_ball', 8, [4, 10]), e('golden_apple', 8, [1, 3]), e('enchanted_golden_apple', 1), e('experience_bottle', 12, [6, 14]), e('marsh_glowcap', 6, [2, 6]), book(8)] },
+    ],
+  },
+  'quest/temple_badlands_temple': {
+    pools: [
+      { rolls: 1, entries: [ench('diamond_pickaxe', 3, [25, 39]), ench('diamond_leggings', 3, [25, 39]), ench('crossbow', 2, [20, 35]), e('totem_of_undying', 2)] },
+      { rolls: [3, 5], entries: [e('gold_block', 8, [1, 3]), e('diamond', 8, [2, 4]), e('emerald', 10, [3, 8]), e('golden_apple', 8, [1, 3]), e('enchanted_golden_apple', 1), e('experience_bottle', 10, [6, 12]), e('raw_gold', 8, [4, 10]), book(8)] },
+    ],
+  },
+  'quest/temple_mountain_temple': {
+    pools: [
+      { rolls: 1, entries: [ench('diamond_pickaxe', 3, [25, 39]), ench('diamond_chestplate', 3, [25, 39]), e('netherite_scrap', 2, [1, 2]), e('totem_of_undying', 2)] },
+      { rolls: [3, 5], entries: [e('diamond', 10, [2, 5]), e('iron_block', 8, [1, 3]), e('emerald', 10, [3, 8]), e('golden_apple', 8, [1, 3]), e('enchanted_golden_apple', 1), e('experience_bottle', 10, [6, 12]), e('amethyst_shard', 8, [4, 10]), book(8)] },
+    ],
+  },
+  'quest/temple_desert_pyramid': {
+    pools: [
+      { rolls: 1, entries: [ench('golden_sword', 2, [30, 39]), ench('diamond_sword', 3, [30, 39]), ench('diamond_helmet', 3, [30, 39]), e('totem_of_undying', 3), e('netherite_scrap', 1, [1, 2])] },
+      { rolls: [4, 6], entries: [e('gold_block', 10, [1, 4]), e('diamond', 8, [2, 5]), e('emerald', 10, [4, 10]), e('sunstone_shard', 8, [3, 6]), e('golden_apple', 8, [1, 3]), e('enchanted_golden_apple', 2), e('experience_bottle', 10, [8, 16]), book(10)] },
+    ],
+  },
   'chest/bonus': {
     pools: [
       { rolls: 1, entries: [e('stick', 1, [1, 12])] },

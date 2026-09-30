@@ -49,6 +49,11 @@ export function wrapClick(host: ScreenHost, f: () => void): () => void {
 const SPLASHES = [
   'Now with more honk!',
   'The World Update!',
+  'Version 4.5: temples of trials!',
+  'Last one standing wins!',
+  'The keycard is outside!',
+  'Bedrock-sealed bunkers!',
+  'Bow before the pyramid!',
   'The ERROR Update!',
   'What is that chunk?',
   'Now with bunkers!',
@@ -79,7 +84,7 @@ export function titleScreen(host: ScreenHost, actions: { singleplayer: () => voi
     button('Multiplayer', wrapClick(host, actions.multiplayer)),
     el('div', { class: 'row' }, button('Options...', wrapClick(host, actions.options), 'btn half'), button(`Profile: ${profile.name}`, wrapClick(host, actions.profile), 'btn half')),
   );
-  const footer = el('div', { class: 'footer' }, el('span', {}, 'MineHonk V4 - The World Update!'), el('span', {}, 'Original game — all art & sound generated'));
+  const footer = el('div', { class: 'footer' }, el('span', {}, 'MineHonk V4.5 - Temples & Bunkers'), el('span', {}, 'Original game — all art & sound generated'));
   return { root: el('div', { class: 'screen dirt title-screen' }, logo, body, footer), escapable: false };
 }
 

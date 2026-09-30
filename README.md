@@ -122,6 +122,44 @@ dimension), and they keep their fluid rules too.
   resets bunkers and builds a fluid test rig. As always, nothing done there
   counts towards advancements.
 
+### Version 4.5 - Temples & Bunkers
+
+Worlds created in Version 4.5 generate with generator version 5. **Worlds
+created before it, V4 worlds included, keep generating exactly as they did**
+(hash tests guard them), including their V4 bunkers and jungle temples.
+
+- **Temples of trials**: the jungle temple is rebuilt, and there are new
+  temples for snowy lands (Frost Temple), swamps (Swamp Temple), badlands and
+  savannas (Canyon Temple), forests and taigas (Grove Temple) and mountains
+  (Mountain Temple), plus the **Desert Pyramid** (the old desert temple
+  stays as it was). Each has three trials, one per chamber, in order:
+  awaken the altars, bring the Temple Relic to its altar, light the braziers
+  (flint and steel waits in the chest by the door), set the levers to match
+  the glyphs, or defeat waves of the temple's guardians. Each trial breaks
+  the seal into the next chamber; the third opens the way to the arena on
+  the roof (the pyramid's summit).
+- **The Champion's Trial**: whoever stands in the arena when it begins takes
+  part. Alone, you fight the temple's champion. With others it is a **duel**:
+  PvP is on between the contestants (whatever the world's PvP setting), a
+  contestant who would die is knocked out instead (sent back down with a
+  little health, keeping their items), and so is anyone who leaves the
+  arena. The last one standing takes the temple's prize: enchanted diamond
+  gear, totems and treasure, different for each temple.
+- **Bunkers**: the keycard is no longer inside. It waits in a chest at a
+  guard post on the surface near the hatch, and the quest tracker says
+  roughly where. The whole bunker sits in a **bedrock shell**, and the entry
+  hall and vault are walled in bedrock, so there is no digging in or around
+  the doors. Every bunker has a **random layout**: a maze of rooms
+  (barracks, storage, armory, lab, mess hall, comms) on a 4 x 4 grid, two or
+  three generators, a keycard gate and a blast door. Bunkers now appear in
+  almost every land biome and dress for it: desert, badlands, snow, taiga,
+  jungle, swamp, mountain and temperate styles, from the guard post and the
+  camouflage up top to the floors, spawners and mobs inside.
+- **Admin Panel**: the World Update tab finds every temple, completes or
+  resets the current temple's trials and gives Temple Relics. As always,
+  none of it counts towards advancements, and a prize won after a cheated
+  trial is cheat-marked.
+
 ### Recipe Book
 
 The book button in the top corner of the inventory and of every workstation

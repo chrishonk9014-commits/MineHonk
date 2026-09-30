@@ -58,12 +58,19 @@ export const STRUCTURE_NAMES: Record<string, string> = {
   mountain_lookout: 'Mountain Lookout',
   prospector_camp: 'Prospector Camp',
   bunker: 'Bunker',
+  // Version 4.5: temples of trials
+  frost_temple: 'Frost Temple',
+  swamp_temple: 'Swamp Temple',
+  badlands_temple: 'Canyon Temple',
+  forest_temple: 'Grove Temple',
+  mountain_temple: 'Mountain Temple',
+  desert_pyramid: 'Desert Pyramid',
   error_biome: 'Error Biome',
   glitched_structure: 'Glitched Structure',
 };
 
 /** V4 Admin Panel operations (all cheats: never advancements, rewards cheat-marked). */
-export const V4_OPS = ['status', 'glitch_start', 'glitch_clear', 'glitch_reset', 'glitch_reward', 'fluid_rig', 'bunker_reset'] as const;
+export const V4_OPS = ['status', 'glitch_start', 'glitch_clear', 'glitch_reset', 'glitch_reward', 'fluid_rig', 'bunker_reset', 'temple_advance', 'temple_reset'] as const;
 export type V4Op = (typeof V4_OPS)[number];
 
 export function structureName(id: string): string {

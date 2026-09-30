@@ -6,7 +6,7 @@ import type { DimensionId } from '../../common/data/biomes';
 
 export const LEVEL_VERSION = 1;
 /** Worlds created from V2 on generate with the Caves Update terrain (see GeneratorOptions.version). */
-export const GENERATOR_VERSION = 4;
+export const GENERATOR_VERSION = 5;
 
 export interface GameRules {
   doDaylightCycle: boolean;
@@ -100,16 +100,18 @@ export interface WorldQuests {
   glitch: Record<string, QuestRecord>;
   /** Bunkers by '<x>,<y>,<z>' of their entrance. */
   bunker: Record<string, QuestRecord>;
+  /** Temple trials (generator 5) by '<type>:<x>,<y>,<z>'. */
+  temple: Record<string, QuestRecord>;
 }
 
 export function newWorldQuests(): WorldQuests {
-  return { glitch: {}, bunker: {} };
+  return { glitch: {}, bunker: {}, temple: {} };
 }
 
 function sanitizeQuests(raw: unknown): WorldQuests {
   const out = newWorldQuests();
   if (!raw || typeof raw !== 'object') return out;
-  for (const kind of ['glitch', 'bunker'] as const) {
+  for (const kind of ['glitch', 'bunker', 'temple'] as const) {
     const m = (raw as Record<string, unknown>)[kind];
     if (!m || typeof m !== 'object') continue;
     for (const [k, v] of Object.entries(m as Record<string, unknown>).slice(0, 4096)) {

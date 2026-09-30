@@ -22,6 +22,7 @@ import { Mob } from '../entity/Mob';
 import { validateAdmin, xpForLevel, structureName, ADMIN_DIMENSIONS, type AdminAction, type AdminCatalog, type LocateResult, type V4Op } from '../../common/game/admin';
 import { GlitchedQuestSystem } from '../systems/GlitchedQuest';
 import { StructureQuests } from '../systems/StructureQuests';
+import { TempleTrials } from '../systems/TempleTrials';
 import type { Start } from '../../common/gen/structures/manager';
 import { itemById, items, itemOf } from '../../common/registry/items';
 import { markAdmin, isAdminStack, stackOf, type ItemStack, type Slot } from '../../common/game/itemstack';
@@ -462,11 +463,15 @@ export class AdminService {
       const rec = key ? s.level.quests.glitch[key] : undefined;
       const f = key ? gq?.fights.get(key) : undefined;
       const bunker = this.bunkerHere(p);
+      const temple = s.templeTrials?.templeAt(p) ?? null;
+      const tq = temple?.quest?.kind === 'temple' ? temple.quest : null;
+      const trec = temple ? s.level.quests.temple[TempleTrials.key(temple)] : undefined;
       const brec = bunker ? s.level.quests.bunker[StructureQuests.key(bunker)] : undefined;
       return {
         inErrorBiome: !!e,
         glitch: e ? { stage: rec?.stage ?? 0, done: rec?.done ?? false, fighting: f ? f.stage : null, mobs: f?.mobs.length ?? 0 } : null,
-        bunker: bunker ? { stage: brec?.stage ?? 0, done: brec?.done ?? false } : null,
+        bunker: bunker ? { stage: brec?.stage ?? 0, done: brec?.done ?? false, stages: bunker.quest?.kind === 'bunker' ? bunker.quest.generators.length + 2 : 4 } : null,
+        temple: temple && tq ? { name: tq.name, stage: trec?.stage ?? 0, done: trec?.done ?? false, stages: tq.missions.length + 1, run: s.templeTrials?.runs.get(TempleTrials.key(temple))?.kind ?? null } : null,
       };
     };
     switch (op) {
@@ -513,7 +518,20 @@ export class AdminService {
           if (hasProp(st, 'open')) dim.setBlock(...d, withProp(st, 'open', 'false'), { updateNeighbors: false });
         }
         for (const b2 of q.blast) dim.setBlock(...b2, S('bunker_blast_door'));
+        // Version 4.5 bunkers: the security gate is a blast door too
+        if (q.cache) for (const d of q.doors) dim.setBlock(...d, S('bunker_blast_door'));
         return { ok: true, text: 'The bunker was reset.', data: status() };
+      }
+      case 'temple_advance': {
+        const t = s.templeTrials?.templeAt(p);
+        if (!t || !s.templeTrials) return { ok: false, text: s.level.generatorVersion < 5 ? 'Temples of trials come with Version 4.5 worlds.' : 'Stand inside a temple first.' };
+        return { ok: true, text: s.templeTrials.adminAdvance(p.dim, t) + ' (as a cheat)', data: status() };
+      }
+      case 'temple_reset': {
+        const t = s.templeTrials?.templeAt(p);
+        if (!t || !s.templeTrials) return { ok: false, text: 'Stand inside a temple first.' };
+        s.templeTrials.adminReset(p.dim, t);
+        return { ok: true, text: 'The temple was reset: its seals are shut and its altars dormant again.', data: status() };
       }
       case 'fluid_rig': {
         // A glass tank beside the player: a water channel running into lava sources and flowing lava

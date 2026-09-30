@@ -32,10 +32,13 @@ export interface SingleDef {
   /** Underground: height range for the anchor (kept at least 18 blocks under the ground). */
   minY?: number;
   maxY?: number;
-  build: (b: Builder, rng: Random, seed: number) => void;
+  /** `biome` is the biome at the footprint's centre (lets one structure dress for its biome). */
+  build: (b: Builder, rng: Random, seed: number, biome: Biome) => void;
   entities?: (x: number, y: number, z: number, rng: Random) => Start['entities'];
   /** V4: the structure's objective, from a builder that only maps local to world positions. */
-  quest?: (b: Builder, rng: Random) => Start['quest'];
+  quest?: (b: Builder, rng: Random, biome: Biome) => Start['quest'];
+  /** Generator 5: structure mobs placed in local coordinates (rng seeded like build's). */
+  mobs?: (b: Builder, rng: Random, biome: Biome) => Start['entities'];
 }
 
 export function single(def: SingleDef): StructureType {
@@ -55,7 +58,8 @@ export function single(def: SingleDef): StructureType {
       const wsz = rot & 1 ? def.sx : def.sz;
       const x0 = (cx << 4) + rng.int(Math.max(1, 16 - Math.min(16, wsx)));
       const z0 = (cz << 4) + rng.int(Math.max(1, 16 - Math.min(16, wsz)));
-      if (!def.biome(ctx.biome(x0 + (wsx >> 1), z0 + (wsz >> 1)))) return null;
+      const biome = ctx.biome(x0 + (wsx >> 1), z0 + (wsz >> 1));
+      if (!def.biome(biome)) return null;
       const corners: number[] = [];
       let water = 0;
       for (const [a, b] of [
@@ -96,9 +100,11 @@ export function single(def: SingleDef): StructureType {
       }
       const seed = hashInts(ctx.seed, x0, y, z0, def.salt);
       const box = boxOf(x0 - 1, y - def.below, z0 - 1, x0 + wsx, y + def.height, z0 + wsz);
-      const piece = { box, build: (v: import('../decorate/view').DecorView) => def.build(new Builder(v, x0, y, z0, rot, def.sx, def.sz), new Random(seed), ctx.seed) };
+      const piece = { box, build: (v: import('../decorate/view').DecorView) => def.build(new Builder(v, x0, y, z0, rot, def.sx, def.sz), new Random(seed), ctx.seed, biome) };
       const start: Start = { type: def.id, x: x0 + (wsx >> 1), y, z: z0 + (wsz >> 1), pieces: [piece], bounds: box, entities: def.entities?.(x0 + wsx / 2, y + 1, z0 + wsz / 2, new Random(seed ^ 0x55)) };
-      if (def.quest) start.quest = def.quest(new Builder(null as unknown as import('../decorate/view').DecorView, x0, y, z0, rot, def.sx, def.sz), new Random(seed));
+      const frame = (): Builder => new Builder(null as unknown as import('../decorate/view').DecorView, x0, y, z0, rot, def.sx, def.sz);
+      if (def.quest) start.quest = def.quest(frame(), new Random(seed), biome);
+      if (def.mobs) start.entities = def.mobs(frame(), new Random(seed), biome);
       return start;
     },
   };

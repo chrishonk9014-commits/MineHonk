@@ -149,7 +149,8 @@ export type InteractKind =
   | 'flower_pot'
   | 'candle'
   | 'keycard_reader'
-  | 'bunker_generator';
+  | 'bunker_generator'
+  | 'temple_altar';
 
 export type TintKind = 'none' | 'grass' | 'foliage' | 'water' | 'birch' | 'spruce' | 'stem' | 'lily';
 

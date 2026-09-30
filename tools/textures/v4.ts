@@ -370,6 +370,67 @@ export function registerV4Blocks(r: PainterRegistry): void {
       }
     for (let i = 0; i < 6; i++) t.set(t.rng.int(16), t.rng.int(16), hex(0xffffff), 230);
   });
+
+  // --- Temple trials (generator 5) -----------------------------------------------------
+  // An altar of old carved stone: a sun glyph that glows gold once it is awakened
+  const altar = (t: Tex, lit: boolean): void => {
+    t.fill(hex(0x7a7468));
+    t.speckle(hex(0x6a645a), 0.3);
+    t.speckle(hex(0x8a8476), 0.15);
+    t.rect(0, 0, 16, 2, hex(0x5a554c));
+    t.rect(0, 14, 16, 2, hex(0x5a554c));
+    t.rect(1, 1, 14, 1, hex(0x9a927e));
+    t.rect(2, 3, 12, 10, hex(0x4a453e));
+    const glyph = lit ? hex(0xffd84a) : hex(0x2e2a24);
+    const rim = lit ? hex(0xff9a1a) : hex(0x3a362f);
+    for (let y = 4; y < 12; y++)
+      for (let x = 3; x < 13; x++) {
+        const d = Math.hypot(x - 7.5, y - 7.5);
+        if (d < 2.2) t.set(x, y, glyph);
+        else if (d < 3 && !lit) t.set(x, y, rim);
+        else if (d < 3) t.set(x, y, rim);
+      }
+    for (const [x, y] of [
+      [7, 3],
+      [8, 3],
+      [7, 12],
+      [8, 12],
+      [3, 7],
+      [3, 8],
+      [12, 7],
+      [12, 8],
+      [4, 4],
+      [11, 4],
+      [4, 11],
+      [11, 11],
+    ] as const)
+      t.set(x, y, lit ? hex(0xffc030) : hex(0x35312a));
+  };
+  r.add('temple_altar', (t) => altar(t, false));
+  r.add('temple_altar_lit', (t) => altar(t, true));
+  // A seal: a slab of carved stone with a glowing lock rune, bound in bronze
+  r.add('temple_seal', (t) => {
+    t.fill(hex(0x8a6d3b));
+    t.speckle(hex(0x7a5d2f), 0.3);
+    t.speckle(hex(0x9a7d4b), 0.15);
+    t.rect(0, 0, 16, 1, hex(0x5a4420));
+    t.rect(0, 15, 16, 1, hex(0x5a4420));
+    t.rect(0, 0, 1, 16, hex(0x5a4420));
+    t.rect(15, 0, 1, 16, hex(0x5a4420));
+    t.rect(2, 2, 12, 12, hex(0x6a5028));
+    t.rect(3, 3, 10, 10, hex(0x4a3818));
+    t.rect(7, 4, 2, 8, hex(0x40e0d0));
+    t.rect(4, 7, 8, 2, hex(0x40e0d0));
+    t.set(7, 7, hex(0xc0fff8));
+    t.set(8, 8, hex(0xc0fff8));
+    for (const [x, y] of [
+      [4, 4],
+      [11, 4],
+      [4, 11],
+      [11, 11],
+    ] as const)
+      t.set(x, y, hex(0xd8a040));
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -412,6 +473,14 @@ export function registerV4Items(r: PainterRegistry): void {
       t,
       ['', '', '', '..oooooooooooo..', '..obbbbbbbbbbo..', '..obyybbbbbbbo..', '..obyybddddbbo..', '..obbbbbbbbbbo..', '..obccccccccbo..', '..obbbbbbbbbbo..', '..oaaaaaaaaaao..', '..oooooooooooo..'],
       { o: hex(0x1a1e1a), a: hex(0x3a3e3a), b: hex(0x5a6a5a), c: hex(0x202420), d: hex(0xd8d8d8), y: hex(0xe8c020) },
+    ),
+  );
+  // A golden idol with turquoise eyes
+  r.add('temple_relic', (t) =>
+    sprite(
+      t,
+      ['', '......oooo......', '.....obbbbo.....', '....obtbbtbo....', '....obbbbbbo....', '....obcbbcbo....', '.....obbbbo.....', '...ooobccbooo...', '..obbbbbbbbbbo..', '..obcbbbbbbcbo..', '...oobbbbbboo...', '....obbccbbo....', '....obbbbbbo....', '...oddddddddo...', '...oooooooooo...'],
+      { o: hex(0x5a3a0a), b: hex(0xe8b020), c: hex(0xfff0a0), t: hex(0x30d8c8), d: hex(0x8a6a2a) },
     ),
   );
 }

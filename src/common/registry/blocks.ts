@@ -222,6 +222,11 @@ function applyStateOverrides(bt: BlockType): void {
       if (getProp(s, 'part') === 'eye') STATE_LIGHT[s] = 11;
     }
   }
+  if (def.id === 'temple_altar') {
+    for (let s = bt.baseState; s < bt.baseState + bt.stateCount; s++) {
+      if (getProp(s, 'lit') !== 'true') STATE_LIGHT[s] = 0;
+    }
+  }
   if (def.id === 'campfire' || def.id === 'soul_campfire') {
     for (let s = bt.baseState; s < bt.baseState + bt.stateCount; s++) {
       if (getProp(s, 'lit') === 'false') STATE_LIGHT[s] = 0;

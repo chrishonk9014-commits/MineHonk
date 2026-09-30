@@ -40,6 +40,17 @@ export async function makeServer(opts: Partial<NewWorldOptions> = {}, storage = 
   return { server, storage };
 }
 
+/** A world made with an older generator version (as if created before an update). */
+export async function makeServerAt(version: number, opts: Partial<NewWorldOptions> = {}, storage = new MemoryStorage()): Promise<{ server: GameServer; storage: MemoryStorage }> {
+  const first = await makeServer(opts, storage);
+  await first.server.stop();
+  (storage.level as { generatorVersion?: number }).generatorVersion = version;
+  const server = await GameServer.open(storage, null, { log: () => {}, genBudgetMs: 1000, chunksPerTick: 400 });
+  installGameplay(server);
+  server.level.rules.doMobSpawning = false;
+  return { server, storage };
+}
+
 export function hello(viewDistance = 3): C2S & { t: 'hello' } {
   return { t: 'hello', version: PROTOCOL_VERSION, name: 'Tester', viewDistance, registryHash: registryHash() };
 }

@@ -22,10 +22,20 @@ import type { QuestInfo } from '../../common/net/protocol';
 import type { QuestRecord } from '../world/LevelData';
 
 type P3 = [number, number, number];
+
+/** "about 9 blocks east" from one position to another. */
+function where(from: P3, to: P3): string {
+  const dx = to[0] - from[0];
+  const dz = to[2] - from[2];
+  const d = Math.round(Math.hypot(dx, dz));
+  const ns = dz < -Math.abs(dx) / 2 ? 'north' : dz > Math.abs(dx) / 2 ? 'south' : '';
+  const ew = dx > Math.abs(dz) / 2 ? 'east' : dx < -Math.abs(dz) / 2 ? 'west' : '';
+  return `about ${d} blocks ${ns}${ns && ew ? '-' : ''}${ew}`;
+}
 const same = (a: P3, x: number, y: number, z: number): boolean => a[0] === x && a[1] === y && a[2] === z;
 
 /** Structures a player can find, for the explorer advancement. */
-export const V4_FINDABLE = ['desert_oasis', 'sun_monument', 'buried_tomb', 'ranger_tower', 'hunter_camp', 'frozen_ruins', 'jungle_shrine', 'swamp_shack', 'stone_circle', 'lighthouse', 'mountain_lookout', 'prospector_camp', 'bunker'];
+export const V4_FINDABLE = ['desert_oasis', 'sun_monument', 'buried_tomb', 'ranger_tower', 'hunter_camp', 'frozen_ruins', 'jungle_shrine', 'swamp_shack', 'stone_circle', 'lighthouse', 'mountain_lookout', 'prospector_camp', 'bunker', 'frost_temple', 'swamp_temple', 'badlands_temple', 'forest_temple', 'mountain_temple', 'desert_pyramid'];
 
 export class StructureQuests {
   private readonly shown = new Map<ServerPlayer, string>();
@@ -122,7 +132,13 @@ export class StructureQuests {
       dim.setBlock(x, y, z, withProp(state, 'lit', 'true'));
       for (const d of q.doors) {
         const ds = dim.getState(...d);
-        if (blocks[STATE_BLOCK[ds]!]!.def.model === 'door') dim.setBlock(d[0], d[1], d[2], withProp(ds, 'open', 'true'), { updateNeighbors: false });
+        const bt = blocks[STATE_BLOCK[ds]!]!;
+        if (bt.def.model === 'door') dim.setBlock(d[0], d[1], d[2], withProp(ds, 'open', 'true'), { updateNeighbors: false });
+        // Version 4.5 bunkers: the security gate is a blast door that slides away
+        else if (bt.id === 'bunker_blast_door') {
+          dim.setBlock(d[0], d[1], d[2], 0);
+          this.server.particles(dim, 'smoke', d[0] + 0.5, d[1] + 0.5, d[2] + 0.5, 4, 0.4);
+        }
       }
       this.server.playSound(dim, 'block.note.pling', x + 0.5, y + 0.5, z + 0.5, 1, 1.4);
       p.send({ t: 'chat', text: 'ACCESS GRANTED. Security doors open.', kind: 'system' });
@@ -191,7 +207,7 @@ export class StructureQuests {
       const v = q.vault;
       if (!rec.done && (p.x - v[0] - 0.5) ** 2 + (p.z - v[2] - 0.5) ** 2 < 9 && Math.abs(p.y - v[1]) < 3 && q.generators.every((g) => rec.flags?.includes(`gen:${g[0]},${g[1]},${g[2]}`))) {
         rec.done = true;
-        rec.stage = 4;
+        rec.stage = q.generators.length + 2;
         p.send({ t: 'title', text: 'BUNKER SECURED', sub: 'The vault is yours', ticks: 60 });
         if (legit) s.interaction.grant(p, 'bunker_quest');
       }
@@ -204,15 +220,18 @@ export class StructureQuests {
     const online = q.generators.filter((g) => flags.includes(`gen:${g[0]},${g[1]},${g[2]}`)).length;
     let text: string;
     if (rec.done) text = 'Secured. The vault is open.';
-    else if (!flags.includes('card')) text = 'Find a keycard and use it on the reader by the security door.';
+    else if (!flags.includes('card')) text = q.cache && q.hatch ? `Find the keycard in the guard post's chest, ${where(q.hatch, q.cache)} of the hatch, and use it on the reader by the security gate.` : 'Find a keycard and use it on the reader by the security door.';
     else if (online < q.generators.length) text = `Bring the generators online (${online}/${q.generators.length}).`;
     else text = 'The blast door is open. Reach the vault.';
-    return { title: 'Bunker', text, stage: rec.done ? 4 : rec.stage, stages: 4 };
+    const stages = q.generators.length + 2;
+    return { title: 'Bunker', text, stage: rec.done ? stages : rec.stage, stages };
   }
 
   private hud(p: ServerPlayer, q: QuestInfo | null): void {
     // The Glitched Structure's tracker takes priority while its player is inside one
     if (this.server.glitchedQuest?.errorAt(p)) return;
+    // ...and so does a temple's, while its player is inside one
+    if (this.server.templeTrials?.showing(p)) return;
     const k = q ? JSON.stringify(q) : '';
     if ((this.shown.get(p) ?? '') === k) return;
     if (k) this.shown.set(p, k);

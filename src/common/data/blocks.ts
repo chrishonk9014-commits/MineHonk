@@ -999,5 +999,8 @@ add({ id: 'bunker_blast_door', name: 'Blast Door', hardness: -1, resistance: 360
 // The Error Biome: an unloaded chunk, and the firewalls between the Glitched Structure's stages
 add({ id: 'error_block', name: 'ERROR', hardness: 2, resistance: 12, sound: 'glitch', model: 'cube', tex: { all: 'error_block' }, tool: 'pickaxe', light: 2, drops: { item: 'glitch_shard', min: 0, max: 1, silkTouch: true }, mapColor: 0x7a00ff });
 add({ id: 'glitch_firewall', name: 'Firewall', hardness: -1, resistance: 3600000, sound: 'glitch', model: 'cube', tex: { all: 'glitch_firewall' }, layer: 'translucent', opacity: 0, light: 10, drops: 'none', creative: 'hidden', item: false });
+// Temple trials (generator 5): altars to awaken and the seals between a temple's chambers
+add({ id: 'temple_altar', name: 'Temple Altar', hardness: -1, resistance: 3600000, sound: 'stone', model: 'cube', props: { lit: BOOL }, tex: { all: 'temple_altar', on: 'temple_altar_lit' }, light: 12, interact: 'temple_altar', drops: 'none', creative: 'hidden', item: false });
+add({ id: 'temple_seal', name: 'Temple Seal', hardness: -1, resistance: 3600000, sound: 'stone', model: 'cube', tex: { all: 'temple_seal' }, light: 4, drops: 'none', creative: 'hidden', item: false, mapColor: 0x8a6d3b });
 
 export const BLOCK_DEFS: readonly BlockDef[] = defs;

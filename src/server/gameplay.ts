@@ -20,6 +20,7 @@ import { EndgameSystem } from './systems/Endgame';
 import { ErrorBossSystem } from './systems/ErrorBoss';
 import { GlitchedQuestSystem } from './systems/GlitchedQuest';
 import { StructureQuests } from './systems/StructureQuests';
+import { TempleTrials } from './systems/TempleTrials';
 
 export function installGameplay(server: GameServer): void {
   const mobs = new MobSystem(server);
@@ -48,7 +49,9 @@ export function installGameplay(server: GameServer): void {
   h.useItem = (p, stack, hand) => !!server.endgame?.useItem(p, stack) || mobs.useItem(p, stack) || end.fillBottle(p, stack) || ws.fillBottle(p, stack) || ws.throwSplash(p, stack) || end.useItem(p, stack) || far.useItem(p, stack) || gadgets.useItem(p, stack, hand);
   const quests = new StructureQuests(server);
   server.structureQuests = quests;
-  h.useBlock = (p, x, y, z, state) => quests.useBlock(p, x, y, z, state) || ws.useBlock(p, x, y, z, state);
+  const temples = new TempleTrials(server);
+  server.templeTrials = temples;
+  h.useBlock = (p, x, y, z, state) => quests.useBlock(p, x, y, z, state) || temples.useBlock(p, x, y, z, state) || ws.useBlock(p, x, y, z, state);
   h.windowAction = (p, m) => ws.windowAction(p, m);
   const prevUseOnBlock = h.useItemOnBlock;
   h.useItemOnBlock = (p, stack, x, y, z, face) => end.useOnBlock(p, stack, x, y, z) || far.useOnBlock(p, stack, x, y, z) || mobs.useSpawnEgg(p, stack, x, y, z, face) || gadgets.useOnBlock(p, stack, x, y, z, face) || !!prevUseOnBlock?.(p, stack, x, y, z, face);
@@ -97,6 +100,7 @@ export function installGameplay(server: GameServer): void {
     errorBoss.tick();
     glitched.tick();
     quests.tick();
+    temples.tick();
     far.tick();
     gadgets.tick();
     mounts.tick();

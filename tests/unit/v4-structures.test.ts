@@ -8,7 +8,7 @@ import { OverworldGenerator } from '../../src/common/gen/generator';
 import type { Start, QuestSpec } from '../../src/common/gen/structures/manager';
 import type { GameServer } from '../../src/server/GameServer';
 import type { ServerPlayer } from '../../src/server/player/ServerPlayer';
-import { makeServer, join, tick } from '../helpers/testServer';
+import { makeServer, makeServerAt, join, tick } from '../helpers/testServer';
 
 initItems();
 
@@ -23,7 +23,8 @@ async function settle(server: GameServer, rounds = 80): Promise<void> {
 
 /** A player legitimately standing at a structure, its chunks loaded. */
 async function visit(type: string): Promise<{ server: GameServer; player: ServerPlayer; s: Start }> {
-  const { server } = await makeServer({ seed: 'v4-quests' });
+  // V4 worlds keep the V4 bunker (Version 4.5 worlds have their own, see v45-bunker.test.ts)
+  const { server } = await (type === 'bunker' ? makeServerAt(4, { seed: 'v4-quests' }) : makeServer({ seed: 'v4-quests' }));
   const { player } = await join(server);
   const g = server.overworld.generator as OverworldGenerator;
   const loc = g.locate(type, 0, 0)!;
@@ -36,7 +37,7 @@ async function visit(type: string): Promise<{ server: GameServer; player: Server
 
 describe('V4 structures', () => {
   it('each generates with its landmark blocks', () => {
-    const gen = new OverworldGenerator(seedFromString('v4-quests'));
+    const gen = new OverworldGenerator(seedFromString('v4-quests'), { version: 4 });
     const expect1: Record<string, string> = { sun_monument: 'lever', jungle_shrine: 'campfire', bunker: 'keycard_reader', lighthouse: 'sea_lantern', buried_tomb: 'ancient_urn', desert_oasis: 'jungle_log', stone_circle: 'chiseled_stone_bricks', swamp_shack: 'brewing_stand', frozen_ruins: 'blue_ice', hunter_camp: 'campfire', ranger_tower: 'ladder', mountain_lookout: 'ladder', prospector_camp: 'ladder' };
     for (const type of V4_TYPES) {
       const loc = gen.locate(type, 0, 0);

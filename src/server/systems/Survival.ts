@@ -184,6 +184,8 @@ export class Survival {
     p.health = Math.max(0, p.health - amount);
     p.addStat('damage_taken', Math.round((before - p.health) * 10));
     if (p.health <= 0) {
+      // Version 4.5: a temple duel knocks its contestants out instead of killing them
+      if (this.server.templeTrials?.spare(p, src)) return before - p.health;
       if (this.tryTotem(p) && src !== 'kill' && src !== 'void') return before;
       this.die(p, info);
     }

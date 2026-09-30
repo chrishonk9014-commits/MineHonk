@@ -349,5 +349,6 @@ food('snowberries', 2, 1.2, { name: 'Snowberries' }, { eatTime: 16 });
 food('lingonberries', 2, 1.2, { name: 'Lingonberries' }, { eatTime: 16 });
 food('aloe_leaf', 1, 1, { name: 'Aloe Leaf' }, { alwaysEdible: true, eatTime: 16, effects: [{ effect: 'regeneration', duration: 100 }] });
 add({ id: 'bunker_keycard', name: 'Bunker Keycard', maxStack: 1, rarity: 'uncommon', creative: 'tools' });
+add({ id: 'temple_relic', name: 'Temple Relic', maxStack: 1, rarity: 'rare', creative: 'tools' });
 
 export const ITEM_DEFS: readonly ItemDef[] = defs;

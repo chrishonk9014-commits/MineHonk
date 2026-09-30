@@ -790,7 +790,7 @@ export class MobSystem {
   /** Damages any entity through the right path (players go through Survival). */
   damage(t: Entity, amount: number, info: HurtInfo & { kbx?: number; kbz?: number; knockback?: number }): number {
     if (isPlayer(t)) {
-      if (info.attacker && isPlayer(info.attacker) && !this.server.level.pvp) return 0;
+      if (info.attacker && isPlayer(info.attacker) && !this.server.level.pvp && !this.server.templeTrials?.pvpBetween(info.attacker, t)) return 0;
       return this.server.interaction.survival.damage(t, amount, { source: info.source as never, attacker: info.attacker, kbx: info.kbx, kbz: info.kbz, knockback: info.knockback, disableShield: info.disableShield, pierceShield: info.pierceShield });
     }
     if (t instanceof LivingEntity) return t.hurt(amount, info);
@@ -1363,7 +1363,7 @@ export class MobSystem {
       }
       return;
     }
-    if (isPlayer(target) && (!s.level.pvp || target.gamemode === 'creative')) return;
+    if (isPlayer(target) && ((!s.level.pvp && !s.templeTrials?.pvpBetween(p, target)) || target.gamemode === 'creative')) return;
     // Visitors may defend themselves against monsters but not hurt animals, pets or villagers
     if (s.roleOf(p) === 'visitor' && target instanceof Mob && target.def.category !== 'monster' && target.def.category !== 'boss') return;
     // Reach & line of sight

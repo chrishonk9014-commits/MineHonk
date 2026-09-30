@@ -86,6 +86,11 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: 'bunker_quest', title: 'Power Restored', description: 'Get past a bunker\'s blast door into its vault', icon: 'bunker_keycard', parent: 'find_bunker', category: 'world' },
   { id: 'world_explorer', title: 'Seen It All', description: 'Find eight different kinds of V4 structure', icon: 'compass', parent: 'root', category: 'world' },
   { id: 'glitched_reward', title: 'Found, Not Forged', description: 'Take Glitched gear from a Glitched Structure', icon: 'glitched_chestplate', parent: 'glitched_quest', category: 'world', secret: true },
+  // Version 4.5 - temple trials
+  { id: 'find_temple', title: 'Sacred Ground', description: 'Enter a temple of trials', icon: 'temple_relic', parent: 'root', category: 'world' },
+  { id: 'temple_trial', title: 'Worthy', description: 'Complete one of a temple\'s trials', icon: 'chiseled_stone_bricks', parent: 'find_temple', category: 'world' },
+  { id: 'temple_champion', title: 'Champion', description: 'Win the Champion\'s Trial on top of a temple', icon: 'gold_block', parent: 'temple_trial', category: 'world' },
+  { id: 'temple_duel', title: 'Last One Standing', description: 'Win a temple\'s prize in a duel against other players', icon: 'diamond_sword', parent: 'temple_champion', category: 'world' },
 ];
 
 export const ACHIEVEMENT_BY_ID = new Map(ACHIEVEMENTS.map((a) => [a.id, a]));

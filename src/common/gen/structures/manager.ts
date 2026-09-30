@@ -43,8 +43,53 @@ export type QuestSpec =
   | { kind: 'levers'; levers: { at: Pos; on: boolean }[]; door: Pos[] }
   /** Light every brazier (campfire). */
   | { kind: 'braziers'; braziers: Pos[]; door: Pos[] }
-  /** Keycard opens the security doors, both generators open the blast door to the vault. */
-  | { kind: 'bunker'; reader: Pos; doors: Pos[]; generators: Pos[]; blast: Pos[]; vault: Pos; area: Box };
+  /**
+   * Keycard opens the security doors, the generators open the blast door to the vault.
+   * Generator 5 bunkers also say where the keycard waits (the guard post's chest up top).
+   */
+  | { kind: 'bunker'; reader: Pos; doors: Pos[]; generators: Pos[]; blast: Pos[]; vault: Pos; area: Box; cache?: Pos; hatch?: Pos; style?: string }
+  | TempleQuest;
+
+/** One trial of a temple, done in its own chamber. */
+export type TempleMission =
+  /** Awaken every altar (use it). */
+  | { type: 'altars'; altars: Pos[]; room: Box }
+  /** Bring a Temple Relic (from the relic chest) to the altar. */
+  | { type: 'relic'; altar: Pos; chest: Pos; room: Box }
+  /** Light every brazier (campfire). */
+  | { type: 'braziers'; braziers: Pos[]; room: Box }
+  /** Set the levers to match the glyphs above them. */
+  | { type: 'levers'; levers: { at: Pos; on: boolean }[]; room: Box }
+  /** Defeat waves of the temple's guardians. */
+  | { type: 'guardians'; spawns: Pos[]; waves: number; mob: string; name: string; room: Box };
+
+/** A seal block between chambers; `ladder` (a world facing) means it opens into a ladder. */
+export interface TempleSeal {
+  at: Pos;
+  ladder?: string;
+}
+
+/**
+ * Generator 5 temples: trials in order, each opening the seal to the next
+ * chamber, then the Champion's Trial on the summit. Alone you face the
+ * temple's champion; with others it is a duel, and the last one standing in
+ * the arena claims the prize.
+ */
+export interface TempleQuest {
+  kind: 'temple';
+  name: string;
+  missions: TempleMission[];
+  /** seals[i] open when mission i is done (the last opens the way to the arena). */
+  seals: TempleSeal[][];
+  arena: Box;
+  center: Pos;
+  champion: { mob: string; name: string; hp: number; dmg: number };
+  /** Where a contestant knocked out of the duel wakes up. */
+  exit: Pos;
+  area: Box;
+  /** Loot table of the prize. */
+  reward: string;
+}
 
 export interface PlanContext {
   seed: number;

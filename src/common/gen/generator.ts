@@ -18,8 +18,10 @@ import { caveDecorV2 } from './caves/decor';
 import { ProtoCache, cloneChunk, addGenEntities, LATEST_GENERATOR, type DimensionGenerator, type GeneratorOptions, type SpawnPoint } from './pipeline';
 import { VILLAGE } from './structures/village';
 import { SURFACE_STRUCTURES, SURFACE_STRUCTURES_V3, SURFACE_STRUCTURES_V4 } from './structures/misc';
-import { V4_STRUCTURES } from './v4/structures';
+import { V4_STRUCTURES, BUNKER } from './v4/structures';
 import { VILLAGE_V4 } from './v4/village';
+import { BUNKER_V5 } from './v5/bunker';
+import { JUNGLE_TEMPLE_V5, V5_TEMPLES } from './v5/temples';
 import { MINESHAFT, STRONGHOLD } from './structures/underground';
 import { CAVE_STRUCTURES } from './structures/caves';
 import { ANCIENT_CITY } from './structures/ancientCity';
@@ -44,6 +46,11 @@ const NEIGHBOUR_STAGES: Stage[] = [F.lakes, F.geodes, F.ores, F.dungeons, F.spri
 const NEIGHBOUR_STAGES_V2: Stage[] = NEIGHBOUR_STAGES.map((s) => (s === F.ores ? F.oresV2 : s === F.geodes ? F.geodesV2 : s));
 /** V4: overgrown fallen logs, stumps and termite mounds replace the boulder stage; cacti grow after the trees. */
 const NEIGHBOUR_STAGES_V4: Stage[] = [...NEIGHBOUR_STAGES_V2.map((s) => (s === F.boulders ? V4.groundFeatures : s)), V4.cacti];
+
+/** Generator 5: the jungle temple becomes a temple of trials, and bunkers get random layouts and biome styles. */
+const SURFACE_STRUCTURES_V5 = SURFACE_STRUCTURES_V4.map((t) => (t.id === 'jungle_temple' ? JUNGLE_TEMPLE_V5 : t));
+/** ...and the new temples and the desert pyramid come last, so nothing placed before them moves. */
+const V5_STRUCTURES = [...V4_STRUCTURES.map((t) => (t === BUNKER ? BUNKER_V5 : t)), ...V5_TEMPLES];
 
 export class OverworldGenerator implements DimensionGenerator {
   readonly dimension = 'overworld' as const;
@@ -70,12 +77,13 @@ export class OverworldGenerator implements DimensionGenerator {
       return { y, water };
     };
     const v4 = this.terrain.version >= 4;
+    const v5 = this.terrain.version >= 5;
     this.structures = new StructureManager(
       seed,
       // V2 adds its underground structures after the V1 list, so V1 placements never move.
       // V4 has its own villages, slightly more common temples and outposts, and its new structures last.
       v4
-        ? [VILLAGE_V4, ...SURFACE_STRUCTURES_V4, MINESHAFT, STRONGHOLD, ...CAVE_STRUCTURES, ANCIENT_CITY, ...V4_STRUCTURES]
+        ? [VILLAGE_V4, ...(v5 ? SURFACE_STRUCTURES_V5 : SURFACE_STRUCTURES_V4), MINESHAFT, STRONGHOLD, ...CAVE_STRUCTURES, ANCIENT_CITY, ...(v5 ? V5_STRUCTURES : V4_STRUCTURES)]
         : [VILLAGE, ...(this.terrain.corrupted ? SURFACE_STRUCTURES_V3 : SURFACE_STRUCTURES), MINESHAFT, STRONGHOLD, ...(this.terrain.carver ? [...CAVE_STRUCTURES, ANCIENT_CITY] : [])],
       {
         seed,

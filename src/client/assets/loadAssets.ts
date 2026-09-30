@@ -4,6 +4,10 @@ import type { AtlasMeta } from '../render/atlasInfo';
 import { ItemIcons } from '../render/ItemIcons';
 import type { GameAssets } from '../render/WorldRenderer';
 
+declare const __ASSET_VERSION__: string;
+/** Cache-busting query for the fixed-name atlases (see vite.config.ts). */
+const V = typeof __ASSET_VERSION__ === 'string' ? `?v=${__ASSET_VERSION__}` : '';
+
 function loadImage(url: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -87,10 +91,10 @@ function buildMips(img: HTMLImageElement): ImageData[] {
 export async function loadAssets(onProgress?: (text: string) => void): Promise<GameAssets> {
   onProgress?.('Loading textures...');
   const [blockImage, itemImage, blockMeta, itemMeta] = await Promise.all([
-    loadImage('assets/blocks.png'),
-    loadImage('assets/items.png'),
-    loadJson<AtlasMeta>('assets/blocks.json'),
-    loadJson<AtlasMeta>('assets/items.json'),
+    loadImage(`assets/blocks.png${V}`),
+    loadImage(`assets/items.png${V}`),
+    loadJson<AtlasMeta>(`assets/blocks.json${V}`),
+    loadJson<AtlasMeta>(`assets/items.json${V}`),
   ]);
   onProgress?.('Building atlas...');
   const mips = buildMips(blockImage);

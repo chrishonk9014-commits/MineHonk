@@ -1,6 +1,9 @@
 /**
  * The title screen backdrop: a patch of real, freshly generated terrain from
- * a random seed. Since V3.5 it is one of three places, picked at random:
+ * a random seed. Since V4 it shows The World Update, picked at random:
+ *  - an Error Biome chunk, circling the one broken chunk in its landscape;
+ *  - a V4 village, circling its houses, farms and decorated streets.
+ * The V3.5 places are still there with ?title=farlands|end|arena:
  *  - the Farlands, the camera turning slowly above its broken terrain;
  *  - the End's main island, circling the exit portal and its pillars;
  *  - The Error's arena over the void, circling The Error itself.
@@ -13,6 +16,7 @@ import { ClientWorld } from '../world/ClientWorld';
 import { ClientEntity } from '../game/ClientEntity';
 import { EndGenerator } from '../../common/gen/end';
 import { FarlandsGenerator } from '../../common/gen/farlands';
+import { OverworldGenerator } from '../../common/gen/generator';
 import type { DimensionGenerator } from '../../common/gen/pipeline';
 import { LightEngine } from '../../common/world/light';
 import { encodeChunk, type Chunk } from '../../common/world/chunk';
@@ -23,7 +27,10 @@ import type { Settings } from '../settings';
 
 const RADIUS = 4;
 
-type Scene = 'farlands' | 'end' | 'arena';
+type Scene = 'farlands' | 'end' | 'arena' | 'error_biome' | 'village';
+/** Shown at random; the others only when asked for. */
+const RANDOM_SCENES: Scene[] = ['error_biome', 'village'];
+const ALL_SCENES: Scene[] = ['error_biome', 'village', 'farlands', 'end', 'arena'];
 
 /** What each scene looks like: particles in the air, camera tilt, extra light. */
 const LOOK: Record<Scene, { particle: string; pitch: number; nightVision: number; aside: number }> = {
@@ -31,6 +38,8 @@ const LOOK: Record<Scene, { particle: string; pitch: number; nightVision: number
   end: { particle: 'portal', pitch: 0.32, nightVision: 0.35, aside: 0 },
   // Looking a little past The Error keeps it beside the menu, not behind it
   arena: { particle: 'glitch', pitch: -0.2, nightVision: 0.15, aside: 0.62 },
+  error_biome: { particle: 'glitch', pitch: 0.42, nightVision: 0, aside: 0 },
+  village: { particle: 'none', pitch: 0.27, nightVision: 0, aside: 0 },
 };
 
 /** The Error's poses shown on the title screen, cycling. */
@@ -65,10 +74,13 @@ export class TitlePanorama {
       return; // no WebGL: the menu keeps its dirt background
     }
     const seed = seedFromString('title-' + Math.floor(Math.random() * 1e9));
-    const scenes: Scene[] = ['farlands', 'end', 'arena'];
-    // ?title=farlands|end|arena picks one (for screenshots)
+    // ?title=error_biome|village|farlands|end|arena picks one (for screenshots)
     const asked = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('title') : null;
-    this.scene = scenes.includes(asked as Scene) ? (asked as Scene) : scenes[Math.floor(Math.random() * scenes.length)]!;
+    this.scene = ALL_SCENES.includes(asked as Scene) ? (asked as Scene) : RANDOM_SCENES[Math.floor(Math.random() * RANDOM_SCENES.length)]!;
+    if (this.scene === 'error_biome' || this.scene === 'village') {
+      this.findOverworld(seed);
+      return;
+    }
     let gen: DimensionGenerator;
     let focus: { x: number; y: number; z: number };
     if (this.scene === 'end') {
@@ -84,11 +96,42 @@ export class TitlePanorama {
         focus = far.findSpawn();
       }
     }
+    this.build(gen, focus);
+  }
+
+  /** V4 scenes: find the Error Biome or a village a step per frame, then build around it. */
+  private findOverworld(seed: number): void {
+    const gen = new OverworldGenerator(seed);
+    const rx = Math.floor((Math.random() - 0.5) * 3000);
+    const rz = Math.floor((Math.random() - 0.5) * 3000);
+    const search = gen.locateSteps(this.scene, rx, rz);
+    const step = (): void => {
+      if (this.disposed) return;
+      const t0 = performance.now();
+      let r = search.next();
+      while (!r.done && performance.now() - t0 < 10) r = search.next();
+      if (!r.done) {
+        this.raf = requestAnimationFrame(step);
+        return;
+      }
+      if (r.value) this.build(gen, r.value);
+      else {
+        // Nothing near (very unlikely): fall back to the Farlands
+        this.scene = 'farlands';
+        const far = new FarlandsGenerator(seed);
+        this.build(far, far.findSpawn());
+      }
+    };
+    this.raf = requestAnimationFrame(step);
+  }
+
+  /** Generates the chunks around a focus a few per frame, lights them and starts the camera. */
+  private build(gen: DimensionGenerator, focus: { x: number; y: number; z: number }): void {
     // The renderer draws whichever dimension the world says it is
-    const dim = this.scene === 'end' ? 'end' : 'farlands';
+    const dim = gen.dimension === 'end' ? 'end' : gen.dimension === 'overworld' ? 'overworld' : 'farlands';
     this.world.dimension = dim;
     this.world.hasSky = dim !== 'end';
-    this.renderer.sky.dimension = dim;
+    this.renderer!.sky.dimension = dim;
 
     const ccx = Math.floor(focus.x) >> 4;
     const ccz = Math.floor(focus.z) >> 4;
@@ -137,6 +180,21 @@ export class TitlePanorama {
         this.orbit = 30;
         break;
       }
+      case 'error_biome': {
+        // Circling the broken chunk, close enough to see its glitched blocks
+        const h = Math.max(focus.y, w.heightAt(fx, fz));
+        this.center = { x: fx + 0.5, y: h + 12, z: fz + 0.5 };
+        this.orbit = 22;
+        break;
+      }
+      case 'village': {
+        // Circling the village from above its rooftops
+        let h = focus.y;
+        for (let dz = -12; dz <= 12; dz += 6) for (let dx = -12; dx <= 12; dx += 6) h = Math.max(h, w.heightAt(fx + dx, fz + dz));
+        this.center = { x: fx + 0.5, y: h + 12, z: fz + 0.5 };
+        this.orbit = 30;
+        break;
+      }
       case 'arena': {
         // Circling The Error, which stands in the middle of its platform
         this.center = { x: fx + 0.5, y: focus.y + 5, z: fz + 0.5 };
@@ -171,7 +229,7 @@ export class TitlePanorama {
         const x = cam.x + (Math.random() - 0.5) * 28;
         const y = cam.y + (Math.random() - 0.5) * 12;
         const z = cam.z + (Math.random() - 0.5) * 28;
-        if (!STATE_SOLID[this.world.getState(Math.floor(x), Math.floor(y), Math.floor(z))]) r.particles.spawn(look.particle, x, y, z, 1, 0.2);
+        if (look.particle !== 'none' && !STATE_SOLID[this.world.getState(Math.floor(x), Math.floor(y), Math.floor(z))]) r.particles.spawn(look.particle, x, y, z, 1, 0.2);
       }
     }
     const boss = this.boss;

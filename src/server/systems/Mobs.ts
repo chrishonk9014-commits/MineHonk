@@ -216,7 +216,8 @@ export class MobSystem {
   /** Spawns generated non-mob entities (end crystals); returns true when handled. */
   extraEntity?: (dim: Dimension, type: string, x: number, y: number, z: number) => boolean;
   /** Boss death hand-off (the dragon fight runs its own death sequence). */
-  onBossDeath?: (m: Mob, killer: ServerPlayer | null, info: HurtInfo) => void;
+  /** A boss died; returns false to let its death run the usual way (loot, experience, advancements). */
+  onBossDeath?: (m: Mob, killer: ServerPlayer | null, info: HurtInfo) => boolean;
 
   onChunkGenerated(dim: Dimension, c: Chunk): void {
     let spawned = false;
@@ -734,7 +735,7 @@ export class MobSystem {
       m.target = null;
       return;
     }
-    let dmg = m.def.damage ?? 2;
+    let dmg = (m.def.damage ?? 2) + (typeof m.data.dmgBonus === 'number' ? m.data.dmgBonus : 0);
     if (m.def.brain === 'slime') dmg = Math.max(0, Number(m.data.size ?? 1) - (m.type === 'slime' ? 0 : -1)) * (m.type === 'magma_cube' ? 1.5 : 1);
     if (m.held) {
       const w = items[m.held.id]!.def.weapon;
@@ -1283,12 +1284,11 @@ export class MobSystem {
     const s = this.server;
     const killer = info.attacker && isPlayer(info.attacker) ? info.attacker : m.dim.server.tickNo - m.lastHurtByPlayerTick < 100 && isPlayer(m.lastAttacker) ? (m.lastAttacker as ServerPlayer) : null;
     const byPlayer = !!killer || (info.attacker instanceof Mob && !!info.attacker.owner);
-    if (m.def.category === 'boss' && this.onBossDeath) {
+    if (m.def.category === 'boss' && this.onBossDeath?.(m, killer, info)) {
       if (killer) {
         killer.addStat('killed.' + m.type);
         killer.addStat('mob_kills');
       }
-      this.onBossDeath(m, killer, info);
       return;
     }
     const weapon = killer ? killer.inventory.get(killer.selectedSlot) : null;

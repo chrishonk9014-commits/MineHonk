@@ -154,6 +154,8 @@ export type S2C =
   | { t: 'player_list'; players: { name: string; uuid: string; ping: number; mode: GameMode }[] }
   | { t: 'explosion'; x: number; y: number; z: number; power: number; kx: number; ky: number; kz: number }
   | { t: 'title'; text: string; sub?: string; ticks?: number }
+  /** V4: the quest tracker (a structure's objective and progress), or null to hide it. */
+  | { t: 'quest'; quest: QuestInfo | null }
   | { t: 'world_info'; world: WorldInfo }
   | { t: 'pong'; time: number }
   | { t: 'take_item'; item: number; by: number }
@@ -173,6 +175,20 @@ export type S2C =
   | { t: 'record'; x: number; y: number; z: number; track: string | null }
   /** Where the player last died (Recovery Compass), or null. */
   | { t: 'death_pos'; pos: { dim: DimensionId; x: number; y: number; z: number } | null };
+
+/** What the quest tracker shows (V4). */
+export interface QuestInfo {
+  title: string;
+  /** The current objective. */
+  text: string;
+  /** Stage progress (e.g. 3 of 5). */
+  stage?: number;
+  stages?: number;
+  /** Enemies or objectives left in this stage. */
+  remaining?: number;
+  /** Glitched quests get the corrupted look. */
+  style?: 'normal' | 'glitch';
+}
 
 export interface AbilitiesMsg {
   mayFly: boolean;

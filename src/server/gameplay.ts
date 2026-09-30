@@ -18,6 +18,7 @@ import { WardenSystem } from './systems/Warden';
 import { EndingsSystem } from './systems/Endings';
 import { EndgameSystem } from './systems/Endgame';
 import { ErrorBossSystem } from './systems/ErrorBoss';
+import { GlitchedQuestSystem } from './systems/GlitchedQuest';
 
 export function installGameplay(server: GameServer): void {
   const mobs = new MobSystem(server);
@@ -60,9 +61,14 @@ export function installGameplay(server: GameServer): void {
   server.endgame = endgame;
   const errorBoss = new ErrorBossSystem(server);
   server.errorBoss = errorBoss;
+  const glitched = new GlitchedQuestSystem(server);
+  server.glitchedQuest = glitched;
   mobs.onBossDeath = (m, killer, info) => {
     if (m.type === 'ender_dragon') end.fight.onDeath(m, killer, info);
     else if (m.type === 'the_error') errorBoss.onDeath(m, killer, info);
+    // Other bosses (the Glitch Beast) drop their loot like any mob
+    else return false;
+    return true;
   };
   h.releaseItem = (p, stack, ticks, slot) => mobs.releaseBow(p, stack, ticks, slot);
   h.igniteTnt = (dim, x, y, z) => mobs.igniteTnt(dim, x, y, z);
@@ -86,6 +92,7 @@ export function installGameplay(server: GameServer): void {
     end.tick();
     endgame.tick();
     errorBoss.tick();
+    glitched.tick();
     far.tick();
     gadgets.tick();
     mounts.tick();

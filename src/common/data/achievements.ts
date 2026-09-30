@@ -7,7 +7,7 @@ export interface AchievementDef {
   /** Parent achievement shown as prerequisite in the UI tree. */
   parent?: string;
   secret?: boolean;
-  category: 'story' | 'nether' | 'end' | 'adventure' | 'farlands' | 'husbandry' | 'caves';
+  category: 'story' | 'nether' | 'end' | 'adventure' | 'farlands' | 'husbandry' | 'caves' | 'world';
 }
 
 export const ACHIEVEMENTS: AchievementDef[] = [
@@ -76,6 +76,11 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: 'vault_reward', title: 'Hollow Heart', description: 'Take the Resonance Charm from the vault beneath the Hollow Gate', icon: 'resonance_charm', parent: 'find_ancient_city', category: 'caves', secret: true },
   { id: 'recovery_compass', title: 'Way Back', description: 'Craft a Recovery Compass', icon: 'recovery_compass', parent: 'find_ancient_city', category: 'caves' },
   { id: 'hollow_disc', title: 'The Sound of Nothing', description: 'Assemble the disc Hollow from its fragments', icon: 'music_disc_hollow', parent: 'find_ancient_city', category: 'caves' },
+  // V4 - The World Update
+  { id: 'find_error_biome', title: 'What Is That?', description: 'Find a chunk that failed to load', icon: 'error_block', parent: 'root', category: 'world', secret: true },
+  { id: 'enter_glitched_structure', title: 'Below the Error', description: 'Dig into a Glitched Structure', icon: 'missing_block', parent: 'find_error_biome', category: 'world', secret: true },
+  { id: 'glitched_quest', title: 'Garbage Collected', description: 'Clear all five stages of a Glitched Structure', icon: 'glitch_block', parent: 'enter_glitched_structure', category: 'world', secret: true },
+  { id: 'glitched_reward', title: 'Found, Not Forged', description: 'Take Glitched gear from a Glitched Structure', icon: 'glitched_chestplate', parent: 'glitched_quest', category: 'world', secret: true },
 ];
 
 export const ACHIEVEMENT_BY_ID = new Map(ACHIEVEMENTS.map((a) => [a.id, a]));

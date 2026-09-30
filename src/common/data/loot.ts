@@ -136,6 +136,23 @@ export const LOOT_TABLES: Record<string, LootTable> = {
       { rolls: 1, entries: [none(35), e('gold_nugget', 20, [2, 7]), e('emerald', 8, [1, 2]), e('bone', 12, [1, 3]), e('string', 10, [1, 3]), e('sunstone_shard', 6), e('iron_nugget', 12, [2, 8]), e('diamond', 1)] },
     ],
   },
+  // V4: the Glitched Structure. Its reward is the existing Glitched gear: one tool and one
+  // armor piece, picked and enchanted by the same loot functions as any other treasure.
+  'quest/glitched_reward': {
+    pools: [
+      { rolls: 1, entries: ['sword', 'pickaxe', 'axe', 'shovel', 'hoe'].map((t) => ench(`glitched_${t}`, t === 'hoe' ? 1 : 3, [20, 39])) },
+      { rolls: 1, entries: ['helmet', 'chestplate', 'leggings', 'boots'].map((a) => ench(`glitched_${a}`, 1, [20, 39])) },
+    ],
+  },
+  'chest/glitched_vault': {
+    pools: [
+      { rolls: 1, entries: [e('glitched_ingot', 1)] },
+      { rolls: [3, 6], entries: [e('glitch_shard', 20, [3, 8]), e('data_fragment', 15, [2, 4]), e('nullium_ingot', 8, [1, 2]), e('experience_bottle', 12, [4, 10]), e('enchanted_golden_apple', 2), e('totem_of_undying', 2), book(8)] },
+    ],
+  },
+  'chest/glitched_cache': {
+    pools: [{ rolls: [2, 4], entries: [e('glitch_shard', 20, [1, 4]), e('data_fragment', 12, [1, 2]), e('missing_block', 10, [2, 6]), e('glitch_berry', 10, [1, 3]), e('ender_pearl', 6, [1, 2]), none(10)] }],
+  },
   'chest/bonus': {
     pools: [
       { rolls: 1, entries: [e('stick', 1, [1, 12])] },

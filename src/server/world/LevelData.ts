@@ -80,6 +80,50 @@ export interface LevelData {
   admin?: { sky?: boolean; blocks?: Record<string, Record<string, number[]>>; chunks?: Record<string, number[]> };
   /** Endgame state: endings, the Corrupted Eye, the Farlands and its boss. */
   endings: WorldEndings;
+  /** V4 quest structures: progress through each Glitched Structure and bunker. */
+  quests: WorldQuests;
+}
+
+/** Progress through one quest structure (V4). */
+export interface QuestRecord {
+  /** Stages or objectives completed. */
+  stage: number;
+  done: boolean;
+  /** Players (uuids) already rewarded for completing it. */
+  rewarded: string[];
+  /** Objective flags (bunkers: 'card', generator positions...). */
+  flags?: string[];
+}
+
+export interface WorldQuests {
+  /** Glitched Structures by '<dimension>:<cx>,<cz>'. */
+  glitch: Record<string, QuestRecord>;
+  /** Bunkers by '<x>,<y>,<z>' of their entrance. */
+  bunker: Record<string, QuestRecord>;
+}
+
+export function newWorldQuests(): WorldQuests {
+  return { glitch: {}, bunker: {} };
+}
+
+function sanitizeQuests(raw: unknown): WorldQuests {
+  const out = newWorldQuests();
+  if (!raw || typeof raw !== 'object') return out;
+  for (const kind of ['glitch', 'bunker'] as const) {
+    const m = (raw as Record<string, unknown>)[kind];
+    if (!m || typeof m !== 'object') continue;
+    for (const [k, v] of Object.entries(m as Record<string, unknown>).slice(0, 4096)) {
+      if (k.length > 64 || !v || typeof v !== 'object') continue;
+      const r = v as Partial<QuestRecord>;
+      out[kind][k] = {
+        stage: typeof r.stage === 'number' && Number.isFinite(r.stage) ? Math.max(0, Math.min(16, Math.floor(r.stage))) : 0,
+        done: r.done === true,
+        rewarded: Array.isArray(r.rewarded) ? r.rewarded.filter((u): u is string => typeof u === 'string' && u.length < 64).slice(0, 64) : [],
+        flags: Array.isArray(r.flags) ? r.flags.filter((u): u is string => typeof u === 'string' && u.length < 64).slice(0, 64) : undefined,
+      };
+    }
+  }
+  return out;
 }
 
 /** Endgame state of a world (V3): how the dragon fell and which endings were reached. */
@@ -198,6 +242,7 @@ export function createLevelData(o: NewWorldOptions): LevelData {
     muted: {},
     reports: [],
     endings: newWorldEndings(),
+    quests: newWorldQuests(),
   };
 }
 
@@ -251,6 +296,7 @@ export function sanitizeLevelData(raw: unknown, fallbackId: string): LevelData |
   out.bonusChest = !!r.bonusChest;
   out.generateStructures = r.generateStructures !== false;
   out.endings = sanitizeEndings(r.endings);
+  out.quests = sanitizeQuests(r.quests);
   if (r.admin && typeof r.admin === 'object') {
     const a = r.admin as NonNullable<LevelData['admin']>;
     out.admin = { sky: a.sky === true, blocks: a.blocks && typeof a.blocks === 'object' ? a.blocks : {}, chunks: a.chunks && typeof a.chunks === 'object' ? a.chunks : {} };

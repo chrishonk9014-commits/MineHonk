@@ -465,7 +465,12 @@ function connectsTo(w: WorldReader, self: number, x: number, y: number, z: numbe
       return dir === 'north' || dir === 'south' ? gf === 'east' || gf === 'west' : gf === 'north' || gf === 'south';
     }
   }
-  if (me.model === 'wall' && (def.model === 'wall' || def.model === 'fence_gate' || def.model === 'pane')) return true;
+  if (me.model === 'wall' && def.model === 'fence_gate') {
+    // A gate joins a wall the same way it joins a fence: only along its hinge line
+    const gf = getProp(s, 'facing')!;
+    return dir === 'north' || dir === 'south' ? gf === 'east' || gf === 'west' : gf === 'north' || gf === 'south';
+  }
+  if (me.model === 'wall' && (def.model === 'wall' || def.model === 'pane')) return true;
   if (me.model === 'pane' && (def.model === 'pane' || def.model === 'wall')) return true;
   return STATE_OPAQUE[s] === 1 || STATE_FULL_CUBE[s] === 1;
 }

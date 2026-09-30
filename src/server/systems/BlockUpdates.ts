@@ -12,6 +12,14 @@ import { Random } from '../../common/math/rng';
 import { FallingBlock } from '../entity/FallingBlock';
 import type { Chunk } from '../../common/world/chunk';
 import { growTree } from '../../common/gen/features/trees';
+import { reconnectSeam } from '../../common/game/connections';
+
+const SEAMS: [number, number][] = [
+  [1, 0],
+  [-1, 0],
+  [0, 1],
+  [0, -1],
+];
 
 const rng = new Random();
 
@@ -105,6 +113,7 @@ export class BlockUpdates {
   }
 
   onChunkReady(dim: Dimension, c: Chunk): void {
+    if (this.server.level.generatorVersion >= 4) this.joinNeighbours(dim, c);
     // Register furnaces with pending work
     for (const [k, be] of c.blockEntities) {
       if (be.type === 'furnace') {
@@ -117,6 +126,20 @@ export class BlockUpdates {
     // Restore persistent entities
     const ents = dim.takePendingEntities(c.cx, c.cz);
     if (ents) this.server.interaction.restoreEntities(dim, ents);
+  }
+
+  /**
+   * V4 worlds: fences, panes, walls and stairs along the chunk's borders
+   * connect to what stands across them, now that both sides are loaded.
+   */
+  private joinNeighbours(dim: Dimension, c: Chunk): void {
+    const set = (x: number, y: number, z: number, s: number): void => {
+      dim.setBlock(x, y, z, s, { updateNeighbors: false, keepBlockEntity: true });
+    };
+    for (const [dx, dz] of SEAMS) {
+      const n = dim.getChunk(c.cx + dx, c.cz + dz);
+      if (n) reconnectSeam(dim, c, n, set);
+    }
   }
 
   tick(dim: Dimension): void {

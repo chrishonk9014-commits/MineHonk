@@ -16,7 +16,8 @@ import { placeTree } from './features/trees';
 import type { TreeKind } from '../data/biomes';
 import { StructureManager } from './structures/manager';
 import { NETHER_STRUCTURES } from './structures/nether';
-import { ProtoCache, cloneChunk, addGenEntities, type DimensionGenerator, type GeneratorOptions, type SpawnPoint } from './pipeline';
+import { ProtoCache, cloneChunk, addGenEntities, LATEST_GENERATOR, type DimensionGenerator, type GeneratorOptions, type SpawnPoint } from './pipeline';
+import { connectChunk } from '../game/connections';
 
 /** Top of the Nether (bedrock roof). */
 export const NETHER_ROOF = 127;
@@ -447,10 +448,14 @@ export class NetherGenerator implements DimensionGenerator {
   readonly structures: StructureManager;
   private readonly protos: ProtoCache;
 
+  /** World generator version. */
+  readonly version: number;
+
   constructor(
     readonly seed: number,
     opts: GeneratorOptions = {},
   ) {
+    this.version = opts.version ?? LATEST_GENERATOR;
     this.terrain = new NetherTerrain(seed);
     this.protos = new ProtoCache(400, (cx, cz) => this.terrain.generate(cx, cz));
     this.structures = new StructureManager(
@@ -492,6 +497,8 @@ export class NetherGenerator implements DimensionGenerator {
     }
     const starts = this.structures.build(v);
     netherVegetation(v, this.seed, cx, cz);
+    // V4: fortress fences and other connecting blocks take their proper shapes
+    if (this.version >= 4) connectChunk(c, { getState: (x, y, z) => v.get(x, y, z) }, (x, y, z, st) => v.set(x, y, z, st));
     c.recount();
     c.recomputeHeightmap();
     for (const s of starts) addGenEntities(c, s);

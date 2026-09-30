@@ -28,6 +28,7 @@ import { NetherGenerator } from './nether';
 import { EndGenerator } from './end';
 import { FarlandsGenerator } from './farlands';
 import * as V4 from './v4/decorate';
+import { connectChunk } from '../game/connections';
 
 export { ProtoCache, cloneChunk, type DimensionGenerator, type GeneratorOptions, type SpawnPoint };
 
@@ -106,6 +107,8 @@ export class OverworldGenerator implements DimensionGenerator {
     F.vegetation(v, seed, cx, cz, v4 ? V4.plantColumn : undefined);
     if (v4) V4.afterVegetation(v, seed, cx, cz);
     F.freeze(v);
+    // V4: fences, panes, walls and stairs built by structures take their proper shapes
+    if (v4) connectChunk(c, { getState: (x, y, z) => v.get(x, y, z) }, (x, y, z, s) => v.set(x, y, z, s));
     // V3: glitched portals and corrupted ruins' chests go on top of everything
     this.terrain.corrupted?.late(v, cx, cz, 'chest/corrupted_cache');
     c.recount();

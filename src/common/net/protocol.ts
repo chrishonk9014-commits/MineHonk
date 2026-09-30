@@ -9,7 +9,7 @@ import type { ItemStack, Slot } from '../game/itemstack';
 import type { GameMode, Difficulty, GodHearts } from '../game/gamemode';
 import type { DimensionId } from '../data/biomes';
 
-export const PROTOCOL_VERSION = 2;
+export const PROTOCOL_VERSION = 3;
 
 // ---------------------------------------------------------------------------
 // Client -> Server

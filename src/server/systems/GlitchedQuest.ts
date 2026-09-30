@@ -82,6 +82,8 @@ interface Fight {
   empty: number;
   cheat: boolean;
   barId: number;
+  /** Players currently shown the stage's boss bar. */
+  barred: Set<ServerPlayer>;
 }
 
 let barIds = -7000;
@@ -146,6 +148,7 @@ export class GlitchedQuestSystem {
     for (const f of [...this.fights.values()]) {
       f.mobs = f.mobs.filter((m) => !m.dead && !m.removed);
       const here = inside.get(f.key) ?? [];
+      this.bar(f, here);
       if (here.length === 0) {
         f.empty += 10;
         if (f.empty >= 600) this.abandon(f);
@@ -153,7 +156,6 @@ export class GlitchedQuestSystem {
       }
       f.empty = 0;
       if (f.mobs.length === 0) this.clear(f);
-      else this.bar(f, here);
     }
     for (const [key, list] of inside) for (const p of list) this.hud(p, this.info(key, p));
     if (s.tickNo % 100 === 0) this.sweepOrphans();
@@ -189,7 +191,7 @@ export class GlitchedQuestSystem {
         mobs.push(m);
         s.particles(dim, 'glitch', m.x, m.y + 1, m.z, 24, 0.6);
       }
-    const f: Fight = { key, dim, e, stage, mobs, maxHp: mobs.reduce((a, m) => a + m.maxHealth, 0), fighters: new Set(players), empty: 0, cheat, barId: barIds-- };
+    const f: Fight = { key, dim, e, stage, mobs, maxHp: mobs.reduce((a, m) => a + m.maxHealth, 0), fighters: new Set(players), empty: 0, cheat, barId: barIds--, barred: new Set() };
     this.fights.set(key, f);
     const cx = (e.cx << 4) + 8;
     const cz = (e.cz << 4) + 8;
@@ -209,7 +211,7 @@ export class GlitchedQuestSystem {
     const rec = this.record(f.key);
     rec.stage = Math.max(rec.stage, f.stage);
     this.openShaft(f.dim, f.e, f.stage);
-    for (const p of f.fighters) p.send({ t: 'boss', id: f.barId, action: 'remove' });
+    for (const p of f.barred) p.send({ t: 'boss', id: f.barId, action: 'remove' });
     const cx = (f.e.cx << 4) + 8;
     const cz = (f.e.cz << 4) + 8;
     if (f.stage < GLITCH_STAGES) {
@@ -270,7 +272,7 @@ export class GlitchedQuestSystem {
   private abandon(f: Fight): void {
     this.fights.delete(f.key);
     for (const m of f.mobs) if (!m.dead && !m.removed) m.remove();
-    for (const p of f.fighters) p.send({ t: 'boss', id: f.barId, action: 'remove' });
+    for (const p of f.barred) p.send({ t: 'boss', id: f.barId, action: 'remove' });
   }
 
   /** Stage mobs left over from a fight that no longer runs (a restart, an unloaded chunk). */
@@ -284,12 +286,22 @@ export class GlitchedQuestSystem {
     }
   }
 
+  /** Shows the stage's boss bar to the players inside, and takes it away from those who left. */
   private bar(f: Fight, here: ServerPlayer[]): void {
+    for (const p of [...f.barred]) {
+      if (here.includes(p)) continue;
+      p.send({ t: 'boss', id: f.barId, action: 'remove' });
+      f.barred.delete(p);
+    }
+    if (!here.length) return;
     const hp = f.mobs.reduce((a, m) => a + Math.max(0, m.health), 0);
     const progress = f.maxHp > 0 ? hp / f.maxHp : 0;
     const title = `STAGE ${f.stage}: ${GLITCH_STAGE_DEFS[f.stage - 1]!.name.toUpperCase()}`;
-    for (const p of here) p.send({ t: 'boss', id: f.barId, action: this.server.tickNo % 200 === 0 || !f.fighters.has(p) ? 'add' : 'update', title, progress, color: 'glitch' });
-    for (const p of here) f.fighters.add(p);
+    for (const p of here) {
+      p.send({ t: 'boss', id: f.barId, action: f.barred.has(p) ? 'update' : 'add', title, progress, color: 'glitch' });
+      f.barred.add(p);
+      f.fighters.add(p);
+    }
   }
 
   /** The quest tracker for a player inside a structure. */

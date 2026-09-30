@@ -115,7 +115,10 @@ describe('V4 Glitched Structure quest', () => {
     const mobs = [...f.mobs];
     // Walk away: after half a minute the stage's mobs dissolve
     server.teleport(player, (e.cx << 4) + 60, 120, (e.cz << 4) + 60);
-    tick(server, 640);
+    tick(server, 20);
+    // The stage's bar goes away as soon as you leave
+    expect(players[0]!.conn.last('boss')?.action).toBe('remove');
+    tick(server, 620);
     expect(q.fights.has(key)).toBe(false);
     expect(mobs.every((m) => m.removed)).toBe(true);
     expect(server.level.quests.glitch[key]!.stage).toBe(1);

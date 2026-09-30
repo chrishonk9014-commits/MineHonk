@@ -72,6 +72,56 @@ rare **glitched ruin** in the Overworld → the **Farlands**. The Farlands have
 overflow walls, glitch ores and data spires. Farlands corruption glitches
 unprotected players; brew a Potion of Stability to resist it.
 
+### The World Update (V4)
+
+Worlds created in V4 generate with generator version 4. **Worlds created
+before V4 keep generating exactly as they did** (hash tests guard every
+dimension), and they keep their fluid rules too.
+
+- **Every biome has its own plants and materials**: desert marigolds and
+  flowering cacti (tall columns, branching saguaros, clusters), aloe and
+  scrub in badlands and savannas, clover and buttercups on plains, leaf
+  litter and shadowcaps in forests, bracket fungus on overgrown fallen logs,
+  lingonberries and snowberries in taigas, frostblooms on snowy plains,
+  edelweiss on meadows, orchids and hanging moss in jungles, cattails,
+  glowcaps and peat in swamps, seashells and beach grass, cherry petals,
+  termite mounds on savannas.
+- **Villages are planned settlements**: a town centre plaza (well or
+  fountain, bell, benches, market stalls), main roads and side streets that
+  follow the ground, plots zoned by distance (smithy, storehouse, workshop
+  and chapel near the plaza; cottages, houses and two-storey manors; fields,
+  pens and watchtowers at the edge), in eight biome styles including jungle
+  and swamp villages on stilts.
+- **New structures**: desert oasis, sun monument, buried tomb, ranger tower,
+  hunter camp, frozen ruins, jungle shrine, swamp shack, stone circle,
+  lighthouse, mountain lookout, prospector camp and the bunker. Temples,
+  huts, igloos and outposts are a little more common; structures never
+  overlap.
+- **Objectives**: set a sun monument's levers to match their glyphs; light a
+  jungle shrine's four braziers; in a bunker, find the keycard, open the
+  security doors, bring both generators online and reach the vault. The
+  quest tracker shows the current objective.
+- **The Error Biome**: about one chunk in 5,000 in the Overworld or the
+  Nether (never the End or the Farlands), exactly one chunk, never two side
+  by side: an unloaded chunk of black and purple ERROR blocks. Dig down to
+  the **Glitched Structure**: five stacked arenas of glitched mobs, each
+  stage harder, each shut off by a Firewall until the one above is cleared.
+  Clearing all five rewards everyone who fought with one Glitched tool and
+  one Glitched armor piece (the same gear the Farlands smithing makes). It
+  never gives the Corrupted Eye or opens the Farlands.
+- **Fences, panes, walls and gates connect properly**, also in generated
+  structures and across chunk borders.
+- **Fluids**: no more endlessly pulsing water edges; flow carries on across
+  unloaded chunk borders and through saves; water reaching lava makes
+  obsidian from a source and cobblestone from flowing lava, lava pouring
+  into water makes stone. Caves never hold water on top of lava: it cools to
+  magma, and cave lava is lined with magma and basalt. Water surfaces slope
+  at their edges and show their flow.
+- **Admin Panel**: a World Update tab finds and teleports to V4 places,
+  drives the Glitched Structure's stages, gives Glitched reward rolls,
+  resets bunkers and builds a fluid test rig. As always, nothing done there
+  counts towards advancements.
+
 ### Recipe Book
 
 The book button in the top corner of the inventory and of every workstation
@@ -131,6 +181,7 @@ test also needs `npm run build:server`. More browser checks:
 ```bash
 npm run test:e2e:v1       # Recipe Book, Admin Panel, cheat-free advancements
 npm run test:e2e:render   # culling never changes a pixel
+npm run test:e2e:v4       # the World Update: Error Biome, Glitched Structure, admin tab
 ```
 
 ### Performance tools

@@ -31,7 +31,7 @@ export interface AdminHost {
   cheats(): boolean;
 }
 
-type Tab = 'items' | 'mobs' | 'teleport' | 'player' | 'world' | 'endgame' | 'perf';
+type Tab = 'items' | 'mobs' | 'teleport' | 'player' | 'world' | 'endgame' | 'v4' | 'perf';
 const TABS: { id: Tab; name: string; icon: string }[] = [
   { id: 'items', name: 'Give Items', icon: 'chest' },
   { id: 'mobs', name: 'Spawn Mobs', icon: 'spawn_egg_zombie' },
@@ -39,6 +39,7 @@ const TABS: { id: Tab; name: string; icon: string }[] = [
   { id: 'player', name: 'Player', icon: 'golden_apple' },
   { id: 'world', name: 'World', icon: 'grass_block' },
   { id: 'endgame', name: 'Endgame', icon: 'corrupted_eye' },
+  { id: 'v4', name: 'World Update', icon: 'error_block' },
   { id: 'perf', name: 'Performance', icon: 'redstone' },
 ];
 const DIM_NAMES: Record<string, string> = { overworld: 'Overworld', nether: 'Nether', end: 'The End', farlands: 'Farlands' };
@@ -571,6 +572,59 @@ export function adminScreen(host: AdminHost): Screen {
     );
   };
 
+  // ------------------------------------------------------------------ the World Update (V4)
+  const renderV4 = (): HTMLElement => {
+    const state = el('div', { class: 'admin-stats' });
+    const showState = (d: unknown): void => {
+      if (!d || typeof d !== 'object') return;
+      const st = d as { inErrorBiome: boolean; glitch: { stage: number; done: boolean; fighting: number | null; mobs: number } | null; bunker: { stage: number; done: boolean } | null };
+      clear(state);
+      const rows: [string, string][] = [
+        ['Glitched Structure', st.glitch ? (st.glitch.done ? 'complete' : st.glitch.fighting ? `stage ${st.glitch.fighting} in progress, ${st.glitch.mobs} left` : `${st.glitch.stage} of 5 stages cleared`) : 'not in an Error Biome chunk'],
+        ['Bunker', st.bunker ? (st.bunker.done ? 'secured' : `objective ${st.bunker.stage} of 4`) : 'not in a bunker'],
+      ];
+      for (const [k, v] of rows) state.append(el('div', { class: 'row' }, el('span', { class: 'muted' }, k), el('span', {}, v)));
+    };
+    const op = (o: 'status' | 'glitch_start' | 'glitch_clear' | 'glitch_reset' | 'glitch_reward' | 'fluid_rig' | 'bunker_reset'): void => void send({ a: 'v4', op: o }).then((r) => showState(r.data));
+    const find = (dim: DimensionId, structure: string, label: string): HTMLElement =>
+      el('div', { class: 'row' }, el('span', { class: 'label' }, label), btn('Find', () => void send({ a: 'locate_structure', dim, structure }), 'btn chip'), btn('Teleport', () => void send({ a: 'tp_structure', dim, structure }), 'btn chip'));
+    const spawn = (mob: string, label: string): HTMLElement => btn(label, () => void send({ a: 'spawn', mob, count: 1 }), 'btn chip');
+    const give = (item: string, label: string): HTMLElement => btn(label, () => void send({ a: 'give', item, count: 1 }), 'btn chip');
+    op('status');
+    return el(
+      'div',
+      { class: 'admin-cols' },
+      el(
+        'div',
+        { class: 'admin-col' },
+        section(
+          'Find',
+          find('overworld', 'village', 'Village'),
+          find('overworld', 'sun_monument', 'Sun Monument'),
+          find('overworld', 'jungle_shrine', 'Jungle Shrine'),
+          find('overworld', 'bunker', 'Bunker'),
+          find('overworld', 'stone_circle', 'Stone Circle'),
+          find('overworld', 'desert_oasis', 'Desert Oasis'),
+          find('overworld', 'lighthouse', 'Lighthouse'),
+          find('overworld', 'buried_tomb', 'Buried Tomb'),
+          find('overworld', 'error_biome', 'Error Biome'),
+          find('overworld', 'glitched_structure', 'Glitched Structure'),
+          find('nether', 'glitched_structure', 'Glitched Structure (Nether)'),
+        ),
+        section('Spawn Glitched Mobs', el('div', { class: 'admin-chips' }, spawn('glitch_zombie', 'Glitched Zombie'), spawn('glitch_skeleton', 'Glitched Skeleton'), spawn('rift_walker', 'Rift Walker'), spawn('void_wisp', 'Void Wisp'), spawn('glitch_beast', 'Glitch Beast'))),
+      ),
+      el(
+        'div',
+        { class: 'admin-col' },
+        section('Quests', state, btn('Refresh', () => op('status'), 'btn chip')),
+        section('Glitched Structure', el('div', { class: 'muted small' }, 'Stand in the Error Biome chunk. Stages started or cleared here are cheats.'), el('div', { class: 'admin-chips' }, btn('Start next stage', () => op('glitch_start'), 'btn chip'), btn('Clear stage', () => op('glitch_clear'), 'btn chip'), btn('Reset structure', () => op('glitch_reset'), 'btn chip'))),
+        section('Give', el('div', { class: 'admin-chips' }, btn('Glitched reward roll', () => op('glitch_reward'), 'btn chip'), give('glitched_pickaxe', 'Glitched Pickaxe'), give('glitched_chestplate', 'Glitched Chestplate'), give('bunker_keycard', 'Bunker Keycard'))),
+        section('Bunker', btn('Reset this bunker', () => op('bunker_reset'), 'btn chip')),
+        section('Fluids', el('div', { class: 'muted small' }, 'Builds a glass tank beside you where water meets lava sources and flowing lava.'), btn('Build fluid test rig', () => op('fluid_rig'), 'btn chip')),
+      ),
+    );
+  };
+
   // ------------------------------------------------------------------ performance
   const renderPerf = (): HTMLElement => {
     const box = el('div', { class: 'admin-cols' });
@@ -603,7 +657,7 @@ export function adminScreen(host: AdminHost): Screen {
     for (const c of tabs.children) c.classList.toggle('active', (c as HTMLElement).dataset.tab === t);
     clear(body);
     hideTooltip();
-    const view = t === 'items' ? renderItems() : t === 'mobs' ? renderMobs() : t === 'teleport' ? renderTeleport() : t === 'player' ? renderPlayer() : t === 'world' ? renderWorld() : t === 'endgame' ? renderEndgame() : renderPerf();
+    const view = t === 'items' ? renderItems() : t === 'mobs' ? renderMobs() : t === 'teleport' ? renderTeleport() : t === 'player' ? renderPlayer() : t === 'world' ? renderWorld() : t === 'endgame' ? renderEndgame() : t === 'v4' ? renderV4() : renderPerf();
     body.append(view);
   };
   for (const t of TABS) {

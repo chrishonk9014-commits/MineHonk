@@ -313,6 +313,29 @@ export class GlitchedQuestSystem {
     p.send({ t: 'quest', quest: q });
   }
 
+  /** Admin Panel: clears the current stage as a cheat (its fight is marked, rewards are cheat-made). */
+  adminClear(key: string): boolean {
+    const f = this.fights.get(key);
+    if (!f) return false;
+    f.cheat = true;
+    for (const m of f.mobs) m.remove();
+    return true;
+  }
+
+  /** Admin Panel: forgets a structure's progress and shuts its firewalls again. */
+  adminReset(dim: Dimension, e: ErrorChunk): void {
+    const key = GlitchedQuestSystem.key(dim, e);
+    const f = this.fights.get(key);
+    if (f) this.abandon(f);
+    delete this.server.level.quests.glitch[key];
+    this.participants.delete(key);
+    if (!dim.getChunk(e.cx, e.cz)) return;
+    for (let stage = 1; stage <= GLITCH_STAGES; stage++) {
+      const { lx, lz } = shaftAt(stage);
+      dim.setBlock((e.cx << 4) + lx, levelFloor(e, stage), (e.cz << 4) + lz, stateOf('glitch_firewall', {}));
+    }
+  }
+
   /** A player left the server: forget what their tracker shows. */
   onLeave(p: ServerPlayer): void {
     this.shown.delete(p);

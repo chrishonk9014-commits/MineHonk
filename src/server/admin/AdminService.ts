@@ -19,15 +19,20 @@ import type { ServerPlayer } from '../player/ServerPlayer';
 import type { Dimension } from '../world/Dimension';
 import type { Entity } from '../entity/Entity';
 import { Mob } from '../entity/Mob';
-import { validateAdmin, xpForLevel, structureName, ADMIN_DIMENSIONS, type AdminAction, type AdminCatalog, type LocateResult } from '../../common/game/admin';
-import { itemById, items } from '../../common/registry/items';
+import { validateAdmin, xpForLevel, structureName, ADMIN_DIMENSIONS, type AdminAction, type AdminCatalog, type LocateResult, type V4Op } from '../../common/game/admin';
+import { GlitchedQuestSystem } from '../systems/GlitchedQuest';
+import { StructureQuests } from '../systems/StructureQuests';
+import type { Start } from '../../common/gen/structures/manager';
+import { itemById, items, itemOf } from '../../common/registry/items';
 import { markAdmin, isAdminStack, stackOf, type ItemStack, type Slot } from '../../common/game/itemstack';
 import { POTION_BY_ID } from '../../common/data/potions';
 import { ENCHANT_BY_ID } from '../../common/data/enchantments';
 import { MOB_DEFS, mobDef } from '../../common/data/mobs';
 import { biomes, biomeOf } from '../../common/registry/biomes';
 import { maxHealthFor } from '../../common/game/gamemode';
-import { STATE_SOLID, STATE_FLUID, STATE_BLOCK, blocks } from '../../common/registry/blocks';
+import { STATE_SOLID, STATE_FLUID, STATE_BLOCK, blocks, S, stateOf, withProp, hasProp } from '../../common/registry/blocks';
+import { rollLoot } from '../../common/game/loot';
+import { Random } from '../../common/math/rng';
 import { chunkIndex } from '../../common/world/constants';
 import type { DimensionId } from '../../common/data/biomes';
 import { ADMIN_ZONE_RADIUS, MAX_ADMIN_ZONES } from './adminState';
@@ -439,9 +444,118 @@ export class AdminService {
         return { ok: true, text: '', data: this.perf() };
       case 'endgame':
         return this.endgame(p, a.op, a.id);
+      case 'v4':
+        return this.v4(p, a.op);
       default:
         return { ok: false, text: 'Unknown action.' };
     }
+  }
+
+  /** V4: the Glitched Structure's quest, bunkers, and a fluid test rig. Everything here is a cheat. */
+  private v4(p: ServerPlayer, op: V4Op): { ok: boolean; text: string; data?: unknown } {
+    const s = this.server;
+    if (s.level.generatorVersion < 4) return { ok: false, text: 'This world was created before the World Update (V4).' };
+    const gq = s.glitchedQuest;
+    const e = gq?.errorAt(p) ?? null;
+    const key = e ? GlitchedQuestSystem.key(p.dim, e) : null;
+    const status = (): Record<string, unknown> => {
+      const rec = key ? s.level.quests.glitch[key] : undefined;
+      const f = key ? gq?.fights.get(key) : undefined;
+      const bunker = this.bunkerHere(p);
+      const brec = bunker ? s.level.quests.bunker[StructureQuests.key(bunker)] : undefined;
+      return {
+        inErrorBiome: !!e,
+        glitch: e ? { stage: rec?.stage ?? 0, done: rec?.done ?? false, fighting: f ? f.stage : null, mobs: f?.mobs.length ?? 0 } : null,
+        bunker: bunker ? { stage: brec?.stage ?? 0, done: brec?.done ?? false } : null,
+      };
+    };
+    switch (op) {
+      case 'status':
+        return { ok: true, text: '', data: status() };
+      case 'glitch_start': {
+        if (!e || !gq || !key) return { ok: false, text: 'Stand in an Error Biome chunk first (Teleport: Glitched Structure).' };
+        const rec = gq.record(key);
+        if (rec.done) return { ok: false, text: 'This Glitched Structure is complete. Reset it first.' };
+        if (gq.fights.has(key)) return { ok: false, text: 'A stage is already in progress.' };
+        const f = gq.start(p.dim, e, rec.stage + 1, true);
+        return f ? { ok: true, text: `Stage ${f.stage} started (as a cheat).`, data: status() } : { ok: false, text: 'Could not start the stage.' };
+      }
+      case 'glitch_clear':
+        if (!key || !gq?.adminClear(key)) return { ok: false, text: 'No stage is in progress here.' };
+        return { ok: true, text: 'Stage cleared (as a cheat).', data: status() };
+      case 'glitch_reset':
+        if (!e || !gq) return { ok: false, text: 'Stand in an Error Biome chunk first.' };
+        gq.adminReset(p.dim, e);
+        return { ok: true, text: 'The Glitched Structure was reset: every firewall is shut again.', data: status() };
+      case 'glitch_reward': {
+        const loot = rollLoot('quest/glitched_reward', { rng: new Random() });
+        for (const st of loot) {
+          const rest = p.inventory.add(markAdmin(st));
+          if (rest) s.interaction.dropStack(p, rest);
+        }
+        s.interaction.syncInventory(p);
+        return { ok: true, text: `Gave a Glitched Structure reward roll: ${loot.map((st: ItemStack) => itemOf(st.id)?.def.name).join(', ')}.` };
+      }
+      case 'bunker_reset': {
+        const b = this.bunkerHere(p);
+        if (!b || b.quest?.kind !== 'bunker') return { ok: false, text: 'Stand inside a bunker first.' };
+        const q = b.quest;
+        delete s.level.quests.bunker[StructureQuests.key(b)];
+        const dim = p.dim;
+        const lit = (pos: [number, number, number], on: boolean): void => {
+          const st = dim.getState(...pos);
+          if (hasProp(st, 'lit')) dim.setBlock(...pos, withProp(st, 'lit', on ? 'true' : 'false'));
+        };
+        lit(q.reader, false);
+        for (const g of q.generators) lit(g, false);
+        for (const d of q.doors) {
+          const st = dim.getState(...d);
+          if (hasProp(st, 'open')) dim.setBlock(...d, withProp(st, 'open', 'false'), { updateNeighbors: false });
+        }
+        for (const b2 of q.blast) dim.setBlock(...b2, S('bunker_blast_door'));
+        return { ok: true, text: 'The bunker was reset.', data: status() };
+      }
+      case 'fluid_rig': {
+        // A glass tank beside the player: a water channel running into lava sources and flowing lava
+        const dim = p.dim;
+        const x0 = Math.floor(p.x) + 3;
+        const y0 = Math.floor(p.y);
+        const z0 = Math.floor(p.z) - 4;
+        for (let x = 0; x < 9; x++)
+          for (let z = 0; z < 9; z++)
+            for (let y = -1; y <= 3; y++) {
+              const wall = x === 0 || x === 8 || z === 0 || z === 8 || y === -1;
+              dim.setBlock(x0 + x, y0 + y, z0 + z, wall ? S('glass') : 0);
+              this.setBlockMark(dim, x0 + x, y0 + y, z0 + z, true);
+            }
+        const mark = (x: number, y: number, z: number, st: number): void => {
+          dim.setBlock(x0 + x, y0 + y, z0 + z, st);
+          this.setBlockMark(dim, x0 + x, y0 + y, z0 + z, true);
+        };
+        for (let x = 1; x < 8; x++) mark(x, 0, 4, S('stone'));
+        mark(2, 0, 2, S('lava'));
+        // Lava falling from a source keeps a stream of flowing lava for the water to meet
+        mark(6, 2, 2, S('lava'));
+        mark(4, 0, 6, S('lava'));
+        mark(4, 2, 4, S('water'));
+        mark(2, 2, 6, S('water'));
+        return { ok: true, text: 'Fluid test rig built: watch water meet lava sources (obsidian) and flowing lava (cobblestone).' };
+      }
+    }
+    return { ok: false, text: 'Unknown operation.' };
+  }
+
+  /** The bunker whose area the player stands in, if any. */
+  private bunkerHere(p: ServerPlayer): Start | null {
+    const g = p.dim.generator as { questStartsAt?(cx: number, cz: number): Start[] };
+    const list = g.questStartsAt?.(Math.floor(p.x) >> 4, Math.floor(p.z) >> 4) ?? [];
+    return (
+      list.find((b) => {
+        if (b.quest?.kind !== 'bunker') return false;
+        const a = b.quest.area;
+        return p.x >= a.x0 && p.x <= a.x1 + 1 && p.z >= a.z0 && p.z <= a.z1 + 1 && p.y >= a.y0 - 1 && p.y <= a.y1 + 2;
+      }) ?? null
+    );
   }
 
   /** V3: endings and The Error. Forced endings are remembered as forced, never as reached. */
@@ -798,7 +912,7 @@ export class AdminService {
     for (const d of ADMIN_DIMENSIONS) {
       structures[d] = s.dim(d).generator.structureTypes?.() ?? [];
       if (s.dim(d).generator.caves) caves[d] = caveFeatures();
-      bl[d] = biomes.filter((b) => b.dimension === d).map((b) => ({ id: b.id, name: b.name }));
+      bl[d] = biomes.filter((b) => b.dimension === d && b.id !== 'error_biome').map((b) => ({ id: b.id, name: b.name }));
     }
     return {
       structures,

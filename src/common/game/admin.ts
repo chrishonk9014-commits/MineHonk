@@ -44,7 +44,27 @@ export const STRUCTURE_NAMES: Record<string, string> = {
   // V3
   glitched_portal: 'Glitched Portal',
   error_arena: "The Error's Arena",
+  // V4: The World Update
+  desert_oasis: 'Desert Oasis',
+  sun_monument: 'Sun Monument',
+  buried_tomb: 'Buried Tomb',
+  ranger_tower: 'Ranger Tower',
+  hunter_camp: 'Hunter Camp',
+  frozen_ruins: 'Frozen Ruins',
+  jungle_shrine: 'Jungle Shrine',
+  swamp_shack: 'Swamp Shack',
+  stone_circle: 'Stone Circle',
+  lighthouse: 'Lighthouse',
+  mountain_lookout: 'Mountain Lookout',
+  prospector_camp: 'Prospector Camp',
+  bunker: 'Bunker',
+  error_biome: 'Error Biome',
+  glitched_structure: 'Glitched Structure',
 };
+
+/** V4 Admin Panel operations (all cheats: never advancements, rewards cheat-marked). */
+export const V4_OPS = ['status', 'glitch_start', 'glitch_clear', 'glitch_reset', 'glitch_reward', 'fluid_rig', 'bunker_reset'] as const;
+export type V4Op = (typeof V4_OPS)[number];
 
 export function structureName(id: string): string {
   return STRUCTURE_NAMES[id] ?? id.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
@@ -80,7 +100,9 @@ export type AdminAction =
   | { a: 'perf' }
   | { a: 'set_cheats'; on: boolean }
   /** V3 endgame: endings and The Error's fight (all cheats: never advancements). */
-  | { a: 'endgame'; op: 'status' | 'reset_endings' | 'force_ending' | 'reset_error'; id?: string };
+  | { a: 'endgame'; op: 'status' | 'reset_endings' | 'force_ending' | 'reset_error'; id?: string }
+  /** V4: the Glitched Structure's quest, bunkers and a fluid test rig. */
+  | { a: 'v4'; op: V4Op };
 
 export type AdminActionName = AdminAction['a'];
 
@@ -95,6 +117,9 @@ export function validateAdmin(raw: unknown): AdminAction | null {
   if (!raw || typeof raw !== 'object') return null;
   const m = raw as Record<string, unknown>;
   switch (m.a) {
+    case 'v4':
+      if (!V4_OPS.includes(m.op as V4Op)) return null;
+      return { a: 'v4', op: m.op as V4Op };
     case 'endgame':
       if (m.op !== 'status' && m.op !== 'reset_endings' && m.op !== 'force_ending' && m.op !== 'reset_error') return null;
       if (m.op === 'force_ending' && !id(m.id)) return null;

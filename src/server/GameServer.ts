@@ -728,6 +728,7 @@ export class GameServer {
   }
 
   onChunkUnloaded(dim: Dimension, c: Chunk): void {
+    this.blockUpdates.onChunkUnloaded(dim, c);
     this.mobs?.onChunkUnloaded(dim, c);
     this.sculk?.onChunkUnload(dim, c.cx, c.cz);
     const k = chunkIndex(c.cx, c.cz);

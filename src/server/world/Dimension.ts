@@ -243,7 +243,7 @@ export class Dimension implements BlockAccess {
       const last = this.wanted.get(k);
       if (last !== undefined && now - last < graceTicks) continue;
       if (this.server.isChunkForceLoaded(this, c.cx, c.cz)) continue;
-      if (c.dirty || this.chunkHasPersistentEntities(k)) toSave.push(c);
+      if (c.dirty || this.chunkHasPersistentEntities(k) || this.server.blockUpdates.hasTicks(this, c)) toSave.push(c);
       this.chunks.delete(k);
       this.wanted.delete(k);
       this.server.onChunkUnloaded(this, c);
@@ -281,6 +281,8 @@ export class Dimension implements BlockAccess {
           if (s) ents.push(s);
         }
       }
+      // V4: pending block ticks (flowing fluids...) travel with the chunk
+      ents.push(...this.server.blockUpdates.savedTicks(this, c));
       if (!c.modified && ents.length === 0) {
         c.dirty = false;
         continue;
@@ -293,7 +295,7 @@ export class Dimension implements BlockAccess {
 
   async saveAll(): Promise<void> {
     const list: Chunk[] = [];
-    for (const [k, c] of this.chunks) if (c.dirty || this.chunkHasPersistentEntities(k)) list.push(c);
+    for (const [k, c] of this.chunks) if (c.dirty || this.chunkHasPersistentEntities(k) || this.server.blockUpdates.hasTicks(this, c)) list.push(c);
     await this.saveChunks(list);
   }
 

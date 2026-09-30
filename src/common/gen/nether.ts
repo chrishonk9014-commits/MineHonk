@@ -18,6 +18,7 @@ import { StructureManager } from './structures/manager';
 import { NETHER_STRUCTURES } from './structures/nether';
 import { ProtoCache, cloneChunk, addGenEntities, LATEST_GENERATOR, type DimensionGenerator, type GeneratorOptions, type SpawnPoint } from './pipeline';
 import { connectChunk } from '../game/connections';
+import { buildErrorChunk, cellCandidate, ERROR_CELL, STRUCTURE_H, nearestError, errorLocation, levelAt, type ErrorChunk } from './v4/errorBiome';
 
 /** Top of the Nether (bedrock roof). */
 export const NETHER_ROOF = 127;
@@ -473,6 +474,34 @@ export class NetherGenerator implements DimensionGenerator {
     );
   }
 
+  private readonly errorCache = new Map<string, ErrorChunk | null>();
+
+  /** The Error Biome chunk of a cell (V4): a pillar of broken slab rising from the Nether's floor. */
+  errorOfCell(gx: number, gz: number): ErrorChunk | null {
+    const key = gx + ',' + gz;
+    if (this.errorCache.has(key)) return this.errorCache.get(key)!;
+    const [cx, cz] = cellCandidate(this.seed, 'nether', gx, gz);
+    const floor = this.floorNear((cx << 4) + 8, 64, (cz << 4) + 8);
+    const base = 6;
+    const surface = Math.max(base + STRUCTURE_H + 6, Math.min(110, floor));
+    const e: ErrorChunk = { cx, cz, surface, base };
+    if (this.errorCache.size > 256) this.errorCache.clear();
+    this.errorCache.set(key, e);
+    return e;
+  }
+
+  errorChunk(cx: number, cz: number): ErrorChunk | null {
+    if (this.version < 4) return null;
+    const cell = ERROR_CELL.nether;
+    const e = this.errorOfCell(Math.floor(cx / cell), Math.floor(cz / cell));
+    return e && e.cx === cx && e.cz === cz ? e : null;
+  }
+
+  nearestErrorChunk(x: number, z: number, maxRings = 10): ErrorChunk | null {
+    if (this.version < 4) return null;
+    return nearestError((gx, gz) => this.errorOfCell(gx, gz), ERROR_CELL.nether, x, z, maxRings);
+  }
+
   /** Nearest floor to `y` at a column in pure terrain (-1 if none). */
   floorNear(x: number, y: number, z: number): number {
     const c = this.protos.get(x >> 4, z >> 4);
@@ -499,6 +528,9 @@ export class NetherGenerator implements DimensionGenerator {
     netherVegetation(v, this.seed, cx, cz);
     // V4: fortress fences and other connecting blocks take their proper shapes
     if (this.version >= 4) connectChunk(c, { getState: (x, y, z) => v.get(x, y, z) }, (x, y, z, st) => v.set(x, y, z, st));
+    // V4: the Error Biome reaches the Nether too
+    const err = this.errorChunk(cx, cz);
+    if (err) buildErrorChunk(c, err, this.seed, 'nether');
     c.recount();
     c.recomputeHeightmap();
     for (const s of starts) addGenEntities(c, s);
@@ -522,19 +554,23 @@ export class NetherGenerator implements DimensionGenerator {
   }
 
   structureAt(x: number, y: number, z: number): string | null {
+    const e = this.errorChunk(Math.floor(x) >> 4, Math.floor(z) >> 4);
+    if (e) return levelAt(e, x, y, z) >= 0 ? 'glitched_structure' : 'error_biome';
     return this.structures.structureAt(x, y, z);
   }
 
   structureTypes(): string[] {
-    return [...this.structures.typeIds()];
+    return [...this.structures.typeIds(), ...(this.version >= 4 ? ['error_biome', 'glitched_structure'] : [])];
   }
 
   *locateSteps(type: string, x: number, z: number): Generator<void, { x: number; y: number; z: number } | null> {
+    if (type === 'error_biome' || type === 'glitched_structure') return errorLocation(this.nearestErrorChunk(x, z), type);
     const s = yield* this.structures.nearestSteps(type, x, z);
     return s ? { x: s.x, y: s.y, z: s.z } : null;
   }
 
   locate(type: string, x: number, z: number): { x: number; y: number; z: number } | null {
+    if (type === 'error_biome' || type === 'glitched_structure') return errorLocation(this.nearestErrorChunk(x, z), type);
     const s = this.structures.nearest(type, x, z, 10);
     return s ? { x: s.x, y: s.y, z: s.z } : null;
   }

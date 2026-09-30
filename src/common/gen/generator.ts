@@ -29,6 +29,8 @@ import { EndGenerator } from './end';
 import { FarlandsGenerator } from './farlands';
 import * as V4 from './v4/decorate';
 import { connectChunk } from '../game/connections';
+import { buildErrorChunk, cellCandidate, ERROR_CELL, STRUCTURE_H, nearestError, errorLocation, levelAt, type ErrorChunk } from './v4/errorBiome';
+import { SEA_LEVEL } from '../world/constants';
 
 export { ProtoCache, cloneChunk, type DimensionGenerator, type GeneratorOptions, type SpawnPoint };
 
@@ -87,6 +89,56 @@ export class OverworldGenerator implements DimensionGenerator {
     return this.terrain.version >= 4;
   }
 
+  private readonly errorCache = new Map<string, ErrorChunk | null>();
+
+  /** The Error Biome chunk of the cell containing chunk (cx, cz), if the cell has one (V4). */
+  errorOfCell(gx: number, gz: number): ErrorChunk | null {
+    const key = gx + ',' + gz;
+    if (this.errorCache.has(key)) return this.errorCache.get(key)!;
+    let e: ErrorChunk | null = null;
+    const [cx, cz] = cellCandidate(this.seed, 'overworld', gx, gz);
+    const mx = (cx << 4) + 8;
+    const mz = (cz << 4) + 8;
+    const cat = biomeOf(this.terrain.estimateBiome(mx, mz)).category;
+    if (this.terrain.estimateHeight(mx, mz) > SEA_LEVEL + 1 && cat !== 'ocean' && cat !== 'river') {
+      // The slab sits at the chunk's average ground height
+      const pc = this.protos.get(cx, cz);
+      let sum = 0;
+      for (const [lx, lz] of [
+        [1, 1],
+        [14, 1],
+        [1, 14],
+        [14, 14],
+        [8, 8],
+      ] as const)
+        sum += pc.getHeight(lx, lz) - 1;
+      let surface = Math.max(SEA_LEVEL + 2, Math.min(200, Math.round(sum / 5)));
+      let base = surface - 7 - (STRUCTURE_H - 1);
+      if (base < 6) {
+        base = 6;
+        surface = base + STRUCTURE_H + 6;
+      }
+      e = { cx, cz, surface, base };
+    }
+    if (this.errorCache.size > 256) this.errorCache.clear();
+    this.errorCache.set(key, e);
+    return e;
+  }
+
+  /** The Error Biome chunk at (cx, cz), or null (V4 worlds only). */
+  errorChunk(cx: number, cz: number): ErrorChunk | null {
+    if (!this.v4) return null;
+    const cell = ERROR_CELL.overworld;
+    const e = this.errorOfCell(Math.floor(cx / cell), Math.floor(cz / cell));
+    return e && e.cx === cx && e.cz === cz ? e : null;
+  }
+
+  /** Nearest Error Biome chunk, searched cell by cell outwards. */
+  nearestErrorChunk(x: number, z: number, maxRings = 10): ErrorChunk | null {
+    if (!this.v4) return null;
+    return nearestError((gx, gz) => this.errorOfCell(gx, gz), ERROR_CELL.overworld, x, z, maxRings);
+  }
+
   generate(cx: number, cz: number): Chunk {
     const proto = this.protos.get(cx, cz);
     const c = cloneChunk(proto);
@@ -109,6 +161,9 @@ export class OverworldGenerator implements DimensionGenerator {
     F.freeze(v);
     // V4: fences, panes, walls and stairs built by structures take their proper shapes
     if (v4) connectChunk(c, { getState: (x, y, z) => v.get(x, y, z) }, (x, y, z, s) => v.set(x, y, z, s));
+    // V4: the rare chunk that failed to load
+    const err = v4 ? this.errorChunk(cx, cz) : null;
+    if (err) buildErrorChunk(c, err, seed, 'overworld');
     // V3: glitched portals and corrupted ruins' chests go on top of everything
     this.terrain.corrupted?.late(v, cx, cz, 'chest/corrupted_cache');
     c.recount();
@@ -156,6 +211,8 @@ export class OverworldGenerator implements DimensionGenerator {
   }
 
   structureAt(x: number, y: number, z: number): string | null {
+    const e = this.errorChunk(Math.floor(x) >> 4, Math.floor(z) >> 4);
+    if (e) return levelAt(e, x, y, z) >= 0 ? 'glitched_structure' : 'error_biome';
     return this.structures.structureAt(x, y, z);
   }
 
@@ -186,11 +243,12 @@ export class OverworldGenerator implements DimensionGenerator {
   }
 
   structureTypes(): string[] {
-    return [...this.structures.typeIds(), 'dungeon', ...(this.terrain.corrupted ? ['glitched_portal'] : [])];
+    return [...this.structures.typeIds(), 'dungeon', ...(this.terrain.corrupted ? ['glitched_portal'] : []), ...(this.v4 ? ['error_biome', 'glitched_structure'] : [])];
   }
 
   *locateSteps(type: string, x: number, z: number): Generator<void, { x: number; y: number; z: number } | null> {
     if (type === 'dungeon') return yield* this.dungeonSteps(x, z);
+    if (type === 'error_biome' || type === 'glitched_structure') return errorLocation(this.nearestErrorChunk(x, z), type);
     if (type === 'glitched_portal') return this.terrain.corrupted?.nearestPortal(x, z) ?? null;
     const s = yield* this.structures.nearestSteps(type, x, z);
     return s ? { x: s.x, y: s.y, z: s.z } : null;
@@ -287,6 +345,7 @@ export class OverworldGenerator implements DimensionGenerator {
   }
 
   locate(type: string, x: number, z: number): { x: number; y: number; z: number } | null {
+    if (type === 'error_biome' || type === 'glitched_structure') return errorLocation(this.nearestErrorChunk(x, z), type);
     if (type === 'glitched_portal') return this.terrain.corrupted?.nearestPortal(x, z) ?? null;
     if (type === 'corrupted_caves') {
       const zone = this.terrain.corrupted?.nearest(x, z);

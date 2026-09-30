@@ -51,6 +51,10 @@ export interface DimensionGenerator {
   caveBiomeAt?(x: number, y: number, z: number): number;
   /** Whether a position lies inside a mega-cavern (V2 overworld). */
   inMegaCavern?(x: number, y: number, z: number): boolean;
+  /** V4: the Error Biome chunk at chunk (cx, cz), if that chunk is one. */
+  errorChunk?(cx: number, cz: number): import('./v4/errorBiome').ErrorChunk | null;
+  /** V4: nearest Error Biome chunk. */
+  nearestErrorChunk?(x: number, z: number, maxRings?: number): import('./v4/errorBiome').ErrorChunk | null;
   /** Structure type whose bounds contain the position (used for structure mob spawns). */
   structureAt?(x: number, y: number, z: number): string | null;
 }

@@ -215,4 +215,9 @@ far({ id: 'shattered_expanse', name: 'Shattered Expanse', category: 'farlands', 
 far({ id: 'static_fields', name: 'Static Fields', category: 'farlands', grass: 0x8a8a8a, foliage: 0x7a7a7a, water: 0x7a3fe4, sky: 0x5a5a5a, fog: 0x6a6a6a, surface: { top: 'static_block', filler: 'farstone', depth: 1 }, rare: true, spawns: { monster: [...FAR_MONSTERS, { mob: 'rift_walker', weight: 30, min: 1, max: 2 }] }, ambience: { particles: 'static' } });
 far({ id: 'null_forest', name: 'Null Forest', category: 'farlands', grass: 0x2f6b62, foliage: 0x2a5f58, water: 0x7a3fe4, sky: 0x74849a, fog: 0x7c8ca2, surface: { top: 'far_grass_block', filler: 'far_dirt', depth: 3 }, trees: [{ kind: 'null_tree', weight: 1 }], treeDensity: 6, grassDensity: 0.3, spawns: { monster: FAR_MONSTERS }, ambience: { particles: 'glitch' } });
 
+// --- V4: the Error Biome ------------------------------------------------------------
+// One chunk that failed to load, in the Overworld or the Nether (never the End or the
+// Farlands). Placed by the V4 generators, not by climate; nothing spawns there naturally.
+defs.push({ id: 'error_biome', name: 'Error Biome', dimension: 'overworld', category: 'error', temperature: 0.5, downfall: 0, precipitation: 'none', grass: 0x3a0060, foliage: 0x3a0060, water: 0x7a00ff, sky: 0x1a0024, fog: 0x2a0040, surface: { top: 'error_block', filler: 'null_block', depth: 1 }, rare: true, spawns: { creature: [], monster: [], ambient: [] }, ambience: { particles: 'glitch' } });
+
 export const BIOME_DEFS: readonly BiomeDef[] = defs;

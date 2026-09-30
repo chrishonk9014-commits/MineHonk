@@ -1962,3 +1962,65 @@ body {
   pointer-events: auto;
   touch-action: none;
 }
+
+/* V4: the quest tracker (bunkers, the Glitched Structure) */
+.quest-tracker {
+  position: absolute;
+  left: calc(var(--s) * 4);
+  top: calc(var(--s) * 40);
+  width: calc(var(--s) * 110);
+  padding: calc(var(--s) * 3) calc(var(--s) * 4);
+  background: rgba(0, 0, 0, 0.45);
+  border-left: calc(var(--s) * 2) solid #e8c020;
+  font-size: calc(var(--s) * 6);
+  line-height: calc(var(--s) * 8);
+  color: #e8e8e8;
+  text-shadow: var(--s) var(--s) 0 rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+}
+.quest-tracker .quest-title {
+  color: #ffe070;
+  margin-bottom: calc(var(--s) * 2);
+}
+.quest-tracker .quest-left {
+  color: #ffb0b0;
+}
+.quest-pips {
+  display: flex;
+  gap: calc(var(--s) * 2);
+  margin-bottom: calc(var(--s) * 2);
+}
+.quest-pips .pip {
+  width: calc(var(--s) * 10);
+  height: calc(var(--s) * 3);
+  background: #333;
+  border: calc(var(--s) * 0.5) solid #000;
+}
+.quest-pips .pip.done {
+  background: #e8c020;
+}
+.quest-glitch {
+  border-left-color: #b050ff;
+  background: repeating-linear-gradient(0deg, rgba(10, 0, 20, 0.6) 0 3px, rgba(30, 0, 50, 0.55) 3px 4px);
+  animation: quest-glitch 2.3s steps(1) infinite;
+}
+.quest-glitch .quest-title {
+  color: #e0a0ff;
+  letter-spacing: 0.15em;
+  text-shadow: 2px 0 #ff2bd6, -2px 0 #00e5ff;
+}
+.quest-glitch .quest-pips .pip.done {
+  background: repeating-linear-gradient(90deg, #ff2bd6 0 4px, #9b30ff 4px 7px, #00e5ff 7px 8px);
+}
+@keyframes quest-glitch {
+  0%, 92% {
+    transform: none;
+  }
+  94% {
+    transform: translateX(calc(var(--s) * 2)) skewX(-4deg);
+  }
+  97% {
+    transform: translateX(calc(var(--s) * -1));
+    filter: hue-rotate(60deg);
+  }
+}

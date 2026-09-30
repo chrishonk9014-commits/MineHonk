@@ -654,6 +654,9 @@ export class Game {
       case 'title':
         this.hud.showTitle(m.text, m.sub, m.ticks);
         break;
+      case 'quest':
+        this.hud.setQuest(m.quest);
+        break;
       case 'world_info':
         this.worldInfo = m.world;
         this.updateCheatsIndicator();
@@ -1241,6 +1244,7 @@ export class Game {
     const p = this.player;
     const b = p.body;
     this.caveAmbience();
+    this.errorAmbience();
     const light = this.world.getLight(Math.floor(b.x), Math.floor(b.y + 1.6), Math.floor(b.z));
     const skyLight = light >> 4;
     if (this.dimension === 'overworld') {
@@ -1266,6 +1270,33 @@ export class Game {
       const boss = this.hud.hasBoss();
       this.audio.music.update(MusicPlayer.moodFor(this.dimension, this.player.gamemode === 'creative', p.body.eyesInWater, boss, this.caveBiome));
     }
+  }
+
+  private inErrorBiome = false;
+
+  /**
+   * V4: inside the Error Biome the air crawls with glitch particles, a low
+   * hum plays and the screen stutters now and then (all within the Glitch
+   * Effects and particle settings).
+   */
+  private errorAmbience(): void {
+    const b = this.player.body;
+    const inside = this.world.biomeAt(b.x, b.z).id === 'error_biome';
+    const g = this.renderer.glitch;
+    if (inside && !this.inErrorBiome) {
+      g.pulse(0.35, 14);
+      this.audio.play('glitch.static', NaN, NaN, NaN, 0.3, 0.7, 'ambient');
+    }
+    this.inErrorBiome = inside;
+    if (!inside) return;
+    if (this.settings.particles !== 'minimal' && this.tickNo % (this.settings.particles === 'decreased' ? 6 : 2) === 0) {
+      const x = b.x + (Math.random() - 0.5) * 16;
+      const y = b.y + Math.random() * 6 - 1;
+      const z = b.z + (Math.random() - 0.5) * 16;
+      if (!STATE_SOLID[this.world.getState(Math.floor(x), Math.floor(y), Math.floor(z))]) this.renderer.particles.spawn('glitch', x, y, z, 1, 0.3);
+    }
+    if (this.tickNo % 90 === 0) this.audio.play('glitch.hum', NaN, NaN, NaN, 0.25, 0.6 + Math.random() * 0.2, 'ambient');
+    if (Math.random() < 1 / 160) g.pulse(0.12 + Math.random() * 0.1, 6 + Math.floor(Math.random() * 6));
   }
 
   private eyePos(alpha = 1): [number, number, number] {

@@ -63,5 +63,16 @@ export async function join(server: GameServer, name = 'Tester', uuid = 'uuid-' +
     await new Promise((r) => setTimeout(r, 0));
     tick(server, 2);
   }
+  // Under load, generation (time-budgeted) can lag: wait until the chunks around the player exist
+  const loaded = (): boolean => {
+    const cx = Math.floor(player.x) >> 4;
+    const cz = Math.floor(player.z) >> 4;
+    for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) if (!player.dim.getChunk(cx + dx, cz + dz)) return false;
+    return true;
+  };
+  for (let i = 0; i < 400 && !loaded(); i++) {
+    await new Promise((r) => setTimeout(r, 0));
+    tick(server, 1);
+  }
   return { conn, player };
 }

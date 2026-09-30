@@ -80,6 +80,11 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: 'find_error_biome', title: 'What Is That?', description: 'Find a chunk that failed to load', icon: 'error_block', parent: 'root', category: 'world', secret: true },
   { id: 'enter_glitched_structure', title: 'Below the Error', description: 'Dig into a Glitched Structure', icon: 'missing_block', parent: 'find_error_biome', category: 'world', secret: true },
   { id: 'glitched_quest', title: 'Garbage Collected', description: 'Clear all five stages of a Glitched Structure', icon: 'glitch_block', parent: 'enter_glitched_structure', category: 'world', secret: true },
+  { id: 'find_monument', title: 'Monumental', description: 'Find a sun monument or a stone circle', icon: 'chiseled_sandstone', parent: 'root', category: 'world' },
+  { id: 'solve_puzzle', title: 'Ancient Mechanisms', description: 'Solve the puzzle of a monument or shrine', icon: 'lever', parent: 'find_monument', category: 'world' },
+  { id: 'find_bunker', title: 'Duck and Cover', description: 'Find a bunker', icon: 'bunker_plating', parent: 'root', category: 'world' },
+  { id: 'bunker_quest', title: 'Power Restored', description: 'Get past a bunker\'s blast door into its vault', icon: 'bunker_keycard', parent: 'find_bunker', category: 'world' },
+  { id: 'world_explorer', title: 'Seen It All', description: 'Find eight different kinds of V4 structure', icon: 'compass', parent: 'root', category: 'world' },
   { id: 'glitched_reward', title: 'Found, Not Forged', description: 'Take Glitched gear from a Glitched Structure', icon: 'glitched_chestplate', parent: 'glitched_quest', category: 'world', secret: true },
 ];
 

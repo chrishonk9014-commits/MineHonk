@@ -19,6 +19,7 @@ import { EndingsSystem } from './systems/Endings';
 import { EndgameSystem } from './systems/Endgame';
 import { ErrorBossSystem } from './systems/ErrorBoss';
 import { GlitchedQuestSystem } from './systems/GlitchedQuest';
+import { StructureQuests } from './systems/StructureQuests';
 
 export function installGameplay(server: GameServer): void {
   const mobs = new MobSystem(server);
@@ -45,7 +46,9 @@ export function installGameplay(server: GameServer): void {
   server.warden = new WardenSystem(server);
   power.extraPower = (dim, x, y, z) => sculk.sensorPower(dim, x, y, z);
   h.useItem = (p, stack, hand) => !!server.endgame?.useItem(p, stack) || mobs.useItem(p, stack) || end.fillBottle(p, stack) || ws.fillBottle(p, stack) || ws.throwSplash(p, stack) || end.useItem(p, stack) || far.useItem(p, stack) || gadgets.useItem(p, stack, hand);
-  h.useBlock = (p, x, y, z, state) => ws.useBlock(p, x, y, z, state);
+  const quests = new StructureQuests(server);
+  server.structureQuests = quests;
+  h.useBlock = (p, x, y, z, state) => quests.useBlock(p, x, y, z, state) || ws.useBlock(p, x, y, z, state);
   h.windowAction = (p, m) => ws.windowAction(p, m);
   const prevUseOnBlock = h.useItemOnBlock;
   h.useItemOnBlock = (p, stack, x, y, z, face) => end.useOnBlock(p, stack, x, y, z) || far.useOnBlock(p, stack, x, y, z) || mobs.useSpawnEgg(p, stack, x, y, z, face) || gadgets.useOnBlock(p, stack, x, y, z, face) || !!prevUseOnBlock?.(p, stack, x, y, z, face);
@@ -93,6 +96,7 @@ export function installGameplay(server: GameServer): void {
     endgame.tick();
     errorBoss.tick();
     glitched.tick();
+    quests.tick();
     far.tick();
     gadgets.tick();
     mounts.tick();

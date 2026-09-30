@@ -74,6 +74,8 @@ export class GameServer {
   errorBoss: import('./systems/ErrorBoss').ErrorBossSystem | null = null;
   /** V4: the Glitched Structures' five-stage fights. */
   glitchedQuest: import('./systems/GlitchedQuest').GlitchedQuestSystem | null = null;
+  /** V4: puzzles and the bunker quest. */
+  structureQuests: import('./systems/StructureQuests').StructureQuests | null = null;
   /** Work scheduled for a later tick (see `later`). */
   private readonly scheduled: { at: number; fn: () => void }[] = [];
   /** Hook for the hosting layer to forward player reports (e.g. to platform moderation). */
@@ -485,6 +487,7 @@ export class GameServer {
     if (!this.players.has(p.conn.id)) return;
     this.players.delete(p.conn.id);
     this.glitchedQuest?.onLeave(p);
+    this.structureQuests?.onLeave(p);
     this.mounts?.dismount(p, true);
     this.interaction.closeWindow(p, p.windowId, true);
     p.dim.removeEntity(p);

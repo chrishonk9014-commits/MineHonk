@@ -27,6 +27,7 @@ import { CAVE_BIOMES } from './caves/caveBiomes';
 import { NetherGenerator } from './nether';
 import { EndGenerator } from './end';
 import { FarlandsGenerator } from './farlands';
+import * as V4 from './v4/decorate';
 
 export { ProtoCache, cloneChunk, type DimensionGenerator, type GeneratorOptions, type SpawnPoint };
 
@@ -36,6 +37,8 @@ type Stage = (v: DecorView, seed: number, ocx: number, ocz: number) => void;
 const NEIGHBOUR_STAGES: Stage[] = [F.lakes, F.geodes, F.ores, F.dungeons, F.springs, F.disks, F.iceFeatures, F.boulders, F.trees];
 /** V2 swaps in the V2 ore table and geodes that stay inside rock. */
 const NEIGHBOUR_STAGES_V2: Stage[] = NEIGHBOUR_STAGES.map((s) => (s === F.ores ? F.oresV2 : s === F.geodes ? F.geodesV2 : s));
+/** V4: overgrown fallen logs, stumps and termite mounds replace the boulder stage; cacti grow after the trees. */
+const NEIGHBOUR_STAGES_V4: Stage[] = [...NEIGHBOUR_STAGES_V2.map((s) => (s === F.boulders ? V4.groundFeatures : s)), V4.cacti];
 
 export class OverworldGenerator implements DimensionGenerator {
   readonly dimension = 'overworld' as const;
@@ -78,12 +81,18 @@ export class OverworldGenerator implements DimensionGenerator {
     );
   }
 
+  /** World generator version 4 or later (the World Update). */
+  get v4(): boolean {
+    return this.terrain.version >= 4;
+  }
+
   generate(cx: number, cz: number): Chunk {
     const proto = this.protos.get(cx, cz);
     const c = cloneChunk(proto);
     const v = new DecorView(c, (x, z) => this.protos.get(x, z));
     const seed = this.seed;
-    for (const stage of this.terrain.carver ? NEIGHBOUR_STAGES_V2 : NEIGHBOUR_STAGES) {
+    const v4 = this.v4;
+    for (const stage of v4 ? NEIGHBOUR_STAGES_V4 : this.terrain.carver ? NEIGHBOUR_STAGES_V2 : NEIGHBOUR_STAGES) {
       for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) stage(v, seed, cx + dx, cz + dz);
     }
     if (this.terrain.carver) caveDecorV2(v, seed, cx, cz, !!this.terrain.corrupted);
@@ -92,8 +101,10 @@ export class OverworldGenerator implements DimensionGenerator {
         const cl = this.terrain.climate.sample(x, z, this.climateScratch);
         return { humidity: cl.h, continentalness: cl.c, weirdness: cl.w };
       });
+    if (v4) V4.volcanic(v, seed, cx, cz);
     const starts = this.structures.build(v);
-    F.vegetation(v, seed, cx, cz);
+    F.vegetation(v, seed, cx, cz, v4 ? V4.plantColumn : undefined);
+    if (v4) V4.afterVegetation(v, seed, cx, cz);
     F.freeze(v);
     // V3: glitched portals and corrupted ruins' chests go on top of everything
     this.terrain.corrupted?.late(v, cx, cz, 'chest/corrupted_cache');

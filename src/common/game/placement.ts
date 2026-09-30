@@ -75,9 +75,15 @@ export function soilOk(def: BlockDef, below: number, w: WorldReader, x: number, 
       return bdef.id === 'farmland';
     case 'needs_sand':
       if (def.id === 'cactus') {
-        if (!(tags.includes('sand') || bdef.id === 'cactus')) return false;
-        for (let f = 2; f < 6; f++) if (STATE_SOLID[w.getState(x + FACE_DX[f], y, z + FACE_DZ[f])]) return false;
-        return true;
+        // Cactus touching cactus is one plant: arms branch sideways off a trunk
+        let arm = false;
+        for (let f = 2; f < 6; f++) {
+          const n = w.getState(x + FACE_DX[f], y, z + FACE_DZ[f]);
+          if (blocks[STATE_BLOCK[n]!]!.id === 'cactus') arm = true;
+          else if (STATE_SOLID[n]) return false;
+        }
+        if (tags.includes('sand') || bdef.id === 'cactus') return true;
+        return arm && !STATE_SOLID[below];
       }
       return tags.includes('sand') || tags.includes('terracotta') || bdef.id === 'terracotta' || tags.includes('dirt');
     case 'needs_soul_sand':

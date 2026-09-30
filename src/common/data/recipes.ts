@@ -359,6 +359,11 @@ shaped('tinted_glass', 2, [' A ', 'AGA', ' A '], { A: 'amethyst_shard', G: 'glas
 shaped('moss_carpet', 3, ['MM'], { M: 'moss_block' });
 shaped('nether_wart_block', 1, ['WWW', 'WWW', 'WWW'], { W: 'nether_wart' });
 shaped('smooth_quartz', 4, ['QQ', 'QQ'], { Q: 'quartz_block' });
+// V4 biome materials
+shaped('frosted_stone_bricks', 4, ['SS', 'SI'], { S: 'stone_bricks', I: 'ice' });
+shapeless('bone_meal', 2, 'seashell');
+shapeless('string', 1, 'cattail', 'cattail');
+shaped('leaf_litter', 3, ['LL'], { L: 'dead_bush' });
 
 // ---------------------------------------------------------------- colours
 const FLOWER_DYES: [string, string, number][] = [
@@ -384,6 +389,14 @@ const FLOWER_DYES: [string, string, number][] = [
   ['ink_sac', 'black_dye', 1],
   ['lapis_lazuli', 'blue_dye', 1],
   ['beetroot', 'red_dye', 1],
+  // V4 biome flowers
+  ['desert_marigold', 'orange_dye', 1],
+  ['frostbloom', 'light_blue_dye', 1],
+  ['edelweiss', 'white_dye', 1],
+  ['jungle_orchid', 'magenta_dye', 1],
+  ['buttercup', 'yellow_dye', 1],
+  ['cactus_flower', 'pink_dye', 1],
+  ['cherry_petals', 'pink_dye', 1],
 ];
 for (const [src, dye, n] of FLOWER_DYES) shapeless(dye, n, src);
 shapeless('orange_dye', 2, 'red_dye', 'yellow_dye');
@@ -434,6 +447,8 @@ smelt('cinder_ore', 'cinder', 0.8, 'ore');
 smelt('raw_nullium', 'nullium_ingot', 2, 'ore');
 smelt('null_ore', 'nullium_ingot', 2, 'ore');
 smelt('glitch_ore', 'glitch_shard', 2, 'ore');
+smelt('termite_mound', 'terracotta', 0.35);
+smelt('cactus_fruit', 'green_dye', 0.2);
 for (const [a, b] of [
   ['iron_pickaxe', 'iron_nugget'],
   ['iron_sword', 'iron_nugget'],

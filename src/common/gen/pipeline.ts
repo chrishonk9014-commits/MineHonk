@@ -21,7 +21,7 @@ export interface GeneratorOptions {
 }
 
 /** Newest world generator version (new worlds use this). */
-export const LATEST_GENERATOR = 3;
+export const LATEST_GENERATOR = 4;
 
 export interface SpawnPoint {
   x: number;

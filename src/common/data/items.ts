@@ -341,4 +341,13 @@ mat('corrupted_eye', { name: 'Corrupted Eye', rarity: 'glitched' });
 add({ id: 'rift_pearl', name: 'Rift Pearl', maxStack: 16, use: 'rift_pearl', rarity: 'rare', creative: 'tools' });
 add({ id: 'farlands_compass', name: 'Farlands Compass', maxStack: 1, use: 'farlands_compass', rarity: 'glitched', creative: 'tools', glint: true });
 
+// ---------------------------------------------------------------------------
+// V4 - The World Update: biome foods and the bunker keycard
+// ---------------------------------------------------------------------------
+food('cactus_fruit', 3, 1.8, { name: 'Cactus Fruit' });
+food('snowberries', 2, 1.2, { name: 'Snowberries' }, { eatTime: 16 });
+food('lingonberries', 2, 1.2, { name: 'Lingonberries' }, { eatTime: 16 });
+food('aloe_leaf', 1, 1, { name: 'Aloe Leaf' }, { alwaysEdible: true, eatTime: 16, effects: [{ effect: 'regeneration', duration: 100 }] });
+add({ id: 'bunker_keycard', name: 'Bunker Keycard', maxStack: 1, rarity: 'uncommon', creative: 'tools' });
+
 export const ITEM_DEFS: readonly ItemDef[] = defs;

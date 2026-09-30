@@ -201,6 +201,14 @@ function computeShape(state: number, collision: boolean): Shape {
           return [box(5, 5, 5, 11, 11, 11)];
         case 'sculk_shrieker':
           return [box(0, 0, 0, 16, 8, 16)];
+        case 'cactus_flower':
+          return collision ? EMPTY : [box(4, 0, 4, 12, 8, 12)];
+        case 'ancient_urn':
+          return [box(3, 0, 3, 13, 15, 13)];
+        case 'bracket_fungus':
+          return collision ? EMPTY : [edgeBox(oppositeOf(getProp(state, 'facing')!), 7, 5, 12, 2, 14)];
+        case 'seashell':
+          return collision ? EMPTY : [box(4, 0, 5, 12, 3, 11)];
         case 'big_dripleaf': {
           // The leaf gives way once it tilts all the way
           const tilt = getProp(state, 'tilt');

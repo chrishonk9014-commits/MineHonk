@@ -194,6 +194,10 @@ export function canSurvive(state: number, w: WorldReader, x: number, y: number, 
     case 'bed':
       return true;
     default:
+      if (def.id === 'bracket_fungus') {
+        const bi = FACE_NAMES.indexOf(oppositeHorizontal(getProp(state, 'facing')!) as 'north');
+        return isSturdy(w, x + FACE_DX[bi], y, z + FACE_DZ[bi]);
+      }
       if (def.place) return soilOk(def, below, w, x, y, z);
       return true;
   }
@@ -374,6 +378,12 @@ export function computePlacement(w: WorldReader, r: PlaceRequest): Placement[] |
       state = withProp(state, 'facing', toward);
       break;
     default:
+      if (def.id === 'bracket_fungus') {
+        // Grows out of the side that was clicked
+        if (face < 2) return null;
+        state = withProp(state, 'facing', FACE_NAMES[face]!);
+        break;
+      }
       if (hasProp(state, 'facing')) {
         const vals = bt.propValues[bt.propNames.indexOf('facing')]!;
         if (vals.includes('up')) {

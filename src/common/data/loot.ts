@@ -130,6 +130,12 @@ export const LOOT_TABLES: Record<string, LootTable> = {
   },
 
   // --- Structure chests -------------------------------------------------------------
+  // V4: urns crack open to scatter whatever was stored in them
+  'block/ancient_urn': {
+    pools: [
+      { rolls: 1, entries: [none(35), e('gold_nugget', 20, [2, 7]), e('emerald', 8, [1, 2]), e('bone', 12, [1, 3]), e('string', 10, [1, 3]), e('sunstone_shard', 6), e('iron_nugget', 12, [2, 8]), e('diamond', 1)] },
+    ],
+  },
   'chest/bonus': {
     pools: [
       { rolls: 1, entries: [e('stick', 1, [1, 12])] },

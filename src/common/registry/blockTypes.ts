@@ -147,7 +147,9 @@ export type InteractKind =
   | 'beacon'
   | 'cauldron'
   | 'flower_pot'
-  | 'candle';
+  | 'candle'
+  | 'keycard_reader'
+  | 'bunker_generator';
 
 export type TintKind = 'none' | 'grass' | 'foliage' | 'water' | 'birch' | 'spruce' | 'stem' | 'lily';
 

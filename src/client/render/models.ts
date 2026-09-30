@@ -671,6 +671,23 @@ function custom(def: BlockDef, state: number): ModelQuad[] {
       }
       return out;
     }
+    case 'cactus_flower':
+      // A small bloom sitting on top of the cactus below
+      return [...box([6, 0, 6], [10, 2, 10], def.tex.all!, 'none', ['down']), ...cross(def.tex.all!, 'none', 0.5, 0.22)];
+    case 'ancient_urn': {
+      const side = def.tex.all!;
+      const top = def.tex.top!;
+      return [...box([3, 0, 3], [13, 11, 13], { up: top, down: top, north: side, south: side, west: side, east: side }), ...box([5, 11, 5], [11, 14, 11], { up: top, down: top, north: side, south: side, west: side, east: side }), ...box([4, 14, 4], [12, 15, 12], { up: top, down: top, north: side, south: side, west: side, east: side })];
+    }
+    case 'bracket_fungus': {
+      // Shelves growing out of the log behind (authored facing north, the log to the south)
+      const t = { up: def.tex.top!, down: def.tex.all!, north: def.tex.all!, south: def.tex.all!, west: def.tex.all!, east: def.tex.all! };
+      return rotY([...box([2, 5, 9], [14, 7, 16], t), ...box([5, 10, 11], [12, 11.5, 16], t)], facingDeg(getProp(state, 'facing')));
+    }
+    case 'seashell': {
+      const t = def.tex.all!;
+      return [...box([4, 0, 5], [12, 2, 11], t), ...box([6, 2, 6], [10, 3, 10], t)];
+    }
     case 'big_dripleaf': {
       // A stem up to a wide leaf that droops as it tilts
       const tilt = getProp(state, 'tilt');

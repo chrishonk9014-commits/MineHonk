@@ -88,7 +88,7 @@ export function initItems(): void {
       block: bd.id,
       maxStack: bd.model === 'bed' ? 1 : maxStack,
       creative: autoTab(bd),
-      fuel: bd.flammable && ['planks', 'logs'].some((t) => bd.tags?.includes(t)) ? 300 : bd.flammable && bd.tags?.includes('wooden_slabs') ? 150 : bd.id === 'coal_block' ? 16000 : undefined,
+      fuel: typeof bd.data?.fuel === 'number' ? bd.data.fuel : bd.flammable && ['planks', 'logs'].some((t) => bd.tags?.includes(t)) ? 300 : bd.flammable && bd.tags?.includes('wooden_slabs') ? 150 : bd.id === 'coal_block' ? 16000 : undefined,
       tags: [...(bd.tags ?? []), 'block'],
     });
   }

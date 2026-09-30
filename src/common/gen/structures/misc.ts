@@ -34,6 +34,8 @@ export interface SingleDef {
   maxY?: number;
   build: (b: Builder, rng: Random, seed: number) => void;
   entities?: (x: number, y: number, z: number, rng: Random) => Start['entities'];
+  /** V4: the structure's objective, from a builder that only maps local to world positions. */
+  quest?: (b: Builder, rng: Random) => Start['quest'];
 }
 
 export function single(def: SingleDef): StructureType {
@@ -95,7 +97,9 @@ export function single(def: SingleDef): StructureType {
       const seed = hashInts(ctx.seed, x0, y, z0, def.salt);
       const box = boxOf(x0 - 1, y - def.below, z0 - 1, x0 + wsx, y + def.height, z0 + wsz);
       const piece = { box, build: (v: import('../decorate/view').DecorView) => def.build(new Builder(v, x0, y, z0, rot, def.sx, def.sz), new Random(seed), ctx.seed) };
-      return { type: def.id, x: x0 + (wsx >> 1), y, z: z0 + (wsz >> 1), pieces: [piece], bounds: box, entities: def.entities?.(x0 + wsx / 2, y + 1, z0 + wsz / 2, new Random(seed ^ 0x55)) };
+      const start: Start = { type: def.id, x: x0 + (wsx >> 1), y, z: z0 + (wsz >> 1), pieces: [piece], bounds: box, entities: def.entities?.(x0 + wsx / 2, y + 1, z0 + wsz / 2, new Random(seed ^ 0x55)) };
+      if (def.quest) start.quest = def.quest(new Builder(null as unknown as import('../decorate/view').DecorView, x0, y, z0, rot, def.sx, def.sz), new Random(seed));
+      return start;
     },
   };
 }
@@ -714,3 +718,10 @@ export const GLITCHED_RUIN_V3 = glitchedRuin(false);
 
 export const SURFACE_STRUCTURES: StructureType[] = [DESERT_TEMPLE, JUNGLE_TEMPLE, WITCH_HUT, IGLOO, RUINED_PORTAL, SHIPWRECK, OCEAN_RUIN, BURIED_TREASURE, OUTPOST, SKY_SHRINE, OVERGROWN_RUIN, STALKER_DEN, GLITCHED_RUIN];
 export const SURFACE_STRUCTURES_V3: StructureType[] = SURFACE_STRUCTURES.map((t) => (t === GLITCHED_RUIN ? GLITCHED_RUIN_V3 : t));
+/**
+ * V4: the temples, huts, igloos and outposts turn up a little more often, so
+ * exploring finds something more consistently. The rare ones (sky shrines,
+ * stalker dens, glitched ruins) keep their rarity.
+ */
+const MORE_COMMON: Record<string, number> = { desert_temple: 26, jungle_temple: 26, witch_hut: 28, igloo: 28, pillager_outpost: 34, shipwreck: 22, overgrown_ruin: 22 };
+export const SURFACE_STRUCTURES_V4: StructureType[] = SURFACE_STRUCTURES_V3.map((t) => (MORE_COMMON[t.id] ? { ...t, spacing: MORE_COMMON[t.id]! } : t));

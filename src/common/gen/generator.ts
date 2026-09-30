@@ -17,7 +17,9 @@ import { StructureManager } from './structures/manager';
 import { caveDecorV2 } from './caves/decor';
 import { ProtoCache, cloneChunk, addGenEntities, LATEST_GENERATOR, type DimensionGenerator, type GeneratorOptions, type SpawnPoint } from './pipeline';
 import { VILLAGE } from './structures/village';
-import { SURFACE_STRUCTURES, SURFACE_STRUCTURES_V3 } from './structures/misc';
+import { SURFACE_STRUCTURES, SURFACE_STRUCTURES_V3, SURFACE_STRUCTURES_V4 } from './structures/misc';
+import { V4_STRUCTURES } from './v4/structures';
+import { VILLAGE_V4 } from './v4/village';
 import { MINESHAFT, STRONGHOLD } from './structures/underground';
 import { CAVE_STRUCTURES } from './structures/caves';
 import { ANCIENT_CITY } from './structures/ancientCity';
@@ -67,10 +69,14 @@ export class OverworldGenerator implements DimensionGenerator {
       }
       return { y, water };
     };
+    const v4 = this.terrain.version >= 4;
     this.structures = new StructureManager(
       seed,
-      // V2 adds its underground structures after the V1 list, so V1 placements never move
-      [VILLAGE, ...(this.terrain.corrupted ? SURFACE_STRUCTURES_V3 : SURFACE_STRUCTURES), MINESHAFT, STRONGHOLD, ...(this.terrain.carver ? [...CAVE_STRUCTURES, ANCIENT_CITY] : [])],
+      // V2 adds its underground structures after the V1 list, so V1 placements never move.
+      // V4 has its own villages, slightly more common temples and outposts, and its new structures last.
+      v4
+        ? [VILLAGE_V4, ...SURFACE_STRUCTURES_V4, MINESHAFT, STRONGHOLD, ...CAVE_STRUCTURES, ANCIENT_CITY, ...V4_STRUCTURES]
+        : [VILLAGE, ...(this.terrain.corrupted ? SURFACE_STRUCTURES_V3 : SURFACE_STRUCTURES), MINESHAFT, STRONGHOLD, ...(this.terrain.carver ? [...CAVE_STRUCTURES, ANCIENT_CITY] : [])],
       {
         seed,
         groundY: (x, z) => ground(x, z).y,
@@ -81,7 +87,13 @@ export class OverworldGenerator implements DimensionGenerator {
         deepDark: (x, z) => this.terrain.caveBiomes?.deepDarkStrength(x, z) ?? -1,
       },
       () => opts.structures !== false,
+      v4,
     );
+  }
+
+  /** V4: structures with objectives whose bounds hold chunk (cx, cz). */
+  questStartsAt(cx: number, cz: number): import('./structures/manager').Start[] {
+    return this.v4 ? this.structures.startsFor(cx, cz).filter((s) => s.quest) : [];
   }
 
   /** World generator version 4 or later (the World Update). */

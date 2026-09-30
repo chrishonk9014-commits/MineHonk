@@ -32,7 +32,19 @@ export interface Start {
   bounds: Box;
   /** Entities to spawn when the chunk containing them is first generated. */
   entities?: { type: string; x: number; y: number; z: number; data?: Record<string, unknown> }[];
+  /** V4: the structure's objective (puzzles, the bunker), with world positions. */
+  quest?: QuestSpec;
 }
+
+type Pos = [number, number, number];
+/** A structure's objective (V4). The server checks it as blocks change and players use things. */
+export type QuestSpec =
+  /** Set every lever to match its glyph: `on` lists the levers that must be on. */
+  | { kind: 'levers'; levers: { at: Pos; on: boolean }[]; door: Pos[] }
+  /** Light every brazier (campfire). */
+  | { kind: 'braziers'; braziers: Pos[]; door: Pos[] }
+  /** Keycard opens the security doors, both generators open the blast door to the vault. */
+  | { kind: 'bunker'; reader: Pos; doors: Pos[]; generators: Pos[]; blast: Pos[]; vault: Pos; area: Box };
 
 export interface PlanContext {
   seed: number;
@@ -95,6 +107,11 @@ export class StructureManager {
     readonly types: StructureType[],
     private readonly ctx: PlanContext,
     private readonly enabled: () => boolean = () => true,
+    /**
+     * V4: a start is dropped when it would overlap (with a few blocks to spare)
+     * a start of a type listed before it, so structures never grow into each other.
+     */
+    private readonly avoidOverlap = false,
   ) {}
 
   /** The chunk a type's start would occupy in a region. */
@@ -120,10 +137,35 @@ export class StructureManager {
     const rng = new Random(hashInts(this.seed, cx, cz, t.salt ^ 0x5717));
     let s: Start | null = null;
     if (t.candidate(this.ctx, (cx << 4) + 8, (cz << 4) + 8, rng)) s = t.plan(this.ctx, cx, cz, rng);
+    if (s && this.avoidOverlap && this.overlapsEarlier(t, s)) s = null;
     this.starts.set(key, s);
     this.order.push(key);
     if (this.order.length > 512) this.starts.delete(this.order.shift()!);
     return s;
+  }
+
+  /** Whether a start overlaps any start of a type listed before its own. */
+  private overlapsEarlier(t: StructureType, s: Start): boolean {
+    const idx = this.types.indexOf(t);
+    const pad = 3;
+    const b = s.bounds;
+    for (let i = 0; i < idx; i++) {
+      const o = this.types[i]!;
+      if (o.fixed) continue;
+      const r = o.radius;
+      const cx0 = (b.x0 >> 4) - r;
+      const cx1 = (b.x1 >> 4) + r;
+      const cz0 = (b.z0 >> 4) - r;
+      const cz1 = (b.z1 >> 4) + r;
+      for (let rx = Math.floor(cx0 / o.spacing); rx <= Math.floor(cx1 / o.spacing); rx++)
+        for (let rz = Math.floor(cz0 / o.spacing); rz <= Math.floor(cz1 / o.spacing); rz++) {
+          const os = this.startAt(o, rx, rz);
+          if (!os) continue;
+          const ob = os.bounds;
+          if (ob.x0 - pad <= b.x1 && ob.x1 + pad >= b.x0 && ob.z0 - pad <= b.z1 && ob.z1 + pad >= b.z0 && ob.y0 <= b.y1 && ob.y1 >= b.y0) return true;
+        }
+    }
+    return false;
   }
 
   /** All starts of all types whose bounds intersect the chunk. */

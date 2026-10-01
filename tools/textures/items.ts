@@ -13,7 +13,7 @@ import { hashInts } from '../../src/common/math/rng';
 
 type Pal = Record<string, RGB>;
 
-function matPal(base: RGB, outlineMul = 0.45): Pal {
+export function matPal(base: RGB, outlineMul = 0.45): Pal {
   return { o: shade(base, outlineMul), a: shade(base, 0.72), b: base, c: shade(base, 1.2), d: shade(base, 1.45) };
 }
 const HANDLE: Pal = { h: hex(0x8a6a3a), H: hex(0x5c4222), k: hex(0x2c1e0e) };
@@ -1281,7 +1281,7 @@ const M: Record<string, string[]> = {
   ],
 };
 
-function paintMask(t: Tex, name: keyof typeof M, pal: Pal): void {
+export function paintMask(t: Tex, name: keyof typeof M, pal: Pal): void {
   t.clear();
   t.mask(M[name]!, { ...HANDLE, ...pal });
 }

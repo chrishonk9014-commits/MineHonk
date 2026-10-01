@@ -21,6 +21,7 @@ import { ErrorBossSystem } from './systems/ErrorBoss';
 import { GlitchedQuestSystem } from './systems/GlitchedQuest';
 import { StructureQuests } from './systems/StructureQuests';
 import { TempleTrials } from './systems/TempleTrials';
+import { Engineering } from './engineering/Engineering';
 
 export function installGameplay(server: GameServer): void {
   const mobs = new MobSystem(server);
@@ -51,7 +52,9 @@ export function installGameplay(server: GameServer): void {
   server.structureQuests = quests;
   const temples = new TempleTrials(server);
   server.templeTrials = temples;
-  h.useBlock = (p, x, y, z, state) => quests.useBlock(p, x, y, z, state) || temples.useBlock(p, x, y, z, state) || ws.useBlock(p, x, y, z, state);
+  const engineering = new Engineering(server);
+  server.engineering = engineering;
+  h.useBlock = (p, x, y, z, state) => quests.useBlock(p, x, y, z, state) || temples.useBlock(p, x, y, z, state) || engineering.useBlock(p, x, y, z, state) || ws.useBlock(p, x, y, z, state);
   h.windowAction = (p, m) => ws.windowAction(p, m);
   const prevUseOnBlock = h.useItemOnBlock;
   h.useItemOnBlock = (p, stack, x, y, z, face) => end.useOnBlock(p, stack, x, y, z) || far.useOnBlock(p, stack, x, y, z) || mobs.useSpawnEgg(p, stack, x, y, z, face) || gadgets.useOnBlock(p, stack, x, y, z, face) || !!prevUseOnBlock?.(p, stack, x, y, z, face);
@@ -101,6 +104,7 @@ export function installGameplay(server: GameServer): void {
     glitched.tick();
     quests.tick();
     temples.tick();
+    engineering.tick();
     far.tick();
     gadgets.tick();
     mounts.tick();

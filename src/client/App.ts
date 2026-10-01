@@ -3,6 +3,7 @@
  * lifecycle (start integrated server, join, save & quit).
  */
 import { adminScreen } from './ui/AdminPanel';
+import { EngineeringBookPanel } from './ui/EngineeringBook';
 import { encode, decode } from '@msgpack/msgpack';
 import { deflateSync, inflateSync } from 'fflate';
 import type { Settings, Profile } from './settings';
@@ -472,6 +473,21 @@ export class App implements GameHost, S.ScreenHost {
       cheats: () => !!game.worldInfo?.cheats,
     });
     this.push(screen);
+  }
+
+  /** The Engineering Book on its own (from the item), optionally at an entry. */
+  openEngineeringBook(entry?: string): void {
+    const game = this.game;
+    if (!game || this.screenOpen) return;
+    const root = el('div', { class: 'screen dim eng-book-screen' });
+    const panel = new EngineeringBookPanel({ advancedTooltips: false, close: () => this.pop() });
+    panel.update(game.invSlots);
+    if (entry) panel.open(entry);
+    root.append(panel.root);
+    root.addEventListener('mousedown', (e) => {
+      if (e.target === root) this.pop();
+    });
+    this.push({ root, onClose: () => panel.destroy() });
   }
 
   openAchievements(): void {

@@ -41,6 +41,49 @@ function attachedFace(state: number): number {
   }
 }
 
+/** V5: front face index (2..5) of a facing signal part. */
+function frontFace(state: number): number {
+  return { north: 2, south: 3, west: 4, east: 5 }[getProp(state, 'facing') as 'north'] ?? 2;
+}
+
+/** The left and right faces of a part facing out of `front`. */
+function sidesOf(front: number): [number, number] {
+  switch (front) {
+    case 2:
+      return [4, 5];
+    case 3:
+      return [5, 4];
+    case 4:
+      return [3, 2];
+    default:
+      return [2, 3];
+  }
+}
+
+/** A logic gate's output from its left, right and back inputs. */
+export function gateResult(mode: string, a: boolean, b: boolean, back: boolean): boolean {
+  switch (mode) {
+    case 'or':
+      return a || b || back;
+    case 'xor':
+      return (Number(a) + Number(b) + Number(back)) % 2 === 1;
+    case 'nand':
+      return !(a && b);
+    case 'nor':
+      return !(a || b || back);
+    case 'not':
+      return !back;
+    default:
+      return a && b;
+  }
+}
+
+let CABLE = -1;
+function isCable(state: number): boolean {
+  if (CABLE < 0) CABLE = blocks.findIndex((bt) => bt.id === 'signal_cable');
+  return STATE_BLOCK[state] === CABLE;
+}
+
 /** For wall torches: the block behind them. */
 function wallTorchAttached(state: number): number {
   switch (getProp(state, 'facing')) {
@@ -64,6 +107,8 @@ export class Power {
   private readonly torchQueue = new Map<string, { dim: Dimension; x: number; y: number; z: number; due: number }>();
   /** Recent toggles per torch (burnout). */
   private readonly torchHistory = new Map<string, number[]>();
+  /** Logic gates switching after their delay. */
+  private readonly gateQueue = new Map<string, { dim: Dimension; x: number; y: number; z: number; due: number; lit: boolean }>();
   /** Pressed plates: key -> last tick an entity was on it. */
   private readonly plates = new Map<string, { dim: Dimension; x: number; y: number; z: number; seen: number }>();
   /** External power providers (sculk sensors): returns 0..15 emitted from a position. */
@@ -98,9 +143,28 @@ export class Power {
       }
       case 'sensor':
         return this.extraPower ? this.extraPower(dim, x, y, z) : 0;
+      // V5 signal parts
+      case 'timer':
+        return getProp(s, 'lit') === 'true' ? 15 : 0;
+      case 'logic':
+        return getProp(s, 'lit') === 'true' && face === frontFace(s) ? 15 : 0;
+      case 'level':
+      case 'detector': {
+        if (face !== frontFace(s)) return 0;
+        const out = (dim.getBlockEntity(x, y, z) as { out?: number } | undefined)?.out;
+        return typeof out === 'number' ? Math.max(0, Math.min(15, out)) : getProp(s, 'lit') === 'true' ? 15 : 0;
+      }
       default:
         return 0;
     }
+  }
+
+  /** Whether a signal comes into (x,y,z) from its neighbour on side `face`. */
+  private inputFrom(dim: Dimension, x: number, y: number, z: number, face: number): boolean {
+    const nx = x + FACE_DX[face];
+    const ny = y + FACE_DY[face];
+    const nz = z + FACE_DZ[face];
+    return this.emitted(dim, nx, ny, nz, face ^ 1) > 0 || this.strongly(dim, nx, ny, nz) || this.weakly(dim, nx, ny, nz);
   }
 
   /** Whether dust points into the horizontal face (2..5). */
@@ -295,12 +359,15 @@ export class Power {
         if (level.get(n[0] + ',' + n[1] + ',' + n[2])! !== l) continue;
         nb.length = 0;
         this.wireNeighbours(dim, n[0], n[1], n[2], nb);
+        const fromCable = isCable(dim.getState(n[0], n[1], n[2]));
         for (const m of nb) {
           const k = m[0] + ',' + m[1] + ',' + m[2];
           const cur = level.get(k);
-          if (cur === undefined || cur >= l - 1) continue;
-          level.set(k, l - 1);
-          buckets[l - 1]!.push(m);
+          // Signal Cable carries a signal to more Signal Cable without growing weaker
+          const next = fromCable && isCable(dim.getState(m[0], m[1], m[2])) ? l : l - 1;
+          if (cur === undefined || cur >= next) continue;
+          level.set(k, next);
+          buckets[next]!.push(m);
         }
       }
     }
@@ -320,8 +387,20 @@ export class Power {
   private updateComponent(dim: Dimension, x: number, y: number, z: number): void {
     const s = dim.getState(x, y, z);
     const k = kindOf(s);
-    if (!k || k === 'wire' || k === 'lever' || k === 'button' || k === 'plate' || k === 'block' || k === 'sensor') return;
+    if (!k || k === 'wire' || k === 'lever' || k === 'button' || k === 'plate' || k === 'block' || k === 'sensor' || k === 'timer' || k === 'level' || k === 'detector') return;
     const key = dim.id + '|' + x + ',' + y + ',' + z;
+    if (k === 'logic') {
+      // Inputs on the left, right and back; the result goes out of the front one tick later
+      const f = frontFace(s);
+      const back = f ^ 1;
+      const [left, right] = sidesOf(f);
+      const a = this.inputFrom(dim, x, y, z, left);
+      const b = this.inputFrom(dim, x, y, z, right);
+      const c = this.inputFrom(dim, x, y, z, back);
+      const want = gateResult(getProp(s, 'mode') ?? 'and', a, b, c);
+      if ((getProp(s, 'lit') === 'true') !== want && !this.gateQueue.has(key)) this.gateQueue.set(key, { dim, x, y, z, due: this.server.tickNo + 2, lit: want });
+      return;
+    }
     if (k === 'torch' || k === 'wall_torch') {
       const af = k === 'torch' ? 0 : wallTorchAttached(s);
       const ax = x + FACE_DX[af];
@@ -428,6 +507,18 @@ export class Power {
         this.torchHistory.set(key, hist);
         t.dim.setBlock(t.x, t.y, t.z, withProp(st, 'lit', lit), { updateNeighbors: false });
         this.touch(t.dim, t.x, t.y, t.z);
+      }
+    }
+    // Logic gates due to switch
+    if (this.gateQueue.size) {
+      for (const [key, g] of [...this.gateQueue]) {
+        if (g.due > now) continue;
+        this.gateQueue.delete(key);
+        if (!g.dim.isLoaded(g.x, g.z)) continue;
+        const st = g.dim.getState(g.x, g.y, g.z);
+        if (kindOf(st) !== 'logic' || (getProp(st, 'lit') === 'true') === g.lit) continue;
+        g.dim.setBlock(g.x, g.y, g.z, withProp(st, 'lit', g.lit), { updateNeighbors: false, keepBlockEntity: true });
+        this.touch(g.dim, g.x, g.y, g.z);
       }
     }
     // Pressure plates: pressed while something stands on them

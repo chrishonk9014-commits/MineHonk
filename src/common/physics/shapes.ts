@@ -3,6 +3,7 @@
  * Shapes are computed lazily and cached per state id.
  */
 import { blocks, STATE_BLOCK, getProp, STATE_FULL_CUBE, blockCollides } from '../registry/blocks';
+import { engBoxes } from '../engineering/geometry';
 
 export type Box = readonly [number, number, number, number, number, number];
 export type Shape = readonly Box[];
@@ -180,6 +181,8 @@ function computeShape(state: number, collision: boolean): Shape {
     case 'campfire':
       return [box(0, 0, 0, 16, 7, 16)];
     case 'custom': {
+      const eng = engBoxes(def.id, state);
+      if (eng) return eng.map((e) => box(e.from[0], e.from[1], e.from[2], e.to[0], e.to[1], e.to[2]));
       switch (def.id) {
         case 'scaffolding':
           return collision ? [box(0, 14, 0, 16, 16, 16)] : FULL;

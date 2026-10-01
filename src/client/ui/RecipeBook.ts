@@ -274,6 +274,7 @@ export function playerOwnedSlots(kind: string, slots: Slot[], size: number): Slo
     case 'player':
       return slots.filter((_, i) => (i >= 1 && i <= 4) || i >= 9);
     case 'crafting':
+    case 'eng_crafting':
       return slots.filter((_, i) => i >= 1);
     case 'furnace':
     case 'blast_furnace':

@@ -9,7 +9,7 @@ import type { ItemStack, Slot } from '../game/itemstack';
 import type { GameMode, Difficulty, GodHearts } from '../game/gamemode';
 import type { DimensionId } from '../data/biomes';
 
-export const PROTOCOL_VERSION = 3;
+export const PROTOCOL_VERSION = 4;
 
 // ---------------------------------------------------------------------------
 // Client -> Server
@@ -45,7 +45,11 @@ export type C2S =
   | { t: 'admin'; req: number; action: AdminAction }
   /** Position of the mount the player steers (horses). */
   | { t: 'vehicle_move'; x: number; y: number; z: number; yaw: number }
-  | { t: 'dismount' };
+  | { t: 'dismount' }
+  /** V5: change a setting of the engineering block whose window is open. */
+  | { t: 'eng_cfg'; window: number; key: string; value: string | number }
+  /** V5: the Engineering Book fills the open Engineering Crafting Table's grid with a recipe. */
+  | { t: 'eng_fill'; recipe: number; all: boolean };
 
 export type ClickMode = 'pickup' | 'quick' | 'swap' | 'drop' | 'drag_start' | 'drag_add' | 'drag_end' | 'collect' | 'clone';
 
@@ -254,7 +258,9 @@ export type WindowKind =
   | 'creative'
   | 'merchant'
   | 'stonecutter'
-  | 'beacon';
+  | 'beacon'
+  | 'eng_crafting'
+  | 'machine';
 
 export type { ItemStack };
 

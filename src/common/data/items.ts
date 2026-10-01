@@ -6,6 +6,7 @@
 import type { ItemDef } from '../registry/itemTypes';
 import type { ToolType } from '../registry/blockTypes';
 import { COLORS } from './blocks';
+import { engineeringItemDefs } from '../engineering/catalog';
 
 const defs: ItemDef[] = [];
 const add = (d: ItemDef): ItemDef => {
@@ -208,7 +209,8 @@ mat('copper_ingot');
 mat('diamond');
 mat('emerald');
 mat('lapis_lazuli');
-mat('redstone', { block: 'redstone_wire' });
+// V5: redstone dust is a material now; Signal Cable replaces placing it as wire (old wire keeps working)
+mat('redstone');
 mat('quartz', { name: 'Nether Quartz' });
 mat('amethyst_shard');
 mat('netherite_scrap', { fireResistant: true });
@@ -350,5 +352,8 @@ food('lingonberries', 2, 1.2, { name: 'Lingonberries' }, { eatTime: 16 });
 food('aloe_leaf', 1, 1, { name: 'Aloe Leaf' }, { alwaysEdible: true, eatTime: 16, effects: [{ effect: 'regeneration', duration: 100 }] });
 add({ id: 'bunker_keycard', name: 'Bunker Keycard', maxStack: 1, rarity: 'uncommon', creative: 'tools' });
 add({ id: 'temple_relic', name: 'Temple Relic', maxStack: 1, rarity: 'rare', creative: 'tools' });
+
+// V5 - The Engineering Update: materials, components, upgrades and the Engineering Book
+for (const d of engineeringItemDefs()) add(d);
 
 export const ITEM_DEFS: readonly ItemDef[] = defs;

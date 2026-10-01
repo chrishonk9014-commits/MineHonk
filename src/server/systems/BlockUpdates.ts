@@ -80,6 +80,7 @@ export class BlockUpdates {
     this.server.sculk?.onBlockChanged(dim, x, y, z, old, state);
     this.server.structureQuests?.onBlockChanged(dim, x, y, z, state);
     this.server.templeTrials?.onBlockChanged(dim, x, y, z, state);
+    this.server.engineering?.onBlockChanged(dim, x, y, z, old, state);
   }
 
   /** Neighbour reaction for the block at (x,y,z). */

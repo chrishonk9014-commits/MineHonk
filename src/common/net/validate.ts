@@ -109,6 +109,12 @@ export function validateC2S(raw: unknown): C2S | null {
       return { t: 'vehicle_move', x: m.x, y: m.y, z: m.z, yaw: m.yaw };
     case 'dismount':
       return { t: 'dismount' };
+    case 'eng_cfg':
+      if (!isInt(m.window) || !isStr(m.key, 48) || !(isStr(m.value, 48) || (isNum(m.value) && Number.isFinite(m.value)))) return null;
+      return { t: 'eng_cfg', window: m.window, key: m.key, value: m.value as string | number };
+    case 'eng_fill':
+      if (!isInt(m.recipe) || m.recipe < 0 || m.recipe > 10000 || !isBool(m.all)) return null;
+      return { t: 'eng_fill', recipe: m.recipe, all: m.all };
     default:
       return null;
   }

@@ -10,6 +10,7 @@
  */
 import { blocks, stateCount, STATE_BLOCK } from '../registry/blocks';
 import { connectState, type WorldReader } from './placement';
+import { conduitBit } from '../engineering/connect';
 import { SECTIONS_PER_CHUNK } from '../world/constants';
 import type { Chunk } from '../world/chunk';
 
@@ -22,7 +23,7 @@ export function connectsTable(): Uint8Array {
   const t = new Uint8Array(n);
   for (let s = 0; s < n; s++) {
     const def = blocks[STATE_BLOCK[s]!]!.def;
-    if (def.model === 'fence' || def.model === 'wall' || def.model === 'pane' || def.model === 'fence_gate' || def.model === 'stairs' || def.id === 'redstone_wire') t[s] = 1;
+    if (def.model === 'fence' || def.model === 'wall' || def.model === 'pane' || def.model === 'fence_gate' || def.model === 'stairs' || def.id === 'redstone_wire' || def.id === 'signal_cable' || conduitBit(s)) t[s] = 1;
   }
   CONNECTS = t;
   return t;

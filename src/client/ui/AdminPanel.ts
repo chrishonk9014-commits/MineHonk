@@ -11,7 +11,7 @@ import type { ItemStack } from '../../common/game/itemstack';
 import { POTIONS } from '../../common/data/potions';
 import { ENCHANTMENTS } from '../../common/data/enchantments';
 import { MOB_DEFS } from '../../common/data/mobs';
-import { structureName, TIME_PRESETS, ADMIN_DIMENSIONS, type AdminAction, type AdminCatalog, type LocateResult, type V4Op } from '../../common/game/admin';
+import { structureName, TIME_PRESETS, ADMIN_DIMENSIONS, type AdminAction, type AdminCatalog, type LocateResult, type V4Op, type V5Op } from '../../common/game/admin';
 import type { DimensionId } from '../../common/data/biomes';
 import { ENDINGS } from '../../common/data/endings';
 
@@ -31,7 +31,7 @@ export interface AdminHost {
   cheats(): boolean;
 }
 
-type Tab = 'items' | 'mobs' | 'teleport' | 'player' | 'world' | 'endgame' | 'v4' | 'perf';
+type Tab = 'items' | 'mobs' | 'teleport' | 'player' | 'world' | 'endgame' | 'v4' | 'v5' | 'perf';
 const TABS: { id: Tab; name: string; icon: string }[] = [
   { id: 'items', name: 'Give Items', icon: 'chest' },
   { id: 'mobs', name: 'Spawn Mobs', icon: 'spawn_egg_zombie' },
@@ -40,6 +40,7 @@ const TABS: { id: Tab; name: string; icon: string }[] = [
   { id: 'world', name: 'World', icon: 'grass_block' },
   { id: 'endgame', name: 'Endgame', icon: 'corrupted_eye' },
   { id: 'v4', name: 'World Update', icon: 'error_block' },
+  { id: 'v5', name: 'Engineering', icon: 'crusher' },
   { id: 'perf', name: 'Performance', icon: 'redstone' },
 ];
 const DIM_NAMES: Record<string, string> = { overworld: 'Overworld', nether: 'Nether', end: 'The End', farlands: 'Farlands' };
@@ -572,6 +573,43 @@ export function adminScreen(host: AdminHost): Screen {
     );
   };
 
+  // ------------------------------------------------------------------ the Engineering Update (V5)
+  const renderV5 = (): HTMLElement => {
+    const state = el('div', { class: 'admin-stats' });
+    const showState = (d: unknown): void => {
+      if (!d || typeof d !== 'object') return;
+      const st = d as { nodes: number; kinds: Record<string, number>; stepMs: number; perTick: number; inspect: Record<string, unknown> | null };
+      clear(state);
+      const rows: [string, string][] = [
+        ['Engineering blocks loaded', String(st.nodes)],
+        ['Last step', `${st.stepMs} ms (${st.perTick} ms per tick)`],
+        ['By kind', Object.entries(st.kinds).map(([k, v]) => `${k.replace(/_/g, ' ')} ${v}`).join(', ') || 'none'],
+      ];
+      const i = st.inspect;
+      if (i) {
+        rows.push(['Nearest', `${String(i.name)} at ${(i.at as number[]).join(', ')}${i.cheat ? ' (cheat)' : ''}`], ['State', String(i.status)]);
+        if (i.energy) rows.push(['Energy', String(i.energy)]);
+        if (i.fluid) rows.push(['Fluid', String(i.fluid)]);
+        rows.push(['Network', i.network ? String(i.network) : 'not on an energy network']);
+      } else rows.push(['Nearest', 'no engineering block within 8 blocks']);
+      for (const [k, v] of rows) state.append(el('div', { class: 'row' }, el('span', { class: 'muted' }, k), el('span', {}, v)));
+    };
+    const op = (o: V5Op): void => void send({ a: 'v5', op: o }).then((r) => showState(r.data));
+    op('status');
+    return el(
+      'div',
+      { class: 'admin-cols' },
+      el(
+        'div',
+        { class: 'admin-col' },
+        section('Kits', el('div', { class: 'muted small' }, 'Cheat-marked items: they never count for advancements.'), el('div', { class: 'admin-chips' }, btn('Starter kit', () => op('kit_basic'), 'btn chip'), btn('Advanced kit', () => op('kit_advanced'), 'btn chip'), btn('Factory kit', () => op('kit_factory'), 'btn chip'))),
+        section('Energy', el('div', { class: 'muted small' }, 'Within 16 blocks of you. Filled machines are cheat-marked.'), el('div', { class: 'admin-chips' }, btn('Fill energy', () => op('fill_energy'), 'btn chip'), btn('Drain energy', () => op('drain_energy'), 'btn chip'), btn('Reset machines', () => op('reset_machines'), 'btn chip'))),
+        section('Test', el('div', { class: 'admin-chips' }, btn('Build a test line', () => op('test_rig'), 'btn chip'), btn('Stress test (250 machines)', () => op('stress_test'), 'btn chip'))),
+      ),
+      el('div', { class: 'admin-col' }, section('Inspect', state, btn('Refresh', () => op('status'), 'btn chip'))),
+    );
+  };
+
   // ------------------------------------------------------------------ the World Update (V4)
   const renderV4 = (): HTMLElement => {
     const state = el('div', { class: 'admin-stats' });
@@ -675,7 +713,7 @@ export function adminScreen(host: AdminHost): Screen {
     for (const c of tabs.children) c.classList.toggle('active', (c as HTMLElement).dataset.tab === t);
     clear(body);
     hideTooltip();
-    const view = t === 'items' ? renderItems() : t === 'mobs' ? renderMobs() : t === 'teleport' ? renderTeleport() : t === 'player' ? renderPlayer() : t === 'world' ? renderWorld() : t === 'endgame' ? renderEndgame() : t === 'v4' ? renderV4() : renderPerf();
+    const view = t === 'items' ? renderItems() : t === 'mobs' ? renderMobs() : t === 'teleport' ? renderTeleport() : t === 'player' ? renderPlayer() : t === 'world' ? renderWorld() : t === 'endgame' ? renderEndgame() : t === 'v4' ? renderV4() : t === 'v5' ? renderV5() : renderPerf();
     body.append(view);
   };
   for (const t of TABS) {

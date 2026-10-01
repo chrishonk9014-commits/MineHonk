@@ -47,6 +47,13 @@ export function wrapClick(host: ScreenHost, f: () => void): () => void {
 // Title
 // ---------------------------------------------------------------------------
 const SPLASHES = [
+  'The Engineering Update!',
+  'Now with conveyor belts!',
+  'Measured in EU/t!',
+  'Redstone, but better!',
+  'Read the Engineering Book!',
+  'Mind the hazard stripes!',
+  'Automate everything!',
   'Now with more honk!',
   'The World Update!',
   'Version 4.5: temples of trials!',
@@ -84,7 +91,7 @@ export function titleScreen(host: ScreenHost, actions: { singleplayer: () => voi
     button('Multiplayer', wrapClick(host, actions.multiplayer)),
     el('div', { class: 'row' }, button('Options...', wrapClick(host, actions.options), 'btn half'), button(`Profile: ${profile.name}`, wrapClick(host, actions.profile), 'btn half')),
   );
-  const footer = el('div', { class: 'footer' }, el('span', {}, 'MineHonk V4.5 - Temples & Bunkers'), el('span', {}, 'Original game — all art & sound generated'));
+  const footer = el('div', { class: 'footer' }, el('span', {}, 'MineHonk V5 - The Engineering Update'), el('span', {}, 'Original game — all art & sound generated'));
   return { root: el('div', { class: 'screen dirt title-screen' }, logo, body, footer), escapable: false };
 }
 
@@ -572,8 +579,8 @@ export function deathScreen(host: ScreenHost, message: string, hardcore: boolean
 
 export function achievementsScreen(host: ScreenHost, unlocked: Set<string> | null): Screen & { update: (u: Set<string>) => void } {
   const { root, body } = titled('Advancements', 'screen dim');
-  const cats = ['story', 'world', 'caves', 'nether', 'end', 'adventure', 'husbandry', 'farlands'] as const;
-  const names: Record<(typeof cats)[number], string> = { story: 'MineHonk', world: 'World', caves: 'Caves', nether: 'Nether', end: 'The End', adventure: 'Adventure', husbandry: 'Husbandry', farlands: 'Farlands' };
+  const cats = ['story', 'world', 'engineering', 'caves', 'nether', 'end', 'adventure', 'husbandry', 'farlands'] as const;
+  const names: Record<(typeof cats)[number], string> = { story: 'MineHonk', world: 'World', engineering: 'Engineering', caves: 'Caves', nether: 'Nether', end: 'The End', adventure: 'Adventure', husbandry: 'Husbandry', farlands: 'Farlands' };
   let cat: (typeof cats)[number] = 'story';
   const tabs = el('div', { class: 'row' });
   const list = el('div', { class: 'list adv-list' });

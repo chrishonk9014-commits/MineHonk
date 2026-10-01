@@ -6,6 +6,7 @@
 import { AABB } from './aabb';
 import { collisionShape } from './shapes';
 import { STATE_FLUID, STATE_FULL_CUBE, blocks, STATE_BLOCK, getProp, hasBlock, S } from '../registry/blocks';
+import { beltUnder } from '../engineering/conveyor';
 
 let POWDER = -2;
 /** State of powder snow (-1 if the registry has none). */
@@ -395,7 +396,9 @@ export function stepMovement(world: BlockAccess, b: Body, input: MoveInput, ab: 
   const prevY = b.y;
   powderState();
   powderFloor = ab.powderWalk && !input.sneak ? b.y : NaN;
-  moveBody(world, b, b.vx * sf, b.vy, b.vz * sf, input.sneak);
+  // V5: a conveyor under the feet carries the body along
+  const belt = b.onGround ? beltUnder(world, b.x, b.y, b.z) : null;
+  moveBody(world, b, b.vx * sf + (belt?.px ?? 0), b.vy, b.vz * sf + (belt?.pz ?? 0), input.sneak);
   powderFloor = NaN;
 
   if (b.onClimbable && (b.collidedH || input.jump)) b.vy = 0.2;

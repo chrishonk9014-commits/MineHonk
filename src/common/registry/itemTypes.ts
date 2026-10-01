@@ -17,6 +17,7 @@ export interface FoodDef {
 
 export type UseKind =
   | 'place_block'
+  | 'engineering_book'
   | 'bow'
   | 'crossbow'
   | 'flint_and_steel'

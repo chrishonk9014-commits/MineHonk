@@ -3,6 +3,7 @@
  * Coordinates are in block-local units (0..1), UVs in tile units (0..1).
  * Runs in mesher workers and on the main thread (item icons, hand model).
  */
+import { engBoxes } from '../../common/engineering/geometry';
 import { blocks, STATE_BLOCK, getProp, stateCount, blockOf } from '../../common/registry/blocks';
 import type { BlockDef, TintKind } from '../../common/registry/blockTypes';
 
@@ -253,7 +254,22 @@ function cubeTextures(def: BlockDef, state: number): { tex: string[]; rot: numbe
     return { tex, rot, tint };
   }
   const facing = getProp(state, 'facing');
-  const front = def.tex.front ? (getProp(state, 'lit') === 'true' && def.tex.front_lit ? def.tex.front_lit : def.tex.front) : undefined;
+  // V5: battery charge bars on the sides
+  if (def.texBy) {
+    const v = getProp(state, def.texBy);
+    for (let i = 2; i < 6; i++) tex[i] = `${tex[i]}_${v}`;
+  }
+  // V5: six-way engineering blocks (extractor, sorter): front where they face, back opposite
+  if (def.tex.back && facing) {
+    const fi = ['down', 'up', 'north', 'south', 'west', 'east'].indexOf(facing);
+    if (fi >= 0) {
+      tex[fi] = def.tex.front!;
+      tex[fi ^ 1] = def.tex.back;
+      return { tex, rot, tint };
+    }
+  }
+  const status = getProp(state, 'status');
+  const front = def.tex.front ? (getProp(state, 'lit') === 'true' && def.tex.front_lit ? def.tex.front_lit : status === 'working' && def.tex.front_on ? def.tex.front_on : status === 'error' && def.tex.front_err ? def.tex.front_err : def.tex.front) : undefined;
   if (front) {
     if (facing && ['north', 'south', 'west', 'east'].includes(facing)) {
       const fi = { north: 2, south: 3, west: 4, east: 5 }[facing as 'north']!;
@@ -624,7 +640,43 @@ function wireModel(def: BlockDef, state: number): ModelQuad[] {
   return q;
 }
 
+/** V5 engineering blocks with their own shapes (geometry shared with collision in common/engineering/geometry). */
+function engModel(def: BlockDef, state: number): ModelQuad[] | null {
+  const boxes = engBoxes(def.id, state);
+  if (!boxes) return null;
+  const t = (key: string): string => def.tex[key] ?? def.tex.all!;
+  const lit = getProp(state, 'lit') === 'true';
+  const facing = getProp(state, 'facing');
+  if (def.id === 'signal_cable') return wireModel(def, state);
+  if (def.id === 'warning_light') return [...box(boxes[0]!.from, boxes[0]!.to, t('base')), ...box(boxes[1]!.from, boxes[1]!.to, lit ? t('on') : t('all'))];
+  if (def.tex.top_on !== undefined || def.id === 'timer' || def.id === 'logic_gate') {
+    // Signal plates: a thin slab whose top shows what it is (and lights up)
+    const top = def.id === 'logic_gate' ? `logic_gate_${getProp(state, 'mode') ?? 'and'}${lit ? '_on' : ''}` : lit ? t('top_on') : t('top');
+    return rotY(box([0, 0, 0], [16, 2, 16], { up: top, down: t('all'), north: t('all'), south: t('all'), west: t('all'), east: t('all') }), facingDeg(facing));
+  }
+  if (def.id === 'conveyor' || def.id === 'express_conveyor') {
+    return rotY(box([0, 0, 0], [16, 4, 16], { up: t('top'), down: 'machine_bottom', north: t('all'), south: t('all'), west: t('all'), east: t('all') }), facingDeg(facing));
+  }
+  if (def.id === 'fluid_tank') {
+    const q = box([1, 0, 1], [15, 16, 15], { up: t('top'), down: t('top'), north: t('all'), south: t('all'), west: t('all'), east: t('all') });
+    const fluid = getProp(state, 'fluid');
+    const level = Number(getProp(state, 'level') ?? 0);
+    if (fluid && fluid !== 'none' && level > 0) {
+      const h = 1 + (level / 8) * 14;
+      const ft = fluid === 'lava' ? 'lava_still' : 'water_still';
+      const tint: TintKind = fluid === 'water' ? 'water' : 'none';
+      q.push(...element([2, 1, 2], [14, h, 14], { up: { tex: ft, tint }, north: { tex: ft, tint }, south: { tex: ft, tint }, west: { tex: ft, tint }, east: { tex: ft, tint } }));
+    }
+    return q;
+  }
+  const q: ModelQuad[] = [];
+  for (const b of boxes) q.push(...box(b.from, b.to, b.cap ? { up: t(b.cap), down: t(b.tex), north: t(b.tex), south: t(b.tex), west: t(b.tex), east: t(b.tex) } : t(b.tex)));
+  return q;
+}
+
 function custom(def: BlockDef, state: number): ModelQuad[] {
+  const eng = engModel(def, state);
+  if (eng) return eng;
   switch (def.id) {
     case 'scaffolding':
       return [...box([0, 14, 0], [16, 16, 16], { up: def.tex.top!, down: def.tex.bottom!, north: def.tex.side!, south: def.tex.side!, west: def.tex.side!, east: def.tex.side! }), ...box([0, 0, 0], [2, 14, 2], def.tex.side!), ...box([14, 0, 0], [16, 14, 2], def.tex.side!), ...box([0, 0, 14], [2, 14, 16], def.tex.side!), ...box([14, 0, 14], [16, 14, 16], def.tex.side!)];

@@ -5,6 +5,7 @@ import { type ItemStack, canStack, maxStack, toSaved, fromSaved, type SavedStack
 import { items } from '../../common/registry/items';
 import type { ServerPlayer } from '../player/ServerPlayer';
 import { STATE_FLUID, blocks, STATE_BLOCK } from '../../common/registry/blocks';
+import { beltUnder } from '../../common/engineering/conveyor';
 
 export const ITEM_DESPAWN_TICKS = 6000;
 
@@ -44,8 +45,17 @@ export class ItemEntity extends Entity {
         return;
       }
     } else b.vy -= 0.04;
-    const moving = Math.abs(b.vx) > 1e-4 || Math.abs(b.vy) > 1e-4 || Math.abs(b.vz) > 1e-4 || !b.onGround;
-    if (moving) moveBody(this.dim, b, b.vx, b.vy, b.vz);
+    // V5: carried along by conveyors (and handed to whatever the belt points into)
+    const belt = b.onGround ? beltUnder(this.dim, b.x, b.y, b.z) : null;
+    if (belt) {
+      this.age = Math.min(this.age, ITEM_DESPAWN_TICKS - 1200);
+      this.pickupDelay = Math.max(this.pickupDelay, 2);
+      moveBody(this.dim, b, b.vx + belt.px, b.vy, b.vz + belt.pz);
+      if (this.dim.server.engineering?.onBelt(this, belt)) return;
+    } else {
+      const moving = Math.abs(b.vx) > 1e-4 || Math.abs(b.vy) > 1e-4 || Math.abs(b.vz) > 1e-4 || !b.onGround;
+      if (moving) moveBody(this.dim, b, b.vx, b.vy, b.vz);
+    }
     const f = b.onGround ? (blocks[STATE_BLOCK[this.dim.getState(Math.floor(b.x), Math.floor(b.y - 0.99), Math.floor(b.z))]!]!.def.slipperiness ?? 0.6) * 0.98 : 0.98;
     b.vx *= f;
     b.vz *= f;

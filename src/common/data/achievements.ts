@@ -7,7 +7,7 @@ export interface AchievementDef {
   /** Parent achievement shown as prerequisite in the UI tree. */
   parent?: string;
   secret?: boolean;
-  category: 'story' | 'nether' | 'end' | 'adventure' | 'farlands' | 'husbandry' | 'caves' | 'world';
+  category: 'story' | 'nether' | 'end' | 'adventure' | 'farlands' | 'husbandry' | 'caves' | 'world' | 'engineering';
 }
 
 export const ACHIEVEMENTS: AchievementDef[] = [
@@ -91,6 +91,18 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: 'temple_trial', title: 'Worthy', description: 'Complete one of a temple\'s trials', icon: 'chiseled_stone_bricks', parent: 'find_temple', category: 'world' },
   { id: 'temple_champion', title: 'Champion', description: 'Win the Champion\'s Trial on top of a temple', icon: 'gold_block', parent: 'temple_trial', category: 'world' },
   { id: 'temple_duel', title: 'Last One Standing', description: 'Win a temple\'s prize in a duel against other players', icon: 'diamond_sword', parent: 'temple_champion', category: 'world' },
+  // V5 - The Engineering Update
+  { id: 'engineering', title: 'Engineering', description: 'Craft an Engineering Crafting Table', icon: 'engineering_table', parent: 'root', category: 'engineering' },
+  { id: 'generate_power', title: 'Power Up', description: 'Generate energy with a generator you built', icon: 'water_wheel', parent: 'engineering', category: 'engineering' },
+  { id: 'first_machine', title: 'It Works!', description: 'Have a machine you built finish its first job', icon: 'crusher', parent: 'generate_power', category: 'engineering' },
+  { id: 'store_power', title: 'Rainy Day Fund', description: 'Charge a battery you built to half full', icon: 'battery', parent: 'generate_power', category: 'engineering' },
+  { id: 'automate_resource', title: 'Hands Off', description: 'Have a machine process something it got by itself, or dig, harvest or collect on its own', icon: 'conveyor', parent: 'first_machine', category: 'engineering' },
+  { id: 'item_network', title: 'Plumbing for Items', description: 'Send items through pipes with an extractor', icon: 'item_pipe', parent: 'automate_resource', category: 'engineering' },
+  { id: 'fluid_network', title: 'Running Water', description: 'Pump a fluid through pipes into a tank or a machine', icon: 'pump', parent: 'automate_resource', category: 'engineering' },
+  { id: 'build_multiblock', title: 'Bigger Is Better', description: 'Complete a multiblock machine', icon: 'machine_casing', parent: 'first_machine', category: 'engineering' },
+  { id: 'advanced_engineering', title: 'Advanced Engineering', description: 'Have a tier 3 machine finish a job', icon: 'advanced_circuit', parent: 'build_multiblock', category: 'engineering' },
+  { id: 'automated_factory', title: 'Lights-Out Factory', description: 'Run five machines at once on one network, fed by automation', icon: 'item_sorter', parent: 'item_network', category: 'engineering' },
+  { id: 'control_room', title: 'Mission Control', description: 'Watch a network of three or more machines with a monitor and a control panel', icon: 'monitor', parent: 'automated_factory', category: 'engineering', secret: false },
 ];
 
 export const ACHIEVEMENT_BY_ID = new Map(ACHIEVEMENTS.map((a) => [a.id, a]));

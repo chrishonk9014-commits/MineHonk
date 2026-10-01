@@ -4,6 +4,7 @@
  * generated in loops.
  */
 import { WOOD_TYPES, COLORS } from './blocks';
+import { ENG_TAGS, DUST_SMELTING } from '../engineering/catalog';
 
 export interface ShapedRecipe {
   type: 'shaped';
@@ -61,6 +62,7 @@ export const RECIPE_TAGS: Record<string, string[]> = {
   sand_any: ['sand', 'red_sand'],
   mushrooms_any: ['brown_mushroom', 'red_mushroom'],
   small_flowers_any: [],
+  wool_any: ENG_TAGS.wool_any!(COLORS),
 };
 
 // ---------------------------------------------------------------- wood
@@ -151,7 +153,7 @@ shaped('shulker_box', 1, ['S', 'C', 'S'], { S: 'shulker_shell', C: 'chest' });
 shaped('conduit', 1, ['NNN', 'NHN', 'NNN'], { N: 'nautilus_shell', H: 'heart_of_the_sea' });
 shaped('rift_pearl', 1, [' V ', 'VEV', ' V '], { V: 'void_shard', E: 'ender_pearl' });
 shaped('glitched_ingot', 2, ['SNS', 'NCN', 'SNS'], { S: 'glitch_shard', N: 'nullium_ingot', C: 'glitch_core' });
-shaped('redstone_torch', 1, ['R', 'S'], { R: 'redstone', S: 'stick' });
+// V5: the redstone torch is no longer made (the Logic Gate's NOT mode replaces it); old torches keep working
 shaped('redstone_lamp', 1, [' R ', 'RGR', ' R '], { R: 'redstone', G: 'glowstone' });
 shaped('carrot_on_a_stick', 1, ['F ', ' C'], { F: 'fishing_rod', C: 'carrot' });
 shaped('recovery_compass', 1, ['EEE', 'ECE', 'EEE'], { E: 'echo_shard', C: 'compass' });
@@ -439,6 +441,11 @@ smelt('deepslate_emerald_ore', 'emerald', 1, 'ore');
 smelt('lapis_ore', 'lapis_lazuli', 0.2, 'ore');
 smelt('deepslate_lapis_ore', 'lapis_lazuli', 0.2, 'ore');
 smelt('redstone_ore', 'redstone', 0.7, 'ore');
+// V5: dusts from the crusher smelt into ingots in any furnace
+for (const [dust, ingot] of DUST_SMELTING) smelt(dust, ingot, 0.3, 'ore');
+// V5: the two ways into engineering, made at a normal crafting table
+shaped('engineering_table', 1, ['ICI', 'CTC', 'III'], { I: 'iron_ingot', C: 'copper_ingot', T: 'crafting_table' });
+shapeless('engineering_book', 1, 'book', 'copper_ingot');
 smelt('deepslate_redstone_ore', 'redstone', 0.7, 'ore');
 smelt('nether_quartz_ore', 'quartz', 0.2, 'ore');
 smelt('ancient_debris', 'netherite_scrap', 2, 'ore');

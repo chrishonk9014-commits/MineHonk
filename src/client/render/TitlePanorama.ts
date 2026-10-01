@@ -1,6 +1,9 @@
 /**
  * The title screen backdrop: a patch of real, freshly generated terrain from
- * a random seed. Since V4 it shows The World Update, picked at random:
+ * a random seed. Since V5 it mostly shows The Engineering Update:
+ *  - a working factory: generators, cables, machines with their lights on,
+ *    conveyors, a multiblock furnace and a control room;
+ * and sometimes The World Update:
  *  - an Error Biome chunk, circling the one broken chunk in its landscape;
  *  - a V4 village, circling its houses, farms and decorated streets.
  * The V3.5 places are still there with ?title=farlands|end|arena:
@@ -22,15 +25,15 @@ import { LightEngine } from '../../common/world/light';
 import { encodeChunk, type Chunk } from '../../common/world/chunk';
 import { chunkIndex } from '../../common/world/constants';
 import { seedFromString } from '../../common/math/rng';
-import { STATE_SOLID } from '../../common/registry/blocks';
+import { STATE_SOLID, S, stateOf } from '../../common/registry/blocks';
 import type { Settings } from '../settings';
 
 const RADIUS = 4;
 
-type Scene = 'farlands' | 'end' | 'arena' | 'error_biome' | 'village';
-/** Shown at random; the others only when asked for. */
-const RANDOM_SCENES: Scene[] = ['error_biome', 'village'];
-const ALL_SCENES: Scene[] = ['error_biome', 'village', 'farlands', 'end', 'arena'];
+type Scene = 'farlands' | 'end' | 'arena' | 'error_biome' | 'village' | 'factory';
+/** Shown at random (the factory most often); the others only when asked for. */
+const RANDOM_SCENES: Scene[] = ['factory', 'factory', 'factory', 'error_biome', 'village'];
+const ALL_SCENES: Scene[] = ['factory', 'error_biome', 'village', 'farlands', 'end', 'arena'];
 
 /** What each scene looks like: particles in the air, camera tilt, extra light. */
 const LOOK: Record<Scene, { particle: string; pitch: number; nightVision: number; aside: number }> = {
@@ -40,6 +43,8 @@ const LOOK: Record<Scene, { particle: string; pitch: number; nightVision: number
   arena: { particle: 'glitch', pitch: -0.2, nightVision: 0.15, aside: 0.62 },
   error_biome: { particle: 'glitch', pitch: 0.42, nightVision: 0, aside: 0 },
   village: { particle: 'none', pitch: 0.27, nightVision: 0, aside: 0 },
+  // Looking a little past the factory keeps it beside the menu
+  factory: { particle: 'none', pitch: 0.3, nightVision: 0, aside: 0.55 },
 };
 
 /** The Error's poses shown on the title screen, cycling. */
@@ -74,11 +79,16 @@ export class TitlePanorama {
       return; // no WebGL: the menu keeps its dirt background
     }
     const seed = seedFromString('title-' + Math.floor(Math.random() * 1e9));
-    // ?title=error_biome|village|farlands|end|arena picks one (for screenshots)
+    // ?title=factory|error_biome|village|farlands|end|arena picks one (for screenshots)
     const asked = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('title') : null;
     this.scene = ALL_SCENES.includes(asked as Scene) ? (asked as Scene) : RANDOM_SCENES[Math.floor(Math.random() * RANDOM_SCENES.length)]!;
     if (this.scene === 'error_biome' || this.scene === 'village') {
       this.findOverworld(seed);
+      return;
+    }
+    if (this.scene === 'factory') {
+      const gen = new OverworldGenerator(seed);
+      this.build(gen, gen.findSpawn());
       return;
     }
     let gen: DimensionGenerator;
@@ -149,6 +159,7 @@ export class TitlePanorama {
         this.raf = requestAnimationFrame(step);
         return;
       }
+      if (this.scene === 'factory') focus = { ...focus, y: stampFactory(chunks, Math.floor(focus.x), Math.floor(focus.z)) };
       const light = new LightEngine({ getChunk: (cx, cz) => chunks.get(chunkIndex(cx, cz)), markLightDirty: () => {} }, this.world.hasSky);
       for (const c of chunks.values()) light.initChunk(c);
       for (const c of chunks.values()) this.world.loadChunk(encodeChunk(c, { light: true, blockEntities: false }));
@@ -185,6 +196,12 @@ export class TitlePanorama {
         const h = Math.max(focus.y, w.heightAt(fx, fz));
         this.center = { x: fx + 0.5, y: h + 12, z: fz + 0.5 };
         this.orbit = 22;
+        break;
+      }
+      case 'factory': {
+        // Circling the factory from above its machines
+        this.center = { x: fx + 0.5, y: focus.y + 8, z: fz + 0.5 };
+        this.orbit = 21;
         break;
       }
       case 'village': {
@@ -284,4 +301,79 @@ export class TitlePanorama {
     this.renderer?.dispose();
     this.renderer = null;
   }
+}
+
+/**
+ * A small working factory for the title screen, built on the generated
+ * terrain: solar panels and wind turbines, battery banks, cable runs,
+ * machines with their lights on, a conveyor line, an industrial furnace
+ * and a control room. Returns the floor height.
+ */
+function stampFactory(chunks: Map<number, Chunk>, fx: number, fz: number): number {
+  const touched = new Set<Chunk>();
+  const set = (x: number, y: number, z: number, st: number): void => {
+    const c = chunks.get(chunkIndex(x >> 4, z >> 4));
+    if (!c || y < 1 || y > 254) return;
+    c.set(x & 15, y, z & 15, st);
+    touched.add(c);
+  };
+  const height = (x: number, z: number): number => chunks.get(chunkIndex(x >> 4, z >> 4))?.getHeight(x & 15, z & 15) ?? 64;
+  const R = 11;
+  let y0 = 0;
+  for (let dz = -R; dz <= R; dz += 4) for (let dx = -R; dx <= R; dx += 4) y0 = Math.max(y0, height(fx + dx, fz + dz));
+  y0 = Math.min(y0, Math.max(height(fx, fz) + 3, 66));
+  // Floor on steel legs, open air above
+  for (let dz = -R; dz <= R; dz++)
+    for (let dx = -R; dx <= R; dx++) {
+      const x = fx + dx;
+      const z = fz + dz;
+      for (let y = y0; y <= y0 + 12; y++) set(x, y, z, 0);
+      const edge = Math.abs(dx) === R || Math.abs(dz) === R;
+      set(x, y0 - 1, z, edge ? S('hazard_stripes') : (dx + dz) % 6 === 0 ? S('steel_block') : S('machine_casing'));
+      if (edge && dx % 5 === 0 && dz % 5 === 0) for (let y = y0 - 2; y > y0 - 12 && !STATE_SOLID[chunks.get(chunkIndex(x >> 4, z >> 4))?.get(x & 15, y, z & 15) ?? 1]; y--) set(x, y, z, S('steel_block'));
+    }
+  const on = (id: string, facing: string): number => stateOf(id, { facing, status: 'working' });
+  const cable = (id: string, arms: string[]): number => stateOf(id, Object.fromEntries(arms.map((a) => [a, 'true'])));
+  // Solar field along the back
+  for (let dx = -9; dx <= 9; dx++) for (const dz of [-9, -8]) set(fx + dx, y0, fz + dz, on('solar_panel', 'south'));
+  // Wind turbines on posts at the corners
+  for (const [dx, dz] of [[-10, -10], [10, -10], [-10, 10], [10, 10]] as const) {
+    for (let y = y0; y < y0 + 4; y++) set(fx + dx, y, fz + dz, S('steel_block'));
+    set(fx + dx, y0 + 4, fz + dz, on('wind_turbine', 'south'));
+    set(fx + dx, y0 + 5, fz + dz, S('factory_light'));
+  }
+  // Power: battery banks and a main cable
+  for (let dx = -9; dx <= 9; dx++) set(fx + dx, y0, fz - 6, cable('power_conduit', dx > -9 ? ['west', 'east'] : ['east']));
+  for (const dx of [-9, -8, -7]) set(fx + dx, y0, fz - 5, stateOf('battery_bank', { charge: '4' }));
+  // The industrial furnace (hollow casing cube) in the middle
+  for (let dx = -1; dx <= 1; dx++)
+    for (let y = 0; y <= 2; y++)
+      for (let dz = -2; dz <= 0; dz++) {
+        if (dx === 0 && y === 1 && dz >= -1) continue;
+        set(fx + dx, y0 + y, fz + dz, y === 2 || dx !== 0 ? S('machine_casing') : S('industrial_glass'));
+      }
+  set(fx, y0 + 1, fz, on('industrial_furnace', 'south'));
+  // A conveyor line between machines, with their lights on
+  for (let dx = -6; dx <= 6; dx++) set(fx + dx, y0, fz + 4, stateOf(dx % 4 === 0 ? 'express_conveyor' : 'conveyor', { facing: 'east' }));
+  set(fx - 7, y0, fz + 4, on('crusher', 'west'));
+  set(fx + 7, y0, fz + 4, on('electric_furnace', 'west'));
+  set(fx + 8, y0, fz + 4, stateOf('hopper', { facing: 'east' }));
+  set(fx + 9, y0, fz + 4, S('industrial_chest'));
+  const row = ['crusher', 'grinder', 'compressor', 'cutter', 'electric_furnace', 'recycler', 'assembler', 'pump', 'mining_drill'];
+  row.forEach((id, i) => set(fx - 8 + i * 2, y0, fz + 7, on(id, 'south')));
+  for (let dx = -8; dx <= 8; dx++) set(fx + dx, y0, fz + 6, cable('insulated_cable', ['west', 'east']));
+  // Fluids: tanks with a pipe run
+  for (const dz of [-3, -1]) set(fx - 9, y0, fz + dz, stateOf('fluid_tank', { fluid: 'water', level: '6' }));
+  set(fx - 9, y0, fz - 2, cable('fluid_pipe', ['north', 'south']));
+  set(fx + 9, y0, fz - 2, stateOf('fluid_tank', { fluid: 'lava', level: '5' }));
+  // The control room: a wall of monitors and a control panel facing the furnace
+  for (let dx = 4; dx <= 8; dx++) {
+    set(fx + dx, y0, fz - 3, S('steel_block'));
+    set(fx + dx, y0 + 1, fz - 3, on('monitor', 'south'));
+    set(fx + dx, y0 + 2, fz - 3, dx === 6 ? on('control_panel', 'south') : on('monitor', 'south'));
+  }
+  for (const dx of [3, 9]) set(fx + dx, y0, fz - 2, stateOf('warning_light', { lit: 'true' }));
+  for (const [dx, dz] of [[-4, 0], [4, 0], [0, 9], [-6, -3]] as const) set(fx + dx, y0, fz + dz, S('factory_light'));
+  for (const c of touched) c.recomputeHeightmap();
+  return y0;
 }

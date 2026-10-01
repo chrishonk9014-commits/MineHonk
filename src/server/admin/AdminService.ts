@@ -38,6 +38,7 @@ import { chunkIndex } from '../../common/world/constants';
 import type { DimensionId } from '../../common/data/biomes';
 import { ADMIN_ZONE_RADIUS, MAX_ADMIN_ZONES } from './adminState';
 import { CAVE_BIOMES } from '../../common/gen/caves/caveBiomes';
+import { engineeringAdmin } from '../engineering/admin';
 
 /** Work budget for searches per server tick (ms). */
 const SEARCH_BUDGET_MS = 6;
@@ -447,9 +448,26 @@ export class AdminService {
         return this.endgame(p, a.op, a.id);
       case 'v4':
         return this.v4(p, a.op);
+      case 'v5':
+        if (!this.server.engineering) return { ok: false, text: 'Engineering is not running.' };
+        return engineeringAdmin(this.server.engineering, { mark: (dim, x, y, z) => this.setBlockMark(dim, x, y, z, true), give: (pl, id, n) => this.giveMarked(pl, id, n) }, p, a.op);
       default:
         return { ok: false, text: 'Unknown action.' };
     }
+  }
+
+  /** Gives a cheat-marked stack (dropping what does not fit). */
+  private giveMarked(p: ServerPlayer, id: string, count: number): void {
+    const it = itemById.get(id);
+    if (!it) return;
+    let left = count;
+    while (left > 0) {
+      const n = Math.min(left, it.maxStack);
+      left -= n;
+      const rest = p.inventory.add(markAdmin({ id: it.num, count: n }));
+      if (rest) this.server.interaction.dropStack(p, rest);
+    }
+    this.server.interaction.syncInventory(p);
   }
 
   /** V4: the Glitched Structure's quest, bunkers, and a fluid test rig. Everything here is a cheat. */

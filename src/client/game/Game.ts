@@ -41,6 +41,7 @@ import * as THREE from 'three';
 import { GlitchHud } from '../ui/GlitchHud';
 import { TouchControls } from '../ui/TouchControls';
 import { EndingCard } from '../ui/EndingCard';
+import { guideEntry } from '../../common/engineering/guide';
 
 export interface GameHost {
   openPause(): void;
@@ -50,6 +51,7 @@ export interface GameHost {
   exit(reason: string | null): void;
   setLoading(text: string | null, detail?: string): void;
   openAchievements(): void;
+  openEngineeringBook(entry?: string): void;
   readonly screenOpen: boolean;
 }
 
@@ -1462,6 +1464,19 @@ export class Game {
     if (!t) return false;
     const held = this.held();
     const def = blocks[STATE_BLOCK[t.state]!]!.def;
+    // The Engineering Book on an engineering block opens its entry; on anything without a use, the book
+    if (first && held && items[held.id]!.def.use === 'engineering_book' && !this.player.sneaking) {
+      if (guideEntry(def.id)) {
+        this.input.unlock();
+        this.host.openEngineeringBook(def.id);
+        return true;
+      }
+      if (!def.interact) {
+        this.input.unlock();
+        this.host.openEngineeringBook();
+        return true;
+      }
+    }
     const interacts = !!def.interact && !(this.player.sneaking && held);
     this.interaction.use(held, 0, this.player.sneaking);
     if (interacts) return true;
@@ -1489,6 +1504,11 @@ export class Game {
     }
     const def = items[held.id]!.def;
     if (this.onCooldown(held.id)) return;
+    if (def.use === 'engineering_book') {
+      this.input.unlock();
+      this.host.openEngineeringBook();
+      return;
+    }
     if (def.use === 'spyglass') {
       this.usingItem = true;
       this.scoping = true;

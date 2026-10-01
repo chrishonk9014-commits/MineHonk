@@ -332,6 +332,9 @@ const EFFECTS: Record<string, { dur: number; recipe: Recipe }> = {
   'door.close': { dur: 0.35, recipe: (s) => s.knock({ f: 150, gain: 1, decay: 0.06 }) },
   'chest.open': { dur: 0.6, recipe: (s) => (s.voice({ dur: 0.45, gain: 0.3, f0: 70, f1: 120, formants: [700, 1900], rough: 0.5 }), s.knock({ start: 0.4, f: 220, gain: 0.5, decay: 0.04 })) },
   'chest.close': { dur: 0.35, recipe: (s) => s.knock({ f: 170, gain: 1, decay: 0.05 }) },
+  // V5 engineering
+  'machine.done': { dur: 0.3, recipe: (s) => (s.tone({ dur: 0.12, gain: 0.35, f0: 880, f1: 880, wave: 'sine', decay: 0.08 }), s.tone({ start: 0.1, dur: 0.18, gain: 0.3, f0: 1320, f1: 1320, wave: 'sine', decay: 0.12 })) },
+  'machine.switch': { dur: 0.15, recipe: (s) => (s.knock({ f: 900, gain: 0.6, decay: 0.02 }), s.tone({ dur: 0.08, gain: 0.25, f0: 500, f1: 300, wave: 'square', decay: 0.03, lp: 2000 })) },
   'bucket.fill': {
     dur: 0.5,
     recipe: (s) => {

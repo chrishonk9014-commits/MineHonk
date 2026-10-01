@@ -5,6 +5,7 @@
  * produces one 16x16 PNG per texture name and packs them into the atlas.
  */
 import type { BlockDef, SoundGroup, TintKind } from '../registry/blockTypes';
+import { engineeringBlockDefs } from '../engineering/catalog';
 
 const defs: BlockDef[] = [];
 const add = (d: BlockDef): BlockDef => {
@@ -1002,5 +1003,8 @@ add({ id: 'glitch_firewall', name: 'Firewall', hardness: -1, resistance: 3600000
 // Temple trials (generator 5): altars to awaken and the seals between a temple's chambers
 add({ id: 'temple_altar', name: 'Temple Altar', hardness: -1, resistance: 3600000, sound: 'stone', model: 'cube', props: { lit: BOOL }, tex: { all: 'temple_altar', on: 'temple_altar_lit' }, light: 12, interact: 'temple_altar', drops: 'none', creative: 'hidden', item: false });
 add({ id: 'temple_seal', name: 'Temple Seal', hardness: -1, resistance: 3600000, sound: 'stone', model: 'cube', tex: { all: 'temple_seal' }, light: 4, drops: 'none', creative: 'hidden', item: false, mapColor: 0x8a6d3b });
+
+// V5 - The Engineering Update: machines, power, transport, fluids, signals and factory blocks
+for (const d of engineeringBlockDefs()) add(d);
 
 export const BLOCK_DEFS: readonly BlockDef[] = defs;

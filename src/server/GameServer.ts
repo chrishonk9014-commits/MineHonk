@@ -77,6 +77,8 @@ export class GameServer {
   /** V4: puzzles and the bunker quest. */
   structureQuests: import('./systems/StructureQuests').StructureQuests | null = null;
   templeTrials: import('./systems/TempleTrials').TempleTrials | null = null;
+  /** V5: machines, power, transport, fluids and control rooms. */
+  engineering: import('./engineering/Engineering').Engineering | null = null;
   /** Work scheduled for a later tick (see `later`). */
   private readonly scheduled: { at: number; fn: () => void }[] = [];
   /** Hook for the hosting layer to forward player reports (e.g. to platform moderation). */
@@ -467,6 +469,12 @@ export class GameServer {
       case 'dismount':
         this.mounts?.dismount(p);
         break;
+      case 'eng_cfg':
+        this.engineering?.windows.handleCfg(p, m.window, m.key, m.value);
+        break;
+      case 'eng_fill':
+        this.engineering?.windows.fill(p, m.recipe, m.all);
+        break;
       case 'hello':
         break;
     }
@@ -731,6 +739,7 @@ export class GameServer {
     this.blockUpdates.onChunkReady(dim, c);
     this.mobs?.onChunkLoaded(dim, c);
     this.workstations?.onChunk(dim, c);
+    this.engineering?.onChunkLoaded(dim, c);
     this.gadgets?.onChunk(dim, c);
     this.sculk?.onChunk(dim, c);
   }
@@ -739,6 +748,7 @@ export class GameServer {
     this.blockUpdates.onChunkUnloaded(dim, c);
     this.mobs?.onChunkUnloaded(dim, c);
     this.sculk?.onChunkUnload(dim, c.cx, c.cz);
+    this.engineering?.onChunkUnloaded(dim, c);
     const k = chunkIndex(c.cx, c.cz);
     // Entities in unloaded chunks are removed (persistent ones were saved with the chunk).
     const b = dim.buckets.get(k);

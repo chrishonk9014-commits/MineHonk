@@ -160,6 +160,70 @@ created before it, V4 worlds included, keep generating exactly as they did**
   none of it counts towards advancements, and a prize won after a cheated
   trial is cheat-marked.
 
+### Version 5 - The Engineering Update
+
+Power, machines, automation and factories. Engineering works in every world,
+old and new (it adds blocks; it does not change world generation). Design
+notes: [docs/ENGINEERING.md](docs/ENGINEERING.md). Electronics (buildable
+computers) come in Version 5.5.
+
+- **The Engineering Crafting Table and Book**: every engineering item is made
+  at the Engineering Crafting Table (iron, copper and a crafting table, at a
+  normal table); none of them at the normal crafting table. The
+  **Engineering Book** (a book and a copper ingot) holds step-by-step guides
+  for each topic and an entry for every block and part: its recipe, numbers,
+  what it is made from and used in. Click an ingredient to open its entry;
+  use the book on an engineering block to open that block's entry. With the
+  table open, the book sits beside it and its **Craft** buttons fill the grid
+  from your inventory.
+- **Power** in EU and EU/t: water wheels, solar panels, wind turbines, steam
+  generators (fuel and water), advanced generators and the Large Generator
+  (lava); batteries, battery banks and advanced energy cells (they keep their
+  charge when broken); copper wire, insulated cable and power conduits
+  carrying 64, 512 and 4,096 EU/t. A network shares out power by need, never
+  makes energy out of nothing, and carries only as much as its weakest
+  cable.
+- **Machines** share one window: input, output, fuel, tool and upgrade
+  slots, energy and fluid bars, progress, state (working, no power, no
+  input, output full, disabled...), information about their network, and
+  settings. Crusher (two dusts per ore), electric furnace, grinder,
+  compressor, cutter, recycler and assembler. Speed, efficiency, capacity
+  and range upgrades. Machines push their results out of their back into an
+  inventory or onto a conveyor (a switch in the window turns it off).
+- **Items**: conveyors and express conveyors (items, mobs and players ride
+  them), hoppers, chutes, item pipes with extractors, filters and sorters;
+  crates, industrial chests, item vaults and storage barrels (4,096 of one
+  item). Chests, barrels and furnaces join item networks too.
+- **Fluids** on the existing water and lava: pumps lift source blocks (water
+  pools refill, lava does not), pipes, tanks you can see the level of,
+  valves, fluid filters and outlets.
+- **Signals replace redstone**: signal cable (no loss along its length),
+  timers, logic gates (AND, OR, XOR, NAND, NOR, NOT), level sensors, item
+  sensors and warning lights. Levers, buttons, plates, lamps, doors and
+  sculk all work with them; every machine can ignore signals, run while
+  powered or run while unpowered. Redstone dust and torches already in a
+  world keep working, but are no longer crafted or placed.
+- **Automation**: mining drills and quarries (with a pickaxe that wears
+  down), ore scanners, crop planters and harvesters, irrigation sprinklers,
+  item collectors and animal feeders.
+- **Multiblocks**: the Industrial Furnace (eight lanes), Advanced Crusher,
+  Large Generator and Quarry, built from machine casing; the controller says
+  which block is missing and where.
+- **Control rooms**: monitors show their network (power, batteries,
+  machines, storage, fluids, alerts) on their screen; control panels switch
+  any machine on the network on or off.
+- **Factory blocks**: machine casing, steel, industrial glass, metal grates,
+  hazard stripes, factory lights and industrial doors.
+- **Eleven engineering advancements**, credited to whoever placed the
+  machine. **Admin Panel**: an Engineering tab with kits, filling and
+  draining energy, resetting machines, inspecting the nearest machine and
+  its network, a test production line and a 250-machine stress test. As
+  always, nothing done there counts towards advancements, and what cheated
+  machines make is cheat-marked.
+- Everything is server authoritative and saved in block entities with its
+  chunk: energy, items, fluids and progress survive saves and unloads
+  without duplicating or disappearing. Only loaded chunks run.
+
 ### Recipe Book
 
 The book button in the top corner of the inventory and of every workstation

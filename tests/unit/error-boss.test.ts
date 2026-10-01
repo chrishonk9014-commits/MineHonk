@@ -152,12 +152,12 @@ describe('The Error', () => {
     const boss = f.boss!;
     boss.invulnerableTicks = 0;
     const dealt = boss.hurt(40, { source: 'player', attacker: player });
-    expect(dealt).toBeCloseTo(10 * (1 - Math.min(20, Math.max(boss.armor / 5, boss.armor - 10 / 2)) / 25), 3);
+    expect(dealt).toBeCloseTo(20 * (1 - Math.min(20, Math.max(boss.armor / 5, boss.armor - 20 / 2)) / 25), 3);
     f.state = 'exposed';
     f.t = 5;
     boss.invulnerableTicks = 0;
     const full = boss.hurt(40, { source: 'player', attacker: player });
-    expect(full).toBeGreaterThan(dealt * 3);
+    expect(full).toBeGreaterThan(dealt * 2.5);
     f.state = 'fight';
     boss.health = boss.maxHealth * 0.7;
     tick(server, 1);

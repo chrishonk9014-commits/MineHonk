@@ -17,8 +17,11 @@
  *  - from phase 2, floor corruption that opens holes to the void (restored);
  *  - from phase 3, a void pulse to jump over and meteors;
  *  - in phase 4, flickering clones that pop in one hit, and an error storm.
- * Four phases at 100/75/50/25% health. Outside its kneel the Error takes a
- * quarter of melee damage and half from projectiles.
+ * Four phases at 100/75/50/25% health. Outside its kneel the Error takes
+ * half of melee damage and three quarters from projectiles; kneeling, with
+ * its core exposed (after every slam, meteor shower and third attack), it
+ * takes one and a half times every hit. Each attack is named on screen with
+ * a countdown before it lands, as Herobrine's are.
  *
  * Health scales with the players who start the fight. When everyone dies or
  * leaves, the fight resets and the arena is restored. The death sequence
@@ -41,7 +44,7 @@ const BASE_HP = 600;
 /** Extra health for each player beyond the first who starts the fight. */
 const HP_PER_PLAYER = 360;
 const INTRO_TICKS = 100;
-const EXPOSED_TICKS = 80;
+const EXPOSED_TICKS = 100;
 const TRANSITION_TICKS = 60;
 const DEATH_TICKS = 220;
 /** Players further than this from the arena's centre have left the fight. */
@@ -53,6 +56,20 @@ const EYE = 16.2;
 const BAR_RANGE = 128;
 
 type AttackKind = 'laser' | 'blocks' | 'zone' | 'teleport' | 'glitch' | 'hole' | 'pulse' | 'meteor' | 'clones' | 'storm';
+
+/** What each attack is called in the warning before it lands (the teleport harms nobody). */
+const ATTACK_NAMES: Record<AttackKind, string | null> = {
+  laser: 'ERROR LASER',
+  blocks: 'FALLING BLOCKS',
+  zone: 'ERROR ZONES',
+  teleport: null,
+  glitch: 'PLAYER GLITCH',
+  hole: 'FLOOR CORRUPTION',
+  pulse: 'VOID PULSE: JUMP',
+  meteor: 'METEORS',
+  clones: 'CLONES',
+  storm: 'ERROR STORM',
+};
 
 interface Hazard {
   kind: 'laser' | 'block' | 'zone' | 'glitch' | 'pulse' | 'hole' | 'storm';
@@ -326,9 +343,12 @@ export class ErrorBossSystem {
     f.lastAttack = kind;
     f.attacks++;
     const tele = this.telegraph(players.length);
+    // Like Herobrine: every attack is named on screen before it lands, with a countdown
+    const name = ATTACK_NAMES[kind];
+    if (name) this.fx(f, { kind: 'hack', text: name, strength: 0, ticks: kind === 'laser' ? tele + 16 : kind === 'glitch' || kind === 'hole' ? tele + 10 : tele });
     this.attack(f, kind, players, tele);
     f.cooldown = Math.max(30, 80 - f.phase * 10) + tele + (players.length > 1 ? 10 : 0);
-    if (kind === 'blocks' || kind === 'meteor' || f.attacks % 5 === 0) {
+    if (kind === 'blocks' || kind === 'meteor' || f.attacks % 3 === 0) {
       f.exposeIn = tele + 20;
       f.cooldown = f.exposeIn + EXPOSED_TICKS + 20;
     }
@@ -675,7 +695,7 @@ export class ErrorBossSystem {
           p.send({ t: 'fx', kind: 'player_glitch', ticks: 60 });
           s.interaction.survival.damage(p, h.dmg, { source: 'magic', attacker: f.boss ?? undefined });
           s.interaction.survival.addEffect(p, 'slowness', 2, 60);
-          s.interaction.survival.addEffect(p, 'nausea', 0, 80);
+          s.interaction.survival.addEffect(p, 'nausea', 0, 40);
         }
         s.particles(f.dim, 'glitch', h.x, h.y + 1, h.z, 30, h.r * 0.5);
         return false;
@@ -821,9 +841,10 @@ export class ErrorBossSystem {
     if (!f || f.boss !== m) return amount;
     if (info.source === 'kill' || info.source === 'void') return amount;
     if (f.state === 'intro' || f.state === 'transition' || f.state === 'dying') return 0;
-    if (f.state === 'exposed') return amount;
+    // Its core exposed, every hit lands harder
+    if (f.state === 'exposed') return amount * 1.5;
     const ranged = info.source === 'arrow';
-    return amount * (ranged ? 0.5 : 0.25);
+    return amount * (ranged ? 0.75 : 0.5);
   }
 
   private updateBar(f: ErrorFight): void {

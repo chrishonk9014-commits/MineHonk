@@ -79,7 +79,7 @@ describe('the dragon fights from the centre', () => {
       lastPhase = fight.phase;
     }
     // Several dives in four minutes, the first well within the first minute and a half
-    expect(perches.length).toBeGreaterThanOrEqual(2);
+    expect(perches.length).toBeGreaterThanOrEqual(5);
     expect(perches[0]!).toBeLessThan(1800);
     expect(struck).toBe(true);
     expect(hurtWhilePerched).toBe(true);

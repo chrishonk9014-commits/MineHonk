@@ -555,7 +555,7 @@ export class DragonFight {
   /** Picks when the dragon next dives to the portal: sooner as its crystals fall. */
   private schedulePerch(scale = 1): void {
     this.sincePerch = 0;
-    this.perchDue = Math.round((620 + this.crystalsAlive() * 60 + this.rng.int(240)) * scale);
+    this.perchDue = Math.round((180 + this.crystalsAlive() * 15 + this.rng.int(120)) * scale);
   }
 
   private setPhase(p: Phase): void {
@@ -601,7 +601,7 @@ export class DragonFight {
           const foe = this.focus(m, players);
           const r = this.rng.next();
           // Every so often it dives to the portal to fight from the centre
-          if (foe && (this.sincePerch >= this.perchDue || r < 1 / (this.crystalsAlive() + 4))) this.setPhase('approach');
+          if (foe && (this.sincePerch >= this.perchDue || r < 1 / (this.crystalsAlive() / 3 + 2))) this.setPhase('approach');
           else if (foe && r < 0.45) {
             this.target = foe;
             this.setPhase(this.rng.chance(0.25) ? 'charge' : 'strafe');

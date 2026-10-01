@@ -24,7 +24,7 @@ import type { Slot, ItemStack } from '../../common/game/itemstack';
 import type { GameMode } from '../../common/game/gamemode';
 import type { DimensionId } from '../../common/data/biomes';
 import { items, itemById } from '../../common/registry/items';
-import { blocks, blockOf, STATE_BLOCK, STATE_FLUID, STATE_SOLID } from '../../common/registry/blocks';
+import { blocks, blockOf, getProp, STATE_BLOCK, STATE_FLUID, STATE_SOLID } from '../../common/registry/blocks';
 import { lookDirection, rayBox } from './look';
 import { entityInfo } from '../../common/data/entities';
 import { raycastBlocks } from '../../common/physics/raycast';
@@ -37,6 +37,12 @@ import type { AdminAction } from '../../common/game/admin';
 import type { AdminReply } from '../ui/AdminPanel';
 import { keyName } from '../ui/Screens';
 import { Navigator, type Instrument } from '../ui/Navigator';
+import * as THREE from 'three';
+import { GlitchHud } from '../ui/GlitchHud';
+import { DigitalHud } from '../ui/DigitalHud';
+import { TouchControls } from '../ui/TouchControls';
+import { EndingCard } from '../ui/EndingCard';
+import { guideEntry } from '../../common/engineering/guide';
 
 export interface GameHost {
   openPause(): void;
@@ -46,6 +52,9 @@ export interface GameHost {
   exit(reason: string | null): void;
   setLoading(text: string | null, detail?: string): void;
   openAchievements(): void;
+  openEngineeringBook(entry?: string): void;
+  /** V5.5: the Witch's Grimoire. */
+  openGrimoire(): void;
   readonly screenOpen: boolean;
 }
 
@@ -77,6 +86,9 @@ export class Game {
   private readonly navigator = new Navigator();
   /** Dark vignette with a round view while looking through a spyglass. */
   private readonly scopeOverlay = el('div', { class: 'spyglass-overlay hidden' });
+  /** Frost creeping in from the edges while freezing, and white-out when buried in powder snow. */
+  private readonly frostOverlay = el('div', { class: 'frost-overlay' });
+  private readonly powderOverlay = el('div', { class: 'powder-overlay hidden' });
   private scoping = false;
   private scopeZoom = 1;
   /** World spawn (compasses) and the last death (Recovery Compass). */
@@ -85,6 +97,16 @@ export class Game {
   readonly chat = new Chat();
   readonly entities = new Map<number, ClientEntity>();
   readonly root = el('div', { class: 'layer' });
+  /** Glitch effects on the interface and the ending cards (V3). */
+  private readonly glitchHud: GlitchHud;
+  /** V5.5: Herobrine's words and the computer world's screen effects. */
+  private readonly digitalHud: DigitalHud;
+  /** V5.5: movement reversed until this tick (PLAYER CONTROL OVERRIDE). */
+  private reverseControlsUntil = 0;
+  /** On-screen controls for phones and tablets. */
+  private readonly touch: TouchControls;
+  private readonly touchClose = el('div', { class: 'touch-close hidden' }, 'X');
+  private readonly endingCard: EndingCard;
   private readonly playerList = new PlayerList();
 
   // Server-provided state
@@ -181,6 +203,7 @@ export class Game {
       const lvl = legs?.tag?.ench?.silent_stride ?? 0;
       return Math.min(1, 0.3 + 0.15 * lvl);
     };
+    this.player.powderWalk = () => items[this.invSlots[HELMET + 3]?.id ?? -1]?.id === 'leather_boots';
     this.player.canGlide = () => {
       const c = this.invSlots[HELMET + 1];
       if (!c) return false;
@@ -198,8 +221,26 @@ export class Game {
       sound: (n, x, y, z, v, p) => this.audio.play(n, x, y, z, v, p),
       swing: () => this.swing(),
     });
-    this.root.append(this.scopeOverlay, this.hud.root, this.chat.root, this.chat.input, this.playerList.root);
+    this.root.append(this.scopeOverlay, this.frostOverlay, this.powderOverlay, this.hud.root, this.chat.root, this.chat.input, this.playerList.root);
     this.hud.root.append(this.navigator.root);
+    this.touch = new TouchControls(this.input, {
+      selectSlot: (i) => this.selectSlot(i),
+      hotbarRect: () => this.hud.hotbarRect(),
+      targetingEntity: () => !!this.entityTarget,
+    });
+    this.root.append(this.touch.root, this.touchClose);
+    this.touchClose.addEventListener(
+      'touchstart',
+      (e) => {
+        e.preventDefault();
+        if (this.chat.open) this.chat.close();
+        else if (this.screen) this.closeWindow(true);
+      },
+      { passive: false },
+    );
+    this.glitchHud = new GlitchHud(this.root, settings);
+    this.digitalHud = new DigitalHud(this.root, settings);
+    this.endingCard = new EndingCard(this.root, settings);
     ui.append(this.root);
     this.chat.onSend = (text) => this.send({ t: 'chat', text });
     this.chat.onClose = () => {
@@ -518,7 +559,9 @@ export class Game {
       case 'window_prop':
         if (this.window && this.window.id === m.window) {
           const props = (m.prop === 'furnace' || m.prop === 'all') && m.value && typeof m.value === 'object' ? (m.value as Record<string, unknown>) : { [m.prop]: m.value };
-          Object.assign(this.window.props, props);
+          // A computer's screen is sent whole each time (fields it no longer shows must go)
+          if (this.window.kind === 'computer' && m.prop === 'all') this.window.props = { ...props };
+          else Object.assign(this.window.props, props);
           this.screen?.setProps(this.window.props);
         }
         break;
@@ -544,6 +587,13 @@ export class Game {
         break;
       case 'trail':
         if (this.settings.particles !== 'minimal' || m.kind === 'sonic_boom') this.renderer.particles.trail(m.kind, m.x0, m.y0, m.z0, m.x1, m.y1, m.z1, m.ticks);
+        break;
+      case 'ending':
+        this.endingCard.show(m);
+        this.audio.play(m.style === 'calm' ? 'challenge.complete' : 'glitch.static', NaN, NaN, NaN, m.style === 'calm' ? 0.7 : 0.35, m.style === 'calm' ? 0.9 : 0.6, 'ui');
+        break;
+      case 'fx':
+        this.onFx(m);
         break;
       case 'teleport':
         this.player.setPos(m.x, m.y, m.z);
@@ -576,10 +626,10 @@ export class Game {
         this.player.yaw = m.yaw;
         this.loadingTerrain = true;
         this.loadingSince = performance.now();
-        this.host.setLoading(m.dimension === 'nether' ? 'Entering the Nether...' : m.dimension === 'end' ? 'Entering the End...' : m.dimension === 'farlands' ? 'Entering the Farlands...' : 'Returning...');
+        this.host.setLoading(m.dimension === 'nether' ? 'Entering the Nether...' : m.dimension === 'end' ? 'Entering the End...' : m.dimension === 'farlands' ? 'Entering the Farlands...' : m.dimension === 'computer' ? 'Connecting...' : 'Returning...');
         break;
       case 'boss':
-        this.hud.setBoss(m.id, m.action, m.title, m.progress);
+        this.hud.setBoss(m.id, m.action, m.title, m.progress, m.color);
         break;
       case 'death':
         this.player.dead = true;
@@ -615,6 +665,9 @@ export class Game {
       }
       case 'title':
         this.hud.showTitle(m.text, m.sub, m.ticks);
+        break;
+      case 'quest':
+        this.hud.setQuest(m.quest);
         break;
       case 'world_info':
         this.worldInfo = m.world;
@@ -713,7 +766,7 @@ export class Game {
   private setDimension(d: DimensionId): void {
     this.dimension = d;
     this.world.dimension = d;
-    this.world.hasSky = d === 'overworld' || d === 'farlands';
+    this.world.hasSky = d === 'overworld' || d === 'farlands' || d === 'computer';
     this.renderer.sky.dimension = d;
   }
 
@@ -794,6 +847,8 @@ export class Game {
       n++;
     }
     if (n === 5) this.acc = 0;
+    this.touch.setVisible(this.input.touchMode && this.joined && !this.uiBlocking && !this.player.dead);
+    this.touchClose.classList.toggle('hidden', !(this.input.touchMode && (!!this.screen || this.chat.open)));
     this.look(dt);
     this.render(this.acc / 50, dt);
     this.frames++;
@@ -839,13 +894,18 @@ export class Game {
     let sneak = false;
     let sprint = false;
     if (!blocking) {
-      forward = (inp.isHeld('forward') ? 1 : 0) - (inp.isHeld('back') ? 1 : 0) - inp.padMove[1];
-      strafe = (inp.isHeld('right') ? 1 : 0) - (inp.isHeld('left') ? 1 : 0) + inp.padMove[0];
+      forward = (inp.isHeld('forward') ? 1 : 0) - (inp.isHeld('back') ? 1 : 0) - inp.padMove[1] - inp.touchMove[1];
+      strafe = (inp.isHeld('right') ? 1 : 0) - (inp.isHeld('left') ? 1 : 0) + inp.padMove[0] + inp.touchMove[0];
       forward = Math.max(-1, Math.min(1, forward));
       strafe = Math.max(-1, Math.min(1, strafe));
-      jump = inp.isHeld('jump') || inp.gpJump;
-      sneak = inp.isHeld('sneak') || inp.gpSneak;
-      sprint = inp.isHeld('sprint') || inp.gpSprint;
+      // V5.5: PLAYER CONTROL OVERRIDE
+      if (this.tickNo < this.reverseControlsUntil) {
+        forward = -forward;
+        strafe = -strafe;
+      }
+      jump = inp.isHeld('jump') || inp.gpJump || inp.touchJump;
+      sneak = inp.isHeld('sneak') || inp.gpSneak || inp.touchSneak;
+      sprint = inp.isHeld('sprint') || inp.gpSprint || inp.touchSprint;
     }
     const forwardPressed = forward > 0 && !this.wasForward;
     const jumpPressed = jump && !this.wasJump;
@@ -874,12 +934,12 @@ export class Game {
     this.updateTargets();
     // Mining / attacking / using
     if (!blocking && !p.dead) {
-      const attackHeld = inp.mouseHeld(0) || inp.gpAttack;
+      const attackHeld = inp.mouseHeld(0) || inp.gpAttack || inp.touchAttack;
       const helmet = this.invSlots[HELMET] ?? null;
       const underwater = p.isUnderwater();
       if (this.entityTarget && attackHeld) this.interaction.tickMining(this.held(), false, underwater, 0, 0, false);
       else this.interaction.tickMining(this.held(), attackHeld, underwater, this.effectLevel('haste'), this.effectLevel('mining_fatigue'), BlockInteraction.aquaAffinity(helmet));
-      const useHeld = inp.mouseHeld(2) || inp.gpUse;
+      const useHeld = inp.mouseHeld(2) || inp.gpUse || inp.touchUse;
       if (useHeld && !this.usingItem) {
         if (this.useRepeat > 0) this.useRepeat--;
         else {
@@ -920,6 +980,9 @@ export class Game {
     this.renderer.hand.tick();
     this.renderer.hand.setItem(this.held()?.id ?? 0);
     this.hud.tick();
+    this.renderer.glitch.tick();
+    this.glitchHud.tick(this.renderer.glitch.corrupting);
+    this.voidAura();
     if (this.flash > 0) this.flash = Math.max(0, this.flash - 0.1);
     if (this.hurtTilt > 0) this.hurtTilt = Math.max(0, this.hurtTilt - 0.12);
     if (this.shake > 0) this.shake = Math.max(0, this.shake - 0.05);
@@ -1060,6 +1123,23 @@ export class Game {
             }
           }
     }
+    // Glitched portal frames flicker and hum; one holding the Eye much harder
+    if (this.tickNo % 5 === 0 && this.dimension === 'overworld' && this.caveBiome === 10) {
+      const px = Math.floor(b.x);
+      const py = Math.floor(b.y);
+      const pz = Math.floor(b.z);
+      for (let i = 0; i < 24; i++) {
+        const x = px + Math.floor(Math.random() * 25) - 12;
+        const y = py + Math.floor(Math.random() * 13) - 6;
+        const z = pz + Math.floor(Math.random() * 25) - 12;
+        const s = this.world.getState(x, y, z);
+        if (blockOf(s).id !== 'glitched_portal_frame') continue;
+        const lit = getProp(s, 'part') === 'eye';
+        if (this.settings.particles !== 'minimal') this.renderer.particles.spawn(lit ? 'void_burst' : 'glitch', x + 0.5, y + 0.5, z + 0.5, lit ? 4 : 2, 0.6);
+        if (Math.random() < (lit ? 0.25 : 0.08)) this.audio.play('glitch.hum', x + 0.5, y + 0.5, z + 0.5, lit ? 0.8 : 0.4, lit ? 0.7 : 1, 'ambient');
+        break;
+      }
+    }
   }
 
   /** Cave biome ambience: drifting particles and biome sounds around the player. */
@@ -1077,8 +1157,133 @@ export class Game {
     }
     // Each biome has its own sounds
     if (this.tickNo % 40 === 0 && Math.random() < 0.35) {
-      const snd = ['', 'cave.drip', 'cave.rumble', 'lush.chirp', 'mushroom.pop', 'crystal.chime', 'cave.drip', 'lava.pop', 'frozen.wind', 'deep_dark.hum'][cb];
+      const snd = ['', 'cave.drip', 'cave.rumble', 'lush.chirp', 'mushroom.pop', 'crystal.chime', 'cave.drip', 'lava.pop', 'frozen.wind', 'deep_dark.hum', 'glitch.static'][cb];
       if (snd) this.audio.play(snd, b.x + (Math.random() - 0.5) * 20, b.y + (Math.random() - 0.5) * 6, b.z + (Math.random() - 0.5) * 20, 0.6, 0.85 + Math.random() * 0.3, 'ambient');
+    }
+  }
+
+  /**
+   * Screen and world effects from the server (V3): glitches, the End going
+   * silent and corrupting, the integrity failure, warnings and attacks.
+   */
+  private onFx(m: Extract<S2C, { t: 'fx' }>): void {
+    const g = this.renderer.glitch;
+    const wf = this.renderer.worldFx;
+    const now = this.tickNo / 20;
+    const secs = (m.ticks ?? 20) / 20;
+    switch (m.kind) {
+      case 'glitch':
+        g.pulse(m.strength ?? 0.5, m.ticks ?? 20);
+        if ((m.strength ?? 0.5) >= 0.5) this.audio.play('glitch.static', NaN, NaN, NaN, 0.35, 0.8 + Math.random() * 0.4, 'ui');
+        break;
+      case 'silence':
+        this.audio.silence(true, 0.25);
+        break;
+      case 'unsilence':
+        this.audio.silence(false, secs);
+        break;
+      case 'corrupt_world':
+        g.corruptWorld(m.strength ?? 0.7, m.ticks ?? 100);
+        break;
+      case 'integrity':
+        g.pulse(1, m.ticks ?? 40);
+        this.glitchHud.integrity(m.text ?? 'ERROR', m.ticks ?? 40);
+        this.audio.playThrough('glitch.static', 0.8);
+        break;
+      case 'player_glitch':
+        g.playerHit();
+        this.glitchHud.playerHit();
+        this.audio.playThrough('glitch.static', 0.6);
+        break;
+      case 'stabilize':
+        g.stabilize();
+        this.glitchHud.clear();
+        this.audio.silence(false, 1);
+        break;
+      case 'warn_circle':
+        wf.warnCircle(m.id, m.x ?? 0, m.y ?? 0, m.z ?? 0, m.r ?? 2, secs, now);
+        break;
+      case 'warn_end':
+      case 'zone_end':
+        if (m.id !== undefined) wf.remove(m.id);
+        break;
+      case 'warn_beam':
+      case 'laser':
+        wf.beam(m.id, new THREE.Vector3(m.x ?? 0, m.y ?? 0, m.z ?? 0), new THREE.Vector3(m.x1 ?? 0, m.y1 ?? 0, m.z1 ?? 0), secs, now, m.kind === 'warn_beam');
+        if (m.kind === 'laser') g.pulse(0.35, 12);
+        break;
+      case 'zone':
+        wf.zone(m.id, m.x ?? 0, m.y ?? 0, m.z ?? 0, m.r ?? 3, m.ticks === undefined ? Infinity : secs, now, m.text === 'malware' ? 0x18ff6a : m.text === 'static' ? 0xd8e8ff : 0xe020c8);
+        break;
+      case 'pulse':
+        wf.pulse(m.x ?? 0, m.y ?? 0, m.z ?? 0, m.r ?? 20, secs, now);
+        break;
+      case 'afterimage': {
+        const obj = m.id !== undefined ? this.renderer.entities.objectOf(m.id) : null;
+        if (obj) wf.afterimage(obj, secs, now);
+        break;
+      }
+      case 'portal_on':
+        g.pulse(0.6, 30);
+        this.audio.play('glitch.portal_on', m.x ?? NaN, m.y ?? NaN, m.z ?? NaN, 1.5, 1);
+        break;
+      case 'farlands_entry':
+        g.pulse(1, m.ticks ?? 50);
+        this.glitchHud.fragments(10);
+        this.audio.playThrough('farlands.entry', 0.7);
+        break;
+      case 'boss_death':
+        g.pulse(1, m.ticks ?? 80);
+        g.corruptWorld(0.9, m.ticks ?? 80);
+        break;
+      // V5.5: the Digital Corruption Update
+      case 'hack': {
+        const mode = Math.round(m.strength ?? 1);
+        this.digitalHud.hack(m.text ?? 'HER0BRINE.EXE', m.ticks ?? 30, mode);
+        if (mode === 1) {
+          g.pulse(0.35, 12);
+          this.audio.play('computer.glitch', NaN, NaN, NaN, 0.6, 0.7, 'ui');
+        } else if (mode === 0) this.audio.play('computer.alert', NaN, NaN, NaN, 0.5, 0.6, 'ui');
+        else if (mode === 3) g.pulse(0.5, 16);
+        break;
+      }
+      case 'takeover':
+        this.digitalHud.takeover(m.text ?? '', m.strength ?? 0);
+        g.pulse(0.15 + (m.strength ?? 0) * 0.35, 8);
+        break;
+      case 'controls_reversed':
+        this.reverseControlsUntil = this.tickNo + (m.ticks ?? 60);
+        break;
+      case 'arc':
+        wf.arc(m.id, new THREE.Vector3(m.x ?? 0, m.y ?? 0, m.z ?? 0), new THREE.Vector3(m.x1 ?? 0, m.y1 ?? 0, m.z1 ?? 0), secs, now, (m.strength ?? 0) > 0);
+        break;
+      case 'bolt':
+        wf.bolt(m.x ?? 0, m.y ?? 0, m.z ?? 0, secs, now);
+        g.pulse(0.2, 6);
+        break;
+      case 'enter_computer':
+        this.digitalHud.enterComputer(m.ticks ?? 36);
+        g.pulse(0.8, m.ticks ?? 36);
+        this.audio.playThrough('computer.enter', 0.8);
+        break;
+      case 'presence':
+        this.digitalHud.presence(m.ticks ?? 80);
+        break;
+      case 'shutdown':
+        this.digitalHud.shutdown(m.ticks ?? 80);
+        this.audio.playThrough('computer.shutdown', 0.8);
+        break;
+    }
+  }
+
+  /** Voidbound Endermen trail dark violet motes (client-side, no network). */
+  private voidAura(): void {
+    if (this.settings.particles === 'minimal' || this.tickNo % 3 !== 0) return;
+    const p = this.player.body;
+    for (const e of this.entities.values()) {
+      if (e.type !== 'enderman' || !e.meta?.voidbound) continue;
+      if ((e.x - p.x) ** 2 + (e.z - p.z) ** 2 > 48 * 48) continue;
+      this.renderer.particles.spawn('void_aura', e.x, e.y + 1.6, e.z, this.settings.particles === 'decreased' ? 1 : 2, 0.5);
     }
   }
 
@@ -1093,6 +1298,7 @@ export class Game {
     const p = this.player;
     const b = p.body;
     this.caveAmbience();
+    this.errorAmbience();
     const light = this.world.getLight(Math.floor(b.x), Math.floor(b.y + 1.6), Math.floor(b.z));
     const skyLight = light >> 4;
     if (this.dimension === 'overworld') {
@@ -1106,6 +1312,9 @@ export class Game {
       this.audio.play('nether.ambient', NaN, NaN, NaN, 0.5, 0.8 + Math.random() * 0.4, 'ambient');
     } else if (this.dimension === 'farlands' && this.tickNo % 120 === 0 && Math.random() < 0.4) {
       this.audio.play('farlands.ambient', NaN, NaN, NaN, 0.45, 0.8 + Math.random() * 0.4, 'ambient');
+    } else if (this.dimension === 'computer' && this.tickNo % 120 === 0 && Math.random() < 0.45) {
+      // V5.5: the hum of the machine under the world
+      this.audio.play('computer.ambient', NaN, NaN, NaN, 0.45, 0.9 + Math.random() * 0.2, 'ambient');
     }
     // Rain loop (scaled by sky exposure)
     const snowy = this.world.biomeAt(b.x, b.z).precipitation === 'snow';
@@ -1118,6 +1327,33 @@ export class Game {
       const boss = this.hud.hasBoss();
       this.audio.music.update(MusicPlayer.moodFor(this.dimension, this.player.gamemode === 'creative', p.body.eyesInWater, boss, this.caveBiome));
     }
+  }
+
+  private inErrorBiome = false;
+
+  /**
+   * V4: inside the Error Biome the air crawls with glitch particles, a low
+   * hum plays and the screen stutters now and then (all within the Glitch
+   * Effects and particle settings).
+   */
+  private errorAmbience(): void {
+    const b = this.player.body;
+    const inside = this.world.biomeAt(b.x, b.z).id === 'error_biome';
+    const g = this.renderer.glitch;
+    if (inside && !this.inErrorBiome) {
+      g.pulse(0.35, 14);
+      this.audio.play('glitch.static', NaN, NaN, NaN, 0.3, 0.7, 'ambient');
+    }
+    this.inErrorBiome = inside;
+    if (!inside) return;
+    if (this.settings.particles !== 'minimal' && this.tickNo % (this.settings.particles === 'decreased' ? 6 : 2) === 0) {
+      const x = b.x + (Math.random() - 0.5) * 16;
+      const y = b.y + Math.random() * 6 - 1;
+      const z = b.z + (Math.random() - 0.5) * 16;
+      if (!STATE_SOLID[this.world.getState(Math.floor(x), Math.floor(y), Math.floor(z))]) this.renderer.particles.spawn('glitch', x, y, z, 1, 0.3);
+    }
+    if (this.tickNo % 90 === 0) this.audio.play('glitch.hum', NaN, NaN, NaN, 0.25, 0.6 + Math.random() * 0.2, 'ambient');
+    if (Math.random() < 1 / 160) g.pulse(0.12 + Math.random() * 0.1, 6 + Math.floor(Math.random() * 6));
   }
 
   private eyePos(alpha = 1): [number, number, number] {
@@ -1283,6 +1519,19 @@ export class Game {
     if (!t) return false;
     const held = this.held();
     const def = blocks[STATE_BLOCK[t.state]!]!.def;
+    // The Engineering Book on an engineering block opens its entry; on anything without a use, the book
+    if (first && held && items[held.id]!.def.use === 'engineering_book' && !this.player.sneaking) {
+      if (guideEntry(def.id)) {
+        this.input.unlock();
+        this.host.openEngineeringBook(def.id);
+        return true;
+      }
+      if (!def.interact) {
+        this.input.unlock();
+        this.host.openEngineeringBook();
+        return true;
+      }
+    }
     const interacts = !!def.interact && !(this.player.sneaking && held);
     this.interaction.use(held, 0, this.player.sneaking);
     if (interacts) return true;
@@ -1310,6 +1559,18 @@ export class Game {
     }
     const def = items[held.id]!.def;
     if (this.onCooldown(held.id)) return;
+    if (def.use === 'engineering_book') {
+      this.input.unlock();
+      this.host.openEngineeringBook();
+      return;
+    }
+    if (def.use === 'grimoire') {
+      // The server notes the reading (an advancement); the pages open here
+      this.send({ t: 'use', hand: 0, action: 'start' });
+      this.input.unlock();
+      this.host.openGrimoire();
+      return;
+    }
     if (def.use === 'spyglass') {
       this.usingItem = true;
       this.scoping = true;
@@ -1377,6 +1638,9 @@ export class Game {
     const nv = this.effectLevel('night_vision') > 0 ? 1 : 0;
     this.scopeZoom += ((this.scoping ? 0.1 : 1) - this.scopeZoom) * Math.min(1, dt / 60);
     this.scopeOverlay.classList.toggle('hidden', !this.scoping);
+    const frost = this.stats?.freeze ?? 0;
+    this.frostOverlay.style.opacity = frost > 0 && this.thirdPerson === 0 ? String(Math.min(1, frost)) : '0';
+    this.powderOverlay.classList.toggle('hidden', !p.body.headInPowder || this.thirdPerson !== 0);
     const fs: FrameState = {
       x: ex,
       y: ey,
@@ -1614,6 +1878,7 @@ export class Game {
     this.closeScreenLocal();
     this.sign?.destroy();
     this.audio.stopAll();
+    this.touch.dispose();
     this.renderer.dispose();
     this.root.remove();
     this.conn.onMessage = () => {};

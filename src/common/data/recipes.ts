@@ -4,6 +4,7 @@
  * generated in loops.
  */
 import { WOOD_TYPES, COLORS } from './blocks';
+import { ENG_TAGS, DUST_SMELTING } from '../engineering/catalog';
 
 export interface ShapedRecipe {
   type: 'shaped';
@@ -61,6 +62,7 @@ export const RECIPE_TAGS: Record<string, string[]> = {
   sand_any: ['sand', 'red_sand'],
   mushrooms_any: ['brown_mushroom', 'red_mushroom'],
   small_flowers_any: [],
+  wool_any: ENG_TAGS.wool_any!(COLORS),
 };
 
 // ---------------------------------------------------------------- wood
@@ -151,7 +153,7 @@ shaped('shulker_box', 1, ['S', 'C', 'S'], { S: 'shulker_shell', C: 'chest' });
 shaped('conduit', 1, ['NNN', 'NHN', 'NNN'], { N: 'nautilus_shell', H: 'heart_of_the_sea' });
 shaped('rift_pearl', 1, [' V ', 'VEV', ' V '], { V: 'void_shard', E: 'ender_pearl' });
 shaped('glitched_ingot', 2, ['SNS', 'NCN', 'SNS'], { S: 'glitch_shard', N: 'nullium_ingot', C: 'glitch_core' });
-shaped('redstone_torch', 1, ['R', 'S'], { R: 'redstone', S: 'stick' });
+// V5: the redstone torch is no longer made (the Logic Gate's NOT mode replaces it); old torches keep working
 shaped('redstone_lamp', 1, [' R ', 'RGR', ' R '], { R: 'redstone', G: 'glowstone' });
 shaped('carrot_on_a_stick', 1, ['F ', ' C'], { F: 'fishing_rod', C: 'carrot' });
 shaped('recovery_compass', 1, ['EEE', 'ECE', 'EEE'], { E: 'echo_shard', C: 'compass' });
@@ -359,6 +361,11 @@ shaped('tinted_glass', 2, [' A ', 'AGA', ' A '], { A: 'amethyst_shard', G: 'glas
 shaped('moss_carpet', 3, ['MM'], { M: 'moss_block' });
 shaped('nether_wart_block', 1, ['WWW', 'WWW', 'WWW'], { W: 'nether_wart' });
 shaped('smooth_quartz', 4, ['QQ', 'QQ'], { Q: 'quartz_block' });
+// V4 biome materials
+shaped('frosted_stone_bricks', 4, ['SS', 'SI'], { S: 'stone_bricks', I: 'ice' });
+shapeless('bone_meal', 2, 'seashell');
+shapeless('string', 1, 'cattail', 'cattail');
+shaped('leaf_litter', 3, ['LL'], { L: 'dead_bush' });
 
 // ---------------------------------------------------------------- colours
 const FLOWER_DYES: [string, string, number][] = [
@@ -384,6 +391,14 @@ const FLOWER_DYES: [string, string, number][] = [
   ['ink_sac', 'black_dye', 1],
   ['lapis_lazuli', 'blue_dye', 1],
   ['beetroot', 'red_dye', 1],
+  // V4 biome flowers
+  ['desert_marigold', 'orange_dye', 1],
+  ['frostbloom', 'light_blue_dye', 1],
+  ['edelweiss', 'white_dye', 1],
+  ['jungle_orchid', 'magenta_dye', 1],
+  ['buttercup', 'yellow_dye', 1],
+  ['cactus_flower', 'pink_dye', 1],
+  ['cherry_petals', 'pink_dye', 1],
 ];
 for (const [src, dye, n] of FLOWER_DYES) shapeless(dye, n, src);
 shapeless('orange_dye', 2, 'red_dye', 'yellow_dye');
@@ -426,6 +441,11 @@ smelt('deepslate_emerald_ore', 'emerald', 1, 'ore');
 smelt('lapis_ore', 'lapis_lazuli', 0.2, 'ore');
 smelt('deepslate_lapis_ore', 'lapis_lazuli', 0.2, 'ore');
 smelt('redstone_ore', 'redstone', 0.7, 'ore');
+// V5: dusts from the crusher smelt into ingots in any furnace
+for (const [dust, ingot] of DUST_SMELTING) smelt(dust, ingot, 0.3, 'ore');
+// V5: the two ways into engineering, made at a normal crafting table
+shaped('engineering_table', 1, ['ICI', 'CTC', 'III'], { I: 'iron_ingot', C: 'copper_ingot', T: 'crafting_table' });
+shapeless('engineering_book', 1, 'book', 'copper_ingot');
 smelt('deepslate_redstone_ore', 'redstone', 0.7, 'ore');
 smelt('nether_quartz_ore', 'quartz', 0.2, 'ore');
 smelt('ancient_debris', 'netherite_scrap', 2, 'ore');
@@ -434,6 +454,8 @@ smelt('cinder_ore', 'cinder', 0.8, 'ore');
 smelt('raw_nullium', 'nullium_ingot', 2, 'ore');
 smelt('null_ore', 'nullium_ingot', 2, 'ore');
 smelt('glitch_ore', 'glitch_shard', 2, 'ore');
+smelt('termite_mound', 'terracotta', 0.35);
+smelt('cactus_fruit', 'green_dye', 0.2);
 for (const [a, b] of [
   ['iron_pickaxe', 'iron_nugget'],
   ['iron_sword', 'iron_nugget'],

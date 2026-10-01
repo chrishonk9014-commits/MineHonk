@@ -128,6 +128,14 @@ export class ServerPlayer extends Entity {
   /** Cave biome the player is in (0 = none) and every cave biome visited so far. */
   caveBiome = 0;
   visitedCaveBiomes = new Set<number>();
+  /** Endings this player has reached (V3). */
+  endings = new Set<string>();
+  /** An ending card waiting to be shown (after walking out through the End portal). */
+  pendingEnding: string | null = null;
+  /** Where this player stepped into the End portal (the secret ending returns them there). */
+  endEntry: { x: number; y: number; z: number } | null = null;
+  /** Freeze build-up from powder snow (ticks, 0-140). */
+  freezeTicks = 0;
 
   constructor(
     readonly conn: Connection,
@@ -200,6 +208,7 @@ export class ServerPlayer extends Entity {
       maxAir: this.maxAir,
       armor: this.armorCache,
       effects: [...this.effects.entries()].map(([id, e]) => ({ id, amp: e.amp, ticks: e.ticks })),
+      freeze: this.freezeTicks ? Math.round((this.freezeTicks / 140) * 20) / 20 : undefined,
     };
   }
 

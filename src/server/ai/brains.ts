@@ -319,7 +319,9 @@ export function installBrain(m: Mob): void {
       m.addTargetGoal(2, new G.NearestTargetGoal(G.nearestPlayerTarget(64), false, 0.5));
       break;
     case 'dragon':
-      // The dragon fight is driven by its own controller
+    case 'the_error':
+    case 'herobrine':
+      // These fights are driven by their own controllers
       break;
   }
 }

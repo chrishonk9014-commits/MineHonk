@@ -15,7 +15,8 @@ import { DecorView } from './decorate/view';
 import { vein, trees } from './decorate/features';
 import { StructureManager } from './structures/manager';
 import { FARLANDS_STRUCTURES } from './structures/farlands';
-import { ProtoCache, cloneChunk, addGenEntities, type DimensionGenerator, type GeneratorOptions, type SpawnPoint } from './pipeline';
+import { ProtoCache, cloneChunk, addGenEntities, LATEST_GENERATOR, type DimensionGenerator, type GeneratorOptions, type SpawnPoint } from './pipeline';
+import { ErrorArenas } from './farlandsArena';
 
 const WATER_LEVEL = 62;
 const TOP = 208;
@@ -300,6 +301,8 @@ export class FarlandsGenerator implements DimensionGenerator {
   readonly dimension = 'farlands' as const;
   readonly terrain: FarlandsTerrain;
   readonly structures: StructureManager;
+  /** V3: The Error's arenas (null in worlds made before V3). */
+  readonly arenas: ErrorArenas | null;
   private readonly protos: ProtoCache;
 
   constructor(
@@ -307,8 +310,18 @@ export class FarlandsGenerator implements DimensionGenerator {
     opts: GeneratorOptions = {},
   ) {
     this.terrain = new FarlandsTerrain(seed);
-    this.protos = new ProtoCache(400, (cx, cz) => this.terrain.generate(cx, cz));
+    this.arenas = (opts.version ?? LATEST_GENERATOR) >= 3 ? new ErrorArenas(seed, (x, z) => this.terrain.estimateHeight(x, z)) : null;
+    this.protos = new ProtoCache(400, (cx, cz) => {
+      const c = this.terrain.generate(cx, cz);
+      if (this.arenas) {
+        this.arenas.apply(c, cx << 4, cz << 4);
+        c.recomputeHeightmap();
+      }
+      return c;
+    });
     const ground = (x: number, z: number): number => {
+      // Nothing gets built in an arena's chasm
+      if (this.arenas?.inChasm(x, z)) return -999;
       const c = this.protos.get(x >> 4, z >> 4);
       let y = c.getHeight(x & 15, z & 15) - 1;
       while (y > 0 && (c.get(x & 15, y, z & 15) === 0 || STATE_FLUID[c.get(x & 15, y, z & 15)])) y--;
@@ -367,15 +380,20 @@ export class FarlandsGenerator implements DimensionGenerator {
   }
 
   structureTypes(): string[] {
-    return [...this.structures.typeIds()];
+    return [...this.structures.typeIds(), ...(this.arenas ? ['error_arena'] : [])];
   }
 
   *locateSteps(type: string, x: number, z: number): Generator<void, { x: number; y: number; z: number } | null> {
+    if (type === 'error_arena') return this.locate(type, x, z);
     const s = yield* this.structures.nearestSteps(type, x, z);
     return s ? { x: s.x, y: s.y, z: s.z } : null;
   }
 
   locate(type: string, x: number, z: number): { x: number; y: number; z: number } | null {
+    if (type === 'error_arena') {
+      const a = this.arenas?.nearest(x, z);
+      return a ? { x: a.x, y: a.y, z: a.z } : null;
+    }
     const s = this.structures.nearest(type, x, z, 10);
     return s ? { x: s.x, y: s.y, z: s.z } : null;
   }

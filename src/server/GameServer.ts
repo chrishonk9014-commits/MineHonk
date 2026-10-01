@@ -66,6 +66,23 @@ export class GameServer {
   power: import('./systems/Power').Power | null = null;
   sculk: import('./systems/Sculk').Sculk | null = null;
   warden: import('./systems/Warden').WardenSystem | null = null;
+  /** Endings and the world's endgame state (V3, installed by gameplay). */
+  endings: import('./systems/Endings').EndingsSystem | null = null;
+  /** The mysterious potion, Voidbound Endermen and the secret ending (V3, installed by gameplay). */
+  endgame: import('./systems/Endgame').EndgameSystem | null = null;
+  /** The Error, the Farlands boss (V3, installed by gameplay). */
+  errorBoss: import('./systems/ErrorBoss').ErrorBossSystem | null = null;
+  /** V4: the Glitched Structures' five-stage fights. */
+  glitchedQuest: import('./systems/GlitchedQuest').GlitchedQuestSystem | null = null;
+  /** V4: puzzles and the bunker quest. */
+  structureQuests: import('./systems/StructureQuests').StructureQuests | null = null;
+  templeTrials: import('./systems/TempleTrials').TempleTrials | null = null;
+  /** V5: machines, power, transport, fluids and control rooms. */
+  engineering: import('./engineering/Engineering').Engineering | null = null;
+  /** V5.5 - the Herobrine story (installed by gameplay). */
+  herobrine: import('./herobrine/Herobrine').HerobrineSystem | null = null;
+  /** Work scheduled for a later tick (see `later`). */
+  private readonly scheduled: { at: number; fn: () => void }[] = [];
   /** Hook for the hosting layer to forward player reports (e.g. to platform moderation). */
   onReport?: (from: ServerPlayer, target: ServerPlayer, reason: string) => void;
   readonly interaction: Interaction;
@@ -110,7 +127,7 @@ export class GameServer {
     this.commands = new Commands(this);
     this.playerData = new PlayerData(this);
     this.admin = new AdminService(this);
-    for (const id of ['overworld', 'nether', 'end', 'farlands'] as DimensionId[]) {
+    for (const id of ['overworld', 'nether', 'end', 'farlands', 'computer'] as DimensionId[]) {
       this.dims.set(id, new Dimension(this, id, level.seedNum));
     }
   }
@@ -454,6 +471,15 @@ export class GameServer {
       case 'dismount':
         this.mounts?.dismount(p);
         break;
+      case 'eng_cfg':
+        this.engineering?.windows.handleCfg(p, m.window, m.key, m.value);
+        break;
+      case 'eng_fill':
+        this.engineering?.windows.fill(p, m.recipe, m.all);
+        break;
+      case 'pc_cmd':
+        if (!this.engineering?.computers.handleCmd(p, m.window, m.cmd, m.arg)) this.herobrine?.terminalCmd(p, m.window, m.cmd);
+        break;
       case 'hello':
         break;
     }
@@ -474,6 +500,9 @@ export class GameServer {
   private async removePlayer(p: ServerPlayer, announce: boolean): Promise<void> {
     if (!this.players.has(p.conn.id)) return;
     this.players.delete(p.conn.id);
+    this.glitchedQuest?.onLeave(p);
+    this.structureQuests?.onLeave(p);
+    this.templeTrials?.onLeave(p);
     this.mounts?.dismount(p, true);
     this.interaction.closeWindow(p, p.windowId, true);
     p.dim.removeEntity(p);
@@ -715,13 +744,16 @@ export class GameServer {
     this.blockUpdates.onChunkReady(dim, c);
     this.mobs?.onChunkLoaded(dim, c);
     this.workstations?.onChunk(dim, c);
+    this.engineering?.onChunkLoaded(dim, c);
     this.gadgets?.onChunk(dim, c);
     this.sculk?.onChunk(dim, c);
   }
 
   onChunkUnloaded(dim: Dimension, c: Chunk): void {
+    this.blockUpdates.onChunkUnloaded(dim, c);
     this.mobs?.onChunkUnloaded(dim, c);
     this.sculk?.onChunkUnload(dim, c.cx, c.cz);
+    this.engineering?.onChunkUnloaded(dim, c);
     const k = chunkIndex(c.cx, c.cz);
     // Entities in unloaded chunks are removed (persistent ones were saved with the chunk).
     const b = dim.buckets.get(k);
@@ -759,6 +791,25 @@ export class GameServer {
 
   // ------------------------------------------------------------------ tick
 
+  /** Runs `fn` after `ticks` server ticks (not saved: only for short effects). */
+  later(ticks: number, fn: () => void): void {
+    this.scheduled.push({ at: this.tickNo + Math.max(1, Math.floor(ticks)), fn });
+  }
+
+  private runScheduled(): void {
+    if (!this.scheduled.length) return;
+    const due = this.scheduled.filter((s) => s.at <= this.tickNo);
+    if (!due.length) return;
+    for (let i = this.scheduled.length - 1; i >= 0; i--) if (this.scheduled[i]!.at <= this.tickNo) this.scheduled.splice(i, 1);
+    for (const s of due) {
+      try {
+        s.fn();
+      } catch (e) {
+        this.log(`[server] scheduled task failed: ${(e as Error).message}`);
+      }
+    }
+  }
+
   private tick(): void {
     this.tickNo++;
     const level = this.level;
@@ -774,6 +825,7 @@ export class GameServer {
     }
     this.interaction.weather.tick();
     if (this.tickNo % 100 === 0) this.sendTime();
+    this.runScheduled();
 
     for (const p of this.players.values()) {
       p.movesThisTick = 0;

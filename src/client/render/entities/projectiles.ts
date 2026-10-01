@@ -234,6 +234,25 @@ registerVisual('small_fireball', fireball(0.35, '#f09020', '#c04010'));
 registerVisual('fireball', fireball(1.0, '#f07020', '#a02808'));
 registerVisual('rift_bolt', fireball(0.5, '#d13fff', '#3a0a5a'));
 registerVisual('shulker_bullet', fireball(0.35, '#f0e8f8', '#8a5a9a'));
+// V5.5: the dragon's malware: a tumbling clump of green and black data
+registerVisual('malware', () =>
+  spriteVisual(
+    pixelCanvas(16, (g) => {
+      const cols = ['#0a0f0a', '#18ff6a', '#0b3a1a', '#9dffb8', '#000000', '#22c45a'];
+      for (let y = 2; y < 14; y += 2)
+        for (let x = 2; x < 14; x += 2) {
+          const d = Math.hypot(x - 7, y - 7);
+          if (d > 6.2) continue;
+          g.fillStyle = cols[(x * 7 + y * 13) % cols.length]!;
+          g.fillRect(x, y, 2, 2);
+        }
+    }),
+    1.1,
+    { glow: true, spin: true },
+  ),
+);
+// Herobrine's bolt: a white spark with a cyan edge
+registerVisual('herobrine_bolt', fireball(0.45, '#ffffff', '#3fe8ff'));
 
 registerVisual('tnt', (e, ctx) => {
   const top = ctx.blockTexture('tnt_top');

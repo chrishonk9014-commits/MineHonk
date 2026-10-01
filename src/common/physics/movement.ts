@@ -5,7 +5,20 @@
  */
 import { AABB } from './aabb';
 import { collisionShape } from './shapes';
-import { STATE_FLUID, STATE_FULL_CUBE, blocks, STATE_BLOCK, getProp } from '../registry/blocks';
+import { STATE_FLUID, STATE_FULL_CUBE, blocks, STATE_BLOCK, getProp, hasBlock, S } from '../registry/blocks';
+import { beltUnder } from '../engineering/conveyor';
+
+let POWDER = -2;
+/** State of powder snow (-1 if the registry has none). */
+function powderState(): number {
+  if (POWDER === -2) POWDER = hasBlock('powder_snow') ? S('powder_snow') : -1;
+  return POWDER;
+}
+/**
+ * While a body wearing leather boots moves, powder snow whose top is at or
+ * below this height is solid ground for it (NaN otherwise).
+ */
+let powderFloor = NaN;
 
 export interface BlockAccess {
   getState(x: number, y: number, z: number): number;
@@ -30,6 +43,10 @@ export interface Body {
   /** Eyes submerged in water. */
   eyesInWater: boolean;
   onClimbable: boolean;
+  /** Some of the body is sunk in powder snow. */
+  inPowder?: boolean;
+  /** The head is under powder snow (no air, freezing fast). */
+  headInPowder?: boolean;
   fallDistance: number;
   stepHeight: number;
   noClip: boolean;
@@ -75,6 +92,11 @@ export function collectBoxes(world: BlockAccess, area: AABB): AABB[] {
         const s = world.getState(x, y, z);
         if (s === 0) continue;
         if (STATE_FULL_CUBE[s]) {
+          const bx = takeBox(n++).set(x, y, z, x + 1, y + 1, z + 1);
+          if (bx.intersects(area)) out.push(bx);
+          continue;
+        }
+        if (s === POWDER && y + 1 <= powderFloor + 1e-3) {
           const bx = takeBox(n++).set(x, y, z, x + 1, y + 1, z + 1);
           if (bx.intersects(area)) out.push(bx);
           continue;
@@ -196,6 +218,19 @@ export function updateEnvironment(world: BlockAccess, b: Body, eyeHeight: number
   b.eyesInWater = STATE_FLUID[es] === 1 && ey < Math.floor(ey) + fluidHeight(es);
   const fs = world.getState(Math.floor(b.x), Math.floor(b.y + 0.01), Math.floor(b.z));
   b.onClimbable = !!blocks[STATE_BLOCK[fs]!]!.def.climbable;
+  // Powder snow: any part of the body inside it, and whether the head is under
+  const pw = powderState();
+  let inPowder = false;
+  if (pw >= 0)
+    for (let x = x0; x <= x1 && !inPowder; x++)
+      for (let z = z0; z <= z1 && !inPowder; z++)
+        for (let y = y0; y <= y1; y++)
+          if (world.getState(x, y, z) === pw) {
+            inPowder = true;
+            break;
+          }
+  b.inPowder = inPowder;
+  b.headInPowder = inPowder && es === pw;
 }
 
 /** Height of fluid surface within a fluid block (0..1). */
@@ -228,6 +263,8 @@ export interface MoveAbilities {
   levitation?: number;
   /** Slow falling: tiny gravity and no fall distance. */
   slowFalling?: boolean;
+  /** Leather boots: walk on powder snow instead of sinking into it. */
+  powderWalk?: boolean;
 }
 
 export interface MoveResult {
@@ -247,8 +284,12 @@ function speedFactorAt(world: BlockAccess, b: Body): number {
   const inside = world.getState(Math.floor(b.x), Math.floor(b.y + 0.2), Math.floor(b.z));
   const di = blocks[STATE_BLOCK[inside]!]!.def;
   if (di.speedFactor !== undefined && !di.collide && inside !== 0) f = Math.min(f, di.speedFactor);
+  // Buried in powder snow: barely able to move
+  if (b.headInPowder) f = Math.min(f, 0.18);
   if (b.onGround) {
     const under = world.getState(Math.floor(b.x), Math.floor(b.y - 0.1), Math.floor(b.z));
+    // Leather boots stand on powder snow at full speed
+    if (under === POWDER && !b.inPowder) return f;
     const du = blocks[STATE_BLOCK[under]!]!.def;
     if (du.speedFactor !== undefined) f = Math.min(f, du.speedFactor);
   }
@@ -341,9 +382,24 @@ export function stepMovement(world: BlockAccess, b: Body, input: MoveInput, ab: 
     b.fallDistance = 0;
   }
 
+  // Powder snow: sink slowly unless wearing leather boots; hold jump to climb,
+  // and pushing against the rim near the top hauls you out
+  const sinking = b.inPowder && !(ab.powderWalk && !input.sneak);
+  if (sinking) {
+    if (input.jump) {
+      b.vy = b.headInPowder ? 0.08 : 0.11;
+      if (b.collidedH && collectBoxes(world, bodyBox(b, tmpBox).offset(b.vx, 0.6, b.vz)).length === 0) b.vy = 0.3;
+    } else b.vy = Math.max(b.vy, -0.04);
+    b.fallDistance = 0;
+  }
   const sf = speedFactorAt(world, b);
   const prevY = b.y;
-  moveBody(world, b, b.vx * sf, b.vy, b.vz * sf, input.sneak);
+  powderState();
+  powderFloor = ab.powderWalk && !input.sneak ? b.y : NaN;
+  // V5: a conveyor under the feet carries the body along
+  const belt = b.onGround ? beltUnder(world, b.x, b.y, b.z) : null;
+  moveBody(world, b, b.vx * sf + (belt?.px ?? 0), b.vy, b.vz * sf + (belt?.pz ?? 0), input.sneak);
+  powderFloor = NaN;
 
   if (b.onClimbable && (b.collidedH || input.jump)) b.vy = 0.2;
 
@@ -353,6 +409,7 @@ export function stepMovement(world: BlockAccess, b: Body, input: MoveInput, ab: 
   } else if (b.y < prevY) {
     b.fallDistance += prevY - b.y;
   }
+  if (sinking) b.fallDistance = 0;
 
   if (ab.levitation) {
     b.vy += (0.05 * ab.levitation - b.vy) * 0.2;

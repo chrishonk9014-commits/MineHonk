@@ -2,7 +2,8 @@
  * Recipe matching for crafting grids, furnaces, stonecutters and smithing.
  * Resolves ingredient tags to item ids at init time for fast matching.
  */
-import { CRAFTING, SMELTING, STONECUTTING, SMITHING, RECIPE_TAGS, EXTRA_FUEL, type SmeltRecipe } from '../data/recipes';
+import { CRAFTING, SMELTING, STONECUTTING, SMITHING, RECIPE_TAGS, EXTRA_FUEL, type SmeltRecipe, type ShapedRecipe, type ShapelessRecipe } from '../data/recipes';
+import { ENG_CRAFTING } from '../engineering/catalog';
 import { items, itemById, initItems } from '../registry/items';
 import type { ItemStack, Slot } from './itemstack';
 
@@ -18,6 +19,7 @@ export interface CompiledRecipe {
 }
 
 let compiled: CompiledRecipe[] | null = null;
+let compiledEng: CompiledRecipe[] | null = null;
 let smeltIndex: Map<number, SmeltRecipe & { resultNum: number }> | null = null;
 
 function resolve(ing: string): Set<number> {
@@ -34,14 +36,14 @@ function resolve(ing: string): Set<number> {
 /** Forgets compiled recipes so recipes registered at runtime are picked up. */
 export function resetRecipes(): void {
   compiled = null;
+  compiledEng = null;
   smeltIndex = null;
 }
 
-export function recipes(): CompiledRecipe[] {
-  if (compiled) return compiled;
+function compile(list: readonly (ShapedRecipe | ShapelessRecipe)[]): CompiledRecipe[] {
   initItems();
-  compiled = [];
-  CRAFTING.forEach((r, index) => {
+  const out: CompiledRecipe[] = [];
+  list.forEach((r, index) => {
     if (!itemById.has(r.result)) return;
     const result = itemById.get(r.result)!.num;
     if (r.type === 'shaped') {
@@ -60,17 +62,27 @@ export function recipes(): CompiledRecipe[] {
           }
         }
       }
-      if (ok) compiled!.push({ index, shaped: true, width: w, height: h, cells, result, count: r.count ?? 1 });
+      if (ok) out.push({ index, shaped: true, width: w, height: h, cells, result, count: r.count ?? 1 });
     } else {
       const cells = r.ingredients.map(resolve);
-      if (cells.every((c) => c.size > 0)) compiled!.push({ index, shaped: false, width: 0, height: 0, cells, result, count: r.count ?? 1 });
+      if (cells.every((c) => c.size > 0)) out.push({ index, shaped: false, width: 0, height: 0, cells, result, count: r.count ?? 1 });
     }
   });
-  return compiled;
+  return out;
+}
+
+/** Crafting table and inventory recipes. */
+export function recipes(): CompiledRecipe[] {
+  return (compiled ??= compile(CRAFTING));
+}
+
+/** V5: Engineering Crafting Table recipes (a separate list: never matched by the normal table). */
+export function engRecipes(): CompiledRecipe[] {
+  return (compiledEng ??= compile(ENG_CRAFTING));
 }
 
 /** Finds the recipe matching a grid (row-major, size gw*gh). */
-export function matchCrafting(grid: Slot[], gw: number, gh: number): CompiledRecipe | null {
+export function matchCrafting(grid: Slot[], gw: number, gh: number, list: CompiledRecipe[] = recipes()): CompiledRecipe | null {
   // bounding box of non-empty cells
   let minX = gw;
   let minY = gh;
@@ -92,7 +104,7 @@ export function matchCrafting(grid: Slot[], gw: number, gh: number): CompiledRec
   if (nonEmpty.length === 0) return null;
   const bw = maxX - minX + 1;
   const bh = maxY - minY + 1;
-  for (const r of recipes()) {
+  for (const r of list) {
     if (r.shaped) {
       if (r.width !== bw || r.height !== bh) continue;
       for (const mirror of [false, true]) {
@@ -131,6 +143,8 @@ export function craftingRemainder(s: ItemStack): ItemStack | null {
   const id = items[s.id]!.id;
   if (id === 'milk_bucket' || id === 'water_bucket' || id === 'lava_bucket') return { id: itemById.get('bucket')!.num, count: 1 };
   if (id === 'honey_bottle') return { id: itemById.get('glass_bottle')!.num, count: 1 };
+  // The Corrupted Eye is only ever lent to a recipe (it can't be replaced)
+  if (id === 'corrupted_eye') return { ...s, count: 1 };
   return null;
 }
 

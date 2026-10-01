@@ -54,6 +54,8 @@ const CAVE_MONSTERS: Record<number, SpawnEntry[]> = {
   6: [{ mob: 'zombie', weight: 60, min: 2, max: 4 }, { mob: 'husk', weight: 30, min: 1, max: 3 }, { mob: 'skeleton', weight: 60, min: 2, max: 3 }, { mob: 'drowned', weight: 20, min: 1, max: 2 }],
   7: [{ mob: 'magma_cube', weight: 80, min: 1, max: 3 }, { mob: 'skeleton', weight: 40, min: 1, max: 2 }, { mob: 'blaze', weight: 5, min: 1, max: 1 }],
   8: [{ mob: 'stray', weight: 100, min: 2, max: 4 }, { mob: 'skeleton', weight: 30, min: 1, max: 2 }, { mob: 'zombie', weight: 30, min: 1, max: 2 }],
+  // V3: things that leaked in from the Farlands
+  10: [{ mob: 'glitch_zombie', weight: 60, min: 1, max: 3 }, { mob: 'glitch_skeleton', weight: 50, min: 1, max: 2 }, { mob: 'farlands_wanderer', weight: 25, min: 1, max: 1 }, { mob: 'void_wisp', weight: 30, min: 1, max: 2 }],
 };
 const CAVE_WATER: Record<number, SpawnEntry[]> = {
   1: [{ mob: 'glow_squid', weight: 10, min: 1, max: 3 }],
@@ -214,7 +216,8 @@ export class MobSystem {
   /** Spawns generated non-mob entities (end crystals); returns true when handled. */
   extraEntity?: (dim: Dimension, type: string, x: number, y: number, z: number) => boolean;
   /** Boss death hand-off (the dragon fight runs its own death sequence). */
-  onBossDeath?: (m: Mob, killer: ServerPlayer | null) => void;
+  /** A boss died; returns false to let its death run the usual way (loot, experience, advancements). */
+  onBossDeath?: (m: Mob, killer: ServerPlayer | null, info: HurtInfo) => boolean;
 
   onChunkGenerated(dim: Dimension, c: Chunk): void {
     let spawned = false;
@@ -617,9 +620,11 @@ export class MobSystem {
     else if (cat === 'water' && !underWater) y = Math.max(1, top - 1 - r.int(8));
     else if (underCreature || underWater) y = 8 + r.int(Math.max(1, Math.min(52, top - 12) - 8));
     else if (!dim.rules.hasSky) {
-      // Cavern dimensions: pick one of the column's floors instead of a random height
+      // Cavern dimensions: pick one of the column's floors instead of a random height.
+      // Without a ceiling (the End) the surface itself is a floor too.
       const floors: number[] = [];
-      for (let yy = 2; yy < top; yy++) if (STATE_SOLID[dim.getState(x, yy - 1, z)] && !STATE_SOLID[dim.getState(x, yy, z)] && !STATE_SOLID[dim.getState(x, yy + 1, z)] && !STATE_FLUID[dim.getState(x, yy, z)]) floors.push(yy);
+      const last = dim.rules.hasCeiling ? top - 1 : top;
+      for (let yy = 2; yy <= last; yy++) if (STATE_SOLID[dim.getState(x, yy - 1, z)] && !STATE_SOLID[dim.getState(x, yy, z)] && !STATE_SOLID[dim.getState(x, yy + 1, z)] && !STATE_FLUID[dim.getState(x, yy, z)]) floors.push(yy);
       if (!floors.length) return;
       y = floors[r.int(floors.length)]!;
     } else y = 1 + r.int(Math.max(1, top));
@@ -636,7 +641,7 @@ export class MobSystem {
     const cb = caves && cat !== 'ambient' && (cat !== 'creature' || underCreature) && (cat !== 'water' || underWater) ? dim.generator.caveBiomeAt!(x, y, z) : 0;
     if (cb === 9) return; // the deep dark: nothing spawns there
     if (cb) {
-      if (cat === 'monster' && CAVE_MONSTERS[cb] && r.chance(0.6)) entry = weighted(CAVE_MONSTERS[cb]!, r);
+      if (cat === 'monster' && CAVE_MONSTERS[cb] && (cb === 10 || r.chance(0.6))) entry = weighted(CAVE_MONSTERS[cb]!, r);
       else if (cat === 'water') entry = CAVE_WATER[cb] ? weighted(CAVE_WATER[cb]!, r) : null;
       else if (cat === 'creature') entry = cb === 4 ? { mob: 'sporeling', weight: 1, min: 1, max: 3 } : null;
     } else if (underCreature || underWater) entry = null;
@@ -661,6 +666,8 @@ export class MobSystem {
         }
       }
       if (sy < 1) continue;
+      // Chosen for a cave biome: it must still be in that biome after dropping to the floor
+      if (cb && dim.generator.caveBiomeAt!(sx, sy, sz) !== cb) continue;
       let tooClose = false;
       for (const pl of this.server.players.values()) if (pl.dim === dim && pl.distanceSq(sx, sy, sz) < 24 * 24) tooClose = true;
       if (tooClose) continue;
@@ -728,7 +735,7 @@ export class MobSystem {
       m.target = null;
       return;
     }
-    let dmg = m.def.damage ?? 2;
+    let dmg = (m.def.damage ?? 2) + (typeof m.data.dmgBonus === 'number' ? m.data.dmgBonus : 0);
     if (m.def.brain === 'slime') dmg = Math.max(0, Number(m.data.size ?? 1) - (m.type === 'slime' ? 0 : -1)) * (m.type === 'magma_cube' ? 1.5 : 1);
     if (m.held) {
       const w = items[m.held.id]!.def.weapon;
@@ -783,7 +790,7 @@ export class MobSystem {
   /** Damages any entity through the right path (players go through Survival). */
   damage(t: Entity, amount: number, info: HurtInfo & { kbx?: number; kbz?: number; knockback?: number }): number {
     if (isPlayer(t)) {
-      if (info.attacker && isPlayer(info.attacker) && !this.server.level.pvp) return 0;
+      if (info.attacker && isPlayer(info.attacker) && !this.server.level.pvp && !this.server.templeTrials?.pvpBetween(info.attacker, t)) return 0;
       return this.server.interaction.survival.damage(t, amount, { source: info.source as never, attacker: info.attacker, kbx: info.kbx, kbz: info.kbz, knockback: info.knockback, disableShield: info.disableShield, pierceShield: info.pierceShield });
     }
     if (t instanceof LivingEntity) return t.hurt(amount, info);
@@ -897,6 +904,13 @@ export class MobSystem {
       s.theEnd?.breathCloud(dim, hit.x, hit.block ? hit.y : Math.floor(hit.y), hit.z, p.owner);
       return true;
     }
+    // V5.5: the dragon's malware bursts into a cloud; Herobrine's bolts
+    if (p.kind === 'malware') {
+      if (e && e === p.owner) return false;
+      s.herobrine?.malware.landed(p, hit.x, hit.y, hit.z);
+      return true;
+    }
+    if (p.kind === 'herobrine_bolt') return s.herobrine ? s.herobrine.boltHit(p, hit) : true;
     switch (p.kind) {
       case 'trident':
         if (p.item) return this.thrownTridentHit(p, hit);
@@ -1277,12 +1291,11 @@ export class MobSystem {
     const s = this.server;
     const killer = info.attacker && isPlayer(info.attacker) ? info.attacker : m.dim.server.tickNo - m.lastHurtByPlayerTick < 100 && isPlayer(m.lastAttacker) ? (m.lastAttacker as ServerPlayer) : null;
     const byPlayer = !!killer || (info.attacker instanceof Mob && !!info.attacker.owner);
-    if (m.def.category === 'boss' && this.onBossDeath) {
+    if (m.def.category === 'boss' && this.onBossDeath?.(m, killer, info)) {
       if (killer) {
         killer.addStat('killed.' + m.type);
         killer.addStat('mob_kills');
       }
-      this.onBossDeath(m, killer);
       return;
     }
     const weapon = killer ? killer.inventory.get(killer.selectedSlot) : null;
@@ -1357,7 +1370,7 @@ export class MobSystem {
       }
       return;
     }
-    if (isPlayer(target) && (!s.level.pvp || target.gamemode === 'creative')) return;
+    if (isPlayer(target) && ((!s.level.pvp && !s.templeTrials?.pvpBetween(p, target)) || target.gamemode === 'creative')) return;
     // Visitors may defend themselves against monsters but not hurt animals, pets or villagers
     if (s.roleOf(p) === 'visitor' && target instanceof Mob && target.def.category !== 'monster' && target.def.category !== 'boss') return;
     // Reach & line of sight

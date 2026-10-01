@@ -21,6 +21,8 @@ export const enum CaveBiome {
   Lava = 7,
   Frozen = 8,
   DeepDark = 9,
+  /** V3: rare zones where the world failed to generate (see corrupted.ts). */
+  Corrupted = 10,
 }
 
 export interface CaveBiomeInfo {
@@ -45,6 +47,7 @@ export const CAVE_BIOMES: readonly CaveBiomeInfo[] = [
   { id: 'lava_caves', name: 'Lava Caves', fog: 0x3a120a, fogDensity: 0.75, particle: 'ember' },
   { id: 'frozen_caves', name: 'Frozen Caves', fog: 0x1c2a3a, fogDensity: 0.85, particle: 'snowflake' },
   { id: 'deep_dark', name: 'Deep Dark', fog: 0x05070a, fogDensity: 0.6, particle: 'sculk_soul' },
+  { id: 'corrupted_caves', name: 'Corrupted Caves', fog: 0x1a0822, fogDensity: 0.8, particle: 'glitch' },
 ];
 
 export const CAVE_BIOME_BY_ID = new Map(CAVE_BIOMES.map((b, i) => [b.id, i as CaveBiome]));
@@ -60,7 +63,11 @@ export class CaveBiomeSource {
   private readonly lava: Octave2;
   private readonly jitter: Octave2;
 
-  constructor(readonly seed: number) {
+  constructor(
+    readonly seed: number,
+    /** Generator version: V3 freezes the deep caves under cold lands too (lava only where it is geothermal). */
+    readonly version = 2,
+  ) {
     const r = (salt: number): Random => new Random(hashInts(seed, salt, 0xca7eb10));
     this.a = new Octave3(r(1), 2, 170, 64);
     this.b = new Octave3(r(2), 2, 210, 80);
@@ -88,6 +95,7 @@ export class CaveBiomeSource {
     }
     if (yy < DEEP_TOP) {
       const l = this.lava.sample(x, z);
+      if (this.version >= 3 && temperature < -0.4) return l > 0.55 ? CaveBiome.Lava : CaveBiome.Frozen;
       return l > 0.42 || (temperature > 0.75 && l > 0.2) ? CaveBiome.Lava : CaveBiome.Deep;
     }
     const a = this.a.sample(x, y, z);

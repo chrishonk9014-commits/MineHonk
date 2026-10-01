@@ -553,11 +553,13 @@ export class Commands {
       level: 'cheat',
       run: (p, args) => {
         const type = args[0];
-        if (!type) return 'Usage: /locate <village|stronghold|desert_temple|jungle_temple|witch_hut|igloo|ruined_portal|shipwreck|ocean_ruin|pillager_outpost|mineshaft|sky_shrine|overgrown_ruin|stalker_den|glitched_ruin>';
+        if (!type) return 'Usage: /locate <village|stronghold|desert_temple|jungle_temple|witch_hut|igloo|ruined_portal|shipwreck|ocean_ruin|pillager_outpost|mineshaft|sky_shrine|overgrown_ruin|stalker_den|glitched_ruin|glitched_portal|corrupted_caves|error_arena>';
         const loc = p.dim.generator.locate?.(type, Math.floor(p.x), Math.floor(p.z));
         if (!loc) return `No ${type} found nearby`;
         const d = Math.round(Math.hypot(loc.x - p.x, loc.z - p.z));
-        return `The nearest ${type} is at [${loc.x}, ~, ${loc.z}] (${d} blocks away)`;
+        // Underground and floating places have a height worth knowing
+        const y = type === 'glitched_portal' || type === 'corrupted_caves' || type === 'error_arena' ? String(loc.y) : '~';
+        return `The nearest ${type} is at [${loc.x}, ${y}, ${loc.z}] (${d} blocks away)`;
       },
     });
     // --- Debug tools ---

@@ -115,7 +115,8 @@ export type BlockEntityKind =
   | 'barrel'
   | 'ender_chest'
   | 'beacon'
-  | 'conduit';
+  | 'conduit'
+  | 'eng';
 
 /** What happens when the player uses (right clicks) the block. */
 export type InteractKind =
@@ -147,7 +148,14 @@ export type InteractKind =
   | 'beacon'
   | 'cauldron'
   | 'flower_pot'
-  | 'candle';
+  | 'candle'
+  | 'keycard_reader'
+  | 'bunker_generator'
+  | 'temple_altar'
+  | 'engineering'
+  | 'engineering_table'
+  /** V5.5: the computer world's old terminals (read their logs). */
+  | 'terminal';
 
 export type TintKind = 'none' | 'grass' | 'foliage' | 'water' | 'birch' | 'spruce' | 'stem' | 'lily';
 
@@ -220,4 +228,8 @@ export interface BlockDef {
   randomTicks?: boolean;
   /** Extra free-form data for specialised logic. */
   data?: Record<string, unknown>;
+  /** Side textures get the value of this prop as a suffix (battery charge bars). */
+  texBy?: string;
+  /** V5.5: the front texture gets the value of this prop as a suffix (a computer's screen). */
+  frontBy?: string;
 }

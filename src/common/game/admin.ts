@@ -6,7 +6,7 @@
 import type { DimensionId } from '../data/biomes';
 import { GAME_MODES, DIFFICULTIES, type GameMode, type Difficulty } from './gamemode';
 
-export const ADMIN_DIMENSIONS: DimensionId[] = ['overworld', 'nether', 'end', 'farlands'];
+export const ADMIN_DIMENSIONS: DimensionId[] = ['overworld', 'nether', 'end', 'farlands', 'computer'];
 
 export const STRUCTURE_NAMES: Record<string, string> = {
   village: 'Village',
@@ -41,7 +41,59 @@ export const STRUCTURE_NAMES: Record<string, string> = {
   abandoned_lab: 'Abandoned Lab',
   cave_shrine: 'Cave Shrine',
   monster_chamber: 'Monster Chamber',
+  // V3
+  glitched_portal: 'Glitched Portal',
+  error_arena: "The Error's Arena",
+  // V4: The World Update
+  desert_oasis: 'Desert Oasis',
+  sun_monument: 'Sun Monument',
+  buried_tomb: 'Buried Tomb',
+  ranger_tower: 'Ranger Tower',
+  hunter_camp: 'Hunter Camp',
+  frozen_ruins: 'Frozen Ruins',
+  jungle_shrine: 'Jungle Shrine',
+  swamp_shack: 'Swamp Shack',
+  stone_circle: 'Stone Circle',
+  lighthouse: 'Lighthouse',
+  mountain_lookout: 'Mountain Lookout',
+  prospector_camp: 'Prospector Camp',
+  bunker: 'Bunker',
+  // Version 4.5: temples of trials
+  frost_temple: 'Frost Temple',
+  swamp_temple: 'Swamp Temple',
+  badlands_temple: 'Canyon Temple',
+  forest_temple: 'Grove Temple',
+  mountain_temple: 'Mountain Temple',
+  desert_pyramid: 'Desert Pyramid',
+  error_biome: 'Error Biome',
+  glitched_structure: 'Glitched Structure',
 };
+
+/** V4 Admin Panel operations (all cheats: never advancements, rewards cheat-marked). */
+export const V4_OPS = ['status', 'glitch_start', 'glitch_clear', 'glitch_reset', 'glitch_reward', 'fluid_rig', 'bunker_reset', 'temple_advance', 'temple_reset'] as const;
+export type V4Op = (typeof V4_OPS)[number];
+export const V5_OPS = ['status', 'fill_energy', 'drain_energy', 'reset_machines', 'kit_basic', 'kit_advanced', 'kit_factory', 'test_rig', 'stress_test'] as const;
+export type V5Op = (typeof V5_OPS)[number];
+/** V5.5: the Herobrine story's test tools (all cheats: they never award anything). */
+export const V55_OPS = [
+  'status',
+  'give_potion',
+  'give_hard_drive',
+  'give_flash_drive',
+  'give_corrupted',
+  'spawn_dragon',
+  'trigger_malware',
+  'trigger_event',
+  'spawn_first',
+  'enter_world',
+  'tp_seed',
+  'tp_cave',
+  'spawn_final',
+  'force_ending',
+  'reset_progress',
+  'reset_ending',
+] as const;
+export type V55Op = (typeof V55_OPS)[number];
 
 export function structureName(id: string): string {
   return STRUCTURE_NAMES[id] ?? id.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
@@ -75,7 +127,15 @@ export type AdminAction =
   | { a: 'regen_chunk' }
   | { a: 'reload_chunks' }
   | { a: 'perf' }
-  | { a: 'set_cheats'; on: boolean };
+  | { a: 'set_cheats'; on: boolean }
+  /** V3 endgame: endings and The Error's fight (all cheats: never advancements). */
+  | { a: 'endgame'; op: 'status' | 'reset_endings' | 'force_ending' | 'reset_error'; id?: string }
+  /** V4: the Glitched Structure's quest, bunkers and a fluid test rig. */
+  | { a: 'v4'; op: V4Op }
+  /** V5: engineering (kits, energy, test rigs; all cheats). */
+  | { a: 'v5'; op: V5Op }
+  /** V5.5: the Herobrine story (all cheats: never advancements). */
+  | { a: 'v55'; op: V55Op };
 
 export type AdminActionName = AdminAction['a'];
 
@@ -90,6 +150,19 @@ export function validateAdmin(raw: unknown): AdminAction | null {
   if (!raw || typeof raw !== 'object') return null;
   const m = raw as Record<string, unknown>;
   switch (m.a) {
+    case 'v5':
+      if (!V5_OPS.includes(m.op as V5Op)) return null;
+      return { a: 'v5', op: m.op as V5Op };
+    case 'v55':
+      if (!V55_OPS.includes(m.op as V55Op)) return null;
+      return { a: 'v55', op: m.op as V55Op };
+    case 'v4':
+      if (!V4_OPS.includes(m.op as V4Op)) return null;
+      return { a: 'v4', op: m.op as V4Op };
+    case 'endgame':
+      if (m.op !== 'status' && m.op !== 'reset_endings' && m.op !== 'force_ending' && m.op !== 'reset_error') return null;
+      if (m.op === 'force_ending' && !id(m.id)) return null;
+      return { a: 'endgame', op: m.op, id: m.op === 'force_ending' ? (m.id as string) : undefined };
     case 'catalog':
     case 'regen_chunk':
     case 'reload_chunks':

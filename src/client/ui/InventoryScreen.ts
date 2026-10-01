@@ -15,6 +15,13 @@ import { ENCHANTMENTS } from '../../common/data/enchantments';
 import type { ItemStack } from '../../common/game/itemstack';
 import { romanNumeral } from '../../common/data/enchantments';
 import { RecipeBookPanel, recipeBookOpen, setRecipeBookOpen, playerOwnedSlots } from './RecipeBook';
+import { EngineeringBookPanel } from './EngineeringBook';
+import type { MachineProps } from '../../common/engineering/window';
+import { ComputerPanel } from './ComputerScreen';
+import type { PcView } from '../../common/digital/view';
+
+/** The Engineering Book beside the Engineering Crafting Table (remembered between screens). */
+let engBookOpen = true;
 
 /** Screens that offer the Recipe Book. */
 const BOOK_KINDS = new Set(['player', 'crafting', 'furnace', 'blast_furnace', 'smoker', 'stonecutter', 'smithing', 'brewing', 'anvil', 'enchanting', 'creative']);
@@ -27,6 +34,8 @@ export interface WindowState {
   slots: Slot[];
   props: Record<string, unknown>;
 }
+
+const fmtEU = (n: number): string => (n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e4 ? Math.round(n / 1000) + 'k' : n >= 1000 ? (n / 1000).toFixed(1) + 'k' : String(Math.floor(n)));
 
 export class InventoryScreen {
   readonly root = el('div', { class: 'layer interactive' });
@@ -50,6 +59,9 @@ export class InventoryScreen {
   private detachPreview: (() => void) | null = null;
   private book: RecipeBookPanel | null = null;
   private bookKind = '';
+  private engBook: EngineeringBookPanel | null = null;
+  private computer: ComputerPanel | null = null;
+  private machine: { energy?: HTMLElement; energyText?: HTMLElement; fluid?: HTMLElement; fluidText?: HTMLElement; status?: HTMLElement; info?: HTMLElement; buttons?: HTMLElement; infoSig?: string; buttonSig?: string } = {};
 
   constructor(
     win: WindowState,
@@ -104,6 +116,8 @@ export class InventoryScreen {
   destroy(): void {
     this.book?.destroy();
     this.book = null;
+    this.engBook?.destroy();
+    this.engBook = null;
     this.detachPreview?.();
     window.removeEventListener('mouseup', this.onMouseUp);
     window.removeEventListener('keydown', this.keyHandler, true);
@@ -316,6 +330,24 @@ export class InventoryScreen {
         gui.append(title, top, this.invSection(10));
         break;
       }
+      case 'eng_crafting': {
+        const grid = el('div', { class: 'grid', style: { gridTemplateColumns: 'repeat(3, calc(var(--s) * 18))' } });
+        for (let i = 1; i <= 9; i++) grid.append(this.slot(i));
+        const top = row(grid, this.arrow(), this.slot(0, 'slot big'));
+        top.style.margin = '0 0 calc(var(--s) * 6) calc(var(--s) * 22)';
+        gui.append(title, top, this.invSection(10));
+        break;
+      }
+      case 'machine':
+        this.buildMachine(gui, title);
+        break;
+      case 'computer':
+        this.computer = new ComputerPanel(gui, w.props as unknown as PcView, {
+          slot: (i) => this.slot(i),
+          invSection: (o) => this.invSection(o),
+          cmd: (cmd, arg) => this.send({ t: 'pc_cmd', window: this.win.id, cmd, ...(arg !== undefined ? { arg } : {}) }),
+        });
+        break;
       case 'chest': {
         const rows = Math.ceil(w.size / 9);
         const grid = el('div', { class: 'inv-main', style: { marginBottom: 'calc(var(--s) * 6)' } });
@@ -509,8 +541,152 @@ export class InventoryScreen {
       });
       gui.append(btn);
     }
+    if (w.kind === 'eng_crafting') {
+      const btn = el('div', { class: 'rb-button' + (engBookOpen ? ' active' : ''), title: 'Engineering Book' });
+      const ic = iconEl({ id: items.find((x) => x.id === 'engineering_book')?.num ?? 0, count: 1 }, false);
+      if (ic) btn.append(ic);
+      btn.addEventListener('mousedown', (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        engBookOpen = !engBookOpen;
+        btn.classList.toggle('active', engBookOpen);
+        this.syncEngBook(engBookOpen);
+      });
+      gui.append(btn);
+      this.syncEngBook(engBookOpen);
+    }
     this.syncBook();
     this.refresh();
+  }
+
+  /** Shows or hides the Engineering Book beside the GUI, optionally at an entry. */
+  private syncEngBook(open: boolean, entry?: string): void {
+    if (!open) {
+      this.engBook?.destroy();
+      this.engBook = null;
+    } else if (!this.engBook) {
+      const craft = this.win.kind === 'eng_crafting' ? (recipe: number, all: boolean): void => this.send({ t: 'eng_fill', recipe, all }) : undefined;
+      this.engBook = new EngineeringBookPanel({ craft, advancedTooltips: this.opts.advancedTooltips });
+      this.engBook.update(this.ownedSlots());
+    }
+    if (this.engBook && entry) this.engBook.open(entry);
+    const gui = this.root.querySelector(':scope > .gui');
+    if (this.engBook && gui && this.engBook.root.nextSibling !== gui) this.root.insertBefore(this.engBook.root, gui);
+    this.root.classList.toggle('with-book', !!this.engBook || !!this.book);
+  }
+
+  // ---------------------------------------------------------------- machines
+
+  private get mp(): MachineProps {
+    return this.win.props as unknown as MachineProps;
+  }
+
+  /** One layout for every engineering machine, described by the window props. */
+  private buildMachine(gui: HTMLElement, title: HTMLElement): void {
+    const p = this.mp;
+    const L = p.layout ?? { input: 0, output: 0, fuel: 0, tool: 0, upgrades: 0, ghost: 0 };
+    this.machine = {};
+    gui.classList.add('eng-gui');
+    // Title with tier and a link to the book entry
+    const help = el('div', { class: 'eng-help', title: 'Open its Engineering Book entry' }, '?');
+    help.addEventListener('mousedown', (e) => {
+      e.stopPropagation();
+      if (this.engBook) this.syncEngBook(false);
+      else this.syncEngBook(true, p.comp);
+    });
+    title.append(el('span', { class: 'eng-tier' }, `Tier ${p.tier}`));
+    gui.append(el('div', { class: 'eng-title-row' }, title, help));
+    let i = 0;
+    const group = (n: number, cls = 'slot'): HTMLElement[] => {
+      const out: HTMLElement[] = [];
+      for (let k = 0; k < n; k++) out.push(this.slot(i++, cls));
+      return out;
+    };
+    const cols = (n: number): number => (n <= 3 ? n : n <= 9 ? 3 : 9);
+    const gridOf = (els: HTMLElement[], label?: string): HTMLElement => {
+      const g = el('div', { class: 'grid', style: { gridTemplateColumns: `repeat(${cols(els.length)}, calc(var(--s) * 18))` } }, ...els);
+      return label ? el('div', { class: 'eng-group' }, el('div', { class: 'eng-label' }, label), g) : g;
+    };
+    const inputs = group(L.input);
+    const outputs = group(L.output, 'slot');
+    const fuel = group(L.fuel);
+    const tool = group(L.tool);
+    const ups = group(L.upgrades);
+    const ghosts = group(L.ghost, 'slot ghost');
+    const main = el('div', { class: 'eng-main' });
+    // Bars
+    if (p.energyMax !== undefined) {
+      const fill = el('div', { class: 'eng-bar-fill energy' });
+      const text = el('div', { class: 'eng-bar-text' });
+      this.machine.energy = fill;
+      this.machine.energyText = text;
+      main.append(el('div', { class: 'eng-bar', title: 'Energy' }, fill, text));
+    }
+    if (p.fluid) {
+      const fill = el('div', { class: 'eng-bar-fill fluid' });
+      const text = el('div', { class: 'eng-bar-text' });
+      this.machine.fluid = fill;
+      this.machine.fluidText = text;
+      main.append(el('div', { class: 'eng-bar', title: 'Fluid' }, fill, text));
+    }
+    const left = el('div', { class: 'stack eng-col' });
+    if (inputs.length) left.append(gridOf(inputs, p.comp === 'storage_barrel' ? 'Put in' : p.kind === 'machine' || p.kind === 'multiblock' ? 'Input' : 'Items'));
+    if (fuel.length) left.append(gridOf(fuel, 'Fuel'));
+    if (tool.length) left.append(gridOf(tool, 'Pickaxe'));
+    if (left.childElementCount) main.append(left);
+    if (p.time && (inputs.length || tool.length) && outputs.length) main.append(this.arrow());
+    if (outputs.length) main.append(gridOf(outputs, p.comp === 'storage_barrel' ? 'Take out' : 'Output'));
+    if (ups.length) main.append(el('div', { class: 'eng-group' }, el('div', { class: 'eng-label' }, 'Upgrades'), el('div', { class: 'stack', style: { gap: '0' } }, ...ups)));
+    if (main.childElementCount) gui.append(main);
+    if (ghosts.length) gui.append(gridOf(ghosts, p.ghostLabel ?? 'Filter'));
+    this.machine.status = el('div', { class: 'eng-status' });
+    this.machine.info = el('div', { class: 'eng-info' });
+    this.machine.buttons = el('div', { class: 'eng-buttons' });
+    gui.append(this.machine.status, this.machine.info, this.machine.buttons, this.invSection(this.win.size));
+    this.updateMachine();
+  }
+
+  private updateMachine(): void {
+    const p = this.mp;
+    const m = this.machine;
+    if (m.energy && p.energyMax) {
+      const f = Math.max(0, Math.min(1, (p.energy ?? 0) / p.energyMax));
+      m.energy.style.height = `${f * 100}%`;
+      m.energyText!.textContent = `${fmtEU(p.energy ?? 0)}`;
+      m.energy.parentElement!.title = `Energy: ${Math.floor(p.energy ?? 0).toLocaleString('en-US')} / ${p.energyMax.toLocaleString('en-US')} EU`;
+    }
+    if (m.fluid && p.fluid) {
+      const f = Math.max(0, Math.min(1, p.fluid.amount / p.fluid.cap));
+      m.fluid.style.height = `${f * 100}%`;
+      m.fluid.className = 'eng-bar-fill fluid ' + (p.fluid.id ?? 'empty');
+      m.fluidText!.textContent = `${(p.fluid.amount / 1000).toFixed(1)}B`;
+      m.fluid.parentElement!.title = `${p.fluid.id ? p.fluid.id[0]!.toUpperCase() + p.fluid.id.slice(1) : 'Empty'}: ${p.fluid.amount.toLocaleString('en-US')} / ${p.fluid.cap.toLocaleString('en-US')} mB`;
+    }
+    if (this.progress.arrow) this.progress.arrow.style.width = `${p.time ? Math.min(1, (p.progress ?? 0) / p.time) * 100 : 0}%`;
+    if (m.status) {
+      m.status.textContent = p.statusText ?? '';
+      m.status.className = 'eng-status ' + (p.status ?? '');
+      m.status.style.display = p.statusText ? '' : 'none';
+    }
+    const infoSig = JSON.stringify(p.info ?? []);
+    if (m.info && infoSig !== m.infoSig) {
+      m.infoSig = infoSig;
+      clear(m.info);
+      for (const line of p.info ?? []) m.info.append(el('div', {}, line));
+    }
+    const buttonSig = JSON.stringify(p.buttons ?? []);
+    if (m.buttons && buttonSig !== m.buttonSig) {
+      m.buttonSig = buttonSig;
+      clear(m.buttons);
+      for (const b of p.buttons ?? []) {
+        const btn = el('button', { class: 'btn chip eng-btn' + (b.on === true ? ' on' : b.on === false ? ' off' : '') }, b.label) as HTMLButtonElement;
+        btn.addEventListener('mousedown', (e) => {
+          e.stopPropagation();
+          this.send({ t: 'eng_cfg', window: this.win.id, key: b.key, value: 1 });
+        });
+        m.buttons.append(btn);
+      }
+    }
   }
 
   /** Shows or hides the Recipe Book beside the GUI (kept open between screens). */
@@ -527,7 +703,7 @@ export class InventoryScreen {
     }
     const gui = this.root.querySelector(':scope > .gui');
     if (this.book && gui && this.book.root.nextSibling !== gui) this.root.insertBefore(this.book.root, gui);
-    this.root.classList.toggle('with-book', !!this.book);
+    this.root.classList.toggle('with-book', !!this.book || !!this.engBook);
   }
 
   /** The player's items as seen by the current screen (for recipe availability). */
@@ -537,7 +713,9 @@ export class InventoryScreen {
   }
 
   private buildCreative(gui: HTMLElement): void {
-    const tabs = el('div', { class: 'tabs', style: { position: 'absolute', top: 'calc(var(--s) * -30)', left: '0' } });
+    // Half the tabs above the GUI, half below (one row each)
+    const tabs = el('div', { class: 'tabs', style: { position: 'absolute', bottom: '100%', left: '0' } });
+    const tabsBelow = el('div', { class: 'tabs below', style: { position: 'absolute', top: '100%', left: '0' } });
     const makeTab = (id: string, icon: string, name: string): HTMLElement => {
       const t = el('div', { class: 'tab' + (id === this.creativeTab && !this.creativeSearch ? ' active' : ''), title: name });
       const num = items.find((x) => x.id === icon)?.num;
@@ -550,13 +728,14 @@ export class InventoryScreen {
         this.creativeTab = id;
         this.creativeSearch = '';
         search.value = '';
-        for (const c of tabs.children) c.classList.remove('active');
+        for (const c of [...tabs.children, ...tabsBelow.children]) c.classList.remove('active');
         t.classList.add('active');
         this.renderCreativeGrid();
       });
       return t;
     };
-    for (const tab of CREATIVE_TABS) tabs.append(makeTab(tab.id, tab.icon, tab.name));
+    const half = Math.ceil(CREATIVE_TABS.length / 2);
+    CREATIVE_TABS.forEach((tab, i) => (i < half ? tabs : tabsBelow).append(makeTab(tab.id, tab.icon, tab.name)));
     const search = el('input', { class: 'field', placeholder: 'Search items...', style: { width: 'calc(var(--s) * 162)', height: 'calc(var(--s) * 14)', marginBottom: 'calc(var(--s) * 4)' } }) as HTMLInputElement;
     search.addEventListener('input', () => {
       this.creativeSearch = search.value;
@@ -570,7 +749,7 @@ export class InventoryScreen {
     for (let i = 0; i < 27; i++) main.append(this.slot(9 + i));
     const armor = el('div', { class: 'row', style: { justifyContent: 'flex-start', gap: '0', marginBottom: 'calc(var(--s) * 4)' } }, this.slot(5), this.slot(6), this.slot(7), this.slot(8), el('div', { style: { width: 'calc(var(--s) * 18)' } }), this.slot(45));
     gui.style.position = 'absolute';
-    gui.append(tabs, search, this.creativeGrid, el('details', {}, el('summary', { class: 'gtitle', style: { cursor: 'pointer' } }, 'Inventory'), armor, main), hot);
+    gui.append(tabs, tabsBelow, search, this.creativeGrid, el('details', {}, el('summary', { class: 'gtitle', style: { cursor: 'pointer' } }, 'Inventory'), armor, main), hot);
     this.renderCreativeGrid();
   }
 
@@ -604,13 +783,15 @@ export class InventoryScreen {
   }
 
   setProps(props: Record<string, unknown>): void {
-    const merged = { ...this.win.props, ...props };
+    const merged = this.win.kind === 'computer' ? { ...props } : { ...this.win.props, ...props };
     if ((this.win.kind === 'stonecutter' || this.win.kind === 'merchant' || this.win.kind === 'enchanting' || this.win.kind === 'beacon') && JSON.stringify(merged) !== JSON.stringify(this.win.props)) {
       this.setState({ ...this.win, props: merged }, this.cursor);
       return;
     }
     this.win.props = merged;
     if (this.win.kind === 'anvil') this.updateAnvilLabel();
+    if (this.win.kind === 'machine') this.updateMachine();
+    if (this.win.kind === 'computer') this.computer?.update(this.win.props as unknown as PcView);
     this.refreshProgress();
   }
 
@@ -634,6 +815,7 @@ export class InventoryScreen {
   }
 
   private refreshProgress(): void {
+    if (this.win.kind === 'machine' || this.win.kind === 'computer') return;
     const p = this.win.props as Record<string, number>;
     if (this.progress.arrow) {
       const f = p.cookTotal ? p.cook / p.cookTotal : 0;
@@ -660,6 +842,7 @@ export class InventoryScreen {
     if (this.hovered >= 0 && this.hovered < 10000 && !this.slotStack(this.hovered)) hideTooltip();
     this.refreshProgress();
     this.book?.update(this.ownedSlots());
+    this.engBook?.update(this.ownedSlots());
   }
 
   private renderCursor(): void {

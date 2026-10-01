@@ -32,8 +32,13 @@ export interface SingleDef {
   /** Underground: height range for the anchor (kept at least 18 blocks under the ground). */
   minY?: number;
   maxY?: number;
-  build: (b: Builder, rng: Random, seed: number) => void;
+  /** `biome` is the biome at the footprint's centre (lets one structure dress for its biome). */
+  build: (b: Builder, rng: Random, seed: number, biome: Biome) => void;
   entities?: (x: number, y: number, z: number, rng: Random) => Start['entities'];
+  /** V4: the structure's objective, from a builder that only maps local to world positions. */
+  quest?: (b: Builder, rng: Random, biome: Biome) => Start['quest'];
+  /** Generator 5: structure mobs placed in local coordinates (rng seeded like build's). */
+  mobs?: (b: Builder, rng: Random, biome: Biome) => Start['entities'];
 }
 
 export function single(def: SingleDef): StructureType {
@@ -53,7 +58,8 @@ export function single(def: SingleDef): StructureType {
       const wsz = rot & 1 ? def.sx : def.sz;
       const x0 = (cx << 4) + rng.int(Math.max(1, 16 - Math.min(16, wsx)));
       const z0 = (cz << 4) + rng.int(Math.max(1, 16 - Math.min(16, wsz)));
-      if (!def.biome(ctx.biome(x0 + (wsx >> 1), z0 + (wsz >> 1)))) return null;
+      const biome = ctx.biome(x0 + (wsx >> 1), z0 + (wsz >> 1));
+      if (!def.biome(biome)) return null;
       const corners: number[] = [];
       let water = 0;
       for (const [a, b] of [
@@ -94,8 +100,12 @@ export function single(def: SingleDef): StructureType {
       }
       const seed = hashInts(ctx.seed, x0, y, z0, def.salt);
       const box = boxOf(x0 - 1, y - def.below, z0 - 1, x0 + wsx, y + def.height, z0 + wsz);
-      const piece = { box, build: (v: import('../decorate/view').DecorView) => def.build(new Builder(v, x0, y, z0, rot, def.sx, def.sz), new Random(seed), ctx.seed) };
-      return { type: def.id, x: x0 + (wsx >> 1), y, z: z0 + (wsz >> 1), pieces: [piece], bounds: box, entities: def.entities?.(x0 + wsx / 2, y + 1, z0 + wsz / 2, new Random(seed ^ 0x55)) };
+      const piece = { box, build: (v: import('../decorate/view').DecorView) => def.build(new Builder(v, x0, y, z0, rot, def.sx, def.sz), new Random(seed), ctx.seed, biome) };
+      const start: Start = { type: def.id, x: x0 + (wsx >> 1), y, z: z0 + (wsz >> 1), pieces: [piece], bounds: box, entities: def.entities?.(x0 + wsx / 2, y + 1, z0 + wsz / 2, new Random(seed ^ 0x55)) };
+      const frame = (): Builder => new Builder(null as unknown as import('../decorate/view').DecorView, x0, y, z0, rot, def.sx, def.sz);
+      if (def.quest) start.quest = def.quest(frame(), new Random(seed), biome);
+      if (def.mobs) start.entities = def.mobs(frame(), new Random(seed), biome);
+      return start;
     },
   };
 }
@@ -238,7 +248,8 @@ export const WITCH_HUT = single({
   y: 'surface',
   biome: ids('swamp'),
   maxSlope: 6,
-  build(b) {
+  build(b, rng, seed) {
+    void rng;
     const planks = S('spruce_planks');
     const y0 = 3;
     for (const [x, z] of [
@@ -259,6 +270,8 @@ export const WITCH_HUT = single({
     b.set(4, y0 + 1, 6, S('cauldron'));
     b.set(2, y0 + 1, 6, S('crafting_table'));
     b.set(2, y0 + 1, 3, S('flower_pot'));
+    // The witch's things (V3): one of them is a potion that should not exist
+    b.chest(4, y0 + 1, 3, 'west', 'chest/witch_hut', lootSeed(b, 4, y0 + 1, 3, seed));
     b.fill(1, y0 + 1, 0, 5, y0 + 1, 0, S('oak_fence'));
   },
   entities: (x, y, z) => [
@@ -637,56 +650,84 @@ export const STALKER_DEN = single({
  * The glitched ruin: a rare, half-corrupted structure that holds a dormant
  * gateway frame to the Farlands. Corrupted blocks bleed into the terrain.
  */
-export const GLITCHED_RUIN = single({
-  id: 'glitched_ruin',
-  spacing: 72,
-  separation: 16,
-  salt: 0x6117c4,
-  sx: 13,
-  sz: 13,
-  height: 12,
-  below: 4,
-  y: 'surface',
-  biome: (b) => b.dimension === 'overworld' && !b.id.includes('ocean') && b.id !== 'river',
-  maxSlope: 10,
-  build(b, rng, seed) {
-    const corrupted = S('corrupted_stone');
-    const farstone = S('farstone_bricks');
-    const stat = S('static_block');
-    // Corruption patch spreading into the ground
-    for (let z = -2; z < 15; z++)
-      for (let x = -2; x < 15; x++) {
-        const d = Math.hypot(x - 6, z - 6);
-        const n = (hashInts(seed, x, z) & 255) / 255;
-        if (d > 7 + n * 2) continue;
-        for (let y = -3; y <= 0; y++) if (STATE_SOLID[b.proto(x, y - 1, z)] && !STATE_FLUID[b.proto(x, y - 1, z)] && n < 0.8) b.set(x, y - 1, z, n < 0.15 ? stat : corrupted);
+function glitchedRuin(withFrame: boolean): StructureType {
+  return single({
+    id: 'glitched_ruin',
+    spacing: 72,
+    separation: 16,
+    salt: 0x6117c4,
+    sx: 13,
+    sz: 13,
+    height: 12,
+    below: 4,
+    y: 'surface',
+    biome: (b) => b.dimension === 'overworld' && !b.id.includes('ocean') && b.id !== 'river',
+    maxSlope: 10,
+    build(b, rng, seed) {
+      const corrupted = S('corrupted_stone');
+      const farstone = S('farstone_bricks');
+      const stat = S('static_block');
+      // Corruption patch spreading into the ground
+      for (let z = -2; z < 15; z++)
+        for (let x = -2; x < 15; x++) {
+          const d = Math.hypot(x - 6, z - 6);
+          const n = (hashInts(seed, x, z) & 255) / 255;
+          if (d > 7 + n * 2) continue;
+          for (let y = -3; y <= 0; y++) if (STATE_SOLID[b.proto(x, y - 1, z)] && !STATE_FLUID[b.proto(x, y - 1, z)] && n < 0.8) b.set(x, y - 1, z, n < 0.15 ? stat : corrupted);
+        }
+      b.clearAbove(1, 1, 11, 11, 0, 11);
+      // Platform
+      b.fill(2, -1, 2, 10, -1, 10, farstone);
+      // Floating, misaligned fragments
+      for (let i = 0; i < 9; i++) {
+        const x = rng.int(13);
+        const z = rng.int(13);
+        const y = 3 + rng.int(7);
+        b.fill(x, y, z, x + rng.int(2), y, z + rng.int(2), rng.chance(0.3) ? stat : corrupted);
       }
-    b.clearAbove(1, 1, 11, 11, 0, 11);
-    // Platform
-    b.fill(2, -1, 2, 10, -1, 10, farstone);
-    // Floating, misaligned fragments
-    for (let i = 0; i < 9; i++) {
-      const x = rng.int(13);
-      const z = rng.int(13);
-      const y = 3 + rng.int(7);
-      b.fill(x, y, z, x + rng.int(2), y, z + rng.int(2), rng.chance(0.3) ? stat : corrupted);
-    }
-    // Dormant gateway frame (activated with a Corrupted Eye)
-    const frame = S('far_portal_frame');
-    for (let x = 4; x <= 8; x++) {
-      b.set(x, 0, 6, frame);
-      b.set(x, 6, 6, frame);
-    }
-    for (let y = 1; y <= 5; y++) {
-      b.set(4, y, 6, frame);
-      b.set(8, y, 6, frame);
-    }
-    b.set(4, 7, 6, S('data_crystal'));
-    b.set(8, 7, 6, S('data_crystal'));
-    b.chest(6, 0, 9, 'north', 'chest/farlands_ruin', lootSeed(b, 6, 0, 9, seed));
-    b.set(2, 0, 2, S('glitch_ore'));
-  },
-  entities: (x, y, z) => [{ type: 'farlands_wanderer', x: x + 3, y, z: z + 3 }],
-});
+      if (withFrame) {
+        // Dormant gateway frame (activated with a Corrupted Eye)
+        const frame = S('far_portal_frame');
+        for (let x = 4; x <= 8; x++) {
+          b.set(x, 0, 6, frame);
+          b.set(x, 6, 6, frame);
+        }
+        for (let y = 1; y <= 5; y++) {
+          b.set(4, y, 6, frame);
+          b.set(8, y, 6, frame);
+        }
+      } else {
+        // V3: the gateway fell here long ago; only toppled pieces remain (the living ones are underground)
+        const frame = S('far_portal_frame');
+        for (const [x, z] of [
+          [4, 6],
+          [5, 6],
+          [6, 7],
+          [8, 5],
+          [9, 5],
+        ] as const)
+          b.set(x, 0, z, frame);
+        b.set(7, 1, 6, frame);
+      }
+      b.set(4, 7, 6, S('data_crystal'));
+      b.set(8, 7, 6, S('data_crystal'));
+      b.chest(6, 0, 9, 'north', 'chest/farlands_ruin', lootSeed(b, 6, 0, 9, seed));
+      b.set(2, 0, 2, S('glitch_ore'));
+    },
+    entities: (x, y, z) => [{ type: 'farlands_wanderer', x: x + 3, y, z: z + 3 }],
+  });
+}
+
+export const GLITCHED_RUIN = glitchedRuin(true);
+/** V3 worlds: same places, but the working portals moved into the corrupted caves. */
+export const GLITCHED_RUIN_V3 = glitchedRuin(false);
 
 export const SURFACE_STRUCTURES: StructureType[] = [DESERT_TEMPLE, JUNGLE_TEMPLE, WITCH_HUT, IGLOO, RUINED_PORTAL, SHIPWRECK, OCEAN_RUIN, BURIED_TREASURE, OUTPOST, SKY_SHRINE, OVERGROWN_RUIN, STALKER_DEN, GLITCHED_RUIN];
+export const SURFACE_STRUCTURES_V3: StructureType[] = SURFACE_STRUCTURES.map((t) => (t === GLITCHED_RUIN ? GLITCHED_RUIN_V3 : t));
+/**
+ * V4: the temples, huts, igloos and outposts turn up a little more often, so
+ * exploring finds something more consistently. The rare ones (sky shrines,
+ * stalker dens, glitched ruins) keep their rarity.
+ */
+const MORE_COMMON: Record<string, number> = { desert_temple: 26, jungle_temple: 26, witch_hut: 28, igloo: 28, pillager_outpost: 34, shipwreck: 22, overgrown_ruin: 22 };
+export const SURFACE_STRUCTURES_V4: StructureType[] = SURFACE_STRUCTURES_V3.map((t) => (MORE_COMMON[t.id] ? { ...t, spacing: MORE_COMMON[t.id]! } : t));

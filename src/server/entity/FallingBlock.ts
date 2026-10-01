@@ -10,6 +10,8 @@ const rng = new Random();
 
 export class FallingBlock extends Entity {
   readonly type = 'falling_block';
+  /** Shatters on landing instead of settling (The Error's falling blocks). */
+  shatter = false;
   constructor(public state: number) {
     super(0.98, 0.98);
     this.body.stepHeight = 0;
@@ -28,6 +30,13 @@ export class FallingBlock extends Entity {
     b.vy *= 0.98;
     b.vx *= 0.98;
     b.vz *= 0.98;
+    if (this.shatter && (b.onGround || this.age > 200 || b.y < -64)) {
+      const def = blocks[STATE_BLOCK[this.state]!]!.def;
+      this.dim.server.particles(this.dim, 'glitch', b.x, b.y + 0.5, b.z, 12, 0.6);
+      this.dim.server.playSound(this.dim, 'break.' + def.sound, b.x, b.y + 0.5, b.z, 0.8, 0.7);
+      this.remove();
+      return;
+    }
     if (b.onGround || this.age > 600 || b.y < -64) {
       const x = Math.floor(b.x);
       const y = Math.floor(b.y + 0.5);
@@ -50,7 +59,8 @@ export class FallingBlock extends Entity {
     }
   }
 
-  override save(): Record<string, unknown> {
+  override save(): Record<string, unknown> | null {
+    if (this.shatter) return null;
     return { type: 'falling_block', x: this.x, y: this.y, z: this.z, state: stateToString(this.state) };
   }
 

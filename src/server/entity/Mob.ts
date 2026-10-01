@@ -436,6 +436,16 @@ export class Mob extends LivingEntity {
     if (this.def.fireImmune && (src === 'fire' || src === 'lava' || src === 'in_fire' || src === 'magma')) return 0;
     // Emerging or burrowing Wardens (and other scripted moments) can't be hurt
     if (this.data.untouchable && src !== 'void' && src !== 'kill') return 0;
+    // The Error shrugs off most of a hit unless its core is exposed
+    if (this.type === 'the_error') {
+      amount = this.dim.server.errorBoss?.scaleDamage(this, amount, info) ?? amount;
+      if (amount <= 0) return 0;
+    }
+    // Herobrine: can't be hurt between moments of his fights, and never dies the first time
+    if (this.type === 'herobrine') {
+      amount = this.dim.server.herobrine?.scaleDamage(this, amount, info) ?? amount;
+      if (amount <= 0) return 0;
+    }
     if (this.invulnerableTicks > 10 && src !== 'void' && src !== 'kill') {
       const last = (this.data.lastHurtAmount as number) ?? 0;
       if (amount <= last) return 0;
@@ -503,7 +513,7 @@ export class Mob extends LivingEntity {
     if (this.owner) m.tame = true;
     if (this.fuse >= 0) m.fuse = this.fuse;
     if (this.angryAt || this.target) m.angry = true;
-    for (const k of ['color', 'sheared', 'size', 'profession', 'variant', 'charged', 'carried', 'phase', 'open', 'saddle', 'leashPos', 'puff', 'dancing', 'playDead', 'rolling', 'eating', 'trusting', 'tongue', 'emerge', 'dig', 'angerLevel', 'sonic', 'listen', 'sniff']) if (this.data[k] !== undefined) m[k] = this.data[k];
+    for (const k of ['color', 'sheared', 'size', 'profession', 'variant', 'charged', 'carried', 'phase', 'open', 'saddle', 'leashPos', 'puff', 'dancing', 'playDead', 'rolling', 'eating', 'trusting', 'tongue', 'emerge', 'dig', 'angerLevel', 'sonic', 'listen', 'sniff', 'voidbound', 'errorPhase', 'errorAnim', 'clone', 'malware', 'hbAnim', 'hbKind', 'apparition']) if (this.data[k] !== undefined) m[k] = this.data[k];
     if (this.data.glowTicks) m.glowing = true;
     if (this.data.leash && this.metaHolder) m.leash = this.metaHolder;
     if (this.rider) m.rider = this.rider.id;

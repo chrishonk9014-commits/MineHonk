@@ -12,6 +12,17 @@ import { Random } from '../../common/math/rng';
 import { FallingBlock } from '../entity/FallingBlock';
 import type { Chunk } from '../../common/world/chunk';
 import { growTree } from '../../common/gen/features/trees';
+import { reconnectSeam } from '../../common/game/connections';
+
+/** Saved-chunk pseudo-entity carrying the chunk's pending block ticks (V4). */
+export const TICKS_ENTITY = 'block_ticks';
+
+const SEAMS: [number, number][] = [
+  [1, 0],
+  [-1, 0],
+  [0, 1],
+  [0, -1],
+];
 
 const rng = new Random();
 
@@ -26,6 +37,11 @@ interface Scheduled {
 export class BlockUpdates {
   /** Scheduled ticks per dimension keyed by position. */
   private readonly scheduled = new Map<Dimension, Map<string, Scheduled>>();
+  /**
+   * V4: ticks of chunks that are not loaded, by chunk, with the delay they
+   * had left. They resume when the chunk loads (and are saved with it).
+   */
+  private readonly parked = new Map<Dimension, Map<number, { x: number; y: number; z: number; left: number; kind: Scheduled['kind'] }[]>>();
   private water = 0;
   private lava = 0;
   private fire = 0;
@@ -51,6 +67,7 @@ export class BlockUpdates {
     const cur = m.get(k);
     if (cur && cur.due <= due) return;
     m.set(k, { x, y, z, due, kind });
+    this.tickIndex.tick = -1;
   }
 
   /** Called after any authoritative block change. */
@@ -61,6 +78,9 @@ export class BlockUpdates {
     for (let f = 0; f < 6; f++) this.react(dim, x + FACE_DX[f], y + FACE_DY[f], z + FACE_DZ[f]);
     this.server.power?.onBlockChanged(dim, x, y, z, old, state);
     this.server.sculk?.onBlockChanged(dim, x, y, z, old, state);
+    this.server.structureQuests?.onBlockChanged(dim, x, y, z, state);
+    this.server.templeTrials?.onBlockChanged(dim, x, y, z, state);
+    this.server.engineering?.onBlockChanged(dim, x, y, z, old, state);
   }
 
   /** Neighbour reaction for the block at (x,y,z). */
@@ -104,7 +124,16 @@ export class BlockUpdates {
     this.server.particles(dim, 'block', x + 0.5, y + 0.5, z + 0.5, 12, 0.4, s);
   }
 
+  /** V4 worlds: the fluid and connection improvements of the World Update. */
+  get v4(): boolean {
+    return this.server.level.generatorVersion >= 4;
+  }
+
   onChunkReady(dim: Dimension, c: Chunk): void {
+    if (this.v4) {
+      this.joinNeighbours(dim, c);
+      this.resumeParked(dim, c);
+    }
     // Register furnaces with pending work
     for (const [k, be] of c.blockEntities) {
       if (be.type === 'furnace') {
@@ -114,9 +143,127 @@ export class BlockUpdates {
         this.server.interaction.containers.registerFurnace(dim, x, y, z);
       }
     }
-    // Restore persistent entities
+    // Restore persistent entities (and, in V4 worlds, the chunk's pending block ticks)
     const ents = dim.takePendingEntities(c.cx, c.cz);
-    if (ents) this.server.interaction.restoreEntities(dim, ents);
+    if (ents) {
+      const ticks = ents.filter((e) => e.type === TICKS_ENTITY);
+      if (ticks.length && this.v4) for (const t of ticks) this.loadTicks(dim, t);
+      this.server.interaction.restoreEntities(dim, ticks.length ? ents.filter((e) => e.type !== TICKS_ENTITY) : ents);
+    }
+  }
+
+  // ------------------------------------------------------------------ pending ticks across unloads (V4)
+
+  private parkedFor(dim: Dimension): Map<number, { x: number; y: number; z: number; left: number; kind: Scheduled['kind'] }[]> {
+    let m = this.parked.get(dim);
+    if (!m) {
+      m = new Map();
+      this.parked.set(dim, m);
+    }
+    return m;
+  }
+
+  private park(dim: Dimension, s: Scheduled): void {
+    const k = chunkIndex(s.x >> 4, s.z >> 4);
+    const m = this.parkedFor(dim);
+    let l = m.get(k);
+    if (!l) {
+      l = [];
+      m.set(k, l);
+    }
+    if (l.length < 4096) l.push({ x: s.x, y: s.y, z: s.z, left: Math.max(1, s.due - this.server.tickNo), kind: s.kind });
+  }
+
+  /** Scheduled ticks by chunk, rebuilt at most once per server tick (saving asks for many chunks at once). */
+  private tickIndex: { dim: Dimension | null; tick: number; map: Map<number, Scheduled[]> } = { dim: null, tick: -1, map: new Map() };
+
+  /** Scheduled ticks inside a chunk (without removing them). */
+  private ticksIn(dim: Dimension, cx: number, cz: number): Scheduled[] {
+    const idx = this.tickIndex;
+    if (idx.dim !== dim || idx.tick !== this.server.tickNo) {
+      idx.dim = dim;
+      idx.tick = this.server.tickNo;
+      idx.map = new Map();
+      const m = this.scheduled.get(dim);
+      if (m)
+        for (const t of m.values()) {
+          const k = chunkIndex(t.x >> 4, t.z >> 4);
+          let l = idx.map.get(k);
+          if (!l) {
+            l = [];
+            idx.map.set(k, l);
+          }
+          l.push(t);
+        }
+    }
+    return idx.map.get(chunkIndex(cx, cz)) ?? [];
+  }
+
+  /** V4: a chunk is unloading; its pending ticks wait for it to come back. */
+  onChunkUnloaded(dim: Dimension, c: Chunk): void {
+    if (!this.v4) return;
+    const m = this.scheduled.get(dim);
+    if (!m) return;
+    const list = this.ticksIn(dim, c.cx, c.cz);
+    if (!list.length) return;
+    for (const s of list) {
+      m.delete(s.x + ',' + s.y + ',' + s.z + s.kind);
+      this.park(dim, s);
+    }
+    this.tickIndex.tick = -1;
+  }
+
+  private resumeParked(dim: Dimension, c: Chunk): void {
+    const m = this.parked.get(dim);
+    const k = chunkIndex(c.cx, c.cz);
+    const l = m?.get(k);
+    if (!l) return;
+    m!.delete(k);
+    for (const t of l) this.schedule(dim, t.x, t.y, t.z, t.left, t.kind);
+  }
+
+  /** Whether a chunk has pending ticks that must be saved with it. */
+  hasTicks(dim: Dimension, c: Chunk): boolean {
+    if (!this.v4) return false;
+    return !!this.parked.get(dim)?.get(chunkIndex(c.cx, c.cz))?.length || this.ticksIn(dim, c.cx, c.cz).length > 0;
+  }
+
+  /** The chunk's pending ticks as a saved pseudo-entity (none in pre-V4 worlds). */
+  savedTicks(dim: Dimension, c: Chunk): Record<string, unknown>[] {
+    if (!this.v4) return [];
+    const list: number[] = [];
+    const kinds: Scheduled['kind'][] = ['fluid', 'fall', 'check', 'dripleaf'];
+    const now = this.server.tickNo;
+    for (const s of this.ticksIn(dim, c.cx, c.cz)) list.push(s.x & 15, s.y, s.z & 15, Math.max(1, s.due - now), kinds.indexOf(s.kind));
+    for (const t of this.parked.get(dim)?.get(chunkIndex(c.cx, c.cz)) ?? []) list.push(t.x & 15, t.y, t.z & 15, t.left, kinds.indexOf(t.kind));
+    return list.length ? [{ type: TICKS_ENTITY, cx: c.cx, cz: c.cz, t: list }] : [];
+  }
+
+  private loadTicks(dim: Dimension, d: Record<string, unknown>): void {
+    const kinds: Scheduled['kind'][] = ['fluid', 'fall', 'check', 'dripleaf'];
+    const t = d.t;
+    const cx = Number(d.cx);
+    const cz = Number(d.cz);
+    if (!Array.isArray(t) || !Number.isFinite(cx) || !Number.isFinite(cz)) return;
+    for (let i = 0; i + 4 < t.length && i < 5 * 4096; i += 5) {
+      const [lx, y, lz, left, kind] = [t[i], t[i + 1], t[i + 2], t[i + 3], t[i + 4]].map(Number) as [number, number, number, number, number];
+      if (!(lx >= 0 && lx < 16 && lz >= 0 && lz < 16 && y >= 0 && y < 256) || !kinds[kind]) continue;
+      this.schedule(dim, (cx << 4) + lx, y, (cz << 4) + lz, Math.max(1, Math.min(1200, left || 1)), kinds[kind]!);
+    }
+  }
+
+  /**
+   * V4 worlds: fences, panes, walls and stairs along the chunk's borders
+   * connect to what stands across them, now that both sides are loaded.
+   */
+  private joinNeighbours(dim: Dimension, c: Chunk): void {
+    const set = (x: number, y: number, z: number, s: number): void => {
+      dim.setBlock(x, y, z, s, { updateNeighbors: false, keepBlockEntity: true });
+    };
+    for (const [dx, dz] of SEAMS) {
+      const n = dim.getChunk(c.cx + dx, c.cz + dz);
+      if (n) reconnectSeam(dim, c, n, set);
+    }
   }
 
   tick(dim: Dimension): void {
@@ -132,8 +279,12 @@ export class BlockUpdates {
           if (due.length > 4000) break;
         }
       }
+      if (due.length) this.tickIndex.tick = -1;
       for (const s of due) {
-        if (!dim.isLoaded(s.x, s.z)) continue;
+        if (!dim.isLoaded(s.x, s.z)) {
+          if (this.v4) this.park(dim, s);
+          continue;
+        }
         if (s.kind === 'fluid') this.tickFluid(dim, s.x, s.y, s.z);
         else if (s.kind === 'fall') this.tickFall(dim, s.x, s.y, s.z);
         else if (s.kind === 'dripleaf') this.tickDripleaf(dim, s.x, s.y, s.z);
@@ -179,9 +330,12 @@ export class BlockUpdates {
     // Recompute this cell's level from neighbours (unless source)
     if (level !== 0) {
       let best = 99;
+      let falling = false;
       const above = dim.getState(x, y + 1, z);
-      if (STATE_FLUID[above] === kind && blocks[STATE_BLOCK[above]!]!.def.model === 'liquid') best = 8; // falling
-      else {
+      if (STATE_FLUID[above] === kind && blocks[STATE_BLOCK[above]!]!.def.model === 'liquid') {
+        best = 8; // falling
+        falling = true;
+      } else {
         let sources = 0;
         for (let f = 2; f < 6; f++) {
           const n = dim.getState(x + FACE_DX[f], y, z + FACE_DZ[f]);
@@ -195,7 +349,10 @@ export class BlockUpdates {
         const under = dim.getState(x, y - 1, z);
         if (kind === 1 && sources >= 2 && (STATE_SOLID[under] || this.fluidLevel(under, 1) === 0)) best = 0;
       }
-      const newLevel = best > maxDist && best !== 8 ? -1 : best;
+      // Level 8 means falling. Before V4, a cell one step past the last flowing
+      // level also came out as 8 and then fed its neighbours like a waterfall,
+      // so the edge of a spreading fluid could pulse forever.
+      const newLevel = this.v4 ? (falling ? 8 : best > maxDist ? -1 : best) : best > maxDist && best !== 8 ? -1 : best;
       if (newLevel === -1) {
         dim.setBlock(x, y, z, 0);
         return;
@@ -218,15 +375,18 @@ export class BlockUpdates {
         }
       }
     }
+    const v4 = this.v4;
     // Spread down
     const below = dim.getState(x, y - 1, z);
     if (y > 0 && this.canFlowInto(dim, below, kind, x, y - 1, z)) {
       if (kind === 1 && STATE_FLUID[below] === 2) {
-        dim.setBlock(x, y - 1, z, this.fluidLevel(below, 2) === 0 ? S('obsidian') : S('stone'));
+        // Water pouring onto lava: a lava source sets into obsidian, flowing lava into cobblestone (V4; stone before)
+        dim.setBlock(x, y - 1, z, this.fluidLevel(below, 2) === 0 ? S('obsidian') : v4 ? S('cobblestone') : S('stone'));
         if (this.server.admin.blockMarked(dim, x, y, z)) this.server.admin.setBlockMark(dim, x, y - 1, z, true);
+        if (v4) this.server.playSound(dim, 'fizz', x + 0.5, y - 0.5, z + 0.5, 0.5, 2.6);
         return;
       }
-      this.flowInto(dim, x, y - 1, z, withProp(base, 'level', '8'), kind, this.server.admin.blockMarked(dim, x, y, z));
+      this.flowInto(dim, x, y - 1, z, withProp(base, 'level', '8'), kind, this.server.admin.blockMarked(dim, x, y, z), true);
       if (level !== 0) return; // falling fluid doesn't spread sideways unless source
     }
     // Spread sideways
@@ -235,16 +395,23 @@ export class BlockUpdates {
     if (next > maxDist) return;
     if (y > 0 && level !== 0 && this.fluidLevel(below, kind) >= 0) return;
     const dirs = this.flowDirections(dim, x, y, z, kind);
+    let blocked = false;
     for (const f of dirs) {
       const nx = x + FACE_DX[f];
       const nz = z + FACE_DZ[f];
+      // V4: flow waiting at the edge of the loaded world carries on once the chunk loads
+      if (v4 && !dim.isLoaded(nx, nz)) {
+        blocked = true;
+        continue;
+      }
       const n = dim.getState(nx, y, nz);
       if (!this.canFlowInto(dim, n, kind, nx, y, nz)) continue;
       const nl = this.fluidLevel(n, kind);
       // Sources, falling fluid and cells at least as full stay as they are
       if (nl >= 0 && (nl === 0 || nl >= 8 || nl <= next)) continue;
-      this.flowInto(dim, nx, y, nz, withProp(base, 'level', String(next)), kind, this.server.admin.blockMarked(dim, x, y, z));
+      this.flowInto(dim, nx, y, nz, withProp(base, 'level', String(next)), kind, this.server.admin.blockMarked(dim, x, y, z), false);
     }
+    if (blocked) this.schedule(dim, x, y, z, 40, 'fluid');
   }
 
   /** Prefers directions leading to a drop within 4 blocks (classic flow AI). */
@@ -291,15 +458,22 @@ export class BlockUpdates {
   }
 
   /** Fluid spreading from a cheat-placed source keeps the cheat mark. */
-  private flowInto(dim: Dimension, x: number, y: number, z: number, state: number, kind: number, cheat = false): void {
+  private flowInto(dim: Dimension, x: number, y: number, z: number, state: number, kind: number, cheat = false, down = false): void {
     if (cheat) this.server.admin.setBlockMark(dim, x, y, z, true);
     const cur = dim.getState(x, y, z);
     if (cur !== 0 && !STATE_FLUID[cur] && STATE_REPLACEABLE[cur]) {
       for (const st of computeBlockDrops(cur, null, rng).items) this.server.mining.dropItem(dim, x + 0.5, y + 0.3, z + 0.5, st);
     }
     if (STATE_FLUID[cur] && STATE_FLUID[cur] !== kind) {
-      // mixing
-      dim.setBlock(x, y, z, kind === 1 ? S('cobblestone') : S('stone'));
+      // Mixing. V4 follows one rule set: water reaching lava sets a source into
+      // obsidian and flowing lava into cobblestone; lava pouring down into water
+      // makes stone, lava running sideways into it cobblestone.
+      let solid: number;
+      if (!this.v4) solid = kind === 1 ? S('cobblestone') : S('stone');
+      else if (kind === 1) solid = this.fluidLevel(cur, 2) === 0 ? S('obsidian') : S('cobblestone');
+      else solid = down ? S('stone') : S('cobblestone');
+      dim.setBlock(x, y, z, solid);
+      if (this.v4) this.server.playSound(dim, 'fizz', x + 0.5, y + 0.5, z + 0.5, 0.5, 2.6);
       return;
     }
     dim.setBlock(x, y, z, state);

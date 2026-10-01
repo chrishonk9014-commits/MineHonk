@@ -6,6 +6,7 @@
 import type { ItemDef } from '../registry/itemTypes';
 import type { ToolType } from '../registry/blockTypes';
 import { COLORS } from './blocks';
+import { engineeringItemDefs } from '../engineering/catalog';
 
 const defs: ItemDef[] = [];
 const add = (d: ItemDef): ItemDef => {
@@ -168,6 +169,8 @@ add({ id: 'bone_meal', name: 'Bone Meal', use: 'bone_meal', creative: 'materials
 add({ id: 'glass_bottle', name: 'Glass Bottle', use: 'glass_bottle', creative: 'brewing' });
 add({ id: 'potion', name: 'Potion', maxStack: 1, use: 'potion', creative: 'brewing' });
 add({ id: 'splash_potion', name: 'Splash Potion', maxStack: 1, use: 'splash_potion', creative: 'brewing' });
+// V3: found only in witch's huts. What it does is left for the player to find out.
+add({ id: 'mysterious_potion', name: 'Mysterious Potion', maxStack: 1, rarity: 'glitched', glint: true, creative: 'brewing' });
 add({ id: 'experience_bottle', name: "Bottle o' Enchanting", use: 'experience_bottle', rarity: 'uncommon', glint: true, creative: 'tools' });
 add({ id: 'enchanted_book', name: 'Enchanted Book', maxStack: 1, rarity: 'uncommon', glint: true, creative: 'tools' });
 add({ id: 'name_tag', name: 'Name Tag', creative: 'tools' });
@@ -206,7 +209,8 @@ mat('copper_ingot');
 mat('diamond');
 mat('emerald');
 mat('lapis_lazuli');
-mat('redstone', { block: 'redstone_wire' });
+// V5: redstone dust is a material now; Signal Cable replaces placing it as wire (old wire keeps working)
+mat('redstone');
 mat('quartz', { name: 'Nether Quartz' });
 mat('amethyst_shard');
 mat('netherite_scrap', { fireResistant: true });
@@ -338,5 +342,21 @@ mat('glitch_core', { name: 'Glitch Core', rarity: 'glitched', glint: true });
 mat('corrupted_eye', { name: 'Corrupted Eye', rarity: 'glitched' });
 add({ id: 'rift_pearl', name: 'Rift Pearl', maxStack: 16, use: 'rift_pearl', rarity: 'rare', creative: 'tools' });
 add({ id: 'farlands_compass', name: 'Farlands Compass', maxStack: 1, use: 'farlands_compass', rarity: 'glitched', creative: 'tools', glint: true });
+
+// ---------------------------------------------------------------------------
+// V4 - The World Update: biome foods and the bunker keycard
+// ---------------------------------------------------------------------------
+food('cactus_fruit', 3, 1.8, { name: 'Cactus Fruit' });
+food('snowberries', 2, 1.2, { name: 'Snowberries' }, { eatTime: 16 });
+food('lingonberries', 2, 1.2, { name: 'Lingonberries' }, { eatTime: 16 });
+food('aloe_leaf', 1, 1, { name: 'Aloe Leaf' }, { alwaysEdible: true, eatTime: 16, effects: [{ effect: 'regeneration', duration: 100 }] });
+add({ id: 'bunker_keycard', name: 'Bunker Keycard', maxStack: 1, rarity: 'uncommon', creative: 'tools' });
+add({ id: 'temple_relic', name: 'Temple Relic', maxStack: 1, rarity: 'rare', creative: 'tools' });
+
+// V5 - The Engineering Update: materials, components, upgrades and the Engineering Book
+for (const d of engineeringItemDefs()) add(d);
+
+// V5.5 - The Digital Corruption Update: an old book in every witch's hut, full of drawings that should not make sense yet
+add({ id: 'witch_grimoire', name: "Witch's Grimoire", maxStack: 1, use: 'grimoire', rarity: 'rare', creative: 'tools' });
 
 export const ITEM_DEFS: readonly ItemDef[] = defs;

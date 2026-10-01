@@ -2,7 +2,7 @@
 import { el, clear } from './dom';
 import { sprites } from './sprites';
 import { fillSlot, itemDisplayName } from './slots';
-import type { PlayerStats } from '../../common/net/protocol';
+import type { PlayerStats, QuestInfo } from '../../common/net/protocol';
 import type { Slot } from '../../common/game/itemstack';
 
 export interface HudState {
@@ -42,6 +42,8 @@ export class Hud {
   private readonly subtitlesEl = el('div', { class: 'subtitles' });
   /** Small, unobtrusive notice that cheats are on in this world. */
   private readonly cheatsEl = el('div', { class: 'cheats-indicator hidden' });
+  /** V4: the quest tracker (structure objective and stage progress). */
+  private readonly questEl = el('div', { class: 'quest-tracker hidden' });
   private itemNameTimer = 0;
   private lastSelectedName = '';
   private titleTimer = 0;
@@ -64,7 +66,7 @@ export class Hud {
     this.hotbarEl.append(this.selEl);
     this.xpbar.append(this.xpfill);
     this.bottom.append(this.hotbarEl, this.xpbar, this.xplevel, this.hearts, this.heartLabel, this.food, this.armor, this.air, this.itemName);
-    this.root.append(this.crosshair, this.bottom, this.bosses, this.title, this.debugLeft, this.debugRight, this.toastEl, this.subtitlesEl, this.cheatsEl);
+    this.root.append(this.crosshair, this.bottom, this.bosses, this.title, this.debugLeft, this.debugRight, this.toastEl, this.subtitlesEl, this.cheatsEl, this.questEl);
     this.toastEl.append(el('div', { class: 't1' }), el('div', { class: 't2' }));
     this.title.style.opacity = '0';
   }
@@ -235,7 +237,7 @@ export class Hud {
     this.toastQueue.push({ t1, t2 });
   }
 
-  setBoss(id: number, action: 'add' | 'update' | 'remove', title?: string, progress?: number): void {
+  setBoss(id: number, action: 'add' | 'update' | 'remove', title?: string, progress?: number, color?: string): void {
     let b = this.bossBars.get(id);
     if (action === 'remove') {
       b?.remove();
@@ -243,12 +245,34 @@ export class Hud {
       return;
     }
     if (!b) {
-      b = el('div', { class: 'boss-bar' }, el('div', { class: 'shadow', style: { textAlign: 'center' } }), el('div', { class: 'bar' }, el('div')));
+      b = el('div', { class: color === 'glitch' ? 'boss-bar boss-glitch' : color === 'herobrine' ? 'boss-bar boss-herobrine' : 'boss-bar' }, el('div', { class: 'shadow', style: { textAlign: 'center' } }), el('div', { class: 'bar' }, el('div')));
       this.bossBars.set(id, b);
       this.bosses.append(b);
     }
     if (title !== undefined) (b.children[0] as HTMLElement).textContent = title;
     if (progress !== undefined) ((b.children[1] as HTMLElement).children[0] as HTMLElement).style.width = `${Math.max(0, Math.min(1, progress)) * 100}%`;
+  }
+
+  /** Shows or hides the quest tracker. */
+  setQuest(q: QuestInfo | null): void {
+    this.questEl.classList.toggle('hidden', !q);
+    clear(this.questEl);
+    if (!q) return;
+    this.questEl.classList.toggle('quest-glitch', q.style === 'glitch');
+    this.questEl.append(el('div', { class: 'quest-title' }, q.title));
+    if (q.stages) {
+      const pips = el('div', { class: 'quest-pips' });
+      for (let i = 1; i <= q.stages; i++) pips.append(el('div', { class: 'pip' + (i <= (q.stage ?? 0) ? ' done' : '') }));
+      this.questEl.append(pips);
+    }
+    this.questEl.append(el('div', { class: 'quest-text' }, q.text));
+    if (q.remaining !== undefined) this.questEl.append(el('div', { class: 'quest-left' }, `${q.remaining} remaining`));
+  }
+
+  /** Where the hotbar is on screen (touch controls pick slots from it). */
+  hotbarRect(): DOMRect | null {
+    const r = this.hotbarEl.getBoundingClientRect();
+    return r.width > 0 ? r : null;
   }
 
   hasBoss(): boolean {

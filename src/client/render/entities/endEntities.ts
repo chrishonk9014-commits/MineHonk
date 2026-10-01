@@ -3,19 +3,25 @@ import * as THREE from 'three';
 import { registerVisual, type EntityVisual } from './EntityRenderer';
 
 registerVisual('eye_of_ender', (e, ctx) => {
-  const src = ctx.icons.texture('ender_eye', 'item');
+  // A Corrupted Eye's guide (V3.1) shows the Corrupted Eye and flickers
+  const corrupted = e.meta.corrupted === true;
+  const src = ctx.icons.texture(corrupted ? 'corrupted_eye' : 'ender_eye', 'item');
   const t = new THREE.CanvasTexture(src ?? document.createElement('canvas'));
   t.magFilter = THREE.NearestFilter;
   t.minFilter = THREE.NearestFilter;
   const mat = new THREE.SpriteMaterial({ map: t, transparent: true, alphaTest: 0.1 });
   const s = new THREE.Sprite(mat);
   s.scale.set(0.4, 0.4, 1);
-  void e;
   return {
     object: s,
-    update(ent, alpha) {
+    update(ent, alpha, time) {
       const [x, y, z] = ent.lerp(alpha);
       s.position.set(x, y + 0.1, z);
+      if (corrupted) {
+        const glitch = Math.floor(time / 2) % 7 === 0;
+        s.position.x += glitch ? 0.08 : 0;
+        s.scale.set(glitch ? 0.5 : 0.4, glitch ? 0.3 : 0.4, 1);
+      }
     },
     setBrightness() {
       mat.color.setScalar(1);

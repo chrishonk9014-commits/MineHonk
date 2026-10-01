@@ -12,7 +12,7 @@
  * also reports which faces of the section are connected through open space,
  * used for cave/occlusion culling.
  */
-import { STATE_OPAQUE, STATE_LAYER, STATE_BLOCK, STATE_FLUID, getProp, initBlocks } from '../../common/registry/blocks';
+import { STATE_OPAQUE, STATE_LAYER, STATE_BLOCK, STATE_FLUID, STATE_SOLID, getProp, initBlocks } from '../../common/registry/blocks';
 import { bakedModels, ModelKind, type BakedModel } from './models';
 import { AtlasLookup, type AtlasMeta } from './atlasInfo';
 import type { TintKind } from '../../common/registry/blockTypes';
@@ -75,6 +75,12 @@ const FIXED_TINT: Record<number, [number, number, number]> = { 4: [0x80, 0xa7, 0
 const WHITE: [number, number, number] = [255, 255, 255];
 const FACE_SHADE = [0.5, 1.0, 0.8, 0.8, 0.6, 0.6];
 const AO_LEVEL = [0.45, 0.65, 0.83, 1.0];
+
+/** Surface height (0..1) of a fluid cell from its level: sources 8/9, falling fluid full. */
+function fluidLevelHeight(s: number): number {
+  const lvl = parseInt(getProp(s, 'level') ?? '0', 10);
+  return lvl === 0 ? 8 / 9 : lvl >= 8 ? 1 : (8 - lvl) / 9;
+}
 /** Face directions: 0 -Y, 1 +Y, 2 -Z, 3 +Z, 4 -X, 5 +X. */
 export const DX = [0, 0, 0, 0, -1, 1];
 export const DY = [-1, 1, 0, 0, 0, 0];
@@ -606,7 +612,9 @@ export class Mesher {
   }
 
   private fluidHeightAt(blocks: Uint16Array, x: number, y: number, z: number, fluid: number): number {
-    // corner height from the 4 cells sharing this corner (x,z are corner coords 0..16)
+    // Corner height from the 4 cells sharing this corner (x,z are corner coords 0..16).
+    // Fuller cells weigh more, and open (non-solid) cells pull the corner down,
+    // so a surface slopes smoothly where fluid spreads and dips at an open edge.
     let sum = 0;
     let cnt = 0;
     for (let i = 0; i < 4; i++) {
@@ -616,16 +624,17 @@ export class Mesher {
       if (STATE_FLUID[s] === fluid) {
         const above = blocks[padIndex(cx, y + 1, cz)]!;
         if (STATE_FLUID[above] === fluid) return 1;
-        const lvl = parseInt(getProp(s, 'level') ?? '0', 10);
-        const h = lvl === 0 ? 8 / 9 : lvl >= 8 ? 1 : (8 - lvl) / 9;
-        sum += h;
-        cnt++;
-      }
+        const h = fluidLevelHeight(s);
+        const w = h >= 0.8 ? 10 : 1;
+        sum += h * w;
+        cnt += w;
+      } else if (!STATE_SOLID[s]) cnt++;
     }
     return cnt ? sum / cnt : 8 / 9;
   }
 
   private meshLiquid(b: Builder, input: MeshInput, x: number, y: number, z: number, s: number, r: Resolved): void {
+    void s;
     const { blocks, light } = input;
     const fluid = r.fluid;
     const water = fluid === 1;
@@ -665,17 +674,23 @@ export class Mesher {
         [1, h11, 1],
         [1, h10, 0],
       ];
-      const uvs: [number, number][] = [
-        [0, 0],
-        [0, 1],
-        [1, 1],
-        [1, 0],
-      ];
+      // A sloped surface shows the flowing texture running downhill (the
+      // texture scrolls along v, so v follows the steepest of the four
+      // directions); a level one shows the still texture.
+      const fx = h00 + h01 - h10 - h11;
+      const fz = h00 + h10 - h01 - h11;
+      const sloped = !flat && Math.abs(fx) + Math.abs(fz) > 0.02;
+      const uvAt = ([px, , pz]: [number, number, number]): [number, number] => {
+        if (!sloped) return [px, pz];
+        if (Math.abs(fx) >= Math.abs(fz)) return fx > 0 ? [1 - pz, px] : [pz, 1 - px];
+        return fz > 0 ? [px, pz] : [1 - px, 1 - pz];
+      };
+      const uvs = top.map(uvAt);
       // A sloped surface is not axis-aligned: it can face the camera from any side
-      emit(top, uvs, true, l, 1, flat ? 1 : GROUP_OTHER);
+      emit(top, uvs, !sloped, l, 1, flat ? 1 : GROUP_OTHER);
       if (water) {
         // underside of the surface visible from below
-        emit([top[3]!, top[2]!, top[1]!, top[0]!], [uvs[3]!, uvs[2]!, uvs[1]!, uvs[0]!], true, l, 0.9, flat ? 0 : GROUP_OTHER);
+        emit([top[3]!, top[2]!, top[1]!, top[0]!], [uvs[3]!, uvs[2]!, uvs[1]!, uvs[0]!], !sloped, l, 0.9, flat ? 0 : GROUP_OTHER);
       }
     }
     // sides

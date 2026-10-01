@@ -7,7 +7,7 @@ export interface AchievementDef {
   /** Parent achievement shown as prerequisite in the UI tree. */
   parent?: string;
   secret?: boolean;
-  category: 'story' | 'nether' | 'end' | 'adventure' | 'farlands' | 'husbandry' | 'caves';
+  category: 'story' | 'nether' | 'end' | 'adventure' | 'farlands' | 'husbandry' | 'caves' | 'world' | 'engineering' | 'digital';
 }
 
 export const ACHIEVEMENTS: AchievementDef[] = [
@@ -32,13 +32,19 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: 'follow_ender_eye', title: 'Eye Spy', description: 'Follow an Eye of Ender to a Stronghold', icon: 'ender_eye', parent: 'obtain_blaze_rod', category: 'story' },
   { id: 'enter_end', title: 'The End?', description: 'Enter the End Portal', icon: 'end_stone', parent: 'follow_ender_eye', category: 'end' },
   { id: 'kill_dragon', title: 'Free the End', description: 'Defeat the Ender Dragon', icon: 'dragon_egg', parent: 'enter_end', category: 'end' },
+  { id: 'destroy_end_crystal', title: 'Shattered Light', description: 'Destroy an End Crystal', icon: 'end_crystal', parent: 'enter_end', category: 'end' },
   { id: 'find_end_city', title: 'The City at the End of the Game', description: 'Go on in, what could happen?', icon: 'purpur_block', parent: 'kill_dragon', category: 'end' },
   { id: 'elytra', title: 'Sky\'s the Limit', description: 'Find Elytra', icon: 'elytra', parent: 'find_end_city', category: 'end' },
-  { id: 'corrupted_eye', title: 'Something Is Wrong', description: 'Obtain a Corrupted Eye', icon: 'corrupted_eye', parent: 'kill_dragon', category: 'farlands', secret: true },
-  { id: 'find_far_portal', title: 'Edge of the Map', description: 'Discover a glitched portal', icon: 'far_portal_frame', parent: 'root', category: 'farlands', secret: true },
+  // The hidden chain (V3): nothing here is explained before it happens
+  { id: 'mysterious_potion', title: 'Unlabeled', description: 'Find the potion hidden in a witch\'s hut', icon: 'mysterious_potion', parent: 'root', category: 'farlands', secret: true },
+  { id: 'enderman_kills_dragon', title: 'The Farlands Remains', description: 'Let an Enderman end the Ender Dragon, with every crystal broken', icon: 'ender_pearl', parent: 'mysterious_potion', category: 'farlands', secret: true },
+  { id: 'corrupted_eye', title: 'Something Is Wrong', description: 'Obtain a Corrupted Eye', icon: 'corrupted_eye', parent: 'enderman_kills_dragon', category: 'farlands', secret: true },
+  { id: 'find_corrupted_cave', title: 'Fundamentally Wrong', description: 'Find a Corrupted Cave', icon: 'corrupted_stone', parent: 'root', category: 'farlands', secret: true },
+  { id: 'find_far_portal', title: 'Edge of the Map', description: 'Discover a glitched portal', icon: 'far_portal_frame', parent: 'find_corrupted_cave', category: 'farlands', secret: true },
   { id: 'enter_farlands', title: 'Welcome to the Far Lands', description: 'Enter the Farlands', icon: 'farstone', parent: 'find_far_portal', category: 'farlands', secret: true },
   { id: 'glitched_gear', title: 'Out of Bounds', description: 'Upgrade gear to Glitched', icon: 'glitched_pickaxe', parent: 'enter_farlands', category: 'farlands', secret: true },
   { id: 'kill_glitch_beast', title: 'Stack Overflow', description: 'Defeat the Glitch Beast', icon: 'glitch_core', parent: 'enter_farlands', category: 'farlands', secret: true },
+  { id: 'defeat_error', title: 'ERROR DEFEATED', description: 'Defeat The Error', icon: 'missing_block', parent: 'enter_farlands', category: 'farlands', secret: true },
   { id: 'all_dimensions', title: 'Dimension Hopper', description: 'Visit every dimension', icon: 'far_portal', parent: 'enter_farlands', category: 'adventure' },
   { id: 'kill_mob', title: 'Monster Hunter', description: 'Kill any hostile monster', icon: 'iron_sword', parent: 'root', category: 'adventure' },
   { id: 'kill_stalker', title: 'Hunter Hunted', description: 'Defeat a Cave Stalker', icon: 'stalker_fang', parent: 'kill_mob', category: 'adventure' },
@@ -70,6 +76,51 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: 'vault_reward', title: 'Hollow Heart', description: 'Take the Resonance Charm from the vault beneath the Hollow Gate', icon: 'resonance_charm', parent: 'find_ancient_city', category: 'caves', secret: true },
   { id: 'recovery_compass', title: 'Way Back', description: 'Craft a Recovery Compass', icon: 'recovery_compass', parent: 'find_ancient_city', category: 'caves' },
   { id: 'hollow_disc', title: 'The Sound of Nothing', description: 'Assemble the disc Hollow from its fragments', icon: 'music_disc_hollow', parent: 'find_ancient_city', category: 'caves' },
+  // V4 - The World Update
+  { id: 'find_error_biome', title: 'What Is That?', description: 'Find a chunk that failed to load', icon: 'error_block', parent: 'root', category: 'world', secret: true },
+  { id: 'enter_glitched_structure', title: 'Below the Error', description: 'Dig into a Glitched Structure', icon: 'missing_block', parent: 'find_error_biome', category: 'world', secret: true },
+  { id: 'glitched_quest', title: 'Garbage Collected', description: 'Clear all five stages of a Glitched Structure', icon: 'glitch_block', parent: 'enter_glitched_structure', category: 'world', secret: true },
+  { id: 'find_monument', title: 'Monumental', description: 'Find a sun monument or a stone circle', icon: 'chiseled_sandstone', parent: 'root', category: 'world' },
+  { id: 'solve_puzzle', title: 'Ancient Mechanisms', description: 'Solve the puzzle of a monument or shrine', icon: 'lever', parent: 'find_monument', category: 'world' },
+  { id: 'find_bunker', title: 'Duck and Cover', description: 'Find a bunker', icon: 'bunker_plating', parent: 'root', category: 'world' },
+  { id: 'bunker_quest', title: 'Power Restored', description: 'Get past a bunker\'s blast door into its vault', icon: 'bunker_keycard', parent: 'find_bunker', category: 'world' },
+  { id: 'world_explorer', title: 'Seen It All', description: 'Find eight different kinds of V4 structure', icon: 'compass', parent: 'root', category: 'world' },
+  { id: 'glitched_reward', title: 'Found, Not Forged', description: 'Take Glitched gear from a Glitched Structure', icon: 'glitched_chestplate', parent: 'glitched_quest', category: 'world', secret: true },
+  // Version 4.5 - temple trials
+  { id: 'find_temple', title: 'Sacred Ground', description: 'Enter a temple of trials', icon: 'temple_relic', parent: 'root', category: 'world' },
+  { id: 'temple_trial', title: 'Worthy', description: 'Complete one of a temple\'s trials', icon: 'chiseled_stone_bricks', parent: 'find_temple', category: 'world' },
+  { id: 'temple_champion', title: 'Champion', description: 'Win the Champion\'s Trial on top of a temple', icon: 'gold_block', parent: 'temple_trial', category: 'world' },
+  { id: 'temple_duel', title: 'Last One Standing', description: 'Win a temple\'s prize in a duel against other players', icon: 'diamond_sword', parent: 'temple_champion', category: 'world' },
+  // V5 - The Engineering Update
+  { id: 'engineering', title: 'Engineering', description: 'Craft an Engineering Crafting Table', icon: 'engineering_table', parent: 'root', category: 'engineering' },
+  { id: 'generate_power', title: 'Power Up', description: 'Generate energy with a generator you built', icon: 'water_wheel', parent: 'engineering', category: 'engineering' },
+  { id: 'first_machine', title: 'It Works!', description: 'Have a machine you built finish its first job', icon: 'crusher', parent: 'generate_power', category: 'engineering' },
+  { id: 'store_power', title: 'Rainy Day Fund', description: 'Charge a battery you built to half full', icon: 'battery', parent: 'generate_power', category: 'engineering' },
+  { id: 'automate_resource', title: 'Hands Off', description: 'Have a machine process something it got by itself, or dig, harvest or collect on its own', icon: 'conveyor', parent: 'first_machine', category: 'engineering' },
+  { id: 'item_network', title: 'Plumbing for Items', description: 'Send items through pipes with an extractor', icon: 'item_pipe', parent: 'automate_resource', category: 'engineering' },
+  { id: 'fluid_network', title: 'Running Water', description: 'Pump a fluid through pipes into a tank or a machine', icon: 'pump', parent: 'automate_resource', category: 'engineering' },
+  { id: 'build_multiblock', title: 'Bigger Is Better', description: 'Complete a multiblock machine', icon: 'machine_casing', parent: 'first_machine', category: 'engineering' },
+  { id: 'advanced_engineering', title: 'Advanced Engineering', description: 'Have a tier 3 machine finish a job', icon: 'advanced_circuit', parent: 'build_multiblock', category: 'engineering' },
+  { id: 'automated_factory', title: 'Lights-Out Factory', description: 'Run five machines at once on one network, fed by automation', icon: 'item_sorter', parent: 'item_network', category: 'engineering' },
+  { id: 'control_room', title: 'Mission Control', description: 'Watch a network of three or more machines with a monitor and a control panel', icon: 'monitor', parent: 'automated_factory', category: 'engineering', secret: false },
+  // V5.5 - the Digital Corruption Update (obtaining the Mysterious Potion is the existing "Unlabeled")
+  { id: 'boot_computer', title: 'Hello, World', description: 'Boot a computer you built', icon: 'computer', parent: 'engineering', category: 'digital' },
+  { id: 'install_os', title: 'Fresh Install', description: 'Install HonkOS onto a hard drive', icon: 'hard_drive', parent: 'boot_computer', category: 'digital' },
+  { id: 'obtain_flash_drive', title: 'Portable Storage', description: 'Get a flash drive', icon: 'flash_drive', parent: 'boot_computer', category: 'digital' },
+  { id: 'network_transfer', title: 'Sneakernet Is Over', description: 'Send a file from one computer to another over a network', icon: 'network_cable', parent: 'install_os', category: 'digital' },
+  { id: 'read_grimoire', title: 'Forbidden Pages', description: "Read the grimoire from a witch's hut", icon: 'witch_grimoire', parent: 'boot_computer', category: 'digital', secret: true },
+  { id: 'feed_dragon', title: 'Not a Healing Potion', description: 'Feed the Mysterious Potion to the Ender Dragon', icon: 'mysterious_potion', parent: 'obtain_flash_drive', category: 'digital', secret: true },
+  { id: 'witness_malware', title: 'Something Digital', description: 'See the Ender Dragon spit malware', icon: 'dragon_breath', parent: 'feed_dragon', category: 'digital', secret: true },
+  { id: 'corrupt_flash_drive', title: 'Exposure', description: 'Hold a flash drive in the malware until it changes', icon: 'corrupted_flash_drive', parent: 'witness_malware', category: 'digital', secret: true },
+  { id: 'obtain_corrupted_drive', title: 'Do Not Plug This In', description: 'Carry the Corrupted Flash Drive', icon: 'corrupted_flash_drive', parent: 'corrupt_flash_drive', category: 'digital', secret: true },
+  { id: 'insert_corrupted_drive', title: 'Autorun', description: 'Plug the Corrupted Flash Drive into a computer in the Overworld', icon: 'computer', parent: 'obtain_corrupted_drive', category: 'digital', secret: true },
+  { id: 'witness_herobrine', title: 'White Eyes', description: 'See Herobrine come out of the computer', icon: 'computer', parent: 'insert_corrupted_drive', category: 'digital', secret: true },
+  { id: 'defeat_first_herobrine', title: 'Ctrl+Alt+Del', description: 'Drive Herobrine back into the computer', icon: 'diamond_sword', parent: 'witness_herobrine', category: 'digital', secret: true },
+  { id: 'enter_computer', title: 'Inside the Machine', description: 'Follow Herobrine into the computer', icon: 'monitor', parent: 'defeat_first_herobrine', category: 'digital', secret: true },
+  { id: 'discover_herobrine_seed', title: '478868574082066804', description: 'Realise where you are: the seed where Herobrine was first found', icon: 'grass_block', parent: 'enter_computer', category: 'digital', secret: true },
+  { id: 'find_herobrine_cave', title: 'The Lights Never Go Out', description: "Find Herobrine's cave", icon: 'server_rack', parent: 'discover_herobrine_seed', category: 'digital', secret: true },
+  { id: 'defeat_final_herobrine', title: 'Removed Herobrine', description: 'Defeat Herobrine in his cave', icon: 'netherite_sword', parent: 'find_herobrine_cave', category: 'digital', secret: true },
+  { id: 'herobrine_ending', title: 'Secret Ending: Herobrine', description: 'Reach the Herobrine secret ending', icon: 'corrupted_flash_drive', parent: 'defeat_final_herobrine', category: 'digital', secret: true },
 ];
 
 export const ACHIEVEMENT_BY_ID = new Map(ACHIEVEMENTS.map((a) => [a.id, a]));

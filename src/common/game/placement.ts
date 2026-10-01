@@ -75,9 +75,15 @@ export function soilOk(def: BlockDef, below: number, w: WorldReader, x: number, 
       return bdef.id === 'farmland';
     case 'needs_sand':
       if (def.id === 'cactus') {
-        if (!(tags.includes('sand') || bdef.id === 'cactus')) return false;
-        for (let f = 2; f < 6; f++) if (STATE_SOLID[w.getState(x + FACE_DX[f], y, z + FACE_DZ[f])]) return false;
-        return true;
+        // Cactus touching cactus is one plant: arms branch sideways off a trunk
+        let arm = false;
+        for (let f = 2; f < 6; f++) {
+          const n = w.getState(x + FACE_DX[f], y, z + FACE_DZ[f]);
+          if (blocks[STATE_BLOCK[n]!]!.id === 'cactus') arm = true;
+          else if (STATE_SOLID[n]) return false;
+        }
+        if (tags.includes('sand') || bdef.id === 'cactus') return true;
+        return arm && !STATE_SOLID[below];
       }
       return tags.includes('sand') || tags.includes('terracotta') || bdef.id === 'terracotta' || tags.includes('dirt');
     case 'needs_soul_sand':
@@ -194,6 +200,10 @@ export function canSurvive(state: number, w: WorldReader, x: number, y: number, 
     case 'bed':
       return true;
     default:
+      if (def.id === 'bracket_fungus') {
+        const bi = FACE_NAMES.indexOf(oppositeHorizontal(getProp(state, 'facing')!) as 'north');
+        return isSturdy(w, x + FACE_DX[bi], y, z + FACE_DZ[bi]);
+      }
       if (def.place) return soilOk(def, below, w, x, y, z);
       return true;
   }
@@ -374,6 +384,35 @@ export function computePlacement(w: WorldReader, r: PlaceRequest): Placement[] |
       state = withProp(state, 'facing', toward);
       break;
     default:
+      // V5 engineering parts
+      if (def.id === 'item_extractor') {
+        // Faces (pulls from) the block it was placed against
+        state = withProp(state, 'facing', FACE_NAMES[face ^ 1]!);
+        break;
+      }
+      if (def.id === 'hopper') {
+        state = withProp(state, 'facing', face >= 2 ? FACE_NAMES[face ^ 1]! : 'down');
+        break;
+      }
+      if (def.id === 'conveyor' || def.id === 'express_conveyor' || def.id === 'logic_gate' || def.id === 'level_sensor' || def.id === 'item_sensor' || def.id === 'timer') {
+        // Runs away from the player
+        state = withProp(state, 'facing', facing);
+        break;
+      }
+      if (def.id === 'item_sorter') {
+        state = withProp(state, 'facing', r.pitch > 0.8 ? 'down' : r.pitch < -0.8 ? 'up' : facing);
+        break;
+      }
+      if (def.id === 'fluid_outlet' && face >= 2) {
+        state = withProp(state, 'facing', FACE_NAMES[face]!);
+        break;
+      }
+      if (def.id === 'bracket_fungus') {
+        // Grows out of the side that was clicked
+        if (face < 2) return null;
+        state = withProp(state, 'facing', FACE_NAMES[face]!);
+        break;
+      }
       if (hasProp(state, 'facing')) {
         const vals = bt.propValues[bt.propNames.indexOf('facing')]!;
         if (vals.includes('up')) {
@@ -449,7 +488,12 @@ function connectsTo(w: WorldReader, self: number, x: number, y: number, z: numbe
       return dir === 'north' || dir === 'south' ? gf === 'east' || gf === 'west' : gf === 'north' || gf === 'south';
     }
   }
-  if (me.model === 'wall' && (def.model === 'wall' || def.model === 'fence_gate' || def.model === 'pane')) return true;
+  if (me.model === 'wall' && def.model === 'fence_gate') {
+    // A gate joins a wall the same way it joins a fence: only along its hinge line
+    const gf = getProp(s, 'facing')!;
+    return dir === 'north' || dir === 'south' ? gf === 'east' || gf === 'west' : gf === 'north' || gf === 'south';
+  }
+  if (me.model === 'wall' && (def.model === 'wall' || def.model === 'pane')) return true;
   if (me.model === 'pane' && (def.model === 'pane' || def.model === 'wall')) return true;
   return STATE_OPAQUE[s] === 1 || STATE_FULL_CUBE[s] === 1;
 }
@@ -474,7 +518,9 @@ export function connectState(w: WorldReader, x: number, y: number, z: number, st
     return state;
   }
   if (def.model === 'stairs') return stairShape(w, x, y, z, state);
-  if (def.id === 'redstone_wire') return wireShape(w, x, y, z, state);
+  if (def.id === 'redstone_wire' || def.id === 'signal_cable') return wireShape(w, x, y, z, state);
+  // V5: cables and pipes connect to their network
+  if (conduitBit(state)) return conduitShape(w, x, y, z, state);
   if (def.model === 'fence_gate') {
     const f = getProp(state, 'facing')!;
     const axisDirs = f === 'north' || f === 'south' ? ['west', 'east'] : ['north', 'south'];
@@ -525,3 +571,4 @@ export function stairShape(w: WorldReader, x: number, y: number, z: number, stat
 
 export { STATE_FLUID };
 import { wireShape } from './redstone';
+import { conduitBit, conduitShape } from '../engineering/connect';

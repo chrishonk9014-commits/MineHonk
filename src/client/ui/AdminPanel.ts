@@ -11,8 +11,9 @@ import type { ItemStack } from '../../common/game/itemstack';
 import { POTIONS } from '../../common/data/potions';
 import { ENCHANTMENTS } from '../../common/data/enchantments';
 import { MOB_DEFS } from '../../common/data/mobs';
-import { structureName, TIME_PRESETS, ADMIN_DIMENSIONS, type AdminAction, type AdminCatalog, type LocateResult } from '../../common/game/admin';
+import { structureName, TIME_PRESETS, ADMIN_DIMENSIONS, type AdminAction, type AdminCatalog, type LocateResult, type V4Op, type V5Op, type V55Op } from '../../common/game/admin';
 import type { DimensionId } from '../../common/data/biomes';
+import { ENDINGS } from '../../common/data/endings';
 
 export interface AdminReply {
   ok: boolean;
@@ -30,16 +31,20 @@ export interface AdminHost {
   cheats(): boolean;
 }
 
-type Tab = 'items' | 'mobs' | 'teleport' | 'player' | 'world' | 'perf';
+type Tab = 'items' | 'mobs' | 'teleport' | 'player' | 'world' | 'endgame' | 'v4' | 'v5' | 'v55' | 'perf';
 const TABS: { id: Tab; name: string; icon: string }[] = [
   { id: 'items', name: 'Give Items', icon: 'chest' },
   { id: 'mobs', name: 'Spawn Mobs', icon: 'spawn_egg_zombie' },
   { id: 'teleport', name: 'Teleport', icon: 'ender_pearl' },
   { id: 'player', name: 'Player', icon: 'golden_apple' },
   { id: 'world', name: 'World', icon: 'grass_block' },
+  { id: 'endgame', name: 'Endgame', icon: 'corrupted_eye' },
+  { id: 'v4', name: 'World Update', icon: 'error_block' },
+  { id: 'v5', name: 'Engineering', icon: 'crusher' },
+  { id: 'v55', name: 'Digital Corruption', icon: 'corrupted_flash_drive' },
   { id: 'perf', name: 'Performance', icon: 'redstone' },
 ];
-const DIM_NAMES: Record<string, string> = { overworld: 'Overworld', nether: 'Nether', end: 'The End', farlands: 'Farlands' };
+const DIM_NAMES: Record<string, string> = { overworld: 'Overworld', nether: 'Nether', end: 'The End', farlands: 'Farlands', computer: 'Inside the Computer' };
 const MOB_CATEGORY_NAMES: Record<string, string> = { monster: 'Hostile', creature: 'Animals', water: 'Water', ambient: 'Ambient', npc: 'Villagers', boss: 'Bosses' };
 
 /** Remembered between openings during a session. */
@@ -524,6 +529,202 @@ export function adminScreen(host: AdminHost): Screen {
     );
   };
 
+  // ------------------------------------------------------------------ endgame (V3)
+  const renderEndgame = (): HTMLElement => {
+    const state = el('div', { class: 'admin-stats' });
+    const showState = (d: unknown): void => {
+      if (!d || typeof d !== 'object') return;
+      const st = d as { dragonDeath: string | null; reached: string[]; forced: string[]; eyeAwarded: boolean; farlandsAccess: boolean; errorDefeated: boolean; error: { state: string; phase: number; health: number; maxHealth: number } | null };
+      const nameOf = (id: string): string => ENDINGS.find((e) => e.id === id)?.card.title ?? id;
+      clear(state);
+      const rows: [string, string][] = [
+        ['Dragon', st.dragonDeath ? `defeated (${st.dragonDeath})` : 'alive'],
+        ['Endings reached', st.reached.map(nameOf).join(', ') || 'none'],
+        ['Forced (cheats)', st.forced.map(nameOf).join(', ') || 'none'],
+        ['Corrupted Eye awarded', st.eyeAwarded ? 'yes' : 'no'],
+        ['Glitched portal lit', st.farlandsAccess ? 'yes' : 'no'],
+        ['The Error', st.error ? `${st.error.state}, phase ${st.error.phase}, ${Math.ceil(st.error.health)}/${st.error.maxHealth}` : st.errorDefeated ? 'defeated' : 'waiting in its arena'],
+      ];
+      for (const [k, v] of rows) state.append(el('div', { class: 'row' }, el('span', { class: 'muted' }, k), el('span', {}, v)));
+    };
+    const endgame = (op: 'status' | 'reset_endings' | 'force_ending' | 'reset_error', id?: string): void => void send({ a: 'endgame', op, id }).then((r) => showState(r.data));
+    const spawn = (mob: string, label: string): HTMLElement => btn(label, () => void send({ a: 'spawn', mob, count: 1 }), 'btn chip');
+    const give = (item: string, label: string): HTMLElement => btn(label, () => void send({ a: 'give', item, count: 1 }), 'btn chip');
+    const find = (dim: DimensionId, structure: string, label: string): HTMLElement =>
+      el('div', { class: 'row' }, el('span', { class: 'label' }, label), btn('Find', () => void send({ a: 'locate_structure', dim, structure }), 'btn chip'), btn('Teleport', () => void send({ a: 'tp_structure', dim, structure }), 'btn chip'));
+    const cave = el('div', { class: 'row' }, el('span', { class: 'label' }, 'Corrupted Cave'), btn('Find', () => void send({ a: 'locate_biome', dim: 'overworld', biome: 'cave:corrupted_caves' }), 'btn chip'), btn('Teleport', () => void send({ a: 'tp_biome', dim: 'overworld', biome: 'cave:corrupted_caves' }), 'btn chip'));
+    endgame('status');
+    return el(
+      'div',
+      { class: 'admin-cols' },
+      el(
+        'div',
+        { class: 'admin-col' },
+        section('Summon', el('div', { class: 'admin-chips' }, spawn('enderman', 'Enderman'), spawn('ender_dragon', 'Ender Dragon'), spawn('the_error', 'The Error'))),
+        section('Give', el('div', { class: 'admin-chips' }, give('mysterious_potion', 'Mysterious Potion'), give('corrupted_eye', 'Corrupted Eye'), give('farlands_compass', 'Farlands Compass'))),
+        section('Find', cave, find('overworld', 'glitched_portal', 'Glitched Portal'), find('farlands', 'error_arena', "The Error's Arena")),
+      ),
+      el(
+        'div',
+        { class: 'admin-col' },
+        section('World State', state, btn('Refresh', () => endgame('status'), 'btn chip')),
+        section('Endings', el('div', { class: 'admin-chips' }, ...ENDINGS.map((e) => btn(`Force: ${e.card.title}`, () => endgame('force_ending', e.id), 'btn chip'))), btn('Reset all endings', () => endgame('reset_endings'), 'btn chip')),
+        section('The Error', el('div', { class: 'muted small' }, 'Ends a fight in progress and lets The Error form again.'), btn('Reset The Error', () => endgame('reset_error'), 'btn chip')),
+      ),
+    );
+  };
+
+  // ------------------------------------------------------------------ the Engineering Update (V5)
+  const renderV5 = (): HTMLElement => {
+    const state = el('div', { class: 'admin-stats' });
+    const showState = (d: unknown): void => {
+      if (!d || typeof d !== 'object') return;
+      const st = d as { nodes: number; kinds: Record<string, number>; stepMs: number; perTick: number; inspect: Record<string, unknown> | null };
+      clear(state);
+      const rows: [string, string][] = [
+        ['Engineering blocks loaded', String(st.nodes)],
+        ['Last step', `${st.stepMs} ms (${st.perTick} ms per tick)`],
+        ['By kind', Object.entries(st.kinds).map(([k, v]) => `${k.replace(/_/g, ' ')} ${v}`).join(', ') || 'none'],
+      ];
+      const i = st.inspect;
+      if (i) {
+        rows.push(['Nearest', `${String(i.name)} at ${(i.at as number[]).join(', ')}${i.cheat ? ' (cheat)' : ''}`], ['State', String(i.status)]);
+        if (i.energy) rows.push(['Energy', String(i.energy)]);
+        if (i.fluid) rows.push(['Fluid', String(i.fluid)]);
+        rows.push(['Network', i.network ? String(i.network) : 'not on an energy network']);
+      } else rows.push(['Nearest', 'no engineering block within 8 blocks']);
+      for (const [k, v] of rows) state.append(el('div', { class: 'row' }, el('span', { class: 'muted' }, k), el('span', {}, v)));
+    };
+    const op = (o: V5Op): void => void send({ a: 'v5', op: o }).then((r) => showState(r.data));
+    op('status');
+    return el(
+      'div',
+      { class: 'admin-cols' },
+      el(
+        'div',
+        { class: 'admin-col' },
+        section('Kits', el('div', { class: 'muted small' }, 'Cheat-marked items: they never count for advancements.'), el('div', { class: 'admin-chips' }, btn('Starter kit', () => op('kit_basic'), 'btn chip'), btn('Advanced kit', () => op('kit_advanced'), 'btn chip'), btn('Factory kit', () => op('kit_factory'), 'btn chip'))),
+        section('Energy', el('div', { class: 'muted small' }, 'Within 16 blocks of you. Filled machines are cheat-marked.'), el('div', { class: 'admin-chips' }, btn('Fill energy', () => op('fill_energy'), 'btn chip'), btn('Drain energy', () => op('drain_energy'), 'btn chip'), btn('Reset machines', () => op('reset_machines'), 'btn chip'))),
+        section('Test', el('div', { class: 'admin-chips' }, btn('Build a test line', () => op('test_rig'), 'btn chip'), btn('Stress test (250 machines)', () => op('stress_test'), 'btn chip'))),
+      ),
+      el('div', { class: 'admin-col' }, section('Inspect', state, btn('Refresh', () => op('status'), 'btn chip'))),
+    );
+  };
+
+  // ------------------------------------------------------------------ the Digital Corruption Update (V5.5)
+  const renderV55 = (): HTMLElement => {
+    const state = el('div', { class: 'admin-stats' });
+    const STAGES: Record<string, string> = { none: 'Not started', emerging: 'A computer is being taken over', fight1: 'Herobrine is out (first fight)', gateway: 'The computer is a way in', final: 'In his cave (final fight)', ending: 'The digital world is collapsing' };
+    const showState = (d: unknown): void => {
+      clear(state);
+      const st = d as { stage?: string; gateway?: { x: number; y: number; z: number } | null; cheat?: boolean; dragonKills?: number; legitKills?: number; completions?: number; infected?: boolean; clouds?: number; fight?: { kind: string; state: string; phase: number; health: number; maxHealth: number } | null; party?: number } | undefined;
+      if (!st || st.stage === undefined) return;
+      const rows: [string, string][] = [
+        ['Story', `${STAGES[st.stage] ?? st.stage}${st.cheat ? ' (a cheat run)' : ''}`],
+        ['Computer', st.gateway ? `${st.gateway.x}, ${st.gateway.y}, ${st.gateway.z}` : 'none'],
+        ['Ender Dragon', `${st.infected ? 'sick with malware, ' : ''}killed ${st.dragonKills ?? 0} times (${st.legitKills ?? 0} without cheats)`],
+        ['Malware clouds', String(st.clouds ?? 0)],
+        ['Players in it', String(st.party ?? 0)],
+        ['Herobrine', st.fight ? `${st.fight.kind === 'first' ? 'first fight' : 'final fight'}, ${st.fight.state}${st.fight.kind === 'final' ? `, phase ${st.fight.phase}` : ''}, ${Math.ceil(st.fight.health)} / ${st.fight.maxHealth}` : 'not here'],
+        ['Seen through', `${st.completions ?? 0} time${st.completions === 1 ? '' : 's'}`],
+      ];
+      for (const [k, v] of rows) state.append(el('div', { class: 'row' }, el('span', { class: 'muted' }, k), el('span', {}, v)));
+    };
+    const op = (o: V55Op): void => void send({ a: 'v55', op: o }).then((r) => showState(r.data));
+    const chips = (...b: HTMLElement[]): HTMLElement => el('div', { class: 'admin-chips' }, ...b);
+    op('status');
+    return el(
+      'div',
+      { class: 'admin-cols' },
+      el(
+        'div',
+        { class: 'admin-col' },
+        el('div', { class: 'muted small' }, 'Everything here is a cheat: it never awards an advancement, and a story run it touches only ever records its ending as forced.'),
+        section('Give', chips(btn('Mysterious Potion', () => op('give_potion'), 'btn chip'), btn('Hard Drive', () => op('give_hard_drive'), 'btn chip'), btn('Flash Drive', () => op('give_flash_drive'), 'btn chip'), btn('Corrupted Flash Drive', () => op('give_corrupted'), 'btn chip'))),
+        section('The Ender Dragon', chips(btn('Spawn the dragon (go to the End)', () => op('spawn_dragon'), 'btn chip'), btn('Trigger malware', () => op('trigger_malware'), 'btn chip'))),
+        section(
+          'Herobrine',
+          el('div', { class: 'muted small' }, 'In the Overworld: uses the computer beside you or builds one.'),
+          chips(btn('Trigger the Herobrine event', () => op('trigger_event'), 'btn chip'), btn('Spawn the first Herobrine', () => op('spawn_first'), 'btn chip')),
+        ),
+        section('Inside the Computer', chips(btn('Enter the computer world', () => op('enter_world'), 'btn chip'), btn('Teleport to the seed', () => op('tp_seed'), 'btn chip'), btn('Teleport to the cave', () => op('tp_cave'), 'btn chip'), btn('Spawn the final Herobrine', () => op('spawn_final'), 'btn chip'))),
+        section('Endings & Resets', chips(btn('Force the Herobrine ending', () => op('force_ending'), 'btn chip'), btn('Reset Herobrine progression', () => op('reset_progress'), 'btn chip'), btn('Reset the ending', () => op('reset_ending'), 'btn chip'))),
+      ),
+      el('div', { class: 'admin-col' }, section('Story', state, btn('Refresh', () => op('status'), 'btn chip'))),
+    );
+  };
+
+  // ------------------------------------------------------------------ the World Update (V4)
+  const renderV4 = (): HTMLElement => {
+    const state = el('div', { class: 'admin-stats' });
+    const showState = (d: unknown): void => {
+      if (!d || typeof d !== 'object') return;
+      const st = d as {
+        inErrorBiome: boolean;
+        glitch: { stage: number; done: boolean; fighting: number | null; mobs: number } | null;
+        bunker: { stage: number; done: boolean; stages: number } | null;
+        temple: { name: string; stage: number; done: boolean; stages: number; run: string | null } | null;
+      };
+      clear(state);
+      const rows: [string, string][] = [
+        ['Glitched Structure', st.glitch ? (st.glitch.done ? 'complete' : st.glitch.fighting ? `stage ${st.glitch.fighting} in progress, ${st.glitch.mobs} left` : `${st.glitch.stage} of 5 stages cleared`) : 'not in an Error Biome chunk'],
+        ['Bunker', st.bunker ? (st.bunker.done ? 'secured' : `objective ${st.bunker.stage} of ${st.bunker.stages}`) : 'not in a bunker'],
+        ['Temple', st.temple ? `${st.temple.name}: ${st.temple.done ? 'complete' : st.temple.run ? `${st.temple.run} in progress` : `${st.temple.stage} of ${st.temple.stages - 1} trials done`}` : 'not in a temple'],
+      ];
+      for (const [k, v] of rows) state.append(el('div', { class: 'row' }, el('span', { class: 'muted' }, k), el('span', {}, v)));
+    };
+    const op = (o: V4Op): void => void send({ a: 'v4', op: o }).then((r) => showState(r.data));
+    const find = (dim: DimensionId, structure: string, label: string): HTMLElement =>
+      el('div', { class: 'row' }, el('span', { class: 'label' }, label), btn('Find', () => void send({ a: 'locate_structure', dim, structure }), 'btn chip'), btn('Teleport', () => void send({ a: 'tp_structure', dim, structure }), 'btn chip'));
+    const spawn = (mob: string, label: string): HTMLElement => btn(label, () => void send({ a: 'spawn', mob, count: 1 }), 'btn chip');
+    const give = (item: string, label: string): HTMLElement => btn(label, () => void send({ a: 'give', item, count: 1 }), 'btn chip');
+    op('status');
+    return el(
+      'div',
+      { class: 'admin-cols' },
+      el(
+        'div',
+        { class: 'admin-col' },
+        section(
+          'Find',
+          find('overworld', 'village', 'Village'),
+          find('overworld', 'sun_monument', 'Sun Monument'),
+          find('overworld', 'jungle_shrine', 'Jungle Shrine'),
+          find('overworld', 'bunker', 'Bunker'),
+          find('overworld', 'jungle_temple', 'Jungle Temple'),
+          find('overworld', 'desert_pyramid', 'Desert Pyramid'),
+          find('overworld', 'frost_temple', 'Frost Temple'),
+          find('overworld', 'swamp_temple', 'Swamp Temple'),
+          find('overworld', 'badlands_temple', 'Canyon Temple'),
+          find('overworld', 'forest_temple', 'Grove Temple'),
+          find('overworld', 'mountain_temple', 'Mountain Temple'),
+          find('overworld', 'stone_circle', 'Stone Circle'),
+          find('overworld', 'desert_oasis', 'Desert Oasis'),
+          find('overworld', 'lighthouse', 'Lighthouse'),
+          find('overworld', 'buried_tomb', 'Buried Tomb'),
+          find('overworld', 'error_biome', 'Error Biome'),
+          find('overworld', 'glitched_structure', 'Glitched Structure'),
+          find('nether', 'glitched_structure', 'Glitched Structure (Nether)'),
+        ),
+        section('Spawn Glitched Mobs', el('div', { class: 'admin-chips' }, spawn('glitch_zombie', 'Glitched Zombie'), spawn('glitch_skeleton', 'Glitched Skeleton'), spawn('rift_walker', 'Rift Walker'), spawn('void_wisp', 'Void Wisp'), spawn('glitch_beast', 'Glitch Beast'))),
+      ),
+      el(
+        'div',
+        { class: 'admin-col' },
+        section('Quests', state, btn('Refresh', () => op('status'), 'btn chip')),
+        section('Glitched Structure', el('div', { class: 'muted small' }, 'Stand in the Error Biome chunk. Stages started or cleared here are cheats.'), el('div', { class: 'admin-chips' }, btn('Start next stage', () => op('glitch_start'), 'btn chip'), btn('Clear stage', () => op('glitch_clear'), 'btn chip'), btn('Reset structure', () => op('glitch_reset'), 'btn chip'))),
+        section('Give', el('div', { class: 'admin-chips' }, btn('Glitched reward roll', () => op('glitch_reward'), 'btn chip'), give('glitched_pickaxe', 'Glitched Pickaxe'), give('glitched_chestplate', 'Glitched Chestplate'), give('bunker_keycard', 'Bunker Keycard'))),
+        section('Bunker', btn('Reset this bunker', () => op('bunker_reset'), 'btn chip')),
+        section(
+          'Temple',
+          el('div', { class: 'muted small' }, 'Stand inside a temple (Version 4.5 worlds). Trials completed here are cheats; so is a prize won after them.'),
+          el('div', { class: 'admin-chips' }, btn('Complete current trial', () => op('temple_advance'), 'btn chip'), btn('Reset temple', () => op('temple_reset'), 'btn chip'), give('temple_relic', 'Temple Relic')),
+        ),
+        section('Fluids', el('div', { class: 'muted small' }, 'Builds a glass tank beside you where water meets lava sources and flowing lava.'), btn('Build fluid test rig', () => op('fluid_rig'), 'btn chip')),
+      ),
+    );
+  };
+
   // ------------------------------------------------------------------ performance
   const renderPerf = (): HTMLElement => {
     const box = el('div', { class: 'admin-cols' });
@@ -556,7 +757,7 @@ export function adminScreen(host: AdminHost): Screen {
     for (const c of tabs.children) c.classList.toggle('active', (c as HTMLElement).dataset.tab === t);
     clear(body);
     hideTooltip();
-    const view = t === 'items' ? renderItems() : t === 'mobs' ? renderMobs() : t === 'teleport' ? renderTeleport() : t === 'player' ? renderPlayer() : t === 'world' ? renderWorld() : renderPerf();
+    const view = t === 'items' ? renderItems() : t === 'mobs' ? renderMobs() : t === 'teleport' ? renderTeleport() : t === 'player' ? renderPlayer() : t === 'world' ? renderWorld() : t === 'endgame' ? renderEndgame() : t === 'v4' ? renderV4() : t === 'v5' ? renderV5() : t === 'v55' ? renderV55() : renderPerf();
     body.append(view);
   };
   for (const t of TABS) {

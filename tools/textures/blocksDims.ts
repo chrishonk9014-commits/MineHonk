@@ -472,6 +472,52 @@ export function registerDims(r: PainterRegistry): void {
       }
     }
   });
+  // V3: the Glitched Portal frame flickers; its cracked pieces show the missing texture through
+  const glitchFrame = (t: Tex, f: number, part: string): void => {
+    const pal = [hex(0x07030c), hex(0x100818), hex(0x1a0c28), hex(0x241236)];
+    const h = (x: number, y: number, k: number): number => ((x * 73856093) ^ (y * 19349663) ^ (k * 83492791)) >>> 0;
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) t.set(x, y, pal[h(x >> 1, y >> 1, 1) % pal.length]!);
+    // Fixed crack paths whose glow moves from frame to frame
+    const glow = [hex(0xff2bd6), hex(0x9b30ff), hex(0x00e5ff), hex(0xffffff)];
+    for (let c = 0; c < 3; c++) {
+      let x = h(c, 0, 7) % 16;
+      for (let y = 0; y < 16; y++) {
+        const on = (y + f * 4 + c * 5) % 16 < 6;
+        t.set(x & 15, y, on ? glow[(c + (y >> 2)) % 3]! : mix(glow[c]!, pal[0]!, 0.65));
+        x += (h(c, y, 3) % 3) - 1;
+      }
+    }
+    if (f === 2) for (let x = 0; x < 16; x++) t.set(x, 5 + (h(x, 0, 9) % 2), mix(glow[2]!, pal[1]!, 0.4));
+    if (part === 'cracked') {
+      for (const [x0, y0, w, hh] of [
+        [1, 2, 6, 4],
+        [9, 9, 5, 6],
+      ] as const)
+        for (let y = y0; y < y0 + hh; y++) for (let x = x0; x < x0 + w; x++) t.set(x, y, ((x >> 1) + (y >> 1)) % 2 ? hex(0x000000) : hex(0xf800f8));
+    } else if (part === 'socket' || part === 'eye') {
+      t.rect(4, 4, 8, 8, hex(0x000000));
+      for (let i = 4; i < 12; i++) {
+        t.set(i, 3, glow[1]!);
+        t.set(i, 12, glow[1]!);
+        t.set(3, i, glow[1]!);
+        t.set(12, i, glow[1]!);
+      }
+      if (part === 'eye') {
+        const pulse = f % 2 ? hex(0xff5ce6) : hex(0xff2bd6);
+        t.rect(5, 6, 6, 4, hex(0xe8e0f0));
+        t.rect(6, 5, 4, 6, hex(0xe8e0f0));
+        t.rect(6, 6, 4, 4, pulse);
+        t.rect(7, 7, 2, 2, hex(0x000000));
+        t.set(9, 6, hex(0xffffff));
+      }
+    }
+  };
+  for (const part of ['frame', 'cracked', 'socket', 'eye'])
+    r.anim(part === 'frame' ? 'glitched_portal_frame' : 'glitched_portal_frame_' + part, 4, part === 'eye' ? 2 : 3, (t, f) => glitchFrame(t, f, part));
+  r.add('null_block', (t) => {
+    t.fill(hex(0x020104));
+    for (let i = 0; i < 5; i++) t.set(t.rng.int(16), t.rng.int(16), hex(0x12081c));
+  });
   r.add('data_crystal', (t) => {
     t.clear();
     for (const [x0, h] of [[4, 9], [7, 14], [10, 10]] as const) {

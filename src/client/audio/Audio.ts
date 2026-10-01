@@ -74,10 +74,42 @@ export class AudioEngine {
     return this.reverb;
   }
 
+  /** True while the world has gone silent (the End breaking). */
+  private muted = false;
+
+  /** Fades every sound out (or back in): the world falling unnaturally quiet. */
+  silence(on: boolean, fadeSeconds = 0.15): void {
+    this.muted = on;
+    const ctx = this.ctx;
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    this.master.gain.cancelScheduledValues(t);
+    this.master.gain.setTargetAtTime(on ? 0 : this.settings.masterVolume, t, Math.max(0.02, fadeSeconds / 3));
+  }
+
+  /** A sound that cuts through a silence (the moment the world fails). */
+  playThrough(name: string, volume = 1): void {
+    const ctx = this.ctx;
+    if (!ctx || ctx.state !== 'running') return;
+    const bufs = this.buffers(name);
+    if (!bufs) return;
+    const src = ctx.createBufferSource();
+    src.buffer = bufs[Math.floor(Math.random() * bufs.length)]!;
+    const g = ctx.createGain();
+    g.gain.value = Math.min(1, volume) * this.settings.masterVolume * this.settings.soundVolume;
+    src.connect(g);
+    g.connect(ctx.destination);
+    src.onended = () => {
+      src.disconnect();
+      g.disconnect();
+    };
+    src.start();
+  }
+
   applyVolumes(): void {
     if (!this.ctx) return;
     const s = this.settings;
-    this.master.gain.value = s.masterVolume;
+    this.master.gain.value = this.muted ? 0 : s.masterVolume;
     this.buses.get('sound')!.gain.value = s.soundVolume;
     this.buses.get('ui')!.gain.value = s.soundVolume;
     this.buses.get('ambient')!.gain.value = s.ambientVolume;
@@ -291,7 +323,7 @@ const SCALES: Record<Mood, { root: number; scale: number[]; tempo: number; densi
 };
 
 /** Music for each cave biome number (see CaveBiome). */
-const CAVE_MOODS: Mood[] = ['calm', 'caves', 'caves', 'lush', 'mushroom', 'crystal', 'caves', 'lava_caves', 'frozen', 'deep_dark'];
+const CAVE_MOODS: Mood[] = ['calm', 'caves', 'caves', 'lush', 'mushroom', 'crystal', 'caves', 'lava_caves', 'frozen', 'deep_dark', 'farlands'];
 
 export class MusicPlayer {
   private playingUntil = 0;

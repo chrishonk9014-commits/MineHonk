@@ -1,4 +1,6 @@
 /** Persistent world-level settings and state. */
+import type { Disk } from '../../common/digital/data';
+import type { HerobrineStage } from '../../common/digital/story';
 import type { GameMode, Difficulty, GodHearts } from '../../common/game/gamemode';
 import { normalizeGodHearts, GAME_MODES, DIFFICULTIES } from '../../common/game/gamemode';
 import { seedFromString } from '../../common/math/rng';
@@ -6,7 +8,7 @@ import type { DimensionId } from '../../common/data/biomes';
 
 export const LEVEL_VERSION = 1;
 /** Worlds created from V2 on generate with the Caves Update terrain (see GeneratorOptions.version). */
-export const GENERATOR_VERSION = 2;
+export const GENERATOR_VERSION = 5;
 
 export interface GameRules {
   doDaylightCycle: boolean;
@@ -78,6 +80,170 @@ export interface LevelData {
   reports: { from: string; target: string; reason: string; at: number }[];
   /** Cheat bookkeeping (blocks placed by cheats, cheat-set time/weather). */
   admin?: { sky?: boolean; blocks?: Record<string, Record<string, number[]>>; chunks?: Record<string, number[]> };
+  /** Endgame state: endings, the Corrupted Eye, the Farlands and its boss. */
+  endings: WorldEndings;
+  /** V4 quest structures: progress through each Glitched Structure and bunker. */
+  quests: WorldQuests;
+  /** V5.5: drives' files (disks by id, carried by the drive items). */
+  digital: DigitalStore;
+  /** V5.5: the Herobrine story in this world. */
+  herobrine: HerobrineWorld;
+}
+
+/** V5.5: every drive's files, kept with the world (the drive item carries its disk's id). */
+export interface DigitalStore {
+  next: number;
+  disks: Record<string, Disk>;
+}
+
+/** V5.5: where the Herobrine story stands in a world (see systems/Herobrine). */
+export interface HerobrineWorld {
+  stage: HerobrineStage;
+  /** The computer he came out of, and went back into. */
+  gateway: { x: number; y: number; z: number } | null;
+  /** This run used cheats somewhere (the Admin Panel, a cheat-made drive): nothing in it counts. */
+  cheat: boolean;
+  /** Ender Dragons killed since V5.5: a corrupted drive only speaks once the dragon has died after it was made. */
+  dragonKills: number;
+  /** Times the story has been seen through to its ending in this world. */
+  completions: number;
+  /** Players (uuids) who have taken part in the current run. */
+  party: string[];
+  /** Ender Dragons killed without cheats (a run is only clean if one of these came after its drive). */
+  legitKills: number;
+  /** Bumped when the computer world collapses: it is generated afresh next time. */
+  epoch: number;
+  /** The Ender Dragon has drunk the potion (until it dies): it coughs up malware. */
+  infected: boolean;
+  infectedCheat: boolean;
+}
+
+export function newHerobrineWorld(): HerobrineWorld {
+  return { stage: 'none', gateway: null, cheat: false, dragonKills: 0, completions: 0, party: [], legitKills: 0, epoch: 0, infected: false, infectedCheat: false };
+}
+
+const STAGES: HerobrineStage[] = ['none', 'emerging', 'fight1', 'gateway', 'final', 'ending'];
+
+function sanitizeHerobrine(raw: unknown): HerobrineWorld {
+  const out = newHerobrineWorld();
+  if (!raw || typeof raw !== 'object') return out;
+  const r = raw as Partial<HerobrineWorld>;
+  if (STAGES.includes(r.stage as HerobrineStage)) out.stage = r.stage as HerobrineStage;
+  const g = r.gateway;
+  if (g && typeof g === 'object' && [g.x, g.y, g.z].every((n) => Number.isInteger(n))) out.gateway = { x: g.x, y: g.y, z: g.z };
+  out.cheat = r.cheat === true;
+  out.dragonKills = typeof r.dragonKills === 'number' && Number.isFinite(r.dragonKills) ? Math.max(0, Math.floor(r.dragonKills)) : 0;
+  out.legitKills = typeof r.legitKills === 'number' && Number.isFinite(r.legitKills) ? Math.max(0, Math.floor(r.legitKills)) : 0;
+  out.epoch = typeof r.epoch === 'number' && Number.isFinite(r.epoch) ? Math.max(0, Math.floor(r.epoch)) : 0;
+  out.infected = r.infected === true;
+  out.infectedCheat = r.infectedCheat === true;
+  out.completions = typeof r.completions === 'number' && Number.isFinite(r.completions) ? Math.max(0, Math.floor(r.completions)) : 0;
+  out.party = Array.isArray(r.party) ? r.party.filter((u): u is string => typeof u === 'string' && u.length < 64).slice(0, 64) : [];
+  // A story stopped mid-way without its computer can't go on: start over
+  if (!out.gateway && out.stage !== 'none') out.stage = 'none';
+  return out;
+}
+
+const FILE_KINDS = ['system', 'program', 'config', 'factory', 'automation', 'blueprint', 'map', 'log', 'lore', 'quest', 'story'];
+
+function sanitizeDigital(raw: unknown): DigitalStore {
+  const out: DigitalStore = { next: 1, disks: {} };
+  if (!raw || typeof raw !== 'object') return out;
+  const r = raw as Partial<DigitalStore>;
+  out.next = typeof r.next === 'number' && Number.isFinite(r.next) ? Math.max(1, Math.floor(r.next)) : 1;
+  if (r.disks && typeof r.disks === 'object') {
+    let n = 0;
+    for (const [id, d] of Object.entries(r.disks)) {
+      if (n++ > 20000 || !d || typeof d !== 'object' || typeof id !== 'string' || id.length > 24) continue;
+      const kind = d.kind === 'hdd' || d.kind === 'flash' || d.kind === 'corrupted' ? d.kind : null;
+      if (!kind) continue;
+      const files = Array.isArray(d.files)
+        ? d.files
+            .filter((f) => f && typeof f === 'object' && typeof f.name === 'string' && f.name.length <= 64 && FILE_KINDS.includes(f.kind) && typeof f.size === 'number' && Number.isFinite(f.size))
+            .slice(0, 512)
+            .map((f) => ({ name: f.name, kind: f.kind, size: Math.max(0, Math.floor(f.size)), ...(f.data !== undefined ? { data: f.data } : {}), ...(f.ro ? { ro: true } : {}), ...(f.corrupt ? { corrupt: true } : {}) }))
+        : [];
+      out.disks[id] = { id, kind, label: typeof d.label === 'string' ? d.label.slice(0, 32) : 'Drive', cap: typeof d.cap === 'number' && Number.isFinite(d.cap) ? Math.max(0, Math.floor(d.cap)) : 1024, files };
+    }
+  }
+  return out;
+}
+
+/** Progress through one quest structure (V4). */
+export interface QuestRecord {
+  /** Stages or objectives completed. */
+  stage: number;
+  done: boolean;
+  /** Players (uuids) already rewarded for completing it. */
+  rewarded: string[];
+  /** Objective flags (bunkers: 'card', generator positions...). */
+  flags?: string[];
+}
+
+export interface WorldQuests {
+  /** Glitched Structures by '<dimension>:<cx>,<cz>'. */
+  glitch: Record<string, QuestRecord>;
+  /** Bunkers by '<x>,<y>,<z>' of their entrance. */
+  bunker: Record<string, QuestRecord>;
+  /** Temple trials (generator 5) by '<type>:<x>,<y>,<z>'. */
+  temple: Record<string, QuestRecord>;
+}
+
+export function newWorldQuests(): WorldQuests {
+  return { glitch: {}, bunker: {}, temple: {} };
+}
+
+function sanitizeQuests(raw: unknown): WorldQuests {
+  const out = newWorldQuests();
+  if (!raw || typeof raw !== 'object') return out;
+  for (const kind of ['glitch', 'bunker', 'temple'] as const) {
+    const m = (raw as Record<string, unknown>)[kind];
+    if (!m || typeof m !== 'object') continue;
+    for (const [k, v] of Object.entries(m as Record<string, unknown>).slice(0, 4096)) {
+      if (k.length > 64 || !v || typeof v !== 'object') continue;
+      const r = v as Partial<QuestRecord>;
+      out[kind][k] = {
+        stage: typeof r.stage === 'number' && Number.isFinite(r.stage) ? Math.max(0, Math.min(16, Math.floor(r.stage))) : 0,
+        done: r.done === true,
+        rewarded: Array.isArray(r.rewarded) ? r.rewarded.filter((u): u is string => typeof u === 'string' && u.length < 64).slice(0, 64) : [],
+        flags: Array.isArray(r.flags) ? r.flags.filter((u): u is string => typeof u === 'string' && u.length < 64).slice(0, 64) : undefined,
+      };
+    }
+  }
+  return out;
+}
+
+/** Endgame state of a world (V3): how the dragon fell and which endings were reached. */
+export interface WorldEndings {
+  /** How the Ender Dragon last died: by a player, by a Voidbound Enderman (the secret ending) or by a cheat. */
+  dragonDeath: 'player' | 'enderman' | 'cheat' | null;
+  /** Endings reached in this world: id -> when (ms) it was first reached. */
+  reached: Record<string, number>;
+  /** Endings that were only ever forced by the Admin Panel or reached with cheats. */
+  forced: string[];
+  /** The secret ending awarded a Corrupted Eye. */
+  eyeAwarded: boolean;
+  /** A glitched portal has been lit with a Corrupted Eye. */
+  farlandsAccess: boolean;
+  /** The Error has been defeated in the Farlands. */
+  errorDefeated: boolean;
+}
+
+export function newWorldEndings(): WorldEndings {
+  return { dragonDeath: null, reached: {}, forced: [], eyeAwarded: false, farlandsAccess: false, errorDefeated: false };
+}
+
+function sanitizeEndings(raw: unknown): WorldEndings {
+  const out = newWorldEndings();
+  if (!raw || typeof raw !== 'object') return out;
+  const r = raw as Partial<WorldEndings>;
+  out.dragonDeath = r.dragonDeath === 'player' || r.dragonDeath === 'enderman' || r.dragonDeath === 'cheat' ? r.dragonDeath : null;
+  if (r.reached && typeof r.reached === 'object') for (const [k, v] of Object.entries(r.reached)) if (k.length < 64 && typeof v === 'number' && Number.isFinite(v)) out.reached[k] = v;
+  out.forced = Array.isArray(r.forced) ? r.forced.filter((s): s is string => typeof s === 'string' && s.length < 64).slice(0, 32) : [];
+  out.eyeAwarded = r.eyeAwarded === true;
+  out.farlandsAccess = r.farlandsAccess === true;
+  out.errorDefeated = r.errorDefeated === true;
+  return out;
 }
 
 export interface PortalRecord {
@@ -162,6 +328,10 @@ export function createLevelData(o: NewWorldOptions): LevelData {
     defaultRole: 'builder',
     muted: {},
     reports: [],
+    endings: newWorldEndings(),
+    quests: newWorldQuests(),
+    digital: { next: 1, disks: {} },
+    herobrine: newHerobrineWorld(),
   };
 }
 
@@ -208,12 +378,17 @@ export function sanitizeLevelData(raw: unknown, fallbackId: string): LevelData |
   if (r.muted && typeof r.muted === 'object') for (const [k, v] of Object.entries(r.muted)) if (typeof v === 'number' && Number.isFinite(v)) out.muted[k] = v;
   out.reports = Array.isArray(r.reports) ? r.reports.filter((q) => q && typeof q.from === 'string' && typeof q.target === 'string' && typeof q.reason === 'string').slice(-200) : [];
   out.portals = Array.isArray(r.portals)
-    ? r.portals.filter((q): q is PortalRecord => !!q && typeof q === 'object' && ['overworld', 'nether', 'end', 'farlands'].includes(q.dim) && (q.kind === 'nether' || q.kind === 'far') && [q.x, q.y, q.z].every((n) => Number.isInteger(n)) && (q.axis === 'x' || q.axis === 'z')).slice(0, 1024)
+    ? r.portals.filter((q): q is PortalRecord => !!q && typeof q === 'object' && ['overworld', 'nether', 'end', 'farlands', 'computer'].includes(q.dim) && (q.kind === 'nether' || q.kind === 'far') && [q.x, q.y, q.z].every((n) => Number.isInteger(n)) && (q.axis === 'x' || q.axis === 'z')).slice(0, 1024)
     : [];
   // Worlds saved without a version predate V2
   out.generatorVersion = num(r.generatorVersion, 1);
   out.bonusChest = !!r.bonusChest;
   out.generateStructures = r.generateStructures !== false;
+  out.endings = sanitizeEndings(r.endings);
+  out.quests = sanitizeQuests(r.quests);
+  // V5.5 (older saves have neither: they start empty)
+  out.digital = sanitizeDigital(r.digital);
+  out.herobrine = sanitizeHerobrine(r.herobrine);
   if (r.admin && typeof r.admin === 'object') {
     const a = r.admin as NonNullable<LevelData['admin']>;
     out.admin = { sky: a.sky === true, blocks: a.blocks && typeof a.blocks === 'object' ? a.blocks : {}, chunks: a.chunks && typeof a.chunks === 'object' ? a.chunks : {} };

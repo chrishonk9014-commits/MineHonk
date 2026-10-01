@@ -25,6 +25,7 @@ export class SignText {
   readonly group = new THREE.Group();
   private readonly signs = new Map<string, Sign>();
   private readonly geo = new THREE.PlaneGeometry(1, 0.5);
+  private readonly screenGeo = new THREE.PlaneGeometry(12 / 16, 12 / 16);
   private frame = 0;
 
   constructor(private readonly world: ClientWorld) {
@@ -50,7 +51,12 @@ export class SignText {
     for (const c of this.world.chunks.values()) {
       if (Math.abs(c.cx - ccx) > 4 || Math.abs(c.cz - ccz) > 4 || c.blockEntities.size === 0) continue;
       for (const [k, be] of c.blockEntities) {
-        if (be.type !== 'sign' || !Array.isArray(be.lines)) continue;
+        if (!Array.isArray(be.lines)) continue;
+        if (be.type === 'eng' && be.id === 'monitor') {
+          this.scanMonitor(c, k, be.lines as unknown[], found);
+          continue;
+        }
+        if (be.type !== 'sign') continue;
         const lines = (be.lines as unknown[]).map((l) => String(l ?? ''));
         const text = lines.join('\n');
         if (!text.trim()) continue;
@@ -71,6 +77,45 @@ export class SignText {
       }
     }
     for (const k of [...this.signs.keys()]) if (!found.has(k)) this.remove(k);
+  }
+
+  /** V5 monitors: their screen, written by the server into the block entity. */
+  private scanMonitor(c: { cx: number; cz: number }, k: number, raw: unknown[], found: Set<string>): void {
+    const lines = raw.map((l) => String(l ?? '')).slice(0, 7);
+    const x = (c.cx << 4) + (k & 15);
+    const y = k >> 8;
+    const z = (c.cz << 4) + ((k >> 4) & 15);
+    const state = this.world.getState(x, y, z);
+    if (blocks[STATE_BLOCK[state]!]?.def.id !== 'monitor') return;
+    const key = `${x},${y},${z}`;
+    found.add(key);
+    const text = lines.join('\n');
+    const cur = this.signs.get(key);
+    if (cur && cur.text === text && cur.meshes[0]?.userData.pose === `${state}`) return;
+    if (cur) this.remove(key);
+    const canvas = document.createElement('canvas');
+    canvas.width = 128;
+    canvas.height = 128;
+    const g = canvas.getContext('2d')!;
+    g.textBaseline = 'middle';
+    g.font = "11px 'MineHonk Pixel', monospace";
+    lines.forEach((line, i) => {
+      g.fillStyle = i === 0 ? '#9fffb0' : line.startsWith('!') ? '#ff8080' : '#5fe07a';
+      g.fillText(line, 6, 10 + i * 17, 116);
+    });
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.magFilter = THREE.NearestFilter;
+    tex.minFilter = THREE.LinearFilter;
+    const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 });
+    const f = getProp(state, 'facing') ?? 'north';
+    const [nx, nz] = ({ north: [0, -1], south: [0, 1], west: [-1, 0], east: [1, 0] } as Record<string, [number, number]>)[f] ?? [0, -1];
+    const m = new THREE.Mesh(this.screenGeo, mat);
+    m.position.set(x + 0.5 + nx * 0.505, y + 0.5, z + 0.5 + nz * 0.505);
+    m.rotation.y = Math.atan2(nx, nz);
+    m.userData.pose = `${state}`;
+    m.renderOrder = 4;
+    this.group.add(m);
+    this.signs.set(key, { meshes: [m], mat, tex, text, glow: true, x, y, z });
   }
 
   private add(key: string, x: number, y: number, z: number, state: number, wall: boolean, lines: string[], glow: boolean): void {
@@ -136,5 +181,6 @@ export class SignText {
   dispose(): void {
     for (const k of [...this.signs.keys()]) this.remove(k);
     this.geo.dispose();
+    this.screenGeo.dispose();
   }
 }

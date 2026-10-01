@@ -338,6 +338,11 @@ export class EntityRenderer {
   readonly group = new THREE.Group();
   private readonly visuals = new Map<number, EntityVisual>();
   private readonly known = new Map<number, ClientEntity>();
+
+  /** The drawn object of an entity (afterimages copy it). */
+  objectOf(id: number): THREE.Object3D | null {
+    return this.visuals.get(id)?.object ?? null;
+  }
   private readonly ctx: VisualContext;
   /** The local player (not a replicated entity): id and hand position for lines. */
   local: { id: number; hand: () => [number, number, number] } | null = null;

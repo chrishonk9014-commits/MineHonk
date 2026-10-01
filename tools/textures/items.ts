@@ -13,7 +13,7 @@ import { hashInts } from '../../src/common/math/rng';
 
 type Pal = Record<string, RGB>;
 
-function matPal(base: RGB, outlineMul = 0.45): Pal {
+export function matPal(base: RGB, outlineMul = 0.45): Pal {
   return { o: shade(base, outlineMul), a: shade(base, 0.72), b: base, c: shade(base, 1.2), d: shade(base, 1.45) };
 }
 const HANDLE: Pal = { h: hex(0x8a6a3a), H: hex(0x5c4222), k: hex(0x2c1e0e) };
@@ -1281,7 +1281,7 @@ const M: Record<string, string[]> = {
   ],
 };
 
-function paintMask(t: Tex, name: keyof typeof M, pal: Pal): void {
+export function paintMask(t: Tex, name: keyof typeof M, pal: Pal): void {
   t.clear();
   t.mask(M[name]!, { ...HANDLE, ...pal });
 }
@@ -1458,6 +1458,28 @@ export function registerItems(r: PainterRegistry): void {
   r.add('glass_bottle', (t) => paintMask(t, 'bottle', { o: hex(0x8a9aa8), c: hex(0xc8d8e0), d: hex(0xe8f4f8) }));
   r.add('honey_bottle', (t) => paintMask(t, 'bottle', { o: hex(0x8a6a2a), c: hex(0xc8a060), d: hex(0xf0b030) }));
   r.add('potion', (t) => paintMask(t, 'bottle', { o: hex(0x6a6a7a), c: hex(0xa8a8b8), d: hex(0x3a5ad8) }));
+  // Almost black, with violet swirls and one bright point that seems to look back
+  r.add('mysterious_potion', (t) => {
+    paintMask(t, 'bottle', { o: hex(0x4a3a5a), c: hex(0x8a7aa8), d: hex(0x160820) });
+    const liquid: [number, number][] = [];
+    for (let y = 0; y < 16; y++)
+      for (let x = 0; x < 16; x++) {
+        const c = t.get(x, y);
+        if (c[3] > 0 && c[0] < 0x30 && c[2] < 0x40) liquid.push([x, y]);
+      }
+    for (const [x, y] of liquid) {
+      const h = (x * 7 + y * 13 + x * y) % 11;
+      if (h === 0) t.set(x, y, hex(0x7a2ad0));
+      else if (h === 5) t.set(x, y, hex(0x3a1060));
+    }
+    // The point of light: the liquid pixel nearest the middle of the bottle
+    let best = liquid[0];
+    for (const p of liquid) if ((p[0] - 8) ** 2 + (p[1] - 11) ** 2 < (best![0] - 8) ** 2 + (best![1] - 11) ** 2) best = p;
+    if (best) {
+      t.set(best[0], best[1], hex(0xffc8ff));
+      if (best[0] + 1 < 16 && liquid.some((q) => q[0] === best![0] + 1 && q[1] === best![1])) t.set(best[0] + 1, best[1], hex(0xff50d8));
+    }
+  });
   r.add('splash_potion', (t) => {
     paintMask(t, 'bottle', { o: hex(0x6a6a7a), c: hex(0xa8a8b8), d: hex(0xd83a5a) });
     t.set(7, 0, hex(0xa8a8b8));

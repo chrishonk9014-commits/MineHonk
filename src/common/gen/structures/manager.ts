@@ -32,6 +32,63 @@ export interface Start {
   bounds: Box;
   /** Entities to spawn when the chunk containing them is first generated. */
   entities?: { type: string; x: number; y: number; z: number; data?: Record<string, unknown> }[];
+  /** V4: the structure's objective (puzzles, the bunker), with world positions. */
+  quest?: QuestSpec;
+}
+
+type Pos = [number, number, number];
+/** A structure's objective (V4). The server checks it as blocks change and players use things. */
+export type QuestSpec =
+  /** Set every lever to match its glyph: `on` lists the levers that must be on. */
+  | { kind: 'levers'; levers: { at: Pos; on: boolean }[]; door: Pos[] }
+  /** Light every brazier (campfire). */
+  | { kind: 'braziers'; braziers: Pos[]; door: Pos[] }
+  /**
+   * Keycard opens the security doors, the generators open the blast door to the vault.
+   * Generator 5 bunkers also say where the keycard waits (the guard post's chest up top).
+   */
+  | { kind: 'bunker'; reader: Pos; doors: Pos[]; generators: Pos[]; blast: Pos[]; vault: Pos; area: Box; cache?: Pos; hatch?: Pos; style?: string }
+  | TempleQuest;
+
+/** One trial of a temple, done in its own chamber. */
+export type TempleMission =
+  /** Awaken every altar (use it). */
+  | { type: 'altars'; altars: Pos[]; room: Box }
+  /** Bring a Temple Relic (from the relic chest) to the altar. */
+  | { type: 'relic'; altar: Pos; chest: Pos; room: Box }
+  /** Light every brazier (campfire). */
+  | { type: 'braziers'; braziers: Pos[]; room: Box }
+  /** Set the levers to match the glyphs above them. */
+  | { type: 'levers'; levers: { at: Pos; on: boolean }[]; room: Box }
+  /** Defeat waves of the temple's guardians. */
+  | { type: 'guardians'; spawns: Pos[]; waves: number; mob: string; name: string; room: Box };
+
+/** A seal block between chambers; `ladder` (a world facing) means it opens into a ladder. */
+export interface TempleSeal {
+  at: Pos;
+  ladder?: string;
+}
+
+/**
+ * Generator 5 temples: trials in order, each opening the seal to the next
+ * chamber, then the Champion's Trial on the summit. Alone you face the
+ * temple's champion; with others it is a duel, and the last one standing in
+ * the arena claims the prize.
+ */
+export interface TempleQuest {
+  kind: 'temple';
+  name: string;
+  missions: TempleMission[];
+  /** seals[i] open when mission i is done (the last opens the way to the arena). */
+  seals: TempleSeal[][];
+  arena: Box;
+  center: Pos;
+  champion: { mob: string; name: string; hp: number; dmg: number };
+  /** Where a contestant knocked out of the duel wakes up. */
+  exit: Pos;
+  area: Box;
+  /** Loot table of the prize. */
+  reward: string;
 }
 
 export interface PlanContext {
@@ -95,6 +152,11 @@ export class StructureManager {
     readonly types: StructureType[],
     private readonly ctx: PlanContext,
     private readonly enabled: () => boolean = () => true,
+    /**
+     * V4: a start is dropped when it would overlap (with a few blocks to spare)
+     * a start of a type listed before it, so structures never grow into each other.
+     */
+    private readonly avoidOverlap = false,
   ) {}
 
   /** The chunk a type's start would occupy in a region. */
@@ -120,10 +182,35 @@ export class StructureManager {
     const rng = new Random(hashInts(this.seed, cx, cz, t.salt ^ 0x5717));
     let s: Start | null = null;
     if (t.candidate(this.ctx, (cx << 4) + 8, (cz << 4) + 8, rng)) s = t.plan(this.ctx, cx, cz, rng);
+    if (s && this.avoidOverlap && this.overlapsEarlier(t, s)) s = null;
     this.starts.set(key, s);
     this.order.push(key);
     if (this.order.length > 512) this.starts.delete(this.order.shift()!);
     return s;
+  }
+
+  /** Whether a start overlaps any start of a type listed before its own. */
+  private overlapsEarlier(t: StructureType, s: Start): boolean {
+    const idx = this.types.indexOf(t);
+    const pad = 3;
+    const b = s.bounds;
+    for (let i = 0; i < idx; i++) {
+      const o = this.types[i]!;
+      if (o.fixed) continue;
+      const r = o.radius;
+      const cx0 = (b.x0 >> 4) - r;
+      const cx1 = (b.x1 >> 4) + r;
+      const cz0 = (b.z0 >> 4) - r;
+      const cz1 = (b.z1 >> 4) + r;
+      for (let rx = Math.floor(cx0 / o.spacing); rx <= Math.floor(cx1 / o.spacing); rx++)
+        for (let rz = Math.floor(cz0 / o.spacing); rz <= Math.floor(cz1 / o.spacing); rz++) {
+          const os = this.startAt(o, rx, rz);
+          if (!os) continue;
+          const ob = os.bounds;
+          if (ob.x0 - pad <= b.x1 && ob.x1 + pad >= b.x0 && ob.z0 - pad <= b.z1 && ob.z1 + pad >= b.z0 && ob.y0 <= b.y1 && ob.y1 >= b.y0) return true;
+        }
+    }
+    return false;
   }
 
   /** All starts of all types whose bounds intersect the chunk. */

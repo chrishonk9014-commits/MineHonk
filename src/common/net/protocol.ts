@@ -9,7 +9,7 @@ import type { ItemStack, Slot } from '../game/itemstack';
 import type { GameMode, Difficulty, GodHearts } from '../game/gamemode';
 import type { DimensionId } from '../data/biomes';
 
-export const PROTOCOL_VERSION = 2;
+export const PROTOCOL_VERSION = 5;
 
 // ---------------------------------------------------------------------------
 // Client -> Server
@@ -45,7 +45,13 @@ export type C2S =
   | { t: 'admin'; req: number; action: AdminAction }
   /** Position of the mount the player steers (horses). */
   | { t: 'vehicle_move'; x: number; y: number; z: number; yaw: number }
-  | { t: 'dismount' };
+  | { t: 'dismount' }
+  /** V5: change a setting of the engineering block whose window is open. */
+  | { t: 'eng_cfg'; window: number; key: string; value: string | number }
+  /** V5: the Engineering Book fills the open Engineering Crafting Table's grid with a recipe. */
+  | { t: 'eng_fill'; recipe: number; all: boolean }
+  /** V5.5: a command from a computer's screen (open program, copy a file, press a button...). */
+  | { t: 'pc_cmd'; window: number; cmd: string; arg?: string | number };
 
 export type ClickMode = 'pickup' | 'quick' | 'swap' | 'drop' | 'drag_start' | 'drag_add' | 'drag_end' | 'collect' | 'clone';
 
@@ -65,6 +71,8 @@ export interface PlayerStats {
   maxAir: number;
   armor: number;
   effects: { id: string; amp: number; ticks: number }[];
+  /** Freezing in powder snow (0..1; absent when warm). */
+  freeze?: number;
 }
 
 export interface WorldInfo {
@@ -132,6 +140,14 @@ export type S2C =
   | { t: 'cave_biome'; id: number }
   /** A particle travelling from one point to another over `ticks` (vibrations, sonic booms). */
   | { t: 'trail'; kind: string; x0: number; y0: number; z0: number; x1: number; y1: number; z1: number; ticks: number }
+  /** An ending card (V3). */
+  | { t: 'ending'; id: string; head: string; title: string; line: string; style: 'calm' | 'glitch' | 'error' | 'herobrine' }
+  /**
+   * Screen and world effects (V3): glitch bursts, the End falling silent and
+   * corrupting, warning markers on the ground, lasers, shockwaves...
+   * Positions are world coordinates; `id` ties a marker to its later updates.
+   */
+  | { t: 'fx'; kind: FxKind; strength?: number; ticks?: number; text?: string; x?: number; y?: number; z?: number; r?: number; x1?: number; y1?: number; z1?: number; id?: number }
   | { t: 'teleport'; x: number; y: number; z: number; yaw?: number; pitch?: number; seq: number }
   | { t: 'dig_progress'; x: number; y: number; z: number; stage: number; by: number }
   | { t: 'gamemode'; mode: GameMode; abilities: AbilitiesMsg }
@@ -144,6 +160,8 @@ export type S2C =
   | { t: 'player_list'; players: { name: string; uuid: string; ping: number; mode: GameMode }[] }
   | { t: 'explosion'; x: number; y: number; z: number; power: number; kx: number; ky: number; kz: number }
   | { t: 'title'; text: string; sub?: string; ticks?: number }
+  /** V4: the quest tracker (a structure's objective and progress), or null to hide it. */
+  | { t: 'quest'; quest: QuestInfo | null }
   | { t: 'world_info'; world: WorldInfo }
   | { t: 'pong'; time: number }
   | { t: 'take_item'; item: number; by: number }
@@ -164,6 +182,20 @@ export type S2C =
   /** Where the player last died (Recovery Compass), or null. */
   | { t: 'death_pos'; pos: { dim: DimensionId; x: number; y: number; z: number } | null };
 
+/** What the quest tracker shows (V4). */
+export interface QuestInfo {
+  title: string;
+  /** The current objective. */
+  text: string;
+  /** Stage progress (e.g. 3 of 5). */
+  stage?: number;
+  stages?: number;
+  /** Enemies or objectives left in this stage. */
+  remaining?: number;
+  /** Glitched quests get the corrupted look. */
+  style?: 'normal' | 'glitch';
+}
+
 export interface AbilitiesMsg {
   mayFly: boolean;
   flying: boolean;
@@ -177,6 +209,60 @@ export interface AbilitiesMsg {
 
 export type EntityAnim = 'swing' | 'hurt' | 'death' | 'crit' | 'eat' | 'magic_crit' | 'wake' | 'sleep' | 'totem' | 'teleport' | 'attack' | 'roar';
 export type ChatKind = 'chat' | 'system' | 'join' | 'leave' | 'death' | 'announce' | 'error' | 'achievement' | 'whisper';
+
+/**
+ * Screen/world effect kinds (V3).
+ * - glitch: a burst of screen glitching (`strength` 0..1, `ticks`)
+ * - silence / unsilence: every sound fades out (the End goes quiet) / back in
+ * - corrupt_world: the world around flickers, blocks float and vanish, the sky stutters
+ * - integrity: the brief WORLD INTEGRITY FAILURE screen (`text`)
+ * - player_glitch: the local player was hit by a glitch attack
+ * - stabilize: effects calm down (the Farlands stabilises)
+ * - warn_circle / warn_end: a telegraph ring on the ground at x,y,z with radius r (`id`)
+ * - warn_beam / laser: a targeting line / the firing laser from (x,y,z) to (x1,y1,z1)
+ * - zone / zone_end: a lingering danger area (`id`)
+ * - pulse: a shockwave ring expanding from x,y,z to radius r over `ticks`
+ * - afterimage: a fading copy of an entity (`id`) where it stood
+ * - portal_on: a glitched portal wakes up at x,y,z
+ * - farlands_entry: the crossing into the Farlands
+ * - boss_death: The Error comes apart at x,y,z
+ */
+export type FxKind =
+  | 'glitch'
+  | 'silence'
+  | 'unsilence'
+  | 'corrupt_world'
+  | 'integrity'
+  | 'player_glitch'
+  | 'stabilize'
+  | 'warn_circle'
+  | 'warn_end'
+  | 'warn_beam'
+  | 'laser'
+  | 'zone'
+  | 'zone_end'
+  | 'pulse'
+  | 'afterimage'
+  | 'portal_on'
+  | 'farlands_entry'
+  | 'boss_death'
+  // V5.5: the Digital Corruption Update
+  /** Words torn across the screen (HER0BRINE.EXE, SYSTEM BREACH...): text, ticks. */
+  | 'hack'
+  /** Movement keys reversed for a while (PLAYER CONTROL OVERRIDE). */
+  | 'controls_reversed'
+  /** An electric arc from (x,y,z) to (x1,y1,z1) for ticks (id: replaced by the same id). */
+  | 'arc'
+  /** A lightning bolt striking (x,y,z). */
+  | 'bolt'
+  /** Falling into the computer: the screen pixelates into the digital world. */
+  | 'enter_computer'
+  /** Something watches: darkness at the edges of the screen for ticks. */
+  | 'presence'
+  /** The digital world shutting down: SHUTDOWN text, fade to black. */
+  | 'shutdown'
+  /** A computer seizing up: its screen and the world around it tear (x,y,z = the computer). */
+  | 'takeover';
 export type WindowKind =
   | 'player'
   | 'crafting'
@@ -191,7 +277,10 @@ export type WindowKind =
   | 'creative'
   | 'merchant'
   | 'stonecutter'
-  | 'beacon';
+  | 'beacon'
+  | 'eng_crafting'
+  | 'machine'
+  | 'computer';
 
 export type { ItemStack };
 

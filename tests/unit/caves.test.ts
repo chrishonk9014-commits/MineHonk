@@ -37,6 +37,16 @@ describe('V2 caves', () => {
     expect(hashChunks(chunks)).toBe('4ccf0381');
   });
 
+  it('worlds made with the V2 generator are generated exactly as in V2', () => {
+    const gen = createGenerator('overworld', seedFromString('v2-regression'), { version: 2 });
+    const chunks: Chunk[] = [];
+    for (let cz = -1; cz <= 1; cz++) for (let cx = -1; cx <= 1; cx++) chunks.push(gen.generate(cx * 7, cz * 7));
+    // (7, 7) holds frozen caves, which V3 reworks for new worlds only
+    chunks.push(gen.generate(7, 7));
+    // Recorded from the last commit before V3's generator
+    expect(hashChunks(chunks)).toBe('78e60319');
+  }, 60000);
+
   it('are deterministic and independent of generation order', () => {
     const seed = seedFromString('cave-order');
     const a = new OverworldGenerator(seed);

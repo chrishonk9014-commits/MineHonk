@@ -85,9 +85,8 @@ export class Interaction {
     if (!p.abilities.mayBuild && !(breaking && p.gamemode === 'adventure')) return false;
     if (this.server.roleOf(p) === 'visitor') return false;
     if (y < 0 || y > 255) return false;
-    void dim;
-    void x;
-    void z;
+    // V5.5: the computer Herobrine has can't be broken or built into
+    if (this.server.herobrine?.protects(dim, x, y, z)) return false;
     return true;
   }
 
@@ -211,6 +210,7 @@ export class Interaction {
       const packed = pdef.id === 'shulker_box' && Array.isArray(stack.tag?.data?.items) ? (stack.tag!.data!.items as unknown[]).slice(0, 27) : null;
       dim.setBlockEntity(first.x, first.y, first.z, { type: pdef.entity, items: packed ? [...packed, ...new Array(27 - packed.length).fill(null)] : new Array(27).fill(null) });
     }
+    if (pdef.entity === 'eng') this.server.engineering?.onPlaced(p, dim, first.x, first.y, first.z, stack);
     if (pdef.entity === 'conduit') {
       dim.setBlockEntity(first.x, first.y, first.z, { type: 'conduit' });
       this.server.gadgets?.addConduit(dim, first.x, first.y, first.z);
@@ -1165,6 +1165,7 @@ export class Interaction {
     if (isAdminStack(stack)) return;
     const id = itemIdOf(stack);
     if (id === 'crafting_table') this.grant(p, 'craft_table');
+    if (id === 'engineering_table') this.grant(p, 'engineering');
     if (id.endsWith('_pickaxe') || id.endsWith('_axe') || id.endsWith('_shovel') || id.endsWith('_sword') || id.endsWith('_hoe')) this.grant(p, 'craft_tool');
     if (id === 'stone_pickaxe') this.grant(p, 'upgrade_tools');
     if (id === 'iron_pickaxe') this.grant(p, 'iron_tools');

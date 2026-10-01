@@ -8,6 +8,7 @@ import type { GameServer } from '../GameServer';
 import type { Dimension } from '../world/Dimension';
 import type { ServerPlayer } from '../player/ServerPlayer';
 import type { Entity } from '../entity/Entity';
+import type { HurtInfo } from '../entity/Living';
 import type { ItemStack } from '../../common/game/itemstack';
 import { stackOf, markAdmin } from '../../common/game/itemstack';
 import { items } from '../../common/registry/items';
@@ -34,6 +35,19 @@ const HOLD_RADIUS = 58;
 const NODES = 12;
 const FIRST_KILL_XP = 12000;
 const REPEAT_KILL_XP = 500;
+/** Ticks the dragon spends perched on the portal before taking off again. */
+const PERCH_TICKS = 300;
+/** Damage taken while perched that sends it back into the air early. */
+const PERCH_DAMAGE_LIMIT = 40;
+
+interface PendingGateway {
+  x: number;
+  z: number;
+  /** Where a return gateway leads (above a main-island gateway); empty for ring gateways. */
+  back: number[];
+  /** Ring gateways around the main island hang at a fixed height. */
+  ringY?: number;
+}
 
 export class EndSystem {
   private readonly clouds: BreathCloud[] = [];
@@ -43,6 +57,15 @@ export class EndSystem {
 
   constructor(private readonly server: GameServer) {
     this.fight = new DragonFight(server, this);
+    // Return gateways still waiting for their island to load (saved with the level)
+    const pend = server.level.flags.pendingGateways;
+    if (Array.isArray(pend)) {
+      for (const g of pend as PendingGateway[]) {
+        if (!g || !Number.isFinite(g.x) || !Number.isFinite(g.z) || !Array.isArray(g.back)) continue;
+        if (Number.isFinite(g.ringY)) this.pendingGateways.push({ x: g.x, z: g.z, back: [], ringY: Number(g.ringY) });
+        else if (g.back.length === 3) this.pendingGateways.push({ x: g.x, z: g.z, back: g.back.map(Number) });
+      }
+    }
   }
 
   private get flags(): Record<string, unknown> {
@@ -134,6 +157,8 @@ export class EndSystem {
   }
 
   private toEnd(p: ServerPlayer): void {
+    // Remember the portal the player came through (the secret ending sends them back to it)
+    if (p.dim.id === 'overworld') p.endEntry = { x: Math.floor(p.x), y: Math.floor(p.y), z: Math.floor(p.z) };
     this.server.changeDimension(p, 'end', END_SPAWN.x + 0.5, END_SPAWN.y, END_SPAWN.z + 0.5, Math.PI / 2);
     p.portalCooldown = 100;
     this.arriving.add(p);
@@ -150,50 +175,83 @@ export class EndSystem {
   }
 
   private leaveEnd(p: ServerPlayer): void {
-    if (this.flags.dragonKilled && !p.statistics.left_the_end) {
-      p.send({ t: 'title', text: 'The End?', sub: 'The Far Lands still remain...', ticks: 120 });
-    }
     p.addStat('left_the_end');
     this.server.interaction.sendToSpawn(p);
     p.portalCooldown = 100;
+    // The ending card waits until the player is home (Ending 1 after a normal kill)
+    this.server.endings?.onLeaveEnd(p);
   }
 
+  /** A player pressed into (or glided through) an End Gateway. */
   private gateway(p: ServerPlayer): void {
     const dim = p.dim;
     if (dim.id !== 'end') return;
     const bx = Math.floor(p.x);
     const by = Math.floor(p.y + 0.5);
     const bz = Math.floor(p.z);
-    let gx = bx;
-    let gy = by;
-    let gz = bz;
-    search: for (let dy = -1; dy <= 2; dy++)
+    for (let dy = -1; dy <= 2; dy++)
       for (let dx = -1; dx <= 1; dx++)
         for (let dz = -1; dz <= 1; dz++)
           if (dim.blockId(bx + dx, by + dy, bz + dz) === 'end_gateway') {
-            gx = bx + dx;
-            gy = by + dy;
-            gz = bz + dz;
-            break search;
+            this.useGateway(p, bx + dx, by + dy, bz + dz);
+            return;
           }
+  }
+
+  /** An ender pearl flew into a gateway: its thrower goes through. */
+  pearlGateway(owner: Entity | null, gx: number, gy: number, gz: number): boolean {
+    if (!owner || !isPlayer(owner) || owner.dead || owner.dim.id !== 'end') return false;
+    if (owner.portalCooldown > 0) return false;
+    this.useGateway(owner, gx, gy, gz);
+    return true;
+  }
+
+  /** Sends a player through the gateway at (gx, gy, gz). */
+  private useGateway(p: ServerPlayer, gx: number, gy: number, gz: number): void {
+    const dim = p.dim;
     const be = dim.getBlockEntity(gx, gy, gz);
     let exit = be && Array.isArray(be.exit) ? (be.exit as number[]) : null;
     if (!exit) {
-      // Main island gateway: fly out ~1024 blocks in the gateway's direction
+      // Main island gateway: out ~1024 blocks in the gateway's direction, to the outer islands
       const d = Math.hypot(gx, gz) || 1;
       const gen = dim.generator as EndGenerator;
       const land = gen.outerLanding((gx / d) * 1024, (gz / d) * 1024);
       exit = [land.x, land.y, land.z];
       dim.setBlockEntity(gx, gy, gz, { type: 'end_gateway', exit });
-      this.pendingGateways.push({ x: land.x, y: land.y + 8, z: land.z, back: [gx, gy + 2, gz] });
+      // The way back stands a few steps from the landing spot, towards the main island
+      this.pendingGateways.push({ x: Math.round(land.x - (gx / d) * 5), z: Math.round(land.z - (gz / d) * 5), back: [gx, gy + 2, gz] });
+      this.savePending();
     }
+    this.server.playSound(dim, 'portal.travel', p.x, p.y, p.z, 0.6, 1.4);
+    this.server.particles(dim, 'portal', gx + 0.5, gy + 0.5, gz + 0.5, 30, 0.8);
     this.server.teleport(p, exit[0]! + 0.5, exit[1]!, exit[2]! + 0.5);
     (p as { needsSafeSpawn?: boolean }).needsSafeSpawn = true;
     p.portalCooldown = 60;
     this.server.playSound(dim, 'portal.travel', p.x, p.y, p.z, 0.6, 1.4);
   }
 
-  private readonly pendingGateways: { x: number; y: number; z: number; back: number[] }[] = [];
+  private readonly pendingGateways: PendingGateway[] = [];
+
+  private savePending(): void {
+    if (this.pendingGateways.length) this.flags.pendingGateways = this.pendingGateways.map((g) => (g.ringY !== undefined ? { x: g.x, z: g.z, back: [], ringY: g.ringY } : { x: g.x, z: g.z, back: g.back }));
+    else delete this.flags.pendingGateways;
+  }
+
+  /**
+   * Builds a return gateway on an outer island: one block above the ground,
+   * so a player standing next to it can step into its side.
+   */
+  private buildReturnGateway(dim: Dimension, g: PendingGateway): void {
+    let y = -1;
+    for (let yy = 120; yy > 8; yy--) {
+      if (dim.blockId(g.x, yy, g.z) === 'end_stone') {
+        y = yy + 2;
+        break;
+      }
+    }
+    if (y < 0) y = 75; // no island under it: hang it where islands usually are
+    this.buildGateway(dim, g.x, y, g.z, g.back);
+  }
 
   private buildGateway(dim: Dimension, x: number, y: number, z: number, exit: number[] | null): void {
     const bedrock = S('bedrock');
@@ -211,15 +269,48 @@ export class EndSystem {
     }
   }
 
-  /** A new gateway on the ring around the main island after each dragon kill. */
+  /** Position of the n-th gateway on the ring around the main island. */
+  static ringGateway(n: number): { x: number; y: number; z: number } {
+    const a = (((n * 7) % 20) / 20) * Math.PI * 2;
+    return { x: Math.round(Math.cos(a) * 96), y: 75, z: Math.round(Math.sin(a) * 96) };
+  }
+
+  /**
+   * A new gateway on the ring around the main island after each dragon
+   * kill. The ring lies outside most view distances, so if its chunk isn't
+   * loaded yet it is built (and saved as pending) once it is.
+   */
   spawnGateway(dim: Dimension): void {
     const n = Number(this.flags.gateways ?? 0);
     if (n >= 20) return;
-    const a = ((n * 7) % 20) / 20 * Math.PI * 2;
-    const x = Math.round(Math.cos(a) * 96);
-    const z = Math.round(Math.sin(a) * 96);
-    this.buildGateway(dim, x, 75, z, null);
+    const g = EndSystem.ringGateway(n);
     this.flags.gateways = n + 1;
+    if (dim.isLoaded(g.x, g.z)) this.buildRingGateway(dim, g.x, g.y, g.z);
+    else {
+      this.pendingGateways.push({ x: g.x, z: g.z, back: [], ringY: g.y });
+      this.savePending();
+    }
+  }
+
+  private buildRingGateway(dim: Dimension, x: number, y: number, z: number): void {
+    this.buildGateway(dim, x, y, z, null);
+    this.server.particles(dim, 'portal', x + 0.5, y + 0.5, z + 0.5, 60, 1.5);
+    this.server.playSound(dim, 'end_portal.open', x + 0.5, y, z + 0.5, 3, 1.3);
+  }
+
+  /** A purple shimmer rising from each ring gateway that has a player nearby. */
+  private gatewayBeams(): void {
+    const n = Math.min(20, Number(this.flags.gateways ?? 0));
+    if (!n) return;
+    const dim = this.server.dim('end');
+    const players = [...this.server.players.values()].filter((p) => p.dim === dim && !p.dead);
+    if (!players.length) return;
+    for (let i = 0; i < n; i++) {
+      const g = EndSystem.ringGateway(i);
+      if (!players.some((p) => p.distanceSq(g.x, g.y, g.z) < 64 * 64)) continue;
+      if (dim.blockId(g.x, g.y, g.z) !== 'end_gateway') continue;
+      this.server.particles(dim, 'portal', g.x + 0.5, g.y + 0.5, g.z + 0.5, 6, 0.4);
+    }
   }
 
   // ------------------------------------------------------------------ crystals & breath
@@ -279,8 +370,12 @@ export class EndSystem {
       const end = this.server.dim('end');
       if (!end.isLoaded(g.x, g.z)) continue;
       this.pendingGateways.splice(i, 1);
-      this.buildGateway(end, g.x, g.y, g.z, g.back);
+      if (g.ringY !== undefined) this.buildRingGateway(end, g.x, g.ringY, g.z);
+      else this.buildReturnGateway(end, g);
+      this.savePending();
     }
+    // Active gateways glow with a faint beam while someone is near
+    if (this.server.tickNo % 10 === 0) this.gatewayBeams();
     for (let i = this.clouds.length - 1; i >= 0; i--) {
       const c = this.clouds[i]!;
       if (--c.ticks <= 0 || c.radius <= 0.5) {
@@ -310,13 +405,19 @@ export class DragonFight {
   private phaseTicks = 0;
   private node = 0;
   private dir = 1;
-  private target: ServerPlayer | null = null;
+  /** Strafe/charge target: a player or a Voidbound Enderman. */
+  private target: Entity | null = null;
+  /** The dragon was killed by a Voidbound Enderman with every crystal broken. */
+  secretRun = false;
   private healer: EndCrystal | null = null;
   private readonly barPlayers = new Set<ServerPlayer>();
   private barId = -1;
   private readonly hitCooldown = new Map<ServerPlayer, number>();
   private damageWhilePerched = 0;
   private lastHealth = 0;
+  /** Ticks since the dragon last left the portal, and when it wants to come down again. */
+  private sincePerch = 0;
+  private perchDue = 0;
   private readonly rng = new Random();
 
   constructor(
@@ -359,6 +460,8 @@ export class DragonFight {
     this.phaseTicks = 0;
     this.lastHealth = m.health;
     this.flags.dragonAlive = true;
+    // The first dive to the portal comes a little sooner than the rest
+    this.schedulePerch(0.7);
     this.server.playSound(this.dim, 'dragon.growl', 0, 100, 0, 4, 1);
     return m;
   }
@@ -378,8 +481,14 @@ export class DragonFight {
     }
     const m = this.dragon;
     if (!players.length) {
+      if (m.dead) {
+        // Everyone left during the death sequence: finish it now so the kill still counts
+        if (this.secretRun) this.server.endgame?.finishSecretNow();
+        else this.finish(m, !this.flags.dragonKilledOnce, !this.flags.dragonKilledOnce ? FIRST_KILL_XP : REPEAT_KILL_XP);
+        return;
+      }
       // Nobody left: put the dragon away, remembering its health
-      if (!m.dead) this.flags.dragonHealth = m.health;
+      this.flags.dragonHealth = m.health;
       m.remove();
       this.dragon = null;
       this.clearBars();
@@ -391,6 +500,7 @@ export class DragonFight {
       return;
     }
     this.phaseTicks++;
+    if (this.phase !== 'approach' && this.phase !== 'perch') this.sincePerch++;
     this.heal(m);
     this.fly(m, players);
     this.contact(m);
@@ -421,6 +531,33 @@ export class DragonFight {
     return best;
   }
 
+  /** Endermen turned against the dragon by the mysterious potion. */
+  voidbound(): Mob[] {
+    const out: Mob[] = [];
+    for (const e of this.dim.entities.values()) if (e instanceof Mob && e.type === 'enderman' && e.data.voidbound && !e.dead && !e.removed) out.push(e);
+    return out;
+  }
+
+  /** What the dragon turns on: the nearest survival player or Voidbound Enderman. */
+  private focus(m: Mob, players: ServerPlayer[]): Entity | null {
+    let best: Entity | null = this.nearest(m, players);
+    let bd = best ? best.distanceSq(m.x, m.y, m.z) : Infinity;
+    for (const e of this.voidbound()) {
+      const dd = e.distanceSq(m.x, m.y, m.z);
+      if (dd < bd) {
+        bd = dd;
+        best = e;
+      }
+    }
+    return best;
+  }
+
+  /** Picks when the dragon next dives to the portal: sooner as its crystals fall. */
+  private schedulePerch(scale = 1): void {
+    this.sincePerch = 0;
+    this.perchDue = Math.round((180 + this.crystalsAlive() * 15 + this.rng.int(120)) * scale);
+  }
+
   private setPhase(p: Phase): void {
     this.phase = p;
     this.phaseTicks = 0;
@@ -429,6 +566,7 @@ export class DragonFight {
       m.data.phase = 'perch';
       this.damageWhilePerched = 0;
     } else delete m.data.phase;
+    if (p === 'takeoff') this.schedulePerch();
     m.metaDirty = true;
   }
 
@@ -460,12 +598,12 @@ export class DragonFight {
         if (this.steer(m, n.x, n.y, n.z, 0.55) < 6) {
           this.node = (this.node + this.dir + NODES) % NODES;
           if (this.rng.chance(0.08)) this.dir = -this.dir;
-          const crystals = this.crystals().length;
-          const t = this.nearest(m, players);
+          const foe = this.focus(m, players);
           const r = this.rng.next();
-          if (t && r < 1 / (crystals + 3)) this.setPhase('approach');
-          else if (t && r < 0.45) {
-            this.target = t;
+          // Every so often it dives to the portal to fight from the centre
+          if (foe && (this.sincePerch >= this.perchDue || r < 1 / (this.crystalsAlive() / 3 + 2))) this.setPhase('approach');
+          else if (foe && r < 0.45) {
+            this.target = foe;
             this.setPhase(this.rng.chance(0.25) ? 'charge' : 'strafe');
           }
         }
@@ -473,7 +611,7 @@ export class DragonFight {
       }
       case 'strafe': {
         const t = this.target;
-        if (!t || t.dead || t.dim !== m.dim || this.phaseTicks > 200) {
+        if (!t || t.removed || (t as { dead?: boolean }).dead || t.dim !== m.dim || this.phaseTicks > 200) {
           this.setPhase('hold');
           break;
         }
@@ -491,7 +629,7 @@ export class DragonFight {
       }
       case 'charge': {
         const t = this.target;
-        if (!t || t.dead || t.dim !== m.dim || this.phaseTicks > 80) {
+        if (!t || t.removed || (t as { dead?: boolean }).dead || t.dim !== m.dim || this.phaseTicks > 80) {
           this.setPhase('hold');
           break;
         }
@@ -500,38 +638,109 @@ export class DragonFight {
       }
       case 'approach': {
         const high = this.phaseTicks < 60;
-        const dist = this.steer(m, 0, py + (high ? 20 : 4), 0, high ? 0.6 : 0.4, 0.12);
-        if (!high && dist < 3) {
-          m.body.vx = m.body.vy = m.body.vz = 0;
-          m.setPos(0, py + 4, 0);
-          this.setPhase('perch');
-          this.server.playSound(m.dim, 'dragon.growl', m.x, m.y, m.z, 4, 0.8);
-        }
-        if (this.phaseTicks > 400) this.setPhase('takeoff');
+        const ty = py + (high ? 20 : 4);
+        const b = m.body;
+        const dx = -b.x;
+        const dy = ty - b.y;
+        const dz = -b.z;
+        const dist = Math.hypot(dx, dy, dz);
+        if (!high && (dist < 16 || this.phaseTicks > 260)) {
+          // Final glide straight down onto the portal pillar (no circling)
+          const step = Math.min(dist, this.phaseTicks > 260 ? 0.8 : 0.5);
+          b.vx = (dx / (dist || 1)) * step;
+          b.vy = (dy / (dist || 1)) * step;
+          b.vz = (dz / (dist || 1)) * step;
+          b.x += b.vx;
+          b.y += b.vy;
+          b.z += b.vz;
+          const foe = this.focus(m, players);
+          if (foe) m.yaw = approachAngle(m.yaw, Math.atan2(-(foe.x - b.x), -(foe.z - b.z)), 0.08);
+          m.headYaw = m.yaw;
+          m.pitch *= 0.8;
+          if (dist < 0.7) {
+            b.vx = b.vy = b.vz = 0;
+            m.setPos(0, py + 4, 0);
+            this.setPhase('perch');
+            this.server.playSound(m.dim, 'dragon.growl', m.x, m.y, m.z, 4, 0.8);
+            this.server.particles(m.dim, 'explosion_smoke', 0.5, py + 1, 0.5, 30, 3);
+          }
+        } else this.steer(m, 0, ty, 0, high ? 0.6 : 0.45, 0.12);
         break;
       }
-      case 'perch': {
-        m.body.vx = m.body.vy = m.body.vz = 0;
-        const t = this.nearest(m, players);
-        if (t) m.yaw = approachAngle(m.yaw, Math.atan2(-(t.x - m.x), -(t.z - m.z)), 0.1);
-        m.headYaw = m.yaw;
-        if (t && this.phaseTicks % 80 === 40) {
-          // Breathe flames at the ground in front of the dragon, towards the player
-          const dx = t.x - m.x;
-          const dz = t.z - m.z;
-          const dd = Math.hypot(dx, dz) || 1;
-          const reach = Math.min(dd, 9);
-          this.end.breathCloud(m.dim, m.x + (dx / dd) * reach, py, m.z + (dz / dd) * reach, m);
-          this.server.playSound(m.dim, 'dragon.growl', m.x, m.y, m.z, 4, 0.6);
-        }
-        if (this.phaseTicks > 260 || this.damageWhilePerched >= 25) this.setPhase('takeoff');
+      case 'perch':
+        this.perchAttacks(m, players, py);
+        if (this.phaseTicks > PERCH_TICKS || this.damageWhilePerched >= PERCH_DAMAGE_LIMIT) this.setPhase('takeoff');
         break;
-      }
       case 'takeoff':
         if (this.steer(m, this.nodePos(this.node).x, py + 30, this.nodePos(this.node).z, 0.5, 0.1) < 10 || this.phaseTicks > 100) this.setPhase('hold');
         break;
       case 'dying':
         break;
+    }
+  }
+
+  /**
+   * Perched on the portal the dragon fights from the centre: it breathes
+   * flames across the ground, snaps at anyone near its head, beats its
+   * wings to throw attackers back and spits fireballs at distant targets.
+   * It can be struck freely the whole time.
+   */
+  private perchAttacks(m: Mob, players: ServerPlayer[], py: number): void {
+    m.body.vx = m.body.vy = m.body.vz = 0;
+    const t = this.focus(m, players);
+    if (t) m.yaw = approachAngle(m.yaw, Math.atan2(-(t.x - m.x), -(t.z - m.z)), 0.1);
+    m.headYaw = m.yaw;
+    if (!t) return;
+    const pt = this.phaseTicks;
+    const dx = t.x - m.x;
+    const dz = t.z - m.z;
+    const dd = Math.hypot(dx, dz) || 1;
+    const survival = this.server.interaction.survival;
+    const hurt = (e: Entity, amount: number, kb: number): void => {
+      const ex = e.x - m.x;
+      const ez = e.z - m.z;
+      const el = Math.hypot(ex, ez) || 1;
+      if (isPlayer(e)) survival.damage(e, amount, { source: 'mob', attacker: m, kbx: ex / el, kbz: ez / el, knockback: kb });
+      else if (e instanceof Mob) e.hurt(amount, { source: 'mob', attacker: m, kbx: ex / el, kbz: ez / el, knockback: kb });
+    };
+    const foes = (): Entity[] => [...players.filter((p) => p.gamemode !== 'creative'), ...this.voidbound()];
+    // Flame breath sweeping the ground towards its target
+    if (pt % 80 === 40) {
+      const reach = Math.min(dd, 9);
+      const base = Math.atan2(dz, dx);
+      for (const off of [0, -0.45, 0.45]) {
+        const r = off === 0 ? reach : reach * 0.75;
+        this.end.breathCloud(m.dim, m.x + Math.cos(base + off) * r, py, m.z + Math.sin(base + off) * r, m);
+      }
+      this.server.playSound(m.dim, 'dragon.growl', m.x, m.y, m.z, 4, 0.6);
+    }
+    // Fireballs at anyone keeping their distance
+    if (pt % 60 === 20 && dd > 16) {
+      const hx = m.x - Math.sin(m.yaw) * 6;
+      const hz = m.z - Math.cos(m.yaw) * 6;
+      const fb = this.server.mobs!.projectile(m.dim, 'dragon_fireball', hx, m.y + 3, hz, m);
+      fb.shoot(t.x - hx, t.y + 0.5 - (m.y + 3), t.z - hz, 1.1, 1, () => this.rng.next());
+      this.server.playSound(m.dim, 'dragon.growl', m.x, m.y, m.z, 3, 1.2);
+    }
+    // A snap of the jaws at whatever stands at its head
+    if (pt % 25 === 12) {
+      const hx = m.x - Math.sin(m.yaw) * 7;
+      const hz = m.z - Math.cos(m.yaw) * 7;
+      for (const e of foes()) {
+        if (Math.hypot(e.x - hx, e.z - hz) < 3.5 && e.y > py - 2 && e.y < py + 8) hurt(e, 6, 0.8);
+      }
+    }
+    // Wing buffet throws back everyone crowding the portal
+    if (pt % 100 === 70) {
+      let any = false;
+      for (const e of foes()) {
+        if (Math.hypot(e.x - m.x, e.z - m.z) < 9 && e.y > py - 3 && e.y < py + 10) {
+          hurt(e, 4, 2.2);
+          any = true;
+        }
+      }
+      this.server.playSound(m.dim, 'dragon.wings', m.x, m.y, m.z, 4, 0.6);
+      if (any) this.server.particles(m.dim, 'explosion_smoke', m.x, py + 1, m.z, 24, 4);
     }
   }
 
@@ -549,6 +758,21 @@ export class DragonFight {
       this.server.interaction.survival.damage(p, this.phase === 'charge' ? 10 : 5, { source: 'mob', attacker: m, kbx: dx / d, kbz: dz / d, knockback: 1.6 });
       this.hitCooldown.set(p, this.server.tickNo + 20);
     }
+    // ... and a Voidbound Enderman caught in its path
+    if (this.server.tickNo % 20 === 0) {
+      for (const e of this.voidbound()) {
+        if (Math.abs(e.x - m.x) > hw || Math.abs(e.z - m.z) > hw || e.y < m.y - 1 || e.y > m.y + 4) continue;
+        const dx = e.x - m.x;
+        const dz = e.z - m.z;
+        const d = Math.hypot(dx, dz) || 1;
+        e.hurt(this.phase === 'charge' ? 10 : 5, { source: 'mob', attacker: m, kbx: dx / d, kbz: dz / d, knockback: 1.6 });
+      }
+    }
+  }
+
+  /** A Voidbound Enderman's blow: it doesn't count towards knocking the dragon off its perch. */
+  noteVoidHit(amount: number): void {
+    if (this.phase === 'perch') this.damageWhilePerched -= amount;
   }
 
   // ------------------------------------------------------------------ crystals
@@ -557,6 +781,48 @@ export class DragonFight {
     const out: EndCrystal[] = [];
     for (const e of this.dim.entities.values()) if (e instanceof EndCrystal && !e.removed) out.push(e);
     return out;
+  }
+
+  /** Index of the pillar a crystal stands on, or -1 (placed on the portal, say). */
+  private pillarOf(c: { x: number; y: number; z: number }): number {
+    const pillars = endPillars(this.server.level.seedNum);
+    for (let i = 0; i < pillars.length; i++) {
+      const p = pillars[i]!;
+      if (Math.abs(c.x - (p.x + 0.5)) < 2 && Math.abs(c.z - (p.z + 0.5)) < 2 && Math.abs(c.y - (p.height + 2)) < 3) return i;
+    }
+    return -1;
+  }
+
+  /**
+   * Which pillars still carry their crystal. Kept in the level data so an
+   * unloaded pillar never counts as destroyed; read off the loaded pillars
+   * the first time it is needed (older saves), or null while some pillar
+   * has never been loaded.
+   */
+  pillarCrystals(): boolean[] | null {
+    const st = this.flags.pillarCrystals;
+    const pillars = endPillars(this.server.level.seedNum);
+    if (Array.isArray(st) && st.length === pillars.length) return st as boolean[];
+    if (!pillars.every((p) => this.dim.isLoaded(p.x, p.z))) return null;
+    const alive = pillars.map(() => false);
+    for (const c of this.crystals()) {
+      const i = this.pillarOf(c);
+      if (i >= 0) alive[i] = true;
+    }
+    this.flags.pillarCrystals = alive;
+    return alive;
+  }
+
+  /** Pillar crystals still standing (all of them while unknown). */
+  crystalsAlive(): number {
+    const st = this.pillarCrystals();
+    return st ? st.filter(Boolean).length : endPillars(this.server.level.seedNum).length;
+  }
+
+  /** True only when every pillar's crystal is known to be destroyed. */
+  allCrystalsDestroyed(): boolean {
+    const st = this.pillarCrystals();
+    return !!st && st.every((a) => !a);
   }
 
   private heal(m: Mob): void {
@@ -587,9 +853,20 @@ export class DragonFight {
 
   onCrystalDestroyed(c: EndCrystal, by: Entity | null): void {
     const m = this.dragon;
+    const owner = by && !isPlayer(by) ? (by as { owner?: Entity | null }).owner : null;
+    const player = by && isPlayer(by) ? by : owner && isPlayer(owner) ? owner : null;
     if (m && !m.dead && this.healer === c) {
       this.healer = null;
-      m.hurt(10, { source: 'explosion', attacker: by && isPlayer(by) ? by : null });
+      m.hurt(10, { source: 'explosion', attacker: player });
+    }
+    const i = this.pillarOf(c);
+    if (i >= 0) {
+      const st = this.pillarCrystals();
+      if (st) {
+        st[i] = false;
+        this.flags.pillarCrystals = st;
+      }
+      if (player && !player.dead) this.server.interaction.grant(player, 'destroy_end_crystal');
     }
     // Four crystals on the exit portal re-summon a defeated dragon
     this.checkRespawn();
@@ -610,37 +887,69 @@ export class DragonFight {
     delete this.flags.dragonHealth;
     buildExitPortal((x, y, z, s) => this.dim.setBlock(x, y, z, s), py, false);
     // Rebuild pillar crystals
-    for (const p of endPillars(this.server.level.seedNum)) {
-      if (this.dim.isLoaded(p.x, p.z)) this.end.spawnCrystal(this.dim, p.x + 0.5, p.height + 2, p.z + 0.5);
-    }
+    const alive = this.pillarCrystals() ?? endPillars(this.server.level.seedNum).map(() => false);
+    endPillars(this.server.level.seedNum).forEach((p, i) => {
+      if (!this.dim.isLoaded(p.x, p.z)) return;
+      if (!alive[i]) this.end.spawnCrystal(this.dim, p.x + 0.5, p.height + 2, p.z + 0.5);
+      alive[i] = true;
+    });
+    this.flags.pillarCrystals = alive;
     this.spawnDragon();
   }
 
   // ------------------------------------------------------------------ death
 
-  /** Called by the mob system when the dragon's health reaches zero. */
-  onDeath(m: Mob, killer: ServerPlayer | null): void {
+  /**
+   * Called by the mob system when the dragon's health reaches zero. A kill
+   * by a Voidbound Enderman with every pillar crystal destroyed breaks the
+   * End (the secret ending); anything else is Ending 1.
+   */
+  onDeath(m: Mob, killer: ServerPlayer | null, info?: HurtInfo): void {
     // A dragon summoned outside the fight: nothing to finish, nothing to award
     if (m !== this.dragon) return;
+    const att = info?.attacker;
+    const enderman = att instanceof Mob && att.type === 'enderman' && att.data.voidbound ? att : null;
+    this.secretRun = !!enderman && this.allCrystalsDestroyed();
     this.phase = 'dying';
     this.phaseTicks = 0;
     m.data.dying = true;
     m.metaDirty = true;
     this.server.playSound(m.dim, 'dragon.death', m.x, m.y, m.z, 6, 1);
+    if (this.healer) {
+      this.healer.setBeam(null);
+      this.healer = null;
+    }
+    if (this.secretRun) {
+      this.server.endgame?.beginSecretEnding(m, enderman!, m.admin || enderman!.data.voidCheat === true);
+      return;
+    }
     // A cheat-spawned dragon's defeat is not an advancement for anyone
     if (!m.admin) {
       if (killer) this.server.interaction.grant(killer, 'kill_dragon');
       for (const p of this.players()) if (p !== killer) this.server.interaction.grant(p, 'kill_dragon');
     }
-    if (this.healer) {
-      this.healer.setBeam(null);
-      this.healer = null;
+    // Ending 1: shown to everyone who saw it once they walk out through the portal
+    const endings = this.server.endings;
+    if (endings) {
+      endings.state.dragonDeath = m.admin ? 'cheat' : 'player';
+      for (const p of this.players()) endings.reach(p, 'dragon', { cheat: m.admin, show: 'on_exit' });
     }
   }
 
   private dying(m: Mob): void {
     this.phaseTicks++;
     const b = m.body;
+    if (this.secretRun) {
+      // It rises a little, then hangs there, twitching, while the End breaks around it
+      if (this.phaseTicks < 50) {
+        b.y += 0.1;
+        if (this.phaseTicks % 6 === 0) this.server.particles(m.dim, 'explosion', m.x + (this.rng.next() - 0.5) * 8, m.y + 2, m.z + (this.rng.next() - 0.5) * 8, 1, 0.5);
+      } else if (this.phaseTicks % 3 === 0) {
+        m.yaw += (this.rng.next() - 0.5) * 0.6;
+        m.metaDirty = true;
+      }
+      return;
+    }
     b.y += 0.1;
     if (this.phaseTicks % 5 === 0) this.server.particles(m.dim, 'explosion', m.x + (this.rng.next() - 0.5) * 8, m.y + 2 + (this.rng.next() - 0.5) * 4, m.z + (this.rng.next() - 0.5) * 8, 1, 0.5);
     const first = !this.flags.dragonKilledOnce;
@@ -661,9 +970,8 @@ export class DragonFight {
       dim.setBlock(0, py + 4, 0, S('dragon_egg'));
       this.server.admin.setBlockMark(dim, 0, py + 4, 0, m.admin);
     }
-    // Loot: dragon scales, breath and the corrupted eye that leads to the Far Lands
+    // Loot: dragon scales and breath. (The Corrupted Eye only ever comes from the secret ending.)
     const drops = rollLoot('mob/ender_dragon', { rng: this.rng, looting: 0, killedByPlayer: true, onFire: false, difficulty: this.server.level.difficulty });
-    drops.push(stackOf('corrupted_eye', 1));
     for (const st of drops) this.server.mining.dropItem(dim, 0.5, py + 5, 0.5, m.admin ? markAdmin(st) : st);
     this.end.spawnGateway(dim);
     this.flags.dragonKilled = true;
@@ -675,6 +983,37 @@ export class DragonFight {
     m.remove();
     this.dragon = null;
     this.server.broadcastChat('The Ender Dragon has been defeated!', 'system');
+    // V5.5: a Corrupted Flash Drive made before this wakes up
+    this.server.herobrine?.onDragonDefeated(m.admin);
+  }
+
+  /**
+   * The secret ending's quiet close: the End is left in its defeated state
+   * (lit exit portal, a new gateway, the egg the first time) without the
+   * victory sequence, loot or announcement.
+   */
+  completeSecret(): void {
+    const dim = this.dim;
+    const m = this.dragon;
+    const py = this.portalY();
+    buildExitPortal((x, y, z, s) => dim.setBlock(x, y, z, s), py, true);
+    if (!this.flags.dragonKilledOnce) {
+      dim.setBlock(0, py + 4, 0, S('dragon_egg'));
+      this.server.admin.setBlockMark(dim, 0, py + 4, 0, !!m?.admin);
+    }
+    this.end.spawnGateway(dim);
+    this.flags.dragonKilled = true;
+    this.flags.dragonKilledOnce = true;
+    this.flags.dragonAlive = false;
+    delete this.flags.dragonAdmin;
+    delete this.flags.dragonHealth;
+    this.clearBars();
+    m?.remove();
+    this.dragon = null;
+    this.secretRun = false;
+    this.phase = 'hold';
+    // V5.5: the malware dies with the dragon (this end doesn't wake a drive: it is the other story's)
+    this.server.herobrine?.malware.onDragonGone();
   }
 
   // ------------------------------------------------------------------ boss bar

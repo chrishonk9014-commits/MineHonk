@@ -47,8 +47,31 @@ export function wrapClick(host: ScreenHost, f: () => void): () => void {
 // Title
 // ---------------------------------------------------------------------------
 const SPLASHES = [
+  'The Digital Corruption Update!',
+  'Do not plug it in!',
+  'Removed Herobrine!',
+  '478868574082066804',
+  'Now with computers!',
+  'HonkOS 5.5!',
+  'Feed it to the dragon?',
+  'Keyboard not found. Press F1!',
+  'He is never where you saw him.',
+  'The Engineering Update!',
+  'Now with conveyor belts!',
+  'Measured in EU/t!',
+  'Redstone, but better!',
+  'Read the Engineering Book!',
+  'Mind the hazard stripes!',
+  'Automate everything!',
   'Now with more honk!',
-  'The Caves Update!',
+  'Last one standing wins!',
+  'The keycard is outside!',
+  'Bedrock-sealed bunkers!',
+  'Bow before the pyramid!',
+  'What is that chunk?',
+  'Now with bunkers!',
+  'Villages, planned!',
+  'ERROR DEFEATED?',
   'Deeper than ever!',
   'Listen. Something is listening back.',
   'Bring a torch!',
@@ -66,7 +89,7 @@ const SPLASHES = [
 ];
 
 export function titleScreen(host: ScreenHost, actions: { singleplayer: () => void; multiplayer: () => void; options: () => void; profile: () => void }, profile: Profile): Screen {
-  const logo = el('div', { class: 'logo' }, 'MINEHONK', el('div', { class: 'splash' }, SPLASHES[Math.floor(Math.random() * SPLASHES.length)]!));
+  const logo = el('div', { class: 'logo' }, 'MINEHONK', el('div', { class: 'logo-edition' }, 'V5.5 - The Digital Corruption Update'), el('div', { class: 'splash' }, SPLASHES[Math.floor(Math.random() * SPLASHES.length)]!));
   const body = el(
     'div',
     { class: 'stack', style: { marginTop: 'calc(var(--s) * 40)' } },
@@ -74,7 +97,7 @@ export function titleScreen(host: ScreenHost, actions: { singleplayer: () => voi
     button('Multiplayer', wrapClick(host, actions.multiplayer)),
     el('div', { class: 'row' }, button('Options...', wrapClick(host, actions.options), 'btn half'), button(`Profile: ${profile.name}`, wrapClick(host, actions.profile), 'btn half')),
   );
-  const footer = el('div', { class: 'footer' }, el('span', {}, 'MineHonk 2.0 — The Caves Update'), el('span', {}, 'Original game — all art & sound generated'));
+  const footer = el('div', { class: 'footer' }, el('span', {}, 'MineHonk V5.5 - The Digital Corruption Update'), el('span', {}, 'Original game — all art & sound generated'));
   return { root: el('div', { class: 'screen dirt title-screen' }, logo, body, footer), escapable: false };
 }
 
@@ -509,6 +532,7 @@ function accessibilityScreen(host: ScreenHost, inGame: boolean): Screen {
     el('div', { class: 'row' }, cycle((v: boolean) => `Subtitles: ${onOff(v)}`, [false, true], s.subtitles, (v) => ((s.subtitles = v), change())), slider((v) => `Chat Opacity: ${Math.round(v * 100)}%`, s.chatOpacity, 0.1, 1, 0.05, (v) => ((s.chatOpacity = v), change()))),
     el('div', { class: 'row' }, cycle((v: boolean) => `Toggle Sprint: ${onOff(v)}`, [false, true], s.toggleSprint, (v) => ((s.toggleSprint = v), change())), cycle((v: boolean) => `Toggle Sneak: ${onOff(v)}`, [false, true], s.toggleSneak, (v) => ((s.toggleSneak = v), change()))),
     el('div', { class: 'row' }, slider((v) => `Darkness Effect Pulsing: ${Math.round(v * 100)}%`, s.darknessPulse, 0, 1, 0.05, (v) => ((s.darknessPulse = v), change()))),
+    el('div', { class: 'row' }, cycle((v: string) => `Glitch Effects: ${v === 'full' ? 'Full' : v === 'reduced' ? 'Reduced' : 'Off'}`, ['full', 'reduced', 'off'], s.glitchFx, (v) => ((s.glitchFx = v as 'full' | 'reduced' | 'off'), change()))),
     el('div', { class: 'spacer' }),
     button('Done', wrapClick(host, () => host.pop())),
   );
@@ -561,8 +585,8 @@ export function deathScreen(host: ScreenHost, message: string, hardcore: boolean
 
 export function achievementsScreen(host: ScreenHost, unlocked: Set<string> | null): Screen & { update: (u: Set<string>) => void } {
   const { root, body } = titled('Advancements', 'screen dim');
-  const cats = ['story', 'caves', 'nether', 'end', 'adventure', 'husbandry', 'farlands'] as const;
-  const names: Record<(typeof cats)[number], string> = { story: 'MineHonk', caves: 'Caves', nether: 'Nether', end: 'The End', adventure: 'Adventure', husbandry: 'Husbandry', farlands: 'Farlands' };
+  const cats = ['story', 'world', 'engineering', 'digital', 'caves', 'nether', 'end', 'adventure', 'husbandry', 'farlands'] as const;
+  const names: Record<(typeof cats)[number], string> = { story: 'MineHonk', world: 'World', engineering: 'Engineering', digital: 'Digital', caves: 'Caves', nether: 'Nether', end: 'The End', adventure: 'Adventure', husbandry: 'Husbandry', farlands: 'Farlands' };
   let cat: (typeof cats)[number] = 'story';
   const tabs = el('div', { class: 'row' });
   const list = el('div', { class: 'list adv-list' });

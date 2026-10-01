@@ -11,7 +11,7 @@ import { Inventory, ARMOR_START, OFFHAND } from '../player/Inventory';
 import { type ItemStack, type Slot, canStack, cloneStack, maxStack, isEmpty, sameItem, toSaved, fromSaved, type SavedStack, itemIdOf, isAdminStack, markAdmin } from '../../common/game/itemstack';
 import { items, itemById } from '../../common/registry/items';
 import type { C2S, WindowKind } from '../../common/net/protocol';
-import { matchCrafting, craftingRemainder, smeltingFor, fuelTicks, stonecutterOptions, smithingResult } from '../../common/game/crafting';
+import { matchCrafting, craftingRemainder, smeltingFor, fuelTicks, stonecutterOptions, smithingResult, engRecipes, type CompiledRecipe } from '../../common/game/crafting';
 import type { Dimension } from '../world/Dimension';
 import { getProp, blocks, STATE_BLOCK, withProp } from '../../common/registry/blocks';
 import { FACE_DX, FACE_DZ } from '../../common/world/constants';
@@ -29,6 +29,10 @@ export interface WSlot {
   onTake?(p: ServerPlayer, taken: ItemStack): void;
   /** Group for shift-click routing. */
   group: 'container' | 'main' | 'hotbar' | 'armor' | 'offhand' | 'craft' | 'result' | 'fuel' | 'input';
+  /** V5 filter / target slots: clicking puts a copy of the cursor item (one) there, never the item itself. */
+  ghost?: boolean;
+  /** V5.5: while true nothing goes in or comes out (a computer Herobrine has taken over). */
+  locked?(): boolean;
 }
 
 export class Window {
@@ -42,6 +46,8 @@ export class Window {
   onClose?: (p: ServerPlayer) => void;
   /** Recompute outputs after any change. */
   refresh?: () => void;
+  /** Crafting grid of crafting windows (the Engineering Book fills it). */
+  craftGrid?: Inventory;
 
   constructor(
     readonly id: number,
@@ -120,10 +126,11 @@ export class Containers {
   }
 
   /** Adds result + grid slots for a crafting window. */
-  private addCrafting(w: Window, p: ServerPlayer, grid: Inventory, gw: number): void {
+  private addCrafting(w: Window, p: ServerPlayer, grid: Inventory, gw: number, list?: CompiledRecipe[]): void {
     const result: { stack: Slot } = { stack: null };
+    w.craftGrid = grid;
     const refresh = (): void => {
-      const r = matchCrafting(grid.slots, gw, gw);
+      const r = matchCrafting(grid.slots, gw, gw, list);
       // Anything crafted from cheat items (or in a cheat context) is cheat-made
       const cheat = !!r && (grid.slots.some((s) => isAdminStack(s)) || this.server.admin.inContext(p));
       result.stack = r ? { id: r.result, count: r.count, ...(cheat ? { tag: { admin: true } } : {}) } : null;
@@ -203,6 +210,25 @@ export class Containers {
     this.open(p, w);
   }
 
+  /** V5: the Engineering Crafting Table (its own recipes; the Engineering Book fills its grid). */
+  openEngineeringTable(p: ServerPlayer, dim: Dimension, x: number, y: number, z: number): void {
+    const w = new Window(this.newId(), 'eng_crafting', 'Engineering Crafting Table', 10);
+    const grid = new Inventory(9);
+    this.addCrafting(w, p, grid, 3, engRecipes());
+    this.addPlayerInventory(w, p);
+    w.pos = { dim, x, y, z };
+    w.onClose = (pl) => {
+      for (let i = 0; i < 9; i++) {
+        const st = grid.get(i);
+        if (st) {
+          const rem = pl.inventory.add(st);
+          if (rem) this.server.interaction.dropStack(pl, rem);
+        }
+      }
+    };
+    this.open(p, w);
+  }
+
   private keyOf(dim: Dimension, x: number, y: number, z: number): string {
     return `${dim.id}:${x},${y},${z}`;
   }
@@ -258,7 +284,7 @@ export class Containers {
   }
 
   /** Writes a live inventory back into its block entity. */
-  private persist(dim: Dimension, x: number, y: number, z: number, inv: Inventory, extra?: Record<string, unknown>): void {
+  persist(dim: Dimension, x: number, y: number, z: number, inv: Inventory, extra?: Record<string, unknown>): void {
     const be = (dim.getBlockEntity(x, y, z) ?? { type: 'chest' }) as Record<string, unknown> & { type: string };
     be.items = inv.slots.map(toSaved);
     if (extra) Object.assign(be, extra);
@@ -571,6 +597,12 @@ export class Containers {
     }
     if (slotIndex < 0 || slotIndex >= w.slots.length) return;
     const slot = w.slots[slotIndex]!;
+    if (slot.locked?.()) return;
+    if (slot.ghost) {
+      // Filter slots hold a copy of what was clicked in (or nothing); real items never move
+      if (mode === 'pickup' || mode === 'quick' || mode === 'drop') slot.set(mode !== 'drop' && p.cursor ? { ...cloneStack(p.cursor), count: 1 } : null);
+      return;
+    }
     switch (mode) {
       case 'pickup':
         if (slot.output) this.takeOutput(p, w, slot, false);
@@ -615,7 +647,7 @@ export class Containers {
         const target = p.cursor;
         for (let pass = 0; pass < 2; pass++) {
           for (const s of w.slots) {
-            if (s.output) continue;
+            if (s.output || s.ghost || s.locked?.()) continue;
             const v = s.get();
             if (!v || !canStack(v, target)) continue;
             if (pass === 0 && v.count === maxStack(v)) continue;

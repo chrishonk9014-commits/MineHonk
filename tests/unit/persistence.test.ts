@@ -1,5 +1,6 @@
+import { GENERATOR_VERSION } from '../../src/server/world/LevelData';
 import { describe, it, expect } from 'vitest';
-import { makeServer, join } from '../helpers/testServer';
+import { makeServer, join, tick } from '../helpers/testServer';
 import { MemoryStorage } from '../../src/server/storage/Storage';
 import { GameServer } from '../../src/server/GameServer';
 
@@ -62,7 +63,7 @@ describe('persistence hardening', () => {
   it('keeps the V2 generator, Warden warnings and visited cave biomes across restarts', async () => {
     const storage = new MemoryStorage();
     const { server } = await makeServer({}, storage);
-    expect(server.level.generatorVersion).toBe(2);
+    expect(server.level.generatorVersion).toBe(GENERATOR_VERSION);
     expect(server.overworld.generator.caves).toBe(true);
     const { player } = await join(server, 'Caver');
     player.wardenWarning = 2;
@@ -70,7 +71,7 @@ describe('persistence hardening', () => {
     player.visitedCaveBiomes.add(9);
     await server.stop();
     const { server: s2 } = await makeServer({}, storage);
-    expect(s2.level.generatorVersion).toBe(2);
+    expect(s2.level.generatorVersion).toBe(GENERATOR_VERSION);
     const { player: p2 } = await join(s2, 'Caver');
     expect(p2.wardenWarning).toBe(2);
     expect([...p2.visitedCaveBiomes].sort()).toEqual([3, 9]);
@@ -88,5 +89,50 @@ describe('persistence hardening', () => {
     // Saving again keeps it a V1 world
     await again.saveAll();
     expect((storage.level as { generatorVersion?: number }).generatorVersion).toBe(1);
+  });
+
+  it('keeps V3 state across restarts: endings, freezing, a fight in progress and blocks to restore', async () => {
+    const storage = new MemoryStorage();
+    const { server } = await makeServer({}, storage);
+    const { player } = await join(server, 'Hero');
+    server.endings!.state.farlandsAccess = true;
+    server.endings!.reach(player, 'dragon');
+    const m = server.mobs!.spawn(player.dim, 'the_error', player.x + 10, player.y, player.z, { reason: 'boss' })!;
+    tick(server, 25);
+    const f = server.errorBoss!.fight!;
+    expect(f.boss).toBe(m);
+    m.health = 250;
+    // A hole the fight opened, not yet put back
+    const [hx, hy, hz] = [Math.floor(player.x) + 3, Math.floor(player.y) - 1, Math.floor(player.z)];
+    const stone = player.dim.getState(hx, hy, hz);
+    (server.level.flags as Record<string, unknown>).errorRestore = { dim: 'overworld', blocks: [[`${hx},${hy},${hz}`, stone]] };
+    player.dim.setBlock(hx, hy, hz, 0);
+    player.freezeTicks = 90;
+    await server.stop();
+
+    const { server: s2 } = await makeServer({}, storage);
+    const { player: p2 } = await join(s2, 'Hero');
+    expect(s2.endings!.state.farlandsAccess).toBe(true);
+    expect(s2.endings!.state.reached.dragon).toBeGreaterThan(0);
+    expect(p2.endings.has('dragon')).toBe(true);
+    // Saved at 90; joining runs a few ticks, which thaw it a little
+    expect(p2.freezeTicks).toBeGreaterThan(50);
+    tick(s2, 25);
+    const f2 = s2.errorBoss!.fight!;
+    expect(f2.boss?.type).toBe('the_error');
+    expect(f2.boss!.health).toBe(250);
+    expect(p2.dim.getState(hx, hy, hz)).toBe(stone);
+  });
+
+  it('keeps a V2 world a V2 world (no corrupted caves or arenas)', async () => {
+    const storage = new MemoryStorage();
+    const { server } = await makeServer({ name: 'Caves' }, storage);
+    await server.stop();
+    (storage.level as { generatorVersion?: number }).generatorVersion = 2;
+    const again = await GameServer.open(storage, null, {});
+    expect(again.level.generatorVersion).toBe(2);
+    expect(again.overworld.generator.caves).toBe(true);
+    expect(again.overworld.generator.structureTypes!()).not.toContain('glitched_portal');
+    expect(again.dim('farlands').generator.structureTypes!()).not.toContain('error_arena');
   });
 });

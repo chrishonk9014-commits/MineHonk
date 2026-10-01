@@ -5,6 +5,8 @@
  * produces one 16x16 PNG per texture name and packs them into the atlas.
  */
 import type { BlockDef, SoundGroup, TintKind } from '../registry/blockTypes';
+import { engineeringBlockDefs } from '../engineering/catalog';
+import { digitalBlockDefs } from '../digital/blocks';
 
 const defs: BlockDef[] = [];
 const add = (d: BlockDef): BlockDef => {
@@ -940,6 +942,9 @@ cube('fractal_glass', 0.5, 'glass', { layer: 'translucent', light: 4, drops: { i
 cube('echo_lamp', 0.5, 'glass', { light: 15 });
 add({ id: 'far_portal', name: 'Farlands Portal', hardness: -1, sound: 'glass', model: 'portal', props: { axis: ['x', 'z'] }, tex: { all: 'far_portal' }, light: 12, collide: false, drops: 'none', item: false, creative: 'hidden' });
 cube('far_portal_frame', -1, 'glitch', { resistance: 3600000, name: 'Corrupted Bedrock', drops: 'none', creative: 'building' });
+// V3: the Glitched Portal's broken frame (a Corrupted Eye sits in its socket) and the black of the void
+add({ id: 'glitched_portal_frame', name: 'Glitched Portal Frame', hardness: -1, resistance: 3600000, sound: 'glitch', model: 'cube', props: { part: ['frame', 'cracked', 'socket', 'eye'] }, tex: { all: 'glitched_portal_frame', cracked: 'glitched_portal_frame_cracked', socket: 'glitched_portal_frame_socket', eye: 'glitched_portal_frame_eye' }, light: 4, drops: 'none', creative: 'building', mapColor: 0x2a0a3a });
+cube('null_block', 30, 'glitch', { tool: 'pickaxe', harvestLevel: 3, requiresTool: true, resistance: 1200, name: 'Null', mapColor: 0x000000 });
 add({ id: 'data_crystal', name: 'Data Crystal', hardness: 3, sound: 'glass', model: 'cross', tex: { all: 'data_crystal' }, light: 11, tool: 'pickaxe', drops: { item: 'data_fragment' } });
 cube('stretched_sand', 0.5, 'sand', { tool: 'shovel', gravity: false, name: 'Stretched Sand' });
 cube('missing_block', 1, 'glitch', { tool: 'pickaxe', name: 'Missing Block' });
@@ -953,5 +958,57 @@ add({ id: 'sculk_sensor', name: 'Sculk Sensor', hardness: 1.5, sound: 'moss', mo
 add({ id: 'sculk_shrieker', name: 'Sculk Shrieker', hardness: 3, sound: 'moss', model: 'custom', props: { can_summon: BOOL, shrieking: BOOL }, tex: { top: 'sculk_shrieker_top', side: 'sculk_shrieker_side', bottom: 'sculk_shrieker_bottom', inner: 'sculk_shrieker_inner' }, tool: 'hoe', collide: true, layer: 'cutout', drops: { item: 'none', xp: [5, 5], silkTouch: true } });
 add({ id: 'sculk_catalyst', name: 'Sculk Catalyst', hardness: 3, sound: 'moss', model: 'cube', props: { bloom: BOOL }, tex: { top: 'sculk_catalyst_top', side: 'sculk_catalyst_side', bottom: 'sculk_catalyst_bottom', on: 'sculk_catalyst_top_bloom' }, light: 6, tool: 'hoe', drops: { item: 'none', xp: [5, 5], silkTouch: true } });
 stoneLike('reinforced_deepslate', 55, { harvestLevel: 99, drops: 'none', sound: 'deepslate', tex: { top: 'reinforced_deepslate_top', side: 'reinforced_deepslate_side', bottom: 'reinforced_deepslate_bottom' } });
+
+// ---------------------------------------------------------------------------
+// V4 - The World Update: biome plants and materials, bunker machinery and the
+// Error Biome. Only V4 worlds generate these; every one can also be placed.
+// ---------------------------------------------------------------------------
+// Desert and badlands
+plant('desert_marigold', { place: 'needs_sand', tags: ['flowers', 'small_flowers'] });
+plant('desert_scrub', { place: 'needs_sand', replaceable: true, drops: { item: 'stick', min: 0, max: 1 } });
+add({ id: 'cactus_flower', name: 'Cactus Flower', hardness: 0, sound: 'plant', model: 'custom', tex: { all: 'cactus_flower' }, place: 'standing', collide: false, flammable: true, drops: { item: 'cactus_fruit', min: 1, max: 2, silkTouch: true }, tags: ['flowers'] });
+plant('aloe_vera', { place: 'needs_sand', drops: { item: 'aloe_leaf', min: 1, max: 2, silkTouch: true } });
+add({ id: 'ancient_urn', name: 'Ancient Urn', hardness: 0.6, sound: 'stone', model: 'custom', tex: { all: 'ancient_urn', top: 'ancient_urn_top' }, tool: 'pickaxe', drops: { table: 'block/ancient_urn', silkTouch: true }, creative: 'decoration' });
+// Forests
+add({ id: 'leaf_litter', name: 'Leaf Litter', hardness: 0.1, sound: 'grass', model: 'carpet', tex: { all: 'leaf_litter' }, layer: 'cutout', replaceable: true, place: 'needs_solid_below', flammable: true, drops: { item: 'none', silkTouch: true } });
+add({ id: 'bracket_fungus', name: 'Bracket Fungus', hardness: 0.2, sound: 'wood', model: 'custom', props: { facing: FACING4 }, tex: { all: 'bracket_fungus', top: 'bracket_fungus_top' }, tool: 'axe', collide: false, flammable: true });
+plant('shadowcap', { place: 'standing', light: 6, tags: ['mushrooms'] });
+// Snow and mountains
+plant('frostbloom', { light: 4, tags: ['flowers', 'small_flowers'] });
+plant('snowberry_bush', { drops: { item: 'snowberries', min: 1, max: 3, silkTouch: true }, speedFactor: 0.8 });
+stoneLike('frosted_stone_bricks', 1.5, { slipperiness: 0.8 });
+plant('edelweiss', { tags: ['flowers', 'small_flowers'] });
+// Jungle
+plant('jungle_orchid', { tags: ['flowers', 'small_flowers'] });
+add({ id: 'hanging_moss', name: 'Hanging Moss', hardness: 0, sound: 'plant', model: 'hanging_plant', tex: { all: 'hanging_moss' }, replaceable: true, flammable: true, drops: { item: 'none', silkTouch: true } });
+// Swamps
+add({ id: 'cattail', name: 'Cattail', hardness: 0, sound: 'plant', model: 'double_plant', props: { half: ['lower', 'upper'] }, tex: { bottom: 'cattail_bottom', top: 'cattail_top' }, place: 'needs_soil', flammable: true });
+plant('marsh_glowcap', { place: 'standing', light: 9, tags: ['mushrooms'] });
+cube('peat', 0.6, 'mud', { tool: 'shovel', tags: ['dirt'], data: { fuel: 1200 }, mapColor: 0x3a2a1c });
+// Plains, taiga, savanna, beaches and cherry groves
+add({ id: 'clover', name: 'Clover', hardness: 0, sound: 'grass', model: 'carpet', tex: { all: 'clover' }, tint: 'grass', layer: 'cutout', replaceable: true, place: 'needs_solid_below', flammable: true, drops: { item: 'none', silkTouch: true } });
+plant('buttercup', { tags: ['flowers', 'small_flowers'] });
+plant('lingonberry_bush', { drops: { item: 'lingonberries', min: 1, max: 3, silkTouch: true }, speedFactor: 0.8 });
+cube('termite_mound', 0.8, 'gravel', { tool: 'shovel', mapColor: 0xa8683a });
+plant('beach_grass', { place: 'needs_sand', replaceable: true, drops: { item: 'none', silkTouch: true } });
+add({ id: 'seashell', name: 'Seashell', hardness: 0, sound: 'bone', model: 'custom', tex: { all: 'seashell' }, place: 'needs_solid_below', collide: false });
+add({ id: 'cherry_petals', name: 'Cherry Petals', hardness: 0, sound: 'grass', model: 'carpet', tex: { all: 'cherry_petals' }, layer: 'cutout', replaceable: true, place: 'needs_solid_below', flammable: true, drops: { item: 'none', silkTouch: true } });
+// Bunkers: a keycard opens the security doors, the generators power the vault
+add({ id: 'keycard_reader', name: 'Keycard Reader', hardness: -1, resistance: 3600000, sound: 'metal', model: 'cube', props: { facing: FACING4, lit: BOOL }, tex: { all: 'bunker_panel', front: 'keycard_reader', front_lit: 'keycard_reader_on' }, interact: 'keycard_reader', drops: 'none', creative: 'hidden', item: false });
+add({ id: 'bunker_generator', name: 'Bunker Generator', hardness: -1, resistance: 3600000, sound: 'metal', model: 'cube', props: { facing: FACING4, lit: BOOL }, tex: { all: 'bunker_panel', top: 'bunker_generator_top', front: 'bunker_generator', front_lit: 'bunker_generator_on' }, interact: 'bunker_generator', drops: 'none', creative: 'hidden', item: false });
+stoneLike('bunker_plating', 50, { resistance: 1200, harvestLevel: 3, sound: 'metal', mapColor: 0x5a5f5a });
+add({ id: 'bunker_blast_door', name: 'Blast Door', hardness: -1, resistance: 3600000, sound: 'metal', model: 'cube', tex: { all: 'bunker_blast_door' }, drops: 'none', creative: 'hidden', item: false });
+// The Error Biome: an unloaded chunk, and the firewalls between the Glitched Structure's stages
+add({ id: 'error_block', name: 'ERROR', hardness: 2, resistance: 12, sound: 'glitch', model: 'cube', tex: { all: 'error_block' }, tool: 'pickaxe', light: 2, drops: { item: 'glitch_shard', min: 0, max: 1, silkTouch: true }, mapColor: 0x7a00ff });
+add({ id: 'glitch_firewall', name: 'Firewall', hardness: -1, resistance: 3600000, sound: 'glitch', model: 'cube', tex: { all: 'glitch_firewall' }, layer: 'translucent', opacity: 0, light: 10, drops: 'none', creative: 'hidden', item: false });
+// Temple trials (generator 5): altars to awaken and the seals between a temple's chambers
+add({ id: 'temple_altar', name: 'Temple Altar', hardness: -1, resistance: 3600000, sound: 'stone', model: 'cube', props: { lit: BOOL }, tex: { all: 'temple_altar', on: 'temple_altar_lit' }, light: 12, interact: 'temple_altar', drops: 'none', creative: 'hidden', item: false });
+add({ id: 'temple_seal', name: 'Temple Seal', hardness: -1, resistance: 3600000, sound: 'stone', model: 'cube', tex: { all: 'temple_seal' }, light: 4, drops: 'none', creative: 'hidden', item: false, mapColor: 0x8a6d3b });
+
+// V5 - The Engineering Update: machines, power, transport, fluids, signals and factory blocks
+for (const d of engineeringBlockDefs()) add(d);
+
+// V5.5 - The Digital Corruption Update: the computer world and Herobrine's cave
+for (const d of digitalBlockDefs()) add(d);
 
 export const BLOCK_DEFS: readonly BlockDef[] = defs;

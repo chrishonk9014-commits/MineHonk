@@ -48,6 +48,11 @@ export interface Settings {
   chatOpacity: number;
   /** How strongly the Darkness effect pulses (0 = a steady dim, 1 = full pulses). */
   darknessPulse: number;
+  /**
+   * Glitch screen effects (V3): 'full', 'reduced' (gentler, slower, no
+   * screen tearing) or 'off' (no distortion; only brief text and fades).
+   */
+  glitchFx: 'full' | 'reduced' | 'off';
   autoJump: boolean;
   toggleSprint: boolean;
   toggleSneak: boolean;
@@ -102,6 +107,7 @@ export const DEFAULT_SETTINGS: Settings = {
   subtitles: false,
   chatOpacity: 1,
   darknessPulse: 1,
+  glitchFx: 'full',
   autoJump: false,
   toggleSprint: false,
   toggleSneak: false,
@@ -113,7 +119,12 @@ const KEY = 'minehonk.settings';
 export function loadSettings(): Settings {
   try {
     const raw = JSON.parse(localStorage.getItem(KEY) ?? 'null') as Partial<Settings> | null;
-    if (!raw) return structuredClone(DEFAULT_SETTINGS);
+    if (!raw) {
+      const s = structuredClone(DEFAULT_SETTINGS);
+      // Phones and tablets start with a gentler view distance
+      if (typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches) s.renderDistance = 6;
+      return s;
+    }
     return { ...DEFAULT_SETTINGS, ...raw, keys: { ...DEFAULT_KEYS, ...(raw.keys ?? {}) } };
   } catch {
     return structuredClone(DEFAULT_SETTINGS);

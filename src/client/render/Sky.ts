@@ -259,6 +259,24 @@ export class Sky {
       u.uGlitch!.value = 0;
       return state;
     }
+    // V5.5: inside the computer it is always the same overcast grey morning, no sun, no clouds
+    if (dim === 'computer') {
+      this.sun.visible = this.moon.visible = false;
+      this.clouds.visible = false;
+      const zenith = new THREE.Color(0x8e9a9c);
+      const horizon = new THREE.Color(0xb9c2c2);
+      u.uZenith!.value.copy(zenith);
+      u.uHorizon!.value.copy(horizon);
+      u.uVoid!.value.copy(horizon.clone().multiplyScalar(0.3));
+      u.uGlowStrength!.value = 0;
+      (this.stars.material as THREE.PointsMaterial).opacity = 0;
+      u.uGlitch!.value = 0;
+      state.daylight = 0.82;
+      state.fog.copy(horizon);
+      state.skyTint.setRGB(0.92, 0.96, 0.95);
+      state.ambient = 0.05;
+      return state;
+    }
     // celestial angle (0 = noon at 6000)
     const f = ((dayTime / 24000 - 0.25) % 1 + 1) % 1;
     const eased = f + (1 - (Math.cos(f * Math.PI) + 1) / 2 - f) / 3;

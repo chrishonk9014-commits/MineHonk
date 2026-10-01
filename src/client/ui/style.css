@@ -2355,3 +2355,11 @@ body {
 .eb-head .gtitle {
   flex: none;
 }
+.logo .logo-edition {
+  font-size: calc(var(--s) * 9);
+  letter-spacing: 0;
+  text-align: center;
+  color: #ffb84a;
+  text-shadow: var(--s) var(--s) 0 #4a2a00;
+  margin-top: calc(var(--s) * 3);
+}

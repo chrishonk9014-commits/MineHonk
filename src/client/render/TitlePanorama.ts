@@ -1,9 +1,18 @@
 /**
  * The title screen backdrop: a patch of real, freshly generated terrain from
- * a random seed. Since V5 it mostly shows The Engineering Update:
- *  - a working factory: generators, cables, machines with their lights on,
- *    conveyors, a multiblock furnace and a control room;
- * and sometimes The World Update:
+ * a random seed. Since V5 it shows The Engineering Update: one of five set
+ * scenes built onto the terrain, picked at random:
+ *  - a factory: machines with their lights on, conveyors, an industrial
+ *    furnace and a wall of monitors;
+ *  - a power plant: solar fields, wind turbines, battery banks, a large
+ *    generator fed from lava tanks, conduits;
+ *  - a mine: a quarry over its open pit, drills, conveyors to crates, an ore
+ *    scanner;
+ *  - an automated farm: fields with planters, harvesters, sprinklers, a
+ *    water tank and an item collector;
+ *  - a control room: a glass-roofed hall of monitors and control panels.
+ * The V4 and V3.5 places are still there with ?title=error_biome|village|
+ * farlands|end|arena:
  *  - an Error Biome chunk, circling the one broken chunk in its landscape;
  *  - a V4 village, circling its houses, farms and decorated streets.
  * The V3.5 places are still there with ?title=farlands|end|arena:
@@ -30,10 +39,13 @@ import type { Settings } from '../settings';
 
 const RADIUS = 4;
 
-type Scene = 'farlands' | 'end' | 'arena' | 'error_biome' | 'village' | 'factory';
-/** Shown at random (the factory most often); the others only when asked for. */
-const RANDOM_SCENES: Scene[] = ['factory', 'factory', 'factory', 'error_biome', 'village'];
-const ALL_SCENES: Scene[] = ['factory', 'error_biome', 'village', 'farlands', 'end', 'arena'];
+type EngScene = 'factory' | 'power_plant' | 'mine' | 'farm' | 'control_room';
+type Scene = 'farlands' | 'end' | 'arena' | 'error_biome' | 'village' | EngScene;
+/** The Engineering Update's set scenes, shown at random; the others only when asked for. */
+const ENG_SCENES: EngScene[] = ['factory', 'power_plant', 'mine', 'farm', 'control_room'];
+const RANDOM_SCENES: Scene[] = ENG_SCENES;
+const ALL_SCENES: Scene[] = [...ENG_SCENES, 'error_biome', 'village', 'farlands', 'end', 'arena'];
+const isEng = (s: Scene): s is EngScene => (ENG_SCENES as Scene[]).includes(s);
 
 /** What each scene looks like: particles in the air, camera tilt, extra light. */
 const LOOK: Record<Scene, { particle: string; pitch: number; nightVision: number; aside: number }> = {
@@ -43,8 +55,12 @@ const LOOK: Record<Scene, { particle: string; pitch: number; nightVision: number
   arena: { particle: 'glitch', pitch: -0.2, nightVision: 0.15, aside: 0.62 },
   error_biome: { particle: 'glitch', pitch: 0.42, nightVision: 0, aside: 0 },
   village: { particle: 'none', pitch: 0.27, nightVision: 0, aside: 0 },
-  // Looking a little past the factory keeps it beside the menu
+  // Looking a little past the scene keeps it beside the menu
   factory: { particle: 'none', pitch: 0.3, nightVision: 0, aside: 0.55 },
+  power_plant: { particle: 'none', pitch: 0.32, nightVision: 0, aside: 0.55 },
+  mine: { particle: 'none', pitch: 0.42, nightVision: 0, aside: 0.5 },
+  farm: { particle: 'none', pitch: 0.34, nightVision: 0, aside: 0.55 },
+  control_room: { particle: 'none', pitch: 0.36, nightVision: 0, aside: 0.5 },
 };
 
 /** The Error's poses shown on the title screen, cycling. */
@@ -79,14 +95,14 @@ export class TitlePanorama {
       return; // no WebGL: the menu keeps its dirt background
     }
     const seed = seedFromString('title-' + Math.floor(Math.random() * 1e9));
-    // ?title=factory|error_biome|village|farlands|end|arena picks one (for screenshots)
+    // ?title=factory|power_plant|mine|farm|control_room|error_biome|village|farlands|end|arena picks one (for screenshots)
     const asked = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('title') : null;
     this.scene = ALL_SCENES.includes(asked as Scene) ? (asked as Scene) : RANDOM_SCENES[Math.floor(Math.random() * RANDOM_SCENES.length)]!;
     if (this.scene === 'error_biome' || this.scene === 'village') {
       this.findOverworld(seed);
       return;
     }
-    if (this.scene === 'factory') {
+    if (isEng(this.scene)) {
       const gen = new OverworldGenerator(seed);
       this.build(gen, gen.findSpawn());
       return;
@@ -159,7 +175,7 @@ export class TitlePanorama {
         this.raf = requestAnimationFrame(step);
         return;
       }
-      if (this.scene === 'factory') focus = { ...focus, y: stampFactory(chunks, Math.floor(focus.x), Math.floor(focus.z)) };
+      if (isEng(this.scene)) focus = { ...focus, y: stampScene(this.scene, chunks, Math.floor(focus.x), Math.floor(focus.z)) };
       const light = new LightEngine({ getChunk: (cx, cz) => chunks.get(chunkIndex(cx, cz)), markLightDirty: () => {} }, this.world.hasSky);
       for (const c of chunks.values()) light.initChunk(c);
       for (const c of chunks.values()) this.world.loadChunk(encodeChunk(c, { light: true, blockEntities: false }));
@@ -198,10 +214,14 @@ export class TitlePanorama {
         this.orbit = 22;
         break;
       }
-      case 'factory': {
-        // Circling the factory from above its machines
-        this.center = { x: fx + 0.5, y: focus.y + 8, z: fz + 0.5 };
-        this.orbit = 21;
+      case 'factory':
+      case 'power_plant':
+      case 'mine':
+      case 'farm':
+      case 'control_room': {
+        // Circling the set scene from just above it
+        this.center = { x: fx + 0.5, y: focus.y + (this.scene === 'mine' ? 10 : 8), z: fz + 0.5 };
+        this.orbit = this.scene === 'control_room' ? 17 : 21;
         break;
       }
       case 'village': {
@@ -303,13 +323,8 @@ export class TitlePanorama {
   }
 }
 
-/**
- * A small working factory for the title screen, built on the generated
- * terrain: solar panels and wind turbines, battery banks, cable runs,
- * machines with their lights on, a conveyor line, an industrial furnace
- * and a control room. Returns the floor height.
- */
-function stampFactory(chunks: Map<number, Chunk>, fx: number, fz: number): number {
+/** Builds one of the Engineering Update's set scenes onto the terrain; returns its floor height. */
+function stampScene(scene: EngScene, chunks: Map<number, Chunk>, fx: number, fz: number): number {
   const touched = new Set<Chunk>();
   const set = (x: number, y: number, z: number, st: number): void => {
     const c = chunks.get(chunkIndex(x >> 4, z >> 4));
@@ -317,63 +332,218 @@ function stampFactory(chunks: Map<number, Chunk>, fx: number, fz: number): numbe
     c.set(x & 15, y, z & 15, st);
     touched.add(c);
   };
+  const solidAt = (x: number, y: number, z: number): boolean => !!STATE_SOLID[chunks.get(chunkIndex(x >> 4, z >> 4))?.get(x & 15, y, z & 15) ?? 1];
   const height = (x: number, z: number): number => chunks.get(chunkIndex(x >> 4, z >> 4))?.getHeight(x & 15, z & 15) ?? 64;
   const R = 11;
   let y0 = 0;
   for (let dz = -R; dz <= R; dz += 4) for (let dx = -R; dx <= R; dx += 4) y0 = Math.max(y0, height(fx + dx, fz + dz));
   y0 = Math.min(y0, Math.max(height(fx, fz) + 3, 66));
-  // Floor on steel legs, open air above
+  // Relative helpers: (dx, dy, dz) from the centre of the floor
+  const put = (dx: number, dy: number, dz: number, st: number): void => set(fx + dx, y0 + dy, fz + dz, st);
+  const on = (id: string, facing = 'south'): number => stateOf(id, { facing, status: 'working' });
+  const arms = (id: string, a: string[]): number => stateOf(id, Object.fromEntries(a.map((k) => [k, 'true'])));
+  const line = (id: string, x0: number, x1: number, dz: number, dy = 0): void => {
+    for (let dx = x0; dx <= x1; dx++) put(dx, dy, dz, arms(id, [...(dx > x0 ? ['west'] : []), ...(dx < x1 ? ['east'] : [])]));
+  };
+  const lineZ = (id: string, dx: number, z0: number, z1: number, dy = 0): void => {
+    for (let dz = z0; dz <= z1; dz++) put(dx, dy, dz, arms(id, [...(dz > z0 ? ['north'] : []), ...(dz < z1 ? ['south'] : [])]));
+  };
+  const turbine = (dx: number, dz: number, h = 4): void => {
+    for (let y = 0; y < h; y++) put(dx, y, dz, S('steel_block'));
+    put(dx, h, dz, on('wind_turbine'));
+  };
+  const hollowCube = (cx: number, cz: number, controller: string): void => {
+    // A 3x3x3 casing cube behind (north of) its controller, hollow in the middle
+    for (let dx = -1; dx <= 1; dx++)
+      for (let y = 0; y <= 2; y++)
+        for (let dz = -2; dz <= 0; dz++) {
+          if (dx === 0 && y === 1 && dz >= -1) continue;
+          put(cx + dx, y, cz + dz, y === 2 || dx !== 0 ? S('machine_casing') : S('industrial_glass'));
+        }
+    put(cx, 1, cz, on(controller));
+  };
+
+  // A clearing around the site, so no hillside hides it: everything above the
+  // floor goes, out to a ring that slopes gently back up to the terrain
+  const CLEAR = R + 12;
+  for (let dz = -CLEAR; dz <= CLEAR; dz++)
+    for (let dx = -CLEAR; dx <= CLEAR; dx++) {
+      const d = Math.max(Math.abs(dx), Math.abs(dz));
+      if (d <= R) continue;
+      const top = y0 - 1 + Math.max(0, d - R - 4);
+      const x = fx + dx;
+      const z = fz + dz;
+      for (let y = top + 1; y <= y0 + 24; y++) set(x, y, z, 0);
+      if (solidAt(x, top, z)) set(x, top, z, S('grass_block'));
+    }
+  // The site: a metal floor on steel legs, open air above
   for (let dz = -R; dz <= R; dz++)
     for (let dx = -R; dx <= R; dx++) {
       const x = fx + dx;
       const z = fz + dz;
       for (let y = y0; y <= y0 + 12; y++) set(x, y, z, 0);
       const edge = Math.abs(dx) === R || Math.abs(dz) === R;
-      set(x, y0 - 1, z, edge ? S('hazard_stripes') : (dx + dz) % 6 === 0 ? S('steel_block') : S('machine_casing'));
-      if (edge && dx % 5 === 0 && dz % 5 === 0) for (let y = y0 - 2; y > y0 - 12 && !STATE_SOLID[chunks.get(chunkIndex(x >> 4, z >> 4))?.get(x & 15, y, z & 15) ?? 1]; y--) set(x, y, z, S('steel_block'));
+      const floor = edge ? S('hazard_stripes') : scene === 'farm' ? S('dirt') : (dx + dz) % 6 === 0 ? S('steel_block') : scene === 'mine' ? S('metal_grate') : S('machine_casing');
+      set(x, y0 - 1, z, floor);
+      if (edge && dx % 5 === 0 && dz % 5 === 0) for (let y = y0 - 2; y > y0 - 12 && !solidAt(x, y, z); y--) set(x, y, z, S('steel_block'));
     }
-  const on = (id: string, facing: string): number => stateOf(id, { facing, status: 'working' });
-  const cable = (id: string, arms: string[]): number => stateOf(id, Object.fromEntries(arms.map((a) => [a, 'true'])));
-  // Solar field along the back
-  for (let dx = -9; dx <= 9; dx++) for (const dz of [-9, -8]) set(fx + dx, y0, fz + dz, on('solar_panel', 'south'));
-  // Wind turbines on posts at the corners
-  for (const [dx, dz] of [[-10, -10], [10, -10], [-10, 10], [10, 10]] as const) {
-    for (let y = y0; y < y0 + 4; y++) set(fx + dx, y, fz + dz, S('steel_block'));
-    set(fx + dx, y0 + 4, fz + dz, on('wind_turbine', 'south'));
-    set(fx + dx, y0 + 5, fz + dz, S('factory_light'));
-  }
-  // Power: battery banks and a main cable
-  for (let dx = -9; dx <= 9; dx++) set(fx + dx, y0, fz - 6, cable('power_conduit', dx > -9 ? ['west', 'east'] : ['east']));
-  for (const dx of [-9, -8, -7]) set(fx + dx, y0, fz - 5, stateOf('battery_bank', { charge: '4' }));
-  // The industrial furnace (hollow casing cube) in the middle
-  for (let dx = -1; dx <= 1; dx++)
-    for (let y = 0; y <= 2; y++)
-      for (let dz = -2; dz <= 0; dz++) {
-        if (dx === 0 && y === 1 && dz >= -1) continue;
-        set(fx + dx, y0 + y, fz + dz, y === 2 || dx !== 0 ? S('machine_casing') : S('industrial_glass'));
+  for (const [dx, dz] of [[-R, -R], [R, -R], [-R, R], [R, R]] as const) put(dx, 0, dz, S('factory_light'));
+
+  switch (scene) {
+    case 'factory': {
+      for (let dx = -9; dx <= 9; dx++) for (const dz of [-9, -8]) put(dx, 0, dz, on('solar_panel'));
+      for (const [dx, dz] of [[-10, -10], [10, -10], [-10, 10], [10, 10]] as const) turbine(dx, dz);
+      line('power_conduit', -9, 9, -6);
+      for (const dx of [-9, -8, -7]) put(dx, 0, -5, stateOf('battery_bank', { charge: '4' }));
+      hollowCube(0, 0, 'industrial_furnace');
+      for (let dx = -6; dx <= 6; dx++) put(dx, 0, 4, stateOf(dx % 4 === 0 ? 'express_conveyor' : 'conveyor', { facing: 'east' }));
+      put(-7, 0, 4, on('crusher', 'west'));
+      put(7, 0, 4, on('electric_furnace', 'west'));
+      put(8, 0, 4, stateOf('hopper', { facing: 'east' }));
+      put(9, 0, 4, S('industrial_chest'));
+      ['crusher', 'grinder', 'compressor', 'cutter', 'electric_furnace', 'recycler', 'assembler', 'pump', 'mining_drill'].forEach((id, i) => put(-8 + i * 2, 0, 7, on(id)));
+      line('insulated_cable', -8, 8, 6);
+      for (const dz of [-3, -1]) put(-9, 0, dz, stateOf('fluid_tank', { fluid: 'water', level: '6' }));
+      lineZ('fluid_pipe', -9, -2, -2);
+      put(9, 0, -2, stateOf('fluid_tank', { fluid: 'lava', level: '5' }));
+      for (let dx = 4; dx <= 8; dx++) {
+        put(dx, 0, -3, S('steel_block'));
+        put(dx, 1, -3, on('monitor'));
+        put(dx, 2, -3, dx === 6 ? on('control_panel') : on('monitor'));
       }
-  set(fx, y0 + 1, fz, on('industrial_furnace', 'south'));
-  // A conveyor line between machines, with their lights on
-  for (let dx = -6; dx <= 6; dx++) set(fx + dx, y0, fz + 4, stateOf(dx % 4 === 0 ? 'express_conveyor' : 'conveyor', { facing: 'east' }));
-  set(fx - 7, y0, fz + 4, on('crusher', 'west'));
-  set(fx + 7, y0, fz + 4, on('electric_furnace', 'west'));
-  set(fx + 8, y0, fz + 4, stateOf('hopper', { facing: 'east' }));
-  set(fx + 9, y0, fz + 4, S('industrial_chest'));
-  const row = ['crusher', 'grinder', 'compressor', 'cutter', 'electric_furnace', 'recycler', 'assembler', 'pump', 'mining_drill'];
-  row.forEach((id, i) => set(fx - 8 + i * 2, y0, fz + 7, on(id, 'south')));
-  for (let dx = -8; dx <= 8; dx++) set(fx + dx, y0, fz + 6, cable('insulated_cable', ['west', 'east']));
-  // Fluids: tanks with a pipe run
-  for (const dz of [-3, -1]) set(fx - 9, y0, fz + dz, stateOf('fluid_tank', { fluid: 'water', level: '6' }));
-  set(fx - 9, y0, fz - 2, cable('fluid_pipe', ['north', 'south']));
-  set(fx + 9, y0, fz - 2, stateOf('fluid_tank', { fluid: 'lava', level: '5' }));
-  // The control room: a wall of monitors and a control panel facing the furnace
-  for (let dx = 4; dx <= 8; dx++) {
-    set(fx + dx, y0, fz - 3, S('steel_block'));
-    set(fx + dx, y0 + 1, fz - 3, on('monitor', 'south'));
-    set(fx + dx, y0 + 2, fz - 3, dx === 6 ? on('control_panel', 'south') : on('monitor', 'south'));
+      for (const dx of [3, 9]) put(dx, 0, -2, stateOf('warning_light', { lit: 'true' }));
+      break;
+    }
+    case 'power_plant': {
+      // Solar fields on both sides, turbines along the back, the large generator in the middle
+      for (let dx = -9; dx <= -3; dx++) for (let dz = -9; dz <= -3; dz++) put(dx, 0, dz, on('solar_panel'));
+      for (let dx = 3; dx <= 9; dx++) for (let dz = -9; dz <= -3; dz++) put(dx, 0, dz, on('solar_panel'));
+      for (const dx of [-9, -5, 5, 9]) turbine(dx, 9, 6);
+      for (const dx of [-1, 1]) turbine(dx * 2, -9, 5);
+      hollowCube(0, 3, 'large_generator');
+      // Lava tanks piped into the generator, battery banks and an energy cell on conduits
+      for (const dx of [-4, 4]) for (let dy = 0; dy <= 1; dy++) put(dx, dy, 1, stateOf('fluid_tank', { fluid: 'lava', level: dy ? '4' : '8' }));
+      line('fluid_pipe', -3, -2, 1);
+      line('fluid_pipe', 2, 3, 1);
+      line('power_conduit', -9, 9, 6);
+      lineZ('power_conduit', 0, 4, 5);
+      for (let dx = -9; dx <= -3; dx++) for (const dz of [7, 8]) put(dx, 0, dz, stateOf('battery_bank', { charge: String(2 + ((dx + dz) & 1) * 2) }));
+      for (let dx = 3; dx <= 7; dx++) put(dx, 0, 7, stateOf('energy_cell', { charge: '4' }));
+      put(8, 0, 7, on('steam_generator'));
+      put(9, 0, 7, on('advanced_generator'));
+      put(0, 0, 7, on('monitor'));
+      put(1, 0, 7, on('monitor'));
+      for (const dx of [-2, 2]) put(dx, 0, 5, stateOf('warning_light', { lit: 'true' }));
+      break;
+    }
+    case 'mine': {
+      // The quarry's open pit: terraces cut down into the ground, ores in the walls
+      for (let dz = -4; dz <= 4; dz++)
+        for (let dx = -4; dx <= 4; dx++) {
+          const depth = 2 + (4 - Math.max(Math.abs(dx), Math.abs(dz))) * 2;
+          for (let y = -1; y >= -depth; y--) put(dx, y, dz, 0);
+          put(dx, -depth - 1, dz, (dx * 7 + dz * 3) % 5 === 0 ? S('iron_ore') : (dx + dz * 5) % 7 === 0 ? S('copper_ore') : S('stone'));
+        }
+      // The quarry frame: a ring of casing around the controller, raised over the pit on legs
+      for (const [dx, dz] of [[-5, -5], [5, -5], [-5, 5], [5, 5]] as const) for (let y = 0; y <= 3; y++) put(dx, y, dz, S('steel_block'));
+      for (let i = -5; i <= 5; i++) for (const [a, b] of [[i, -5], [i, 5], [-5, i], [5, i]] as const) put(a, 4, b, S('machine_casing'));
+      put(0, 4, -5, on('quarry'));
+      for (let dz = -5; dz <= 5; dz++) put(0, 4, dz, dz === -5 ? on('quarry') : S('metal_grate'));
+      // Drills on the rim, conveyors carrying the haul to crates
+      for (const [dx, dz] of [[-8, -8], [8, -8], [-8, 8]] as const) put(dx, 0, dz, on('mining_drill'));
+      for (let dx = -4; dx <= 8; dx++) put(dx, 0, 7, stateOf(dx % 3 === 0 ? 'express_conveyor' : 'conveyor', { facing: 'east' }));
+      put(9, 0, 7, S('crate'));
+      put(9, 0, 8, S('crate'));
+      put(9, 0, 6, S('storage_barrel'));
+      put(-6, 0, 7, on('crusher', 'west'));
+      put(-5, 0, 7, on('electric_furnace', 'west'));
+      put(-8, 0, 0, on('ore_scanner'));
+      line('insulated_cable', -9, -6, 9);
+      for (const dx of [-9, -8, -7]) put(dx, 0, 8, stateOf('battery_bank', { charge: '4' }));
+      for (const dz of [-9, -7]) turbine(9, dz);
+      for (const dx of [-7, -3, 3, 7]) put(dx, 0, -9, stateOf('warning_light', { lit: 'true' }));
+      break;
+    }
+    case 'farm': {
+      // Four fields of crops at different stages, watered by sprinklers fed from a tank
+      const crops = ['wheat', 'carrots', 'potatoes', 'wheat'];
+      const fields: [number, number][] = [[-9, -9], [2, -9], [-9, 2], [2, 2]];
+      fields.forEach(([x0, z0], i) => {
+        const id = crops[i]!;
+        const max = id === 'wheat' ? 7 : 3;
+        for (let dz = 0; dz < 7; dz++)
+          for (let dx = 0; dx < 7; dx++) {
+            if (dx === 3 && dz === 3) {
+              put(x0 + dx, -1, z0 + dz, S('machine_casing'));
+              put(x0 + dx, 0, z0 + dz, on(i % 2 ? 'crop_harvester' : 'irrigation_sprinkler'));
+              continue;
+            }
+            put(x0 + dx, -1, z0 + dz, stateOf('farmland', { moisture: '7' }));
+            put(x0 + dx, 0, z0 + dz, stateOf(id, { age: String(Math.min(max, Math.floor(((dx + dz * 3) % 9) / 8 * (max + 1)))) }));
+          }
+      });
+      // Paths between the fields with the machinery
+      for (let d = -9; d <= 9; d++) {
+        put(d, -1, 0, S('steel_block'));
+        put(0, -1, d, S('steel_block'));
+        put(d, -1, 1, S('steel_block'));
+        put(1, -1, d, S('steel_block'));
+      }
+      line('fluid_pipe', -9, 9, 0);
+      put(-10, 0, 0, stateOf('fluid_tank', { fluid: 'water', level: '7' }));
+      put(-10, 1, 0, stateOf('fluid_tank', { fluid: 'water', level: '8' }));
+      put(10, 0, 0, on('pump', 'west'));
+      line('copper_wire', -9, 9, 1);
+      for (const [dx, dz] of [[0, -9], [0, 9], [1, -9], [1, 9]] as const) put(dx, 0, dz, on('crop_planter'));
+      put(0, 0, -6, on('item_collector'));
+      put(1, 0, 6, on('animal_feeder'));
+      for (const [dx, dz] of [[-10, -10], [10, -10], [-10, 10], [10, 10]] as const) turbine(dx, dz, 3);
+      for (const [dx, dz] of [[-10, 3], [10, 3]] as const) put(dx, 0, dz, on('solar_panel'));
+      put(10, 0, -3, S('crate'));
+      put(10, 0, -2, stateOf('hopper', { facing: 'down' }));
+      break;
+    }
+    case 'control_room': {
+      // A hall of casing walls with windows and a glass roof; monitors and panels inside
+      const W = 7;
+      for (let dz = -W; dz <= W; dz++)
+        for (let dx = -W; dx <= W; dx++) {
+          const wall = Math.abs(dx) === W || Math.abs(dz) === W;
+          if (wall) for (let y = 0; y <= 3; y++) put(dx, y, dz, y === 1 || y === 2 ? ((dx + dz) % 3 === 0 ? S('machine_casing') : S('industrial_glass')) : S('machine_casing'));
+          put(dx, 4, dz, wall ? S('machine_casing') : (dx % 3 === 0 && dz % 3 === 0 ? S('factory_light') : S('industrial_glass')));
+          if (!wall) put(dx, -1, dz, (dx + dz) % 2 === 0 ? S('steel_block') : S('metal_grate'));
+        }
+      put(0, 1, W, 0);
+      put(0, 0, W, 0);
+      // Monitor walls on three sides, consoles in the middle
+      for (let d = -5; d <= 5; d++) {
+        for (const y of [1, 2]) {
+          put(d, y, -W + 1, on('monitor'));
+          put(-W + 1, y, d, on('monitor', 'east'));
+          put(W - 1, y, d, on('monitor', 'west'));
+        }
+        put(d, 0, -W + 1, S('steel_block'));
+        put(-W + 1, 0, d, S('steel_block'));
+        put(W - 1, 0, d, S('steel_block'));
+      }
+      for (const dx of [-3, 0, 3]) {
+        put(dx, 0, -1, on('control_panel'));
+        put(dx, 0, 0, S('steel_block'));
+        put(dx, 0, 2, on('control_panel', 'north'));
+      }
+      for (const [dx, dz] of [[-5, 5], [5, 5]] as const) put(dx, 0, dz, stateOf('warning_light', { lit: 'true' }));
+      // Outside: the plant it watches over
+      for (let dx = -10; dx <= 10; dx++) put(dx, 0, -10, on('solar_panel'));
+      for (const [dx, dz] of [[-10, 9], [10, 9], [-10, -8], [10, -8]] as const) turbine(dx, dz, 5);
+      line('power_conduit', -10, 10, 9, 0);
+      for (let dx = -6; dx <= 6; dx += 2) put(dx, 0, 10, stateOf('battery_bank', { charge: '4' }));
+      for (const dz of [-6, -2, 2, 6]) {
+        put(-10, 0, dz, on('electric_furnace', 'east'));
+        put(10, 0, dz, on('crusher', 'west'));
+      }
+      break;
+    }
   }
-  for (const dx of [3, 9]) set(fx + dx, y0, fz - 2, stateOf('warning_light', { lit: 'true' }));
-  for (const [dx, dz] of [[-4, 0], [4, 0], [0, 9], [-6, -3]] as const) set(fx + dx, y0, fz + dz, S('factory_light'));
   for (const c of touched) c.recomputeHeightmap();
   return y0;
 }

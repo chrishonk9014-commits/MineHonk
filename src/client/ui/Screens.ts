@@ -55,13 +55,10 @@ const SPLASHES = [
   'Mind the hazard stripes!',
   'Automate everything!',
   'Now with more honk!',
-  'The World Update!',
-  'Version 4.5: temples of trials!',
   'Last one standing wins!',
   'The keycard is outside!',
   'Bedrock-sealed bunkers!',
   'Bow before the pyramid!',
-  'The ERROR Update!',
   'What is that chunk?',
   'Now with bunkers!',
   'Villages, planned!',
@@ -83,7 +80,7 @@ const SPLASHES = [
 ];
 
 export function titleScreen(host: ScreenHost, actions: { singleplayer: () => void; multiplayer: () => void; options: () => void; profile: () => void }, profile: Profile): Screen {
-  const logo = el('div', { class: 'logo' }, 'MINEHONK', el('div', { class: 'splash' }, SPLASHES[Math.floor(Math.random() * SPLASHES.length)]!));
+  const logo = el('div', { class: 'logo' }, 'MINEHONK', el('div', { class: 'logo-edition' }, 'V5 - The Engineering Update'), el('div', { class: 'splash' }, SPLASHES[Math.floor(Math.random() * SPLASHES.length)]!));
   const body = el(
     'div',
     { class: 'stack', style: { marginTop: 'calc(var(--s) * 40)' } },

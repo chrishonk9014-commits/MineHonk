@@ -220,6 +220,9 @@ computers) come in Version 5.5.
   its network, a test production line and a 250-machine stress test. As
   always, nothing done there counts towards advancements, and what cheated
   machines make is cheat-marked.
+- **Title screen**: "V5 - The Engineering Update" under the logo, and the
+  backdrop is one of five engineering set scenes built on real terrain: a
+  factory, a power plant, a quarry mine, an automated farm or a control room.
 - Everything is server authoritative and saved in block entities with its
   chunk: energy, items, fluids and progress survive saves and unloads
   without duplicating or disappearing. Only loaded chunks run.

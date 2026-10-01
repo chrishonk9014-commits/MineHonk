@@ -5,7 +5,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { makeServer, join, tick, type FakeConn } from '../helpers/testServer';
-import { S, stateOf, blocks, STATE_BLOCK } from '../../src/common/registry/blocks';
+import { S, stateOf, blocks, STATE_BLOCK, STATE_SOLID } from '../../src/common/registry/blocks';
 import { itemById, items } from '../../src/common/registry/items';
 import { stackOf, isAdminStack, markAdmin } from '../../src/common/game/itemstack';
 import { rollLoot } from '../../src/common/game/loot';
@@ -156,6 +156,57 @@ describe('the computer world', () => {
 function blockId(state: number): string {
   return blocks[STATE_BLOCK[state]!]!.id;
 }
+
+describe('the ways down to the cave', () => {
+  it('several torch-lit tunnels lead from the surface to the hall, each one walkable', () => {
+    resetComputerLayout();
+    const g = new ComputerWorldGenerator(7);
+    const L = g.layout();
+    expect(L.entrances.length).toBeGreaterThanOrEqual(5);
+    const cache = new Map<string, ReturnType<typeof g.generate>>();
+    const ch = (x: number, z: number): ReturnType<typeof g.generate> => {
+      const k = `${x >> 4},${z >> 4}`;
+      let c = cache.get(k);
+      if (!c) cache.set(k, (c = g.generate(x >> 4, z >> 4)));
+      return c;
+    };
+    const solid = (x: number, y: number, z: number): boolean => !!STATE_SOLID[ch(x, z).get(x & 15, y, z & 15)];
+    const stand = (x: number, y: number, z: number): boolean => solid(x, y - 1, z) && !solid(x, y, z) && !solid(x, y + 1, z);
+    for (const path of L.branches) {
+      // On foot, staying inside the hall and this tunnel: step up at most one block, drop at most three
+      const inside = (x: number, z: number): boolean => Math.hypot(x - L.hall.x, z - L.hall.z) < L.hall.r || path.some(([px, pz]) => Math.abs(px - x) <= 1 && Math.abs(pz - z) <= 1);
+      const s0 = [path[0]![0], L.hall.y, path[0]![1]] as [number, number, number];
+      const seen = new Set([s0.join()]);
+      const q = [s0];
+      let sky = false;
+      let torches = 0;
+      while (q.length && !sky) {
+        const [x, y, z] = q.shift()!;
+        let open = true;
+        for (let yy = y; yy < 200 && open; yy++) if (solid(x, yy, z)) open = false;
+        if (open) sky = true;
+        for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+          const nx = x + dx;
+          const nz = z + dz;
+          if (!inside(nx, nz)) continue;
+          for (const ny of [y + 1, y, y - 1, y - 2, y - 3]) {
+            if (ny > y && solid(x, y + 2, z)) continue;
+            if (!stand(nx, ny, nz)) continue;
+            const k = `${nx},${ny},${nz}`;
+            if (!seen.has(k)) {
+              seen.add(k);
+              q.push([nx, ny, nz]);
+            }
+            break;
+          }
+        }
+      }
+      for (const [x, z, f] of path) for (let y = f - 3; y <= f + 1; y++) if (blockId(ch(x, z).get(x & 15, y, z & 15)) === 'redstone_torch') torches++;
+      expect(sky).toBe(true);
+      expect(torches).toBeGreaterThan(3);
+    }
+  }, 120000);
+});
 
 describe('the canon path', () => {
   it('potion -> dragon -> malware -> corrupted drive -> the dragon dies -> a computer -> Herobrine -> the computer world -> the cave -> the ending', async () => {

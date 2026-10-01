@@ -747,8 +747,10 @@ export class HerobrineSystem {
       if (exit) lines = [...EXIT_TERMINAL_LINES];
       else {
         const log = TERMINAL_LOGS[(hashInts(x, y, z, 0x7e3) >>> 0) % TERMINAL_LOGS.length]!;
-        const dx = L.entrance.x - x;
-        const dz = L.entrance.z - z;
+        // The nearest way down
+        const to = L.entrances.reduce((a, b) => (Math.hypot(b.x - x, b.z - z) < Math.hypot(a.x - x, a.z - z) ? b : a));
+        const dx = to.x - x;
+        const dz = to.z - z;
         const far = Math.hypot(dx, dz);
         lines = [...log, '', '> trace cable', far < 24 ? '> signal: strong. here.' : `> signal: ${bearing(dx, dz)}`];
       }

@@ -75,7 +75,7 @@ Computers are engineering machines (`src/server/engineering/computer/`).
       - broken chunks.
     - The figure across the lake in the fog, gone once you have seen him.
     - The exit terminal (LOG OUT).
-17. **The cave**: a 2x2 tunnel down, lit by redstone torches, to a hall of servers, screens of static, giant hard drives, tesla coils and the core.
+17. **The cave**: a hall of servers, screens of static, giant hard drives, tesla coils and the core. Five ways lead down to it, all lit by redstone torches: the original straight 2x2 tunnel from the west, and four wider tunnels that wind up to the surface from the hall's north and south sides. You find one wherever you explore. The old terminals' cable traces point to the nearest one.
 18. **The final fight** (600 HP, +300 per extra player; three phases; he plugs back into the core between them). Attacks:
     - **Electricity**: coil arcs, lightning, a current beam (cover blocks it).
     - **Hacking**:

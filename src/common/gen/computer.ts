@@ -52,7 +52,21 @@ export interface ComputerLayout {
   /** Where Herobrine stands, plugged in, before the fight. */
   throne: { x: number; y: number; z: number };
   coils: { x: number; y: number; z: number }[];
+  /**
+   * More ways down: winding tunnels from the hall's north and south sides
+   * up to the surface, one point per step (x, z and floor height).
+   */
+  branches: [number, number, number][][];
+  /** The floor height of every column the extra tunnels pass through ("x,z" -> floor). */
+  branchFloor: Map<string, number>;
+  /** Where every way down opens at the surface (the first is the original 2x2 tunnel). */
+  entrances: { x: number; z: number }[];
+  /** The area the cave and its tunnels take up (nothing else is built there). */
+  caveBox: { x0: number; z0: number; x1: number; z1: number };
 }
+
+/** Angles (from the hall's centre, east = 0) of the extra tunnels: away from the core in the east and the first tunnel in the west. */
+const BRANCH_ANGLES = [70, 125, -70, -125].map((d) => (d * Math.PI) / 180);
 
 let LAYOUT: ComputerLayout | null = null;
 
@@ -137,13 +151,68 @@ export class ComputerWorldGenerator implements DimensionGenerator {
       core,
       throne: { x: core.x - 3, y: CAVE_FLOOR_Y, z: core.z },
       coils,
+      branches: [],
+      branchFloor: new Map(),
+      entrances: [{ x: ex, z: ez }],
+      caveBox: { x0: ex - 4, z0: hall.z - CAVE_RADIUS - 4, x1: hall.x + CAVE_RADIUS + 4, z1: hall.z + CAVE_RADIUS + 4 },
     };
     LAYOUT = L;
     L.spawn.y = this.hill(L.spawn.x, L.spawn.z) + 1;
     L.sighting.y = this.hill(L.sighting.x, L.sighting.z) + 1;
     L.exitTerminal.y = this.hill(L.exitTerminal.x, L.exitTerminal.z) + 1;
     L.sign.y = this.hill(L.sign.x, L.sign.z) + 1;
+    this.planBranches(L);
     return L;
+  }
+
+  /**
+   * The extra tunnels: each leaves the hall level for a few steps, then
+   * climbs a block per step, winding left and right, until it is well
+   * clear of the ground above.
+   */
+  private planBranches(L: ComputerLayout): void {
+    const H = L.hall;
+    const t = this.inner.terrain;
+    BRANCH_ANGLES.forEach((a, k) => {
+      const dx = Math.cos(a);
+      const dz = Math.sin(a);
+      const path: [number, number, number][] = [];
+      let open = -1;
+      for (let i = -3; i < 420; i++) {
+        const wig = Math.sin(i * 0.085 + k * 1.7) * 6 * Math.min(1, Math.max(0, i) / 20);
+        const r = H.r + i;
+        const x = Math.round(H.x + dx * r - dz * wig);
+        const z = Math.round(H.z + dz * r + dx * wig);
+        // A block up for every two along: gentle enough that the steps are never more than one high
+        const floor = CAVE_FLOOR_Y + Math.max(0, Math.floor((i - 6) / 2));
+        path.push([x, z, floor]);
+        // Climb on well past where the ground is expected (it is only an estimate)
+        if (open < 0 && floor >= Math.round(t.estimateHeight(x, z)) + 1) open = i;
+        if (open >= 0 && i >= open + 16) break;
+      }
+      L.branches.push(path);
+      // Each column takes the floor of the nearest step
+      const best = new Map<string, number>();
+      for (const [x, z, floor] of path)
+        for (let ox = -1; ox <= 1; ox++)
+          for (let oz = -1; oz <= 1; oz++) {
+            const key = `${x + ox},${z + oz}`;
+            const d = ox * ox + oz * oz;
+            const prev = best.get(key);
+            if (prev === undefined || d < prev || (d === prev && floor < (L.branchFloor.get(key) ?? Infinity))) {
+              best.set(key, d);
+              L.branchFloor.set(key, floor);
+            }
+          }
+      const top = path[Math.max(0, path.length - 17)]!;
+      L.entrances.push({ x: top[0], z: top[1] });
+      for (const [x, z] of path) {
+        L.caveBox.x0 = Math.min(L.caveBox.x0, x - 3);
+        L.caveBox.z0 = Math.min(L.caveBox.z0, z - 3);
+        L.caveBox.x1 = Math.max(L.caveBox.x1, x + 3);
+        L.caveBox.z1 = Math.max(L.caveBox.z1, z + 3);
+      }
+    });
   }
 
   /**
@@ -192,7 +261,8 @@ export class ComputerWorldGenerator implements DimensionGenerator {
     const x0 = cx << 4;
     const z0 = cz << 4;
     const nearSpawn = Math.hypot(x0 + 8 - L.spawn.x, z0 + 8 - L.spawn.z) < 72;
-    const nearCave = Math.hypot(x0 + 8 - (L.entrance.x + L.hall.x) / 2, z0 + 8 - L.entrance.z) < L.tunnelRun / 2 + CAVE_RADIUS + 40;
+    const B = L.caveBox;
+    const nearCave = x0 + 15 >= B.x0 - 24 && x0 <= B.x1 + 24 && z0 + 15 >= B.z0 - 24 && z0 <= B.z1 + 24;
     if (!nearSpawn && !nearCave) {
       this.clues(c);
       this.broken(c);
@@ -493,6 +563,32 @@ export class ComputerWorldGenerator implements DimensionGenerator {
       // Redstone torches nobody placed, along the way down
       for (const z of [ez - 1, ez + 2]) if (x >> 4 === c.cx && z >> 4 === c.cz && i % 8 === 4 && STATE_SOLID[this.get(c, x, floor - 1, z)] && STATE_SOLID[this.get(c, x, floor + 2, z)]) this.set(c, x, floor, z, p.rtorch);
     }
+    // The other ways down: wider, winding, torch-lit like the first
+    for (const path of L.branches)
+      path.forEach(([x, z, floor], i) => {
+        if (x >> 4 < c.cx - 1 || x >> 4 > c.cx + 1 || z >> 4 < c.cz - 1 || z >> 4 > c.cz + 1) return;
+        for (let ox = -1; ox <= 1; ox++)
+          for (let oz = -1; oz <= 1; oz++) {
+            const wx = x + ox;
+            const wz = z + oz;
+            if (wx >> 4 !== c.cx || wz >> 4 !== c.cz) continue;
+            const f = L.branchFloor.get(`${wx},${wz}`) ?? floor;
+            // Underground it gets a floor; out in the open nothing is built
+            const under = STATE_SOLID[this.get(c, wx, f - 1, wz)] || STATE_SOLID[this.get(c, wx, f, wz)] || f - 1 < this.inner.terrain.estimateHeight(wx, wz) + 2;
+            for (let y = f; y < f + 4; y++) this.set(c, wx, y, wz, 0);
+            if (under) this.set(c, wx, f - 1, wz, i % 9 === 4 ? p.circuit : p.stone);
+          }
+      });
+    // Torches once the digging is done (the steps overlap, so each lands on the real floor)
+    for (const path of L.branches)
+      path.forEach(([x, z, floor], i) => {
+        if (i % 8 !== 4 || x >> 4 !== c.cx || z >> 4 !== c.cz) return;
+        for (let y = floor + 1; y > floor - 4; y--)
+          if (this.get(c, x, y, z) === 0 && STATE_SOLID[this.get(c, x, y - 1, z)]) {
+            this.set(c, x, y, z, p.rtorch);
+            break;
+          }
+      });
     // Giant hard drives standing like pillars, tesla coils in a ring
     for (let i = 0; i < 6; i++) {
       const a = (i / 6) * Math.PI * 2;

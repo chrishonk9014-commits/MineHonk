@@ -63,6 +63,7 @@ export class EngWindows {
         if (i >= r.fuel[0] && i < r.fuel[1]) return (s) => fuelTicks(s) > 0;
         if (i >= r.tool[0] && i < r.tool[1]) return (s) => items[s.id]?.def.tool?.type === 'pickaxe';
         if (i >= r.upgrades[0] && i < r.upgrades[1]) return (s) => isUpgrade(items[s.id]?.id ?? '');
+        if (c.kind === 'server') return (s) => items[s.id]?.id === 'hard_drive';
         if (c.kind === 'machine' || c.kind === 'multiblock') {
           if (c.machine === 'planter') return (s) => this.isSeed(s);
           if (c.machine === 'feeder' || c.machine === 'assembler') return () => true;
@@ -72,7 +73,7 @@ export class EngWindows {
       };
       for (let i = 0; i < r.size; i++) {
         const out = i >= r.output[0] && i < r.output[1];
-        const single = (i >= r.tool[0] && i < r.tool[1]) || (i >= r.upgrades[0] && i < r.upgrades[1]);
+        const single = (i >= r.tool[0] && i < r.tool[1]) || (i >= r.upgrades[0] && i < r.upgrades[1]) || c.kind === 'server';
         const sl = this.slot(n, inv, i, out ? 'result' : i >= r.fuel[0] && i < r.fuel[1] ? 'fuel' : 'input', may(i), single ? 1 : 64);
         if (out) {
           sl.output = true;

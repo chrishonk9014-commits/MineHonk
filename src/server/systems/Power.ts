@@ -154,6 +154,8 @@ export class Power {
         const out = (dim.getBlockEntity(x, y, z) as { out?: number } | undefined)?.out;
         return typeof out === 'number' ? Math.max(0, Math.min(15, out)) : getProp(s, 'lit') === 'true' ? 15 : 0;
       }
+      case 'pc':
+        return this.server.engineering?.computers.emitted(dim, x, y, z, face) ?? 0;
       default:
         return 0;
     }
@@ -387,7 +389,7 @@ export class Power {
   private updateComponent(dim: Dimension, x: number, y: number, z: number): void {
     const s = dim.getState(x, y, z);
     const k = kindOf(s);
-    if (!k || k === 'wire' || k === 'lever' || k === 'button' || k === 'plate' || k === 'block' || k === 'sensor' || k === 'timer' || k === 'level' || k === 'detector') return;
+    if (!k || k === 'wire' || k === 'lever' || k === 'button' || k === 'plate' || k === 'block' || k === 'sensor' || k === 'timer' || k === 'level' || k === 'detector' || k === 'pc') return;
     const key = dim.id + '|' + x + ',' + y + ',' + z;
     if (k === 'logic') {
       // Inputs on the left, right and back; the result goes out of the front one tick later

@@ -449,6 +449,8 @@ export const LOOT_TABLES: Record<string, LootTable> = {
       { rolls: [2, 5], entries: [e('glowstone_dust', 10, [1, 3]), e('redstone', 10, [1, 3]), e('spider_eye', 10, [1, 2]), e('sugar', 10, [1, 3]), e('glass_bottle', 10, [1, 3]), e('fermented_spider_eye', 3)] },
       // V3: every hut keeps one
       { rolls: 1, entries: [e('mysterious_potion', 1)] },
+      // V5.5: and the book that draws where it leads
+      { rolls: 1, entries: [e('witch_grimoire', 1)] },
     ],
   },
   // Original structures

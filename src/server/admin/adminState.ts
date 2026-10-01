@@ -27,7 +27,7 @@ export function newAdminState(): AdminPlayerState {
   return { xp: 0, zones: [], visit: null, mode: false, flight: false };
 }
 
-const DIMS: DimensionId[] = ['overworld', 'nether', 'end', 'farlands'];
+const DIMS: DimensionId[] = ['overworld', 'nether', 'end', 'farlands', 'computer'];
 
 export function loadAdminState(raw: unknown): AdminPlayerState {
   const s = newAdminState();

@@ -153,7 +153,9 @@ export type InteractKind =
   | 'bunker_generator'
   | 'temple_altar'
   | 'engineering'
-  | 'engineering_table';
+  | 'engineering_table'
+  /** V5.5: the computer world's old terminals (read their logs). */
+  | 'terminal';
 
 export type TintKind = 'none' | 'grass' | 'foliage' | 'water' | 'birch' | 'spruce' | 'stem' | 'lily';
 
@@ -228,4 +230,6 @@ export interface BlockDef {
   data?: Record<string, unknown>;
   /** Side textures get the value of this prop as a suffix (battery charge bars). */
   texBy?: string;
+  /** V5.5: the front texture gets the value of this prop as a suffix (a computer's screen). */
+  frontBy?: string;
 }

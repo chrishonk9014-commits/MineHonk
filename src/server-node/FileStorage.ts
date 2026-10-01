@@ -25,7 +25,7 @@ interface Region {
   lastUse: number;
 }
 
-const DIMS: readonly DimensionId[] = ['overworld', 'nether', 'end', 'farlands'];
+const DIMS: readonly DimensionId[] = ['overworld', 'nether', 'end', 'farlands', 'computer'];
 
 function safeKey(s: string): string {
   return s.replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 64);

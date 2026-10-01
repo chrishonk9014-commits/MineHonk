@@ -8,7 +8,7 @@ import { loadAdminState } from '../admin/adminState';
 
 export const PLAYER_DATA_VERSION = 1;
 
-const DIMS: DimensionId[] = ['overworld', 'nether', 'end', 'farlands'];
+const DIMS: DimensionId[] = ['overworld', 'nether', 'end', 'farlands', 'computer'];
 
 export class PlayerData {
   constructor(private readonly server: GameServer) {}

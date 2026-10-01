@@ -9,7 +9,7 @@
 import type { BlockDef, PropDefs } from '../registry/blockTypes';
 import type { ItemDef } from '../registry/itemTypes';
 
-export type Net = 'energy' | 'item' | 'fluid';
+export type Net = 'energy' | 'item' | 'fluid' | 'data';
 export type Tier = 1 | 2 | 3 | 4;
 
 export type EngKind =
@@ -36,7 +36,12 @@ export type EngKind =
   | 'signal'
   | 'monitor'
   | 'control_panel'
-  | 'decor';
+  | 'decor'
+  // V5.5: computers
+  | 'computer'
+  | 'peripheral'
+  | 'data_cable'
+  | 'server';
 
 export interface SlotLayout {
   input?: number;
@@ -76,6 +81,8 @@ export interface ComponentDef {
   desc: string;
   /** Engineering Book guide this belongs to. */
   guide: string;
+  /** V5.5 peripherals: what a computer next to it gains. */
+  peripheral?: 'keyboard' | 'mouse' | 'speaker' | 'led';
 }
 
 // ---------------------------------------------------------------------------
@@ -178,11 +185,20 @@ for (const [id, name, desc] of [
 ] as const)
   comp({ id, name, kind: 'decor', tier: 2, nets: [], desc, guide: 'factories' });
 
+// V5.5 - computers (the Digital Corruption Update)
+comp({ id: 'computer', name: 'Computer', kind: 'computer', tier: 3, nets: ['energy', 'data'], energy: { capacity: 4000, maxIn: 64, use: 3 }, slots: { input: 12 }, desc: 'A computer case. Install a power supply, motherboard, CPU and RAM to boot it, a hard drive for HonkOS and its programs. It needs a monitor and a keyboard beside it, and power.', guide: 'computers' });
+comp({ id: 'keyboard', name: 'Keyboard', kind: 'peripheral', tier: 2, nets: [], peripheral: 'keyboard', desc: 'Lets you use the computer it sits beside (within one block).', guide: 'computers' });
+comp({ id: 'mouse', name: 'Mouse', kind: 'peripheral', tier: 2, nets: [], peripheral: 'mouse', desc: 'Programs with graphics (maps and blueprints) need a mouse beside the computer.', guide: 'computers' });
+comp({ id: 'speaker', name: 'Speaker', kind: 'peripheral', tier: 2, nets: [], peripheral: 'speaker', desc: 'Lets a computer beside it play sounds: its start-up chime, alerts and alarms.', guide: 'computers' });
+comp({ id: 'led_light', name: 'LED', kind: 'peripheral', tier: 1, nets: [], peripheral: 'led', desc: 'A small status light. Beside a computer it shows its state (green running, red trouble); anywhere else it lights while powered by a signal.', guide: 'computers' });
+comp({ id: 'network_cable', name: 'Network Cable', kind: 'data_cable', tier: 2, nets: ['data'], desc: 'Joins computers and server racks with network cards into a network: share files and programs between them.', guide: 'computers' });
+comp({ id: 'server_rack', name: 'Server Rack', kind: 'server', tier: 3, nets: ['energy', 'data'], energy: { capacity: 2000, maxIn: 32, use: 2 }, slots: { input: 4 }, desc: 'Holds four hard drives as network storage: every computer on its network can read and write them.', guide: 'computers' });
+
 export const COMPONENTS: readonly ComponentDef[] = C;
 export const COMPONENT_BY_ID: ReadonlyMap<string, ComponentDef> = new Map(C.map((c) => [c.id, c]));
 
 /** Machines whose block faces the player who placed them (generators, machines, sensors...). */
-const FACED = new Set<EngKind>(['generator', 'machine', 'multiblock', 'hopper', 'extractor', 'sorter', 'pump', 'outlet', 'monitor', 'control_panel', 'conveyor']);
+const FACED = new Set<EngKind>(['generator', 'machine', 'multiblock', 'hopper', 'extractor', 'sorter', 'pump', 'outlet', 'monitor', 'control_panel', 'conveyor', 'computer', 'peripheral', 'server']);
 
 // ---------------------------------------------------------------------------
 // Block definitions
@@ -191,6 +207,8 @@ const BOOL = ['false', 'true'] as const;
 const FACING4 = ['north', 'south', 'west', 'east'] as const;
 const FACING6 = ['down', 'up', 'north', 'south', 'west', 'east'] as const;
 const STATUS = ['idle', 'working', 'error'] as const;
+/** V5.5: what a computer's screen shows. */
+export const SCREENS = ['off', 'boot', 'on', 'err', 'glitch', 'portal'] as const;
 const ARMS: PropDefs = { north: BOOL, south: BOOL, west: BOOL, east: BOOL, up: BOOL, down: BOOL };
 
 export const GATE_MODES = ['and', 'or', 'xor', 'nand', 'nor', 'not'] as const;
@@ -223,6 +241,7 @@ export function engineeringBlockDefs(): BlockDef[] {
         out.push({ id: c.id, name: c.name, hardness: 2.5, sound: 'wood', model: 'cube', tex: { top: 'engineering_table_top', side: 'engineering_table_side', front: 'engineering_table_front', bottom: 'oak_planks' }, tool: 'axe', interact: 'engineering_table', creative: 'engineering' } as BlockDef);
         break;
       case 'cable':
+      case 'data_cable':
       case 'item_pipe':
       case 'fluid_pipe':
       case 'item_filter':
@@ -230,7 +249,7 @@ export function engineeringBlockDefs(): BlockDef[] {
       case 'fluid_filter': {
         const extra: PropDefs = c.kind === 'valve' ? { open: BOOL } : {};
         metal(c, {
-          hardness: c.kind === 'cable' ? 0.5 : 1,
+          hardness: c.kind === 'cable' || c.kind === 'data_cable' ? 0.5 : 1,
           harvestLevel: 0,
           requiresTool: false,
           model: 'custom',
@@ -239,8 +258,8 @@ export function engineeringBlockDefs(): BlockDef[] {
           props: { ...ARMS, ...extra },
           defaults: c.kind === 'valve' ? { open: 'true' } : {},
           tex: { all: c.id },
-          interact: c.kind === 'cable' || c.kind === 'item_pipe' || c.kind === 'fluid_pipe' ? undefined : 'engineering',
-          entity: c.kind === 'cable' || c.kind === 'item_pipe' || c.kind === 'fluid_pipe' ? undefined : 'eng',
+          interact: c.kind === 'cable' || c.kind === 'data_cable' || c.kind === 'item_pipe' || c.kind === 'fluid_pipe' ? undefined : 'engineering',
+          entity: c.kind === 'cable' || c.kind === 'data_cable' || c.kind === 'item_pipe' || c.kind === 'fluid_pipe' ? undefined : 'eng',
         });
         break;
       }
@@ -284,6 +303,16 @@ export function engineeringBlockDefs(): BlockDef[] {
         }
         break;
       }
+      case 'computer':
+        // The screen shows what the computer is doing: off, starting up, running, trouble, corrupted, a way in
+        metal(c, { props: { facing: FACING4, screen: SCREENS }, tex: { all: 'computer_side', top: 'computer_top', bottom: 'machine_bottom', front: 'computer_front' }, frontBy: 'screen', light: 0 });
+        break;
+      case 'peripheral': {
+        const props: PropDefs = { facing: FACING4 };
+        if (c.peripheral === 'led') props.lit = BOOL;
+        metal(c, { hardness: 0.8, harvestLevel: 0, requiresTool: false, model: 'custom', layer: 'cutout', opacity: 0, props, tex: c.peripheral === 'led' ? { all: c.id, top: c.id + '_top', on: c.id + '_on' } : { all: c.id, top: c.id + '_top' }, light: c.peripheral === 'led' ? 7 : 0, interact: undefined, entity: undefined, place: c.peripheral === 'led' ? undefined : 'needs_solid_below' });
+        break;
+      }
       case 'storage':
         metal(c, { tex: { top: c.id + '_top', side: c.id + '_side', bottom: c.id + '_top', front: c.id === 'storage_barrel' ? 'storage_barrel_front' : undefined }, props: c.id === 'storage_barrel' ? { facing: FACING4 } : undefined, hardness: c.tier === 1 ? 2.5 : 3.5, sound: c.tier === 1 ? 'wood' : 'metal', tool: c.tier === 1 ? 'axe' : 'pickaxe', harvestLevel: 0, requiresTool: c.tier !== 1 });
         break;
@@ -294,7 +323,7 @@ export function engineeringBlockDefs(): BlockDef[] {
       default: {
         const props: PropDefs = {};
         if (faced) props.facing = FACING4;
-        if (c.kind === 'generator' || c.kind === 'machine' || c.kind === 'multiblock' || c.kind === 'pump' || c.kind === 'monitor' || c.kind === 'control_panel') props.status = STATUS;
+        if (c.kind === 'generator' || c.kind === 'machine' || c.kind === 'multiblock' || c.kind === 'pump' || c.kind === 'monitor' || c.kind === 'control_panel' || c.kind === 'server') props.status = STATUS;
         metal(c, {
           props,
           tex: { all: c.id + '_side', top: c.id + '_top', bottom: 'machine_bottom', front: c.id + '_front', front_on: c.id + '_front_on', front_err: c.id + '_front_err' },
@@ -311,6 +340,10 @@ export function engineeringBlockDefs(): BlockDef[] {
 // ---------------------------------------------------------------------------
 export const ENG_MATERIALS = ['copper_dust', 'iron_dust', 'gold_dust', 'coal_dust', 'steel_blend', 'steel_ingot', 'iron_plate', 'steel_plate', 'iron_gear', 'copper_coil', 'motor', 'control_circuit', 'advanced_circuit'] as const;
 export const UPGRADES = ['speed_upgrade', 'efficiency_upgrade', 'capacity_upgrade', 'range_upgrade'] as const;
+/** V5.5: electronics and computer parts (installed in a computer's slots). */
+export const ELECTRONICS = ['circuit_board', 'electronic_components', 'connector'] as const;
+export const COMPUTER_PARTS = ['power_supply', 'motherboard', 'cpu', 'ram_module', 'gpu', 'network_card', 'hard_drive', 'flash_drive'] as const;
+export type ComputerPart = (typeof COMPUTER_PARTS)[number];
 export type UpgradeId = (typeof UPGRADES)[number];
 
 export function engineeringItemDefs(): ItemDef[] {
@@ -323,6 +356,15 @@ export function engineeringItemDefs(): ItemDef[] {
   for (const id of ENG_MATERIALS) out.push({ id, name: title(id), creative: 'engineering', tags: ['engineering'], ...(id === 'coal_dust' ? { fuel: 1600 } : {}) });
   for (const id of UPGRADES) out.push({ id, name: title(id), maxStack: 16, rarity: 'uncommon', creative: 'engineering', tags: ['engineering', 'upgrade'] });
   out.push({ id: 'engineering_book', name: 'Engineering Book', maxStack: 1, use: 'engineering_book', rarity: 'uncommon', creative: 'engineering' });
+  // V5.5: electronics, computer parts and drives
+  for (const id of ELECTRONICS) out.push({ id, name: title(id), creative: 'engineering', tags: ['engineering', 'electronics'] });
+  const PART_NAMES: Record<string, string> = { power_supply: 'Power Supply', motherboard: 'Motherboard', cpu: 'CPU', ram_module: 'RAM Module', gpu: 'Graphics Card', network_card: 'Network Card', hard_drive: 'Hard Drive', flash_drive: 'Flash Drive' };
+  for (const id of COMPUTER_PARTS) {
+    const drive = id === 'hard_drive' || id === 'flash_drive';
+    out.push({ id, name: PART_NAMES[id]!, maxStack: drive ? 1 : 16, rarity: id === 'cpu' || id === 'gpu' ? 'uncommon' : 'common', creative: 'engineering', tags: ['engineering', 'computer_part', ...(drive ? ['drive'] : [])] });
+  }
+  // Never crafted: what the Ender Dragon's malware makes of a flash drive
+  out.push({ id: 'corrupted_flash_drive', name: 'Corrupted Flash Drive', maxStack: 1, rarity: 'glitched', glint: true, creative: 'hidden', tags: ['computer_part', 'drive'] });
   return out;
 }
 
@@ -461,6 +503,26 @@ shaped('large_generator', 1, ['PaP', 'AKA', 'PaP'], with_(k('P', 'A', 'K'), { a:
 shaped('quarry', 1, ['PdP', 'AKA', 'PdP'], with_(k('P', 'A', 'K'), { d: 'mining_drill' }));
 shaped('assembler', 1, ['PUP', 'AKA', 'PXP'], with_(k('P', 'A', 'K', 'X'), { U: 'crafting_table' }));
 shaped('control_panel', 1, ['PmP', 'AKA', 'PRP'], with_(k('P', 'A', 'K', 'R'), { m: 'monitor' }));
+
+// V5.5 - electronics and computers
+shaped('circuit_board', 2, ['CRC', 'ppp'], k('C', 'R', 'p'));
+shaped('electronic_components', 4, ['RCR', 'LGL'], k('R', 'C', 'L', 'G'));
+shaped('connector', 4, ['C C', 'pCp'], k('C', 'p'));
+shaped('power_supply', 1, ['pcp', 'XbX', 'pnp'], with_(k('p', 'c', 'X'), { b: 'battery', n: 'connector' }));
+shaped('motherboard', 1, ['ene', 'XBX', 'nBn'], with_(k('X'), { e: 'electronic_components', n: 'connector', B: 'circuit_board' }));
+shaped('cpu', 1, ['eGe', 'GAG', 'eGe'], with_(k('G', 'A'), { e: 'electronic_components' }));
+shaped('ram_module', 2, ['eee', 'BBB', 'n n'], { e: 'electronic_components', B: 'circuit_board', n: 'connector' });
+shaped('gpu', 1, ['ePe', 'AOA', 'nBn'], with_(k('P', 'A', 'O'), { e: 'electronic_components', n: 'connector', B: 'circuit_board' }));
+shaped('network_card', 1, ['nCn', 'eBe'], with_(k('C'), { e: 'electronic_components', n: 'connector', B: 'circuit_board' }));
+shaped('hard_drive', 1, ['pgp', 'eXe', 'pnp'], with_(k('p', 'g', 'X'), { e: 'electronic_components', n: 'connector' }));
+shaped('flash_drive', 1, ['n', 'B', 'p'], with_(k('p'), { n: 'connector', B: 'circuit_board' }));
+shaped('computer', 1, ['PLP', 'pKp', 'PnP'], with_(k('P', 'L', 'p', 'K'), { n: 'connector' }));
+shaped('keyboard', 1, ['bbb', 'pep'], with_(k('p'), { b: 'stone_button', e: 'electronic_components' }));
+shaped('mouse', 1, ['bnb', 'pep'], with_(k('p'), { b: 'stone_button', n: 'connector', e: 'electronic_components' }));
+shaped('speaker', 1, ['pnp', 'pNp', 'pep'], with_(k('p'), { n: 'connector', N: 'note_block', e: 'electronic_components' }));
+shaped('led_light', 4, ['L', 'O', 'e'], with_(k('L', 'O'), { e: 'electronic_components' }));
+shaped('network_cable', 8, ['www', 'CnC', 'www'], with_(k('w', 'C'), { n: 'connector' }));
+shaped('server_rack', 1, ['PnP', 'hKh', 'PnP'], with_(k('P', 'K'), { n: 'connector', h: 'hard_drive' }));
 
 /** Extra recipe tag used by engineering recipes. */
 export const ENG_TAGS: Record<string, (colors: readonly string[]) => string[]> = {

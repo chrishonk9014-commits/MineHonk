@@ -576,8 +576,8 @@ export function deathScreen(host: ScreenHost, message: string, hardcore: boolean
 
 export function achievementsScreen(host: ScreenHost, unlocked: Set<string> | null): Screen & { update: (u: Set<string>) => void } {
   const { root, body } = titled('Advancements', 'screen dim');
-  const cats = ['story', 'world', 'engineering', 'caves', 'nether', 'end', 'adventure', 'husbandry', 'farlands'] as const;
-  const names: Record<(typeof cats)[number], string> = { story: 'MineHonk', world: 'World', engineering: 'Engineering', caves: 'Caves', nether: 'Nether', end: 'The End', adventure: 'Adventure', husbandry: 'Husbandry', farlands: 'Farlands' };
+  const cats = ['story', 'world', 'engineering', 'digital', 'caves', 'nether', 'end', 'adventure', 'husbandry', 'farlands'] as const;
+  const names: Record<(typeof cats)[number], string> = { story: 'MineHonk', world: 'World', engineering: 'Engineering', digital: 'Digital', caves: 'Caves', nether: 'Nether', end: 'The End', adventure: 'Adventure', husbandry: 'Husbandry', farlands: 'Farlands' };
   let cat: (typeof cats)[number] = 'story';
   const tabs = el('div', { class: 'row' });
   const list = el('div', { class: 'list adv-list' });

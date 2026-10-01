@@ -269,6 +269,12 @@ function cubeTextures(def: BlockDef, state: number): { tex: string[]; rot: numbe
     }
   }
   const status = getProp(state, 'status');
+  // V5.5: a computer's screen
+  if (def.frontBy && def.tex.front && facing) {
+    const fi = { north: 2, south: 3, west: 4, east: 5 }[facing as 'north'];
+    if (fi !== undefined) tex[fi] = `${def.tex.front}_${getProp(state, def.frontBy)}`;
+    return { tex, rot, tint };
+  }
   const front = def.tex.front ? (getProp(state, 'lit') === 'true' && def.tex.front_lit ? def.tex.front_lit : status === 'working' && def.tex.front_on ? def.tex.front_on : status === 'error' && def.tex.front_err ? def.tex.front_err : def.tex.front) : undefined;
   if (front) {
     if (facing && ['north', 'south', 'west', 'east'].includes(facing)) {
@@ -648,6 +654,7 @@ function engModel(def: BlockDef, state: number): ModelQuad[] | null {
   const lit = getProp(state, 'lit') === 'true';
   const facing = getProp(state, 'facing');
   if (def.id === 'signal_cable') return wireModel(def, state);
+  if (def.id === 'led_light') return box(boxes[0]!.from, boxes[0]!.to, { up: lit ? t('on') : t('top'), down: t('all'), north: lit ? t('on') : t('all'), south: lit ? t('on') : t('all'), west: lit ? t('on') : t('all'), east: lit ? t('on') : t('all') });
   if (def.id === 'warning_light') return [...box(boxes[0]!.from, boxes[0]!.to, t('base')), ...box(boxes[1]!.from, boxes[1]!.to, lit ? t('on') : t('all'))];
   if (def.tex.top_on !== undefined || def.id === 'timer' || def.id === 'logic_gate') {
     // Signal plates: a thin slab whose top shows what it is (and lights up)

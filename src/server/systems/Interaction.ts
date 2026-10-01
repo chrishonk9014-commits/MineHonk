@@ -85,9 +85,8 @@ export class Interaction {
     if (!p.abilities.mayBuild && !(breaking && p.gamemode === 'adventure')) return false;
     if (this.server.roleOf(p) === 'visitor') return false;
     if (y < 0 || y > 255) return false;
-    void dim;
-    void x;
-    void z;
+    // V5.5: the computer Herobrine has can't be broken or built into
+    if (this.server.herobrine?.protects(dim, x, y, z)) return false;
     return true;
   }
 

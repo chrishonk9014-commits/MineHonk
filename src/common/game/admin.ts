@@ -6,7 +6,7 @@
 import type { DimensionId } from '../data/biomes';
 import { GAME_MODES, DIFFICULTIES, type GameMode, type Difficulty } from './gamemode';
 
-export const ADMIN_DIMENSIONS: DimensionId[] = ['overworld', 'nether', 'end', 'farlands'];
+export const ADMIN_DIMENSIONS: DimensionId[] = ['overworld', 'nether', 'end', 'farlands', 'computer'];
 
 export const STRUCTURE_NAMES: Record<string, string> = {
   village: 'Village',
@@ -74,6 +74,26 @@ export const V4_OPS = ['status', 'glitch_start', 'glitch_clear', 'glitch_reset',
 export type V4Op = (typeof V4_OPS)[number];
 export const V5_OPS = ['status', 'fill_energy', 'drain_energy', 'reset_machines', 'kit_basic', 'kit_advanced', 'kit_factory', 'test_rig', 'stress_test'] as const;
 export type V5Op = (typeof V5_OPS)[number];
+/** V5.5: the Herobrine story's test tools (all cheats: they never award anything). */
+export const V55_OPS = [
+  'status',
+  'give_potion',
+  'give_hard_drive',
+  'give_flash_drive',
+  'give_corrupted',
+  'spawn_dragon',
+  'trigger_malware',
+  'trigger_event',
+  'spawn_first',
+  'enter_world',
+  'tp_seed',
+  'tp_cave',
+  'spawn_final',
+  'force_ending',
+  'reset_progress',
+  'reset_ending',
+] as const;
+export type V55Op = (typeof V55_OPS)[number];
 
 export function structureName(id: string): string {
   return STRUCTURE_NAMES[id] ?? id.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
@@ -113,7 +133,9 @@ export type AdminAction =
   /** V4: the Glitched Structure's quest, bunkers and a fluid test rig. */
   | { a: 'v4'; op: V4Op }
   /** V5: engineering (kits, energy, test rigs; all cheats). */
-  | { a: 'v5'; op: V5Op };
+  | { a: 'v5'; op: V5Op }
+  /** V5.5: the Herobrine story (all cheats: never advancements). */
+  | { a: 'v55'; op: V55Op };
 
 export type AdminActionName = AdminAction['a'];
 
@@ -131,6 +153,9 @@ export function validateAdmin(raw: unknown): AdminAction | null {
     case 'v5':
       if (!V5_OPS.includes(m.op as V5Op)) return null;
       return { a: 'v5', op: m.op as V5Op };
+    case 'v55':
+      if (!V55_OPS.includes(m.op as V55Op)) return null;
+      return { a: 'v55', op: m.op as V55Op };
     case 'v4':
       if (!V4_OPS.includes(m.op as V4Op)) return null;
       return { a: 'v4', op: m.op as V4Op };

@@ -173,6 +173,8 @@ export function portAt(server: GameServer, dim: Dimension, x: number, y: number,
   const c = compOf(be.id);
   if (!c) return null;
   if (c.id === 'storage_barrel') return barrelPort(server, dim, x, y, z, be);
+  // V5.5: computers and server racks keep their parts to themselves (drives move by hand only)
+  if (c.kind === 'computer' || c.kind === 'server') return null;
   const r = rangesOf(c);
   if (!r.size) return null;
   const inv = ct.containerAt(dim, x, y, z, r.size, 'eng');

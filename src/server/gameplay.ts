@@ -22,6 +22,7 @@ import { GlitchedQuestSystem } from './systems/GlitchedQuest';
 import { StructureQuests } from './systems/StructureQuests';
 import { TempleTrials } from './systems/TempleTrials';
 import { Engineering } from './engineering/Engineering';
+import { HerobrineSystem } from './herobrine/Herobrine';
 
 export function installGameplay(server: GameServer): void {
   const mobs = new MobSystem(server);
@@ -47,14 +48,14 @@ export function installGameplay(server: GameServer): void {
   server.sculk = sculk;
   server.warden = new WardenSystem(server);
   power.extraPower = (dim, x, y, z) => sculk.sensorPower(dim, x, y, z);
-  h.useItem = (p, stack, hand) => !!server.endgame?.useItem(p, stack) || mobs.useItem(p, stack) || end.fillBottle(p, stack) || ws.fillBottle(p, stack) || ws.throwSplash(p, stack) || end.useItem(p, stack) || far.useItem(p, stack) || gadgets.useItem(p, stack, hand);
+  h.useItem = (p, stack, hand) => !!server.herobrine?.useItem(p, stack) || !!server.endgame?.useItem(p, stack) || mobs.useItem(p, stack) || end.fillBottle(p, stack) || ws.fillBottle(p, stack) || ws.throwSplash(p, stack) || end.useItem(p, stack) || far.useItem(p, stack) || gadgets.useItem(p, stack, hand);
   const quests = new StructureQuests(server);
   server.structureQuests = quests;
   const temples = new TempleTrials(server);
   server.templeTrials = temples;
   const engineering = new Engineering(server);
   server.engineering = engineering;
-  h.useBlock = (p, x, y, z, state) => quests.useBlock(p, x, y, z, state) || temples.useBlock(p, x, y, z, state) || engineering.useBlock(p, x, y, z, state) || ws.useBlock(p, x, y, z, state);
+  h.useBlock = (p, x, y, z, state) => !!server.herobrine?.useBlock(p, x, y, z, state) || quests.useBlock(p, x, y, z, state) || temples.useBlock(p, x, y, z, state) || engineering.useBlock(p, x, y, z, state) || ws.useBlock(p, x, y, z, state);
   h.windowAction = (p, m) => ws.windowAction(p, m);
   const prevUseOnBlock = h.useItemOnBlock;
   h.useItemOnBlock = (p, stack, x, y, z, face) => end.useOnBlock(p, stack, x, y, z) || far.useOnBlock(p, stack, x, y, z) || mobs.useSpawnEgg(p, stack, x, y, z, face) || gadgets.useOnBlock(p, stack, x, y, z, face) || !!prevUseOnBlock?.(p, stack, x, y, z, face);
@@ -72,9 +73,13 @@ export function installGameplay(server: GameServer): void {
   server.errorBoss = errorBoss;
   const glitched = new GlitchedQuestSystem(server);
   server.glitchedQuest = glitched;
+  // V5.5: the Herobrine story (after the dragon fight and the computers it hooks into)
+  const herobrine = new HerobrineSystem(server);
+  server.herobrine = herobrine;
   mobs.onBossDeath = (m, killer, info) => {
     if (m.type === 'ender_dragon') end.fight.onDeath(m, killer, info);
     else if (m.type === 'the_error') errorBoss.onDeath(m, killer, info);
+    else if (m.type === 'herobrine') herobrine.onBossDeath(m, killer, info);
     // Other bosses (the Glitch Beast) drop their loot like any mob
     else return false;
     return true;
@@ -105,6 +110,7 @@ export function installGameplay(server: GameServer): void {
     quests.tick();
     temples.tick();
     engineering.tick();
+    herobrine.tick();
     far.tick();
     gadgets.tick();
     mounts.tick();

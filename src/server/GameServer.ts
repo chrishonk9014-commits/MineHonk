@@ -79,6 +79,8 @@ export class GameServer {
   templeTrials: import('./systems/TempleTrials').TempleTrials | null = null;
   /** V5: machines, power, transport, fluids and control rooms. */
   engineering: import('./engineering/Engineering').Engineering | null = null;
+  /** V5.5 - the Herobrine story (installed by gameplay). */
+  herobrine: import('./herobrine/Herobrine').HerobrineSystem | null = null;
   /** Work scheduled for a later tick (see `later`). */
   private readonly scheduled: { at: number; fn: () => void }[] = [];
   /** Hook for the hosting layer to forward player reports (e.g. to platform moderation). */
@@ -125,7 +127,7 @@ export class GameServer {
     this.commands = new Commands(this);
     this.playerData = new PlayerData(this);
     this.admin = new AdminService(this);
-    for (const id of ['overworld', 'nether', 'end', 'farlands'] as DimensionId[]) {
+    for (const id of ['overworld', 'nether', 'end', 'farlands', 'computer'] as DimensionId[]) {
       this.dims.set(id, new Dimension(this, id, level.seedNum));
     }
   }
@@ -474,6 +476,9 @@ export class GameServer {
         break;
       case 'eng_fill':
         this.engineering?.windows.fill(p, m.recipe, m.all);
+        break;
+      case 'pc_cmd':
+        if (!this.engineering?.computers.handleCmd(p, m.window, m.cmd, m.arg)) this.herobrine?.terminalCmd(p, m.window, m.cmd);
         break;
       case 'hello':
         break;

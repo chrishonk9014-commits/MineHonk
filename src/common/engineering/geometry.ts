@@ -76,9 +76,24 @@ export function engBoxes(id: string, state: number): EngBox[] | null {
       const t = c.id === 'copper_wire' ? 2 : c.id === 'insulated_cable' ? 4 : 6;
       return conduit(state, 8 - t / 2, 8 + t / 2, t + 2);
     }
+    case 'data_cable':
+      return conduit(state, 7, 9, 4);
     case 'item_pipe':
     case 'fluid_pipe':
       return conduit(state, 5, 11, 6);
+    case 'peripheral': {
+      const f = getProp(state, 'facing');
+      switch (c.peripheral) {
+        case 'keyboard':
+          return [rot({ from: [1, 0, 5], to: [15, 2, 11], tex: 'all', cap: 'top' }, f)];
+        case 'mouse':
+          return [rot({ from: [6, 0, 6], to: [10, 2, 11], tex: 'all', cap: 'top' }, f)];
+        case 'speaker':
+          return [rot({ from: [4, 0, 5], to: [12, 12, 11], tex: 'all', cap: 'top' }, f)];
+        default:
+          return [{ from: [6, 0, 6], to: [10, 3, 10], tex: 'all', cap: 'top' }];
+      }
+    }
     case 'item_filter':
     case 'valve':
     case 'fluid_filter':

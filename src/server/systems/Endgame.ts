@@ -89,6 +89,8 @@ export class EndgameSystem {
     const stack = p.inventory.get(slot);
     if (!stack || items[stack.id]?.id !== 'mysterious_potion') return false;
     if (!(target instanceof Mob) || target.dead || target.removed) return false;
+    // V5.5: the Ender Dragon drinks it (the Herobrine story)
+    if (target.type === 'ender_dragon' && this.server.herobrine) return this.server.herobrine.feedDragon(p, target, slot, stack);
     // Bosses and changed Endermen shrug it off (the bottle isn't used up)
     if (target.def.category === 'boss' || target.data.voidbound) {
       this.server.playSound(target.dim, 'glitch.zap', target.x, target.y + 1, target.z, 0.4, 0.5);

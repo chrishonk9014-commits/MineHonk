@@ -39,6 +39,7 @@ import type { DimensionId } from '../../common/data/biomes';
 import { ADMIN_ZONE_RADIUS, MAX_ADMIN_ZONES } from './adminState';
 import { CAVE_BIOMES } from '../../common/gen/caves/caveBiomes';
 import { engineeringAdmin } from '../engineering/admin';
+import { herobrineAdmin } from '../herobrine/admin';
 
 /** Work budget for searches per server tick (ms). */
 const SEARCH_BUDGET_MS = 6;
@@ -448,6 +449,9 @@ export class AdminService {
         return this.endgame(p, a.op, a.id);
       case 'v4':
         return this.v4(p, a.op);
+      case 'v55':
+        if (!this.server.herobrine || !this.server.engineering) return { ok: false, text: 'The Herobrine story is not running.' };
+        return herobrineAdmin(this.server.herobrine, { moveTo: (pl, dim, x, y, z) => this.moveTo(pl, dim, x, y, z), give: (pl, id, n) => this.giveMarked(pl, id, n), safeSpot: (dim, x, y, z) => this.safeSpot(dim, x, y, z, false) }, p, a.op);
       case 'v5':
         if (!this.server.engineering) return { ok: false, text: 'Engineering is not running.' };
         return engineeringAdmin(this.server.engineering, { mark: (dim, x, y, z) => this.setBlockMark(dim, x, y, z, true), give: (pl, id, n) => this.giveMarked(pl, id, n) }, p, a.op);

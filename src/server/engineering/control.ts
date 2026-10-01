@@ -25,7 +25,7 @@ const fmt = (n: number): string => (n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >=
 const bar = (f: number, w = 12): string => '[' + '#'.repeat(Math.round(Math.max(0, Math.min(1, f)) * w)).padEnd(w, '-') + ']';
 const statusOf = (n: EngNode): string => (n.be()?.status ?? 'idle').split(':')[0]!;
 
-interface Scope {
+export interface Scope {
   net: EnergyNet;
   generators: EngNode[];
   batteries: EngNode[];
@@ -46,6 +46,27 @@ export class ControlRoom {
 
   invalidate(): void {
     this.scopes.clear();
+  }
+
+  /** V5.5: what the energy network at a position can see (computers' programs), or null off any network. */
+  scopeAt(dim: import('../world/Dimension').Dimension, x: number, y: number, z: number): Scope | null {
+    const net = this.eng.energy.netAt(dim, x, y, z);
+    return net ? this.scopeOf(net) : null;
+  }
+
+  /** V5.5: the alerts a monitor's Alerts page would show for a scope. */
+  alerts(sc: Scope): string[] {
+    const out: string[] = [];
+    for (const m of [...sc.machines, ...sc.generators]) if (PROBLEMS.has(statusOf(m))) out.push(`${m.c.name} at ${m.x}, ${m.y}, ${m.z}: ${STATUS_TEXT[statusOf(m)] ?? statusOf(m)}`);
+    if (sc.net.stats.limited) out.push('The network is at its cable limit');
+    if (sc.net.stats.capacity && sc.net.stats.stored / sc.net.stats.capacity < 0.1) out.push('Batteries low');
+    return out;
+  }
+
+  /** V5.5: a computer next to a monitor drives its screen; the monitor's own pages wait. */
+  private pcDriven(n: EngNode): boolean {
+    const at = n.be()?.pcAt;
+    return typeof at === 'number' && this.eng.server.tickNo - at < 80;
   }
 
   /** What a network can see: its devices, and storage and tanks touching it. */
@@ -100,7 +121,7 @@ export class ControlRoom {
       this.eng.machines.setStatus(n, powered ? 'working' : 'no_power');
       const net = this.eng.energy.netAt(n.dim, n.x, n.y, n.z);
       if (net && powered) (n.c.kind === 'monitor' ? monitors : panels).set(net, [...((n.c.kind === 'monitor' ? monitors : panels).get(net) ?? []), n]);
-      if (n.c.kind === 'monitor') this.updateMonitor(n, powered);
+      if (n.c.kind === 'monitor' && !this.pcDriven(n)) this.updateMonitor(n, powered);
     }
     // A control room: a monitor and a control panel watching the same network of three or more machines
     for (const [net, mons] of monitors) {

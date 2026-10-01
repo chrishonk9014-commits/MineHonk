@@ -12,9 +12,9 @@ import { FACE_DX, FACE_DY, FACE_DZ, FACE_NAMES } from '../world/constants';
 let NETS: (number | undefined)[] = [];
 let CONDUIT: (number | undefined)[] = [];
 
-const BIT: Record<Net, number> = { energy: 1, item: 2, fluid: 4 };
+const BIT: Record<Net, number> = { energy: 1, item: 2, fluid: 4, data: 8 };
 
-/** Networks a block joins, as bits (1 energy, 2 item, 4 fluid). */
+/** Networks a block joins, as bits (1 energy, 2 item, 4 fluid, 8 data). */
 export function netBits(state: number): number {
   const num = STATE_BLOCK[state]!;
   let v = NETS[num];
@@ -39,6 +39,7 @@ export function conduitBit(state: number): number {
   if (c?.kind === 'cable') v = BIT.energy;
   else if (c?.kind === 'item_pipe' || c?.kind === 'item_filter') v = BIT.item;
   else if (c?.kind === 'fluid_pipe' || c?.kind === 'valve' || c?.kind === 'fluid_filter') v = BIT.fluid;
+  else if (c?.kind === 'data_cable') v = BIT.data;
   CONDUIT[num] = v;
   return v;
 }

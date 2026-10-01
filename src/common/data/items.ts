@@ -356,4 +356,7 @@ add({ id: 'temple_relic', name: 'Temple Relic', maxStack: 1, rarity: 'rare', cre
 // V5 - The Engineering Update: materials, components, upgrades and the Engineering Book
 for (const d of engineeringItemDefs()) add(d);
 
+// V5.5 - The Digital Corruption Update: an old book in every witch's hut, full of drawings that should not make sense yet
+add({ id: 'witch_grimoire', name: "Witch's Grimoire", maxStack: 1, use: 'grimoire', rarity: 'rare', creative: 'tools' });
+
 export const ITEM_DEFS: readonly ItemDef[] = defs;

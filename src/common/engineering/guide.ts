@@ -4,7 +4,7 @@
  * (components by their `guide`, plus materials and upgrades), so a new
  * component shows up in the book by itself.
  */
-import { COMPONENTS, COMPONENT_BY_ID, ENG_MATERIALS, UPGRADES, UPGRADE_INFO, MACHINE_RECIPES, DUST_SMELTING, type ComponentDef } from './catalog';
+import { COMPONENTS, COMPONENT_BY_ID, ENG_MATERIALS, UPGRADES, UPGRADE_INFO, MACHINE_RECIPES, DUST_SMELTING, ELECTRONICS, COMPUTER_PARTS, type ComponentDef } from './catalog';
 
 export interface GuideChapter {
   id: string;
@@ -166,6 +166,35 @@ export const CHAPTERS: readonly GuideChapter[] = [
     ],
   },
   {
+    id: 'computers',
+    title: 'Computers',
+    icon: 'computer',
+    intro: 'Computers watch and run your factories, keep data on drives and share it over networks. Build them from parts: nothing works until the right parts are in.',
+    steps: [
+      'Make the parts at the Engineering Crafting Table: circuit boards, electronic components and connectors first.',
+      'Place a Computer, cable power to it, and install a Power Supply, a Motherboard, a CPU and at least one RAM Module.',
+      'Put a Monitor and a Keyboard within a block of it. Use the computer: press the power button and it starts up.',
+      'Install a Hard Drive and run Disk Utility to install HonkOS: it puts the programs on the drive.',
+      'Open programs from the desktop: monitors, managers, configuration, automation, logs.',
+      'Add a Graphics Card and a Mouse for maps and blueprints, a Network Card and Network Cable to reach other computers and server racks.',
+    ],
+    tips: ['Programs and files live on drives: copy them to a Flash Drive to carry them to another computer.', 'A blueprint only remembers blocks. Building it takes every block from your inventory.', 'A monitor next to a computer shows what the computer is running.'],
+  },
+  {
+    id: 'digital',
+    title: 'Data & Drives',
+    icon: 'flash_drive',
+    intro: 'Hard drives stay in a computer; flash drives go with you. Both hold files: programs, configurations, blueprints, maps, logs and notes.',
+    steps: [
+      'Open the File Manager to see every drive the computer can reach.',
+      'Pick a file, then copy it to the flash drive, the hard drive or a computer on the network.',
+      'Save a machine\'s settings with Machine Configuration and load them onto another machine of the same kind.',
+      'Save a whole factory\'s settings at once, and put them back after a change.',
+      'Take the flash drive out of the computer and put it into another one: its files come with it.',
+    ],
+    tips: ['Some drives are not what they seem. A computer will tell you what it finds on one.'],
+  },
+  {
     id: 'factories',
     title: 'Factories',
     icon: 'hazard_stripes',
@@ -228,7 +257,12 @@ export function guideEntries(): GuideEntry[] {
     return r;
   };
   for (const ch of CHAPTERS) {
+    if (ch.id === 'digital') {
+      for (const id of COMPUTER_PARTS) out.push({ id, name: PART_NAMES[id] ?? title(id), chapter: 'digital', desc: PART_DESC[id] ?? '', stats: [], madeBy: [] });
+      continue;
+    }
     if (ch.id === 'materials') {
+      for (const id of ELECTRONICS) out.push({ id, name: title(id), chapter: 'materials', desc: MATERIAL_DESC[id] ?? '', stats: [], madeBy: madeBy(id) });
       for (const id of ENG_MATERIALS) out.push({ id, name: title(id), chapter: 'materials', desc: MATERIAL_DESC[id] ?? '', stats: [], madeBy: madeBy(id) });
       for (const id of UPGRADES) out.push({ id, name: title(id), chapter: 'materials', desc: UPGRADE_INFO[id], stats: ['Goes in a machine\'s upgrade slots'], madeBy: [] });
       continue;
@@ -243,7 +277,23 @@ export function guideEntry(id: string): GuideEntry | undefined {
   return guideEntries().find((e) => e.id === id);
 }
 
+const PART_NAMES: Record<string, string> = { power_supply: 'Power Supply', motherboard: 'Motherboard', cpu: 'CPU', ram_module: 'RAM Module', gpu: 'Graphics Card', network_card: 'Network Card', hard_drive: 'Hard Drive', flash_drive: 'Flash Drive' };
+
+const PART_DESC: Record<string, string> = {
+  power_supply: 'Turns the network\'s power into what a computer can use. Without one it never starts.',
+  motherboard: 'Everything else plugs into it.',
+  cpu: 'The computer\'s brain. One is enough for every program.',
+  ram_module: 'Memory. Bigger programs need more modules (up to four).',
+  gpu: 'Draws pictures: maps and blueprints need it (and a mouse).',
+  network_card: 'Lets the computer talk to others over network cable.',
+  hard_drive: 'Keeps HonkOS, programs and files inside the computer. 8 MB.',
+  flash_drive: 'A drive you carry: put it into a computer to read and write files, take it out and into another. 1 MB.',
+};
+
 const MATERIAL_DESC: Record<string, string> = {
+  circuit_board: 'The board every electronic part is built on.',
+  electronic_components: 'Resistors, capacitors and chips by the handful.',
+  connector: 'Plugs and sockets for parts and cables.',
   copper_dust: 'Crushed copper. Smelts into a copper ingot.',
   iron_dust: 'Crushed iron. Smelts into an iron ingot, or mixes with coal dust into steel blend.',
   gold_dust: 'Crushed gold. Smelts into a gold ingot.',

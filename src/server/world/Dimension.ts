@@ -16,6 +16,9 @@ import type { GameServer } from '../GameServer';
 import type { BlockEntityData } from '../../common/world/chunk';
 import { currentHashValue, V1_HASH } from '../../common/registry/palette';
 
+
+/** Saved-chunk entry recording which run of the computer world a chunk was saved in. */
+const EPOCH_MARK = '__epoch';
 export interface DimensionRules {
   hasSky: boolean;
   hasCeiling: boolean;
@@ -34,6 +37,8 @@ export const DIMENSION_RULES: Record<DimensionId, DimensionRules> = {
   nether: { hasSky: false, hasCeiling: true, scale: 8, ambientLight: 0.1, fixedTime: 18000, bedWorks: false, waterEvaporates: true, respawnAnchorWorks: true, lavaSpreadFast: true },
   end: { hasSky: false, hasCeiling: false, scale: 1, ambientLight: 0.2, fixedTime: 6000, bedWorks: false, waterEvaporates: false, respawnAnchorWorks: false, lavaSpreadFast: false },
   farlands: { hasSky: true, hasCeiling: false, scale: 1, ambientLight: 0.05, fixedTime: null, bedWorks: false, waterEvaporates: false, respawnAnchorWorks: false, lavaSpreadFast: false },
+  // V5.5: inside the computer it is always the same grey morning
+  computer: { hasSky: true, hasCeiling: false, scale: 1, ambientLight: 0.04, fixedTime: 3200, bedWorks: false, waterEvaporates: false, respawnAnchorWorks: false, lavaSpreadFast: false },
 };
 
 type LoadState = 'reading' | 'queued';
@@ -178,8 +183,18 @@ export class Dimension implements BlockAccess {
         if (this.loading.get(k) !== 'reading') return;
         if (data) {
           try {
-            const { chunk, entities } = decodeSavedChunk(data, this.rules.hasSky, (h) => this.server.registries.remapFor(h));
+            const { chunk, entities: all } = decodeSavedChunk(data, this.rules.hasSky, (h) => this.server.registries.remapFor(h));
             if (chunk.cx !== cx || chunk.cz !== cz) throw new Error('chunk coordinate mismatch');
+            // V5.5: the computer world starts over after it collapses (chunks saved before then are dropped)
+            const mark = all.find((e) => e.t === EPOCH_MARK);
+            const entities = mark ? all.filter((e) => e !== mark) : all;
+            const epoch = typeof mark?.e === 'number' ? mark.e : 0;
+            if (epoch < this.epoch) {
+              this.loading.set(k, 'queued');
+              this.genQueue.set(k, priority);
+              return;
+            }
+            if (this.id === 'computer') this.epochs.set(chunk, epoch);
             this.loading.delete(k);
             this.addChunk(chunk);
             if (entities.length) this.pendingEntities.set(k, entities);
@@ -197,6 +212,28 @@ export class Dimension implements BlockAccess {
         this.loading.set(k, 'queued');
         this.genQueue.set(k, priority);
       });
+  }
+
+  /** V5.5: which run of the computer world each loaded chunk belongs to. */
+  private readonly epochs = new WeakMap<Chunk, number>();
+
+  private get epoch(): number {
+    return this.id === 'computer' ? (this.server.level.herobrine?.epoch ?? 0) : 0;
+  }
+
+  /** V5.5: forgets loaded chunks from an earlier run of the computer world (call only with nobody in it). */
+  dropStale(): void {
+    if (this.id !== 'computer') return;
+    const e = this.epoch;
+    let any = false;
+    for (const [k, c] of this.chunks) {
+      if ((this.epochs.get(c) ?? 0) >= e) continue;
+      this.chunks.delete(k);
+      this.wanted.delete(k);
+      this.server.onChunkUnloaded(this, c);
+      any = true;
+    }
+    if (any) this.light.invalidateCache();
   }
 
   private addChunk(c: Chunk): void {
@@ -223,6 +260,7 @@ export class Dimension implements BlockAccess {
       const c = this.generator.generate(chunkIndexX(k), chunkIndexZ(k));
       c.dirty = false;
       c.modified = false;
+      if (this.id === 'computer') this.epochs.set(c, this.epoch);
       this.addChunk(c);
       this.genMsTotal += performance.now() - t0;
       this.genCount++;
@@ -287,6 +325,7 @@ export class Dimension implements BlockAccess {
         c.dirty = false;
         continue;
       }
+      if (this.id === 'computer') ents.push({ t: EPOCH_MARK, e: this.epochs.get(c) ?? this.epoch });
       entries.push({ cx: c.cx, cz: c.cz, data: encodeSavedChunk(c, ents) });
       c.dirty = false;
     }

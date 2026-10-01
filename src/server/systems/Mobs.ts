@@ -904,6 +904,13 @@ export class MobSystem {
       s.theEnd?.breathCloud(dim, hit.x, hit.block ? hit.y : Math.floor(hit.y), hit.z, p.owner);
       return true;
     }
+    // V5.5: the dragon's malware bursts into a cloud; Herobrine's bolts
+    if (p.kind === 'malware') {
+      if (e && e === p.owner) return false;
+      s.herobrine?.malware.landed(p, hit.x, hit.y, hit.z);
+      return true;
+    }
+    if (p.kind === 'herobrine_bolt') return s.herobrine ? s.herobrine.boltHit(p, hit) : true;
     switch (p.kind) {
       case 'trident':
         if (p.item) return this.thrownTridentHit(p, hit);

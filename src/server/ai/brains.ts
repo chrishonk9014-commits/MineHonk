@@ -320,6 +320,7 @@ export function installBrain(m: Mob): void {
       break;
     case 'dragon':
     case 'the_error':
+    case 'herobrine':
       // These fights are driven by their own controllers
       break;
   }

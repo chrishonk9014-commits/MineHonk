@@ -115,6 +115,10 @@ export function validateC2S(raw: unknown): C2S | null {
     case 'eng_fill':
       if (!isInt(m.recipe) || m.recipe < 0 || m.recipe > 10000 || !isBool(m.all)) return null;
       return { t: 'eng_fill', recipe: m.recipe, all: m.all };
+    case 'pc_cmd':
+      if (!isInt(m.window) || !isStr(m.cmd, 48)) return null;
+      if (m.arg !== undefined && !(isStr(m.arg, 96) || (isNum(m.arg) && Number.isFinite(m.arg)))) return null;
+      return { t: 'pc_cmd', window: m.window, cmd: m.cmd, ...(m.arg !== undefined ? { arg: m.arg as string | number } : {}) };
     default:
       return null;
   }

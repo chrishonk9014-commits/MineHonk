@@ -3,7 +3,7 @@
  * the world); reaching one shows its card. New endings are added here and
  * triggered by the system that owns them (the dragon fight, the Farlands).
  */
-export type EndingStyle = 'calm' | 'glitch' | 'error';
+export type EndingStyle = 'calm' | 'glitch' | 'error' | 'herobrine';
 
 export interface EndingDef {
   id: string;
@@ -42,6 +42,14 @@ export const ENDINGS: EndingDef[] = [
     title: 'ERROR DEFEATED',
     secret: true,
     card: { head: 'FARLANDS ENDING', title: 'ERROR DEFEATED', line: 'The Farlands fall quiet. For now.', style: 'error' },
+  },
+  {
+    id: 'herobrine',
+    order: 4,
+    label: 'Secret Ending',
+    title: 'Herobrine',
+    secret: true,
+    card: { head: 'SECRET ENDING', title: 'HEROBRINE', line: 'Herobrine is gone. The seed is quiet. The computer is just a computer again.', style: 'herobrine' },
   },
 ];
 

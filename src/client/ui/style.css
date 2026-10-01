@@ -1841,6 +1841,75 @@ body {
   animation: glitch-jitter 1.2s steps(2) infinite;
 }
 
+/* V5.5: the Herobrine ending - a dead terminal, two white eyes, then his name */
+.ending-herobrine {
+  background: #000;
+}
+.ending-herobrine .ending-terminal {
+  font-size: calc(var(--s) * 7);
+  line-height: 1.7;
+  color: #6af07a;
+  text-align: left;
+  min-height: calc(var(--s) * 48);
+  margin: 0 auto calc(var(--s) * 10);
+  width: min(calc(var(--s) * 220), 90vw);
+  text-shadow: 0 0 calc(var(--s) * 3) rgba(106, 240, 122, 0.6);
+  transition: opacity 1.2s ease;
+}
+.ending-herobrine .ending-eyes {
+  display: flex;
+  justify-content: center;
+  gap: calc(var(--s) * 14);
+  height: calc(var(--s) * 6);
+  margin-bottom: calc(var(--s) * 10);
+  opacity: 0;
+  transition: opacity 2s ease;
+}
+.ending-herobrine .ending-eyes span {
+  width: calc(var(--s) * 10);
+  height: calc(var(--s) * 4);
+  background: #fff;
+  box-shadow: 0 0 calc(var(--s) * 8) rgba(255, 255, 255, 0.9);
+}
+.ending-herobrine .ending-head,
+.ending-herobrine .ending-title,
+.ending-herobrine .ending-line,
+.ending-herobrine .ending-mark {
+  opacity: 0;
+  transition: opacity 1.6s ease;
+}
+.ending-herobrine.titled .ending-terminal {
+  opacity: 0.35;
+}
+.ending-herobrine.titled .ending-eyes,
+.ending-herobrine.titled .ending-head,
+.ending-herobrine.titled .ending-title,
+.ending-herobrine.titled .ending-line,
+.ending-herobrine.titled .ending-mark {
+  opacity: 1;
+}
+.ending-herobrine .ending-head {
+  color: #e8e8e8;
+}
+.ending-herobrine .ending-title {
+  color: #ffffff;
+  font-size: calc(var(--s) * 38);
+  letter-spacing: calc(var(--s) * 3);
+  text-shadow: calc(var(--s) * -2) 0 0 #3af0ff, calc(var(--s) * 2) 0 0 #ff2a2a, 0 0 calc(var(--s) * 16) rgba(255, 255, 255, 0.35);
+}
+.ending-herobrine.titled .ending-eyes {
+  animation: herobrine-eyes 5s ease-in forwards;
+}
+@keyframes herobrine-eyes {
+  0%,
+  70% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
 /* ------------------------------------------------------------------ touch controls (phones, tablets) */
 .touch-layer {
   position: absolute;

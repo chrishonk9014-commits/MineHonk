@@ -7,7 +7,7 @@ export interface AchievementDef {
   /** Parent achievement shown as prerequisite in the UI tree. */
   parent?: string;
   secret?: boolean;
-  category: 'story' | 'nether' | 'end' | 'adventure' | 'farlands' | 'husbandry' | 'caves' | 'world' | 'engineering';
+  category: 'story' | 'nether' | 'end' | 'adventure' | 'farlands' | 'husbandry' | 'caves' | 'world' | 'engineering' | 'digital';
 }
 
 export const ACHIEVEMENTS: AchievementDef[] = [
@@ -103,6 +103,24 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: 'advanced_engineering', title: 'Advanced Engineering', description: 'Have a tier 3 machine finish a job', icon: 'advanced_circuit', parent: 'build_multiblock', category: 'engineering' },
   { id: 'automated_factory', title: 'Lights-Out Factory', description: 'Run five machines at once on one network, fed by automation', icon: 'item_sorter', parent: 'item_network', category: 'engineering' },
   { id: 'control_room', title: 'Mission Control', description: 'Watch a network of three or more machines with a monitor and a control panel', icon: 'monitor', parent: 'automated_factory', category: 'engineering', secret: false },
+  // V5.5 - the Digital Corruption Update (obtaining the Mysterious Potion is the existing "Unlabeled")
+  { id: 'boot_computer', title: 'Hello, World', description: 'Boot a computer you built', icon: 'computer', parent: 'engineering', category: 'digital' },
+  { id: 'install_os', title: 'Fresh Install', description: 'Install HonkOS onto a hard drive', icon: 'hard_drive', parent: 'boot_computer', category: 'digital' },
+  { id: 'obtain_flash_drive', title: 'Portable Storage', description: 'Get a flash drive', icon: 'flash_drive', parent: 'boot_computer', category: 'digital' },
+  { id: 'network_transfer', title: 'Sneakernet Is Over', description: 'Send a file from one computer to another over a network', icon: 'network_cable', parent: 'install_os', category: 'digital' },
+  { id: 'read_grimoire', title: 'Forbidden Pages', description: "Read the grimoire from a witch's hut", icon: 'witch_grimoire', parent: 'boot_computer', category: 'digital', secret: true },
+  { id: 'feed_dragon', title: 'Not a Healing Potion', description: 'Feed the Mysterious Potion to the Ender Dragon', icon: 'mysterious_potion', parent: 'obtain_flash_drive', category: 'digital', secret: true },
+  { id: 'witness_malware', title: 'Something Digital', description: 'See the Ender Dragon spit malware', icon: 'dragon_breath', parent: 'feed_dragon', category: 'digital', secret: true },
+  { id: 'corrupt_flash_drive', title: 'Exposure', description: 'Hold a flash drive in the malware until it changes', icon: 'corrupted_flash_drive', parent: 'witness_malware', category: 'digital', secret: true },
+  { id: 'obtain_corrupted_drive', title: 'Do Not Plug This In', description: 'Carry the Corrupted Flash Drive', icon: 'corrupted_flash_drive', parent: 'corrupt_flash_drive', category: 'digital', secret: true },
+  { id: 'insert_corrupted_drive', title: 'Autorun', description: 'Plug the Corrupted Flash Drive into a computer in the Overworld', icon: 'computer', parent: 'obtain_corrupted_drive', category: 'digital', secret: true },
+  { id: 'witness_herobrine', title: 'White Eyes', description: 'See Herobrine come out of the computer', icon: 'computer', parent: 'insert_corrupted_drive', category: 'digital', secret: true },
+  { id: 'defeat_first_herobrine', title: 'Ctrl+Alt+Del', description: 'Drive Herobrine back into the computer', icon: 'diamond_sword', parent: 'witness_herobrine', category: 'digital', secret: true },
+  { id: 'enter_computer', title: 'Inside the Machine', description: 'Follow Herobrine into the computer', icon: 'monitor', parent: 'defeat_first_herobrine', category: 'digital', secret: true },
+  { id: 'discover_herobrine_seed', title: '478868574082066804', description: 'Realise where you are: the seed where Herobrine was first found', icon: 'grass_block', parent: 'enter_computer', category: 'digital', secret: true },
+  { id: 'find_herobrine_cave', title: 'The Lights Never Go Out', description: "Find Herobrine's cave", icon: 'server_rack', parent: 'discover_herobrine_seed', category: 'digital', secret: true },
+  { id: 'defeat_final_herobrine', title: 'Removed Herobrine', description: 'Defeat Herobrine in his cave', icon: 'netherite_sword', parent: 'find_herobrine_cave', category: 'digital', secret: true },
+  { id: 'herobrine_ending', title: 'Secret Ending: Herobrine', description: 'Reach the Herobrine secret ending', icon: 'corrupted_flash_drive', parent: 'defeat_final_herobrine', category: 'digital', secret: true },
 ];
 
 export const ACHIEVEMENT_BY_ID = new Map(ACHIEVEMENTS.map((a) => [a.id, a]));

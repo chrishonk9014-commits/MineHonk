@@ -18,6 +18,8 @@ export interface FoodDef {
 export type UseKind =
   | 'place_block'
   | 'engineering_book'
+  /** V5.5: the witch's grimoire (opens its pages on the client). */
+  | 'grimoire'
   | 'bow'
   | 'crossbow'
   | 'flint_and_steel'

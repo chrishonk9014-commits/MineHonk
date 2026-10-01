@@ -6,6 +6,7 @@
  */
 import type { BlockDef, SoundGroup, TintKind } from '../registry/blockTypes';
 import { engineeringBlockDefs } from '../engineering/catalog';
+import { digitalBlockDefs } from '../digital/blocks';
 
 const defs: BlockDef[] = [];
 const add = (d: BlockDef): BlockDef => {
@@ -1006,5 +1007,8 @@ add({ id: 'temple_seal', name: 'Temple Seal', hardness: -1, resistance: 3600000,
 
 // V5 - The Engineering Update: machines, power, transport, fluids, signals and factory blocks
 for (const d of engineeringBlockDefs()) add(d);
+
+// V5.5 - The Digital Corruption Update: the computer world and Herobrine's cave
+for (const d of digitalBlockDefs()) add(d);
 
 export const BLOCK_DEFS: readonly BlockDef[] = defs;

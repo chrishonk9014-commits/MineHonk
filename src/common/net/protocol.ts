@@ -9,7 +9,7 @@ import type { ItemStack, Slot } from '../game/itemstack';
 import type { GameMode, Difficulty, GodHearts } from '../game/gamemode';
 import type { DimensionId } from '../data/biomes';
 
-export const PROTOCOL_VERSION = 4;
+export const PROTOCOL_VERSION = 5;
 
 // ---------------------------------------------------------------------------
 // Client -> Server
@@ -49,7 +49,9 @@ export type C2S =
   /** V5: change a setting of the engineering block whose window is open. */
   | { t: 'eng_cfg'; window: number; key: string; value: string | number }
   /** V5: the Engineering Book fills the open Engineering Crafting Table's grid with a recipe. */
-  | { t: 'eng_fill'; recipe: number; all: boolean };
+  | { t: 'eng_fill'; recipe: number; all: boolean }
+  /** V5.5: a command from a computer's screen (open program, copy a file, press a button...). */
+  | { t: 'pc_cmd'; window: number; cmd: string; arg?: string | number };
 
 export type ClickMode = 'pickup' | 'quick' | 'swap' | 'drop' | 'drag_start' | 'drag_add' | 'drag_end' | 'collect' | 'clone';
 
@@ -139,7 +141,7 @@ export type S2C =
   /** A particle travelling from one point to another over `ticks` (vibrations, sonic booms). */
   | { t: 'trail'; kind: string; x0: number; y0: number; z0: number; x1: number; y1: number; z1: number; ticks: number }
   /** An ending card (V3). */
-  | { t: 'ending'; id: string; head: string; title: string; line: string; style: 'calm' | 'glitch' | 'error' }
+  | { t: 'ending'; id: string; head: string; title: string; line: string; style: 'calm' | 'glitch' | 'error' | 'herobrine' }
   /**
    * Screen and world effects (V3): glitch bursts, the End falling silent and
    * corrupting, warning markers on the ground, lasers, shockwaves...
@@ -243,7 +245,24 @@ export type FxKind =
   | 'afterimage'
   | 'portal_on'
   | 'farlands_entry'
-  | 'boss_death';
+  | 'boss_death'
+  // V5.5: the Digital Corruption Update
+  /** Words torn across the screen (HER0BRINE.EXE, SYSTEM BREACH...): text, ticks. */
+  | 'hack'
+  /** Movement keys reversed for a while (PLAYER CONTROL OVERRIDE). */
+  | 'controls_reversed'
+  /** An electric arc from (x,y,z) to (x1,y1,z1) for ticks (id: replaced by the same id). */
+  | 'arc'
+  /** A lightning bolt striking (x,y,z). */
+  | 'bolt'
+  /** Falling into the computer: the screen pixelates into the digital world. */
+  | 'enter_computer'
+  /** Something watches: darkness at the edges of the screen for ticks. */
+  | 'presence'
+  /** The digital world shutting down: SHUTDOWN text, fade to black. */
+  | 'shutdown'
+  /** A computer seizing up: its screen and the world around it tear (x,y,z = the computer). */
+  | 'takeover';
 export type WindowKind =
   | 'player'
   | 'crafting'
@@ -260,7 +279,8 @@ export type WindowKind =
   | 'stonecutter'
   | 'beacon'
   | 'eng_crafting'
-  | 'machine';
+  | 'machine'
+  | 'computer';
 
 export type { ItemStack };
 

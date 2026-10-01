@@ -11,7 +11,8 @@
  *   4. items move (hoppers, chutes, pipes, sorters);
  *   5. fluids move along fluid networks;
  *   6. sensors and timers update their signals;
- *   7. monitors, control panels and open windows are refreshed.
+ *   7. computers run (V5.5) and server racks keep their drives spinning;
+ *   8. monitors, control panels and open windows are refreshed.
  *
  * Conveyors move items every tick (as part of the items' own physics).
  * Idle machines sleep for a few steps and wake when something reaches them.
@@ -34,6 +35,7 @@ import { FluidNets } from './fluids';
 import { EngWindows } from './windows';
 import { ControlRoom } from './control';
 import { SignalParts } from './signals';
+import { Computers } from './computer/Computers';
 import type { ItemEntity } from '../entity/ItemEntity';
 
 export const ENG_STEP = 4;
@@ -64,6 +66,7 @@ export class Engineering {
   readonly windows: EngWindows;
   readonly control: ControlRoom;
   readonly signals: SignalParts;
+  readonly computers: Computers;
   /** Time spent in the last step (ms), for the Admin Panel. */
   lastStepMs = 0;
 
@@ -75,6 +78,7 @@ export class Engineering {
     this.windows = new EngWindows(this);
     this.control = new ControlRoom(this);
     this.signals = new SignalParts(this);
+    this.computers = new Computers(this);
     // Chunks loaded before the system was installed (spawn chunks)
     for (const dim of server.dims.values()) for (const c of dim.chunks.values()) this.onChunkLoaded(dim, c);
   }
@@ -119,6 +123,10 @@ export class Engineering {
     n.removed = true;
     this.nodes.delete(key);
     this.windows.closeAt(dim, x, y, z);
+    if (n.c.kind === 'computer') {
+      this.computers.closeAt(n);
+      this.server.herobrine?.onComputerGone(n);
+    }
   }
 
   // ------------------------------------------------------------------ hooks
@@ -152,6 +160,8 @@ export class Engineering {
   onBlockChanged(dim: Dimension, x: number, y: number, z: number, old: number, state: number): void {
     const oldC = COMPONENT_BY_ID.get(blocks[STATE_BLOCK[old]!]!.id);
     const newC = COMPONENT_BY_ID.get(blocks[STATE_BLOCK[state]!]!.id);
+    // Peripherals, monitors and parts around computers
+    this.computers.invalidateAround(dim.id, x, y, z);
     if (!oldC && !newC) {
       // A neighbour of a machine changed (water for a wheel, crops for a harvester...)
       return;
@@ -216,9 +226,20 @@ export class Engineering {
     const heldId = held ? items[held.id]!.id : '';
     // The Engineering Book opens this block's page (on the client)
     if (heldId === 'engineering_book') return true;
+    // A keyboard, mouse or screen beside a computer is a way to use it
+    if (c.kind === 'peripheral' || (c.kind === 'monitor' && !p.sneaking && this.computers.drivenMonitor(p.dim, x, y, z))) {
+      const pc = this.computers.besides(p.dim, x, y, z);
+      if (!pc) return c.kind !== 'peripheral' ? false : true;
+      if (p.gamemode !== 'spectator') this.computers.openFor(p, pc);
+      return true;
+    }
     const n = this.node(p.dim, x, y, z);
     if (!n) return false;
     if (p.gamemode === 'spectator') return true;
+    if (c.kind === 'computer') {
+      this.computers.openFor(p, n);
+      return true;
+    }
     if ((heldId === 'bucket' || heldId === 'water_bucket' || heldId === 'lava_bucket') && this.fluids.useBucket(p, n)) return true;
     if (c.kind === 'fluid_filter' && (heldId === 'water_bucket' || heldId === 'lava_bucket')) {
       const be = n.be();
@@ -333,6 +354,7 @@ export class Engineering {
     this.transport.step(nodes, ENG_STEP);
     this.fluids.step(nodes, ENG_STEP);
     this.signals.step(nodes);
+    this.computers.step(nodes, ENG_STEP);
     if (now % 20 === 0) this.control.refresh(nodes);
     this.windows.step();
     for (const n of nodes) this.flush(n);

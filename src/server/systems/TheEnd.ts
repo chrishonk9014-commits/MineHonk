@@ -983,6 +983,8 @@ export class DragonFight {
     m.remove();
     this.dragon = null;
     this.server.broadcastChat('The Ender Dragon has been defeated!', 'system');
+    // V5.5: a Corrupted Flash Drive made before this wakes up
+    this.server.herobrine?.onDragonDefeated(m.admin);
   }
 
   /**
@@ -1010,6 +1012,8 @@ export class DragonFight {
     this.dragon = null;
     this.secretRun = false;
     this.phase = 'hold';
+    // V5.5: the malware dies with the dragon (this end doesn't wake a drive: it is the other story's)
+    this.server.herobrine?.malware.onDragonGone();
   }
 
   // ------------------------------------------------------------------ boss bar

@@ -31,6 +31,8 @@ export interface WSlot {
   group: 'container' | 'main' | 'hotbar' | 'armor' | 'offhand' | 'craft' | 'result' | 'fuel' | 'input';
   /** V5 filter / target slots: clicking puts a copy of the cursor item (one) there, never the item itself. */
   ghost?: boolean;
+  /** V5.5: while true nothing goes in or comes out (a computer Herobrine has taken over). */
+  locked?(): boolean;
 }
 
 export class Window {
@@ -595,6 +597,7 @@ export class Containers {
     }
     if (slotIndex < 0 || slotIndex >= w.slots.length) return;
     const slot = w.slots[slotIndex]!;
+    if (slot.locked?.()) return;
     if (slot.ghost) {
       // Filter slots hold a copy of what was clicked in (or nothing); real items never move
       if (mode === 'pickup' || mode === 'quick' || mode === 'drop') slot.set(mode !== 'drop' && p.cursor ? { ...cloneStack(p.cursor), count: 1 } : null);
@@ -644,7 +647,7 @@ export class Containers {
         const target = p.cursor;
         for (let pass = 0; pass < 2; pass++) {
           for (const s of w.slots) {
-            if (s.output || s.ghost) continue;
+            if (s.output || s.ghost || s.locked?.()) continue;
             const v = s.get();
             if (!v || !canStack(v, target)) continue;
             if (pass === 0 && v.count === maxStack(v)) continue;

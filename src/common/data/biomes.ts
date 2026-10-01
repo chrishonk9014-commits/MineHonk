@@ -2,7 +2,8 @@
  * Biome definitions. Colours follow the familiar Minecraft-like palette
  * (grass/foliage/water tints), expressed as explicit per-biome values.
  */
-export type DimensionId = 'overworld' | 'nether' | 'end' | 'farlands';
+/** V5.5: 'computer' is the world inside the computer (the Herobrine seed). */
+export type DimensionId = 'overworld' | 'nether' | 'end' | 'farlands' | 'computer';
 export type TreeKind =
   | 'oak'
   | 'fancy_oak'

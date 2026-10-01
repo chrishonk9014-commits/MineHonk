@@ -8,6 +8,7 @@
  *     writing blocks that fall inside the target chunk. Decisions read only
  *     proto data, so the result is deterministic regardless of load order.
  */
+import { ComputerWorldGenerator } from './computer';
 import { Chunk } from '../world/chunk';
 import type { DimensionId } from '../data/biomes';
 import { OverworldTerrain } from './overworld';
@@ -388,6 +389,8 @@ export function createGenerator(dim: DimensionId, seed: number, opts: GeneratorO
       return new EndGenerator(seed, opts);
     case 'farlands':
       return new FarlandsGenerator(seed, opts);
+    case 'computer':
+      return new ComputerWorldGenerator(seed, opts);
     case 'overworld':
     default:
       return new OverworldGenerator(seed, opts);

@@ -441,6 +441,11 @@ export class Mob extends LivingEntity {
       amount = this.dim.server.errorBoss?.scaleDamage(this, amount, info) ?? amount;
       if (amount <= 0) return 0;
     }
+    // Herobrine: can't be hurt between moments of his fights, and never dies the first time
+    if (this.type === 'herobrine') {
+      amount = this.dim.server.herobrine?.scaleDamage(this, amount, info) ?? amount;
+      if (amount <= 0) return 0;
+    }
     if (this.invulnerableTicks > 10 && src !== 'void' && src !== 'kill') {
       const last = (this.data.lastHurtAmount as number) ?? 0;
       if (amount <= last) return 0;
@@ -508,7 +513,7 @@ export class Mob extends LivingEntity {
     if (this.owner) m.tame = true;
     if (this.fuse >= 0) m.fuse = this.fuse;
     if (this.angryAt || this.target) m.angry = true;
-    for (const k of ['color', 'sheared', 'size', 'profession', 'variant', 'charged', 'carried', 'phase', 'open', 'saddle', 'leashPos', 'puff', 'dancing', 'playDead', 'rolling', 'eating', 'trusting', 'tongue', 'emerge', 'dig', 'angerLevel', 'sonic', 'listen', 'sniff', 'voidbound', 'errorPhase', 'errorAnim', 'clone']) if (this.data[k] !== undefined) m[k] = this.data[k];
+    for (const k of ['color', 'sheared', 'size', 'profession', 'variant', 'charged', 'carried', 'phase', 'open', 'saddle', 'leashPos', 'puff', 'dancing', 'playDead', 'rolling', 'eating', 'trusting', 'tongue', 'emerge', 'dig', 'angerLevel', 'sonic', 'listen', 'sniff', 'voidbound', 'errorPhase', 'errorAnim', 'clone', 'malware', 'hbAnim', 'hbKind', 'apparition']) if (this.data[k] !== undefined) m[k] = this.data[k];
     if (this.data.glowTicks) m.glowing = true;
     if (this.data.leash && this.metaHolder) m.leash = this.metaHolder;
     if (this.rider) m.rider = this.rider.id;

@@ -4,6 +4,7 @@
  */
 import { adminScreen } from './ui/AdminPanel';
 import { EngineeringBookPanel } from './ui/EngineeringBook';
+import { GrimoirePanel } from './ui/Grimoire';
 import { encode, decode } from '@msgpack/msgpack';
 import { deflateSync, inflateSync } from 'fflate';
 import type { Settings, Profile } from './settings';
@@ -488,6 +489,23 @@ export class App implements GameHost, S.ScreenHost {
       if (e.target === root) this.pop();
     });
     this.push({ root, onClose: () => panel.destroy() });
+  }
+
+  /** V5.5: the Witch's Grimoire, from the item. */
+  openGrimoire(): void {
+    const game = this.game;
+    if (!game || this.screenOpen) return;
+    const root = el('div', { class: 'screen dim grimoire-screen' });
+    const panel = new GrimoirePanel({ close: () => this.pop(), turn: () => game.audio.play('book.page', NaN, NaN, NaN, 0.6, 0.9 + Math.random() * 0.2, 'ui') });
+    root.append(panel.root);
+    root.addEventListener('mousedown', (e) => {
+      if (e.target === root) this.pop();
+    });
+    const key = (e: KeyboardEvent): void => {
+      if (panel.onKey(e)) e.preventDefault();
+    };
+    window.addEventListener('keydown', key);
+    this.push({ root, onClose: () => window.removeEventListener('keydown', key) });
   }
 
   openAchievements(): void {

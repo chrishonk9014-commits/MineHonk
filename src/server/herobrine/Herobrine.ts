@@ -964,6 +964,12 @@ export class HerobrineSystem {
       ct.persist(p.dim, x, y, z, inv);
       p.dim.setBlock(x, y + 1, z, stateOf('monitor', { facing }));
       s.admin.setBlockMark(p.dim, x, y + 1, z, true);
+      // A keyboard beside it, on something solid
+      const kx = x + (Math.abs(fx) > Math.abs(fz) ? 0 : 1);
+      const kz = z + (Math.abs(fx) > Math.abs(fz) ? 1 : 0);
+      p.dim.setBlock(kx, y - 1, kz, S('stone'));
+      p.dim.setBlock(kx, y, kz, stateOf('keyboard', { facing }));
+      for (const [bx, by, bz] of [[kx, y - 1, kz], [kx, y, kz]] as const) s.admin.setBlockMark(p.dim, bx, by, bz, true);
     }
     const be = best.be();
     if (be) {

@@ -112,6 +112,15 @@ export function showTooltip(stack: Slot, x: number, y: number, advanced = false)
   }
   if (it.id === 'farlands_compass') tooltipEl.append(el('div', { class: 'rarity-glitched' }, 'Points somewhere it should not.'));
   if (it.id === 'mysterious_potion') tooltipEl.append(el('div', { class: 'dim italic' }, 'Something in it is looking back.'));
+  // V5.5: drives show what they hold
+  if (it.id === 'hard_drive' || it.id === 'flash_drive' || it.id === 'corrupted_flash_drive') {
+    const t = stack.tag?.data as { label?: string; used?: number; cap?: number; spent?: boolean } | undefined;
+    if (it.id === 'corrupted_flash_drive') tooltipEl.append(el('div', { class: 'rarity-glitched' }, t?.spent ? 'Empty now. Something used to be on it.' : 'Do not plug this in.'));
+    if (t?.label && it.id !== 'corrupted_flash_drive') tooltipEl.append(el('div', {}, `"${t.label}"`));
+    if (typeof t?.used === 'number' && typeof t.cap === 'number') tooltipEl.append(el('div', { class: 'dim' }, it.id === 'corrupted_flash_drive' ? `${t.used} / ??? KB` : `${t.used} / ${t.cap} KB used`));
+    else if (it.id !== 'corrupted_flash_drive') tooltipEl.append(el('div', { class: 'dim' }, 'Empty'));
+  }
+  if (it.id === 'witch_grimoire') tooltipEl.append(el('div', { class: 'dim italic' }, 'Two doors, one bottle.'));
   if (it.id === 'corrupted_eye') {
     tooltipEl.append(el('div', { class: 'dim italic' }, 'It remembers the End breaking.'));
     tooltipEl.append(el('div', { class: 'dim' }, 'Throw: shows the way to a glitched portal'));

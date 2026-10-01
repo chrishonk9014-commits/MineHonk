@@ -115,14 +115,14 @@ export class WorldFX {
     });
   }
 
-  /** A lingering danger zone. */
-  zone(id: number | undefined, x: number, y: number, z: number, r: number, seconds: number, now: number): void {
+  /** A lingering danger zone (`color`: the Error's magenta; V5.5 malware green, Herobrine's static white). */
+  zone(id: number | undefined, x: number, y: number, z: number, r: number, seconds: number, now: number, color = 0xe020c8): void {
     const geo = new THREE.PlaneGeometry(r * 2, r * 2);
     geo.rotateX(-Math.PI / 2);
     const mat = new THREE.ShaderMaterial({
       vertexShader: RING_VERT,
       fragmentShader: ZONE_FRAG,
-      uniforms: { uTime: { value: 0 }, uAlpha: { value: 0 }, uColor: { value: new THREE.Color(0xe020c8) } },
+      uniforms: { uTime: { value: 0 }, uAlpha: { value: 0 }, uColor: { value: new THREE.Color(color) } },
       transparent: true,
       depthWrite: false,
       side: THREE.DoubleSide,
@@ -204,6 +204,82 @@ export class WorldFX {
         g.scale.set(rr, 1, rr);
         mat.opacity = 0.85 * (1 - f * 0.6);
         wallMat.opacity = 0.35 * (1 - f * 0.5);
+      },
+    });
+  }
+
+  /**
+   * V5.5: an electric arc from a to b: a jagged line that re-forms every few
+   * frames (three strands, a bright core and two paler ones).
+   */
+  arc(id: number | undefined, a: THREE.Vector3, b: THREE.Vector3, seconds: number, now: number, heavy = false): void {
+    const segs = Math.max(4, Math.min(24, Math.round(a.distanceTo(b) * 1.5)));
+    const g = new THREE.Group();
+    const strands: { line: THREE.Line; geo: THREE.BufferGeometry; amp: number }[] = [];
+    const cols = [0xffffff, 0x9ff4ff, 0x4fc8ff];
+    for (let k = 0; k < (heavy ? 3 : 2); k++) {
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array((segs + 1) * 3), 3));
+      const mat = new THREE.LineBasicMaterial({ color: cols[k]!, transparent: true, opacity: k === 0 ? 1 : 0.7, depthWrite: false, fog: false });
+      const line = new THREE.Line(geo, mat);
+      g.add(line);
+      strands.push({ line, geo, amp: (k === 0 ? 0.25 : 0.45) * (heavy ? 1.6 : 1) });
+    }
+    const dir = b.clone().sub(a);
+    const len = dir.length() || 1;
+    const side1 = new THREE.Vector3(0, 1, 0).cross(dir).normalize();
+    if (side1.lengthSq() < 0.01) side1.set(1, 0, 0);
+    const side2 = dir.clone().cross(side1).normalize();
+    let last = -1;
+    const reform = (): void => {
+      for (const st of strands) {
+        const pos = st.geo.getAttribute('position') as THREE.BufferAttribute;
+        for (let i = 0; i <= segs; i++) {
+          const f = i / segs;
+          const env = Math.sin(f * Math.PI);
+          const o1 = (Math.random() - 0.5) * 2 * st.amp * env * Math.min(1, len / 6 + 0.3);
+          const o2 = (Math.random() - 0.5) * 2 * st.amp * env * Math.min(1, len / 6 + 0.3);
+          pos.setXYZ(i, a.x + dir.x * f + side1.x * o1 + side2.x * o2, a.y + dir.y * f + side1.y * o1 + side2.y * o2, a.z + dir.z * f + side1.z * o1 + side2.z * o2);
+        }
+        pos.needsUpdate = true;
+        st.geo.computeBoundingSphere();
+      }
+    };
+    reform();
+    this.add(id, {
+      obj: g,
+      born: now,
+      life: seconds,
+      kind: 'arc',
+      update: (age, t) => {
+        const frame = Math.floor(t * 20);
+        if (frame !== last) {
+          last = frame;
+          reform();
+        }
+        g.visible = Math.random() > 0.08;
+        for (const st of strands) (st.line.material as THREE.LineBasicMaterial).opacity = Math.max(0, 1 - age / seconds) * (0.6 + Math.random() * 0.4);
+      },
+    });
+  }
+
+  /** V5.5: a lightning strike coming down on (x, y, z), with a flash on the ground. */
+  bolt(x: number, y: number, z: number, seconds: number, now: number): void {
+    this.arc(undefined, new THREE.Vector3(x + (Math.random() - 0.5) * 2, y + 16, z + (Math.random() - 0.5) * 2), new THREE.Vector3(x, y, z), seconds, now, true);
+    const geo = new THREE.CircleGeometry(1.6, 24);
+    geo.rotateX(-Math.PI / 2);
+    const mat = new THREE.MeshBasicMaterial({ color: 0xbff4ff, transparent: true, opacity: 0.8, depthWrite: false, side: THREE.DoubleSide, fog: false });
+    const m = new THREE.Mesh(geo, mat);
+    m.position.set(x, y + 0.07, z);
+    this.add(undefined, {
+      obj: m,
+      born: now,
+      life: seconds,
+      kind: 'bolt',
+      update: (age) => {
+        const f = Math.min(1, age / seconds);
+        mat.opacity = 0.8 * (1 - f);
+        m.scale.setScalar(1 + f * 1.5);
       },
     });
   }

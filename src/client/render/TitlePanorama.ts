@@ -1,7 +1,17 @@
 /**
  * The title screen backdrop: a patch of real, freshly generated terrain from
- * a random seed. Since V5 it shows The Engineering Update: one of five set
- * scenes built onto the terrain, picked at random:
+ * a random seed. Since V5.5 it shows The Digital Corruption Update, one of
+ * four scenes picked at random:
+ *  - a computer lab: desks of computers, monitors, keyboards and speakers,
+ *    server racks on network cable, and one computer whose screen has gone
+ *    wrong;
+ *  - the world inside the computer: the seed where Herobrine was first
+ *    found, the lake, the leafless trees, and him across the water in the fog;
+ *  - Herobrine's cave: servers, screens of static, tesla coils and the core,
+ *    and him plugged into it;
+ *  - the End, the Ender Dragon sick with malware, coughing data.
+ * The Engineering Update's five set scenes are still there with
+ * ?title=factory|power_plant|mine|farm|control_room:
  *  - a factory: machines with their lights on, conveyors, an industrial
  *    furnace and a wall of monitors;
  *  - a power plant: solar fields, wind turbines, battery banks, a large
@@ -29,6 +39,7 @@ import { ClientEntity } from '../game/ClientEntity';
 import { EndGenerator } from '../../common/gen/end';
 import { FarlandsGenerator } from '../../common/gen/farlands';
 import { OverworldGenerator } from '../../common/gen/generator';
+import { ComputerWorldGenerator } from '../../common/gen/computer';
 import type { DimensionGenerator } from '../../common/gen/pipeline';
 import { LightEngine } from '../../common/world/light';
 import { encodeChunk, type Chunk } from '../../common/world/chunk';
@@ -39,12 +50,14 @@ import type { Settings } from '../settings';
 
 const RADIUS = 4;
 
-type EngScene = 'factory' | 'power_plant' | 'mine' | 'farm' | 'control_room';
-type Scene = 'farlands' | 'end' | 'arena' | 'error_biome' | 'village' | EngScene;
-/** The Engineering Update's set scenes, shown at random; the others only when asked for. */
-const ENG_SCENES: EngScene[] = ['factory', 'power_plant', 'mine', 'farm', 'control_room'];
-const RANDOM_SCENES: Scene[] = ENG_SCENES;
-const ALL_SCENES: Scene[] = [...ENG_SCENES, 'error_biome', 'village', 'farlands', 'end', 'arena'];
+type EngScene = 'factory' | 'power_plant' | 'mine' | 'farm' | 'control_room' | 'computer_lab';
+type DigitalScene = 'digital_world' | 'herobrine_cave';
+type Scene = 'farlands' | 'end' | 'arena' | 'error_biome' | 'village' | 'dragon_malware' | EngScene | DigitalScene;
+/** The Engineering Update's set scenes (built onto overworld terrain). */
+const ENG_SCENES: EngScene[] = ['factory', 'power_plant', 'mine', 'farm', 'control_room', 'computer_lab'];
+/** The Digital Corruption Update's scenes, shown at random; the others only when asked for. */
+const RANDOM_SCENES: Scene[] = ['computer_lab', 'digital_world', 'herobrine_cave', 'dragon_malware'];
+const ALL_SCENES: Scene[] = [...ENG_SCENES, 'digital_world', 'herobrine_cave', 'dragon_malware', 'error_biome', 'village', 'farlands', 'end', 'arena'];
 const isEng = (s: Scene): s is EngScene => (ENG_SCENES as Scene[]).includes(s);
 
 /** What each scene looks like: particles in the air, camera tilt, extra light. */
@@ -61,6 +74,10 @@ const LOOK: Record<Scene, { particle: string; pitch: number; nightVision: number
   mine: { particle: 'none', pitch: 0.42, nightVision: 0, aside: 0.5 },
   farm: { particle: 'none', pitch: 0.34, nightVision: 0, aside: 0.55 },
   control_room: { particle: 'none', pitch: 0.36, nightVision: 0, aside: 0.5 },
+  computer_lab: { particle: 'none', pitch: 0.36, nightVision: 0, aside: 0.5 },
+  digital_world: { particle: 'none', pitch: 0.06, nightVision: 0, aside: 0.35 },
+  herobrine_cave: { particle: 'electric', pitch: 0.12, nightVision: 0.3, aside: 0.45 },
+  dragon_malware: { particle: 'malware', pitch: 0.05, nightVision: 0.35, aside: 0.5 },
 };
 
 /** The Error's poses shown on the title screen, cycling. */
@@ -77,6 +94,9 @@ export class TitlePanorama {
   private orbit = 0;
   private scene: Scene = 'farlands';
   private boss: ClientEntity | null = null;
+  private gen: DimensionGenerator | null = null;
+  /** A camera that looks one way (the lake inside the computer) instead of turning. */
+  private fixedYaw: number | null = null;
   private disposed = false;
   private lastTick = 0;
   onReady: (() => void) | null = null;
@@ -105,6 +125,17 @@ export class TitlePanorama {
     if (isEng(this.scene)) {
       const gen = new OverworldGenerator(seed);
       this.build(gen, gen.findSpawn());
+      return;
+    }
+    if (this.scene === 'digital_world' || this.scene === 'herobrine_cave') {
+      // Inside the computer: always the same seed
+      const gen = new ComputerWorldGenerator(seed);
+      const L = gen.layout();
+      this.build(gen, this.scene === 'digital_world' ? { x: L.spawn.x, y: L.spawn.y, z: L.lake.z } : { x: L.hall.x, y: L.hall.y, z: L.hall.z });
+      return;
+    }
+    if (this.scene === 'dragon_malware') {
+      this.build(new EndGenerator(seed), { x: 0, y: 70, z: 0 });
       return;
     }
     let gen: DimensionGenerator;
@@ -153,10 +184,12 @@ export class TitlePanorama {
 
   /** Generates the chunks around a focus a few per frame, lights them and starts the camera. */
   private build(gen: DimensionGenerator, focus: { x: number; y: number; z: number }): void {
+    this.gen = gen;
     // The renderer draws whichever dimension the world says it is
-    const dim = gen.dimension === 'end' ? 'end' : gen.dimension === 'overworld' ? 'overworld' : 'farlands';
+    const dim = gen.dimension === 'end' ? 'end' : gen.dimension === 'overworld' ? 'overworld' : gen.dimension === 'computer' ? 'computer' : 'farlands';
     this.world.dimension = dim;
     this.world.hasSky = dim !== 'end';
+    this.world.dimension = dim;
     this.renderer!.sky.dimension = dim;
 
     const ccx = Math.floor(focus.x) >> 4;
@@ -207,6 +240,34 @@ export class TitlePanorama {
         this.orbit = 30;
         break;
       }
+      case 'dragon_malware': {
+        // Circling the dragon as it hangs over the island, leaking data
+        const h = w.heightAt(0, 0);
+        this.center = { x: 0.5, y: h + 14, z: 0.5 };
+        this.orbit = 26;
+        this.boss = new ClientEntity(-1, 'ender_dragon', 0.5, h + 12, 0.5, 0, 0, { malware: true });
+        this.renderer!.entities.add(this.boss);
+        break;
+      }
+      case 'digital_world': {
+        // From the hill where you arrive, over the still lake; he stands on the far shore in the fog
+        const L = (this.gen as ComputerWorldGenerator).layout();
+        this.center = { x: L.spawn.x + 0.5, y: L.spawn.y + 2.5, z: L.spawn.z + 6.5 };
+        this.orbit = 0;
+        this.fixedYaw = 0;
+        this.boss = new ClientEntity(-1, 'herobrine', L.sighting.x + 0.5, L.sighting.y, L.sighting.z + 0.5, 0, 0, { hbAnim: 'stare', apparition: true });
+        this.renderer!.entities.add(this.boss);
+        break;
+      }
+      case 'herobrine_cave': {
+        // Circling the hall; he stands plugged into the core
+        const L = (this.gen as ComputerWorldGenerator).layout();
+        this.center = { x: L.hall.x + 0.5, y: L.hall.y + 6, z: L.hall.z + 0.5 };
+        this.orbit = 12;
+        this.boss = new ClientEntity(-1, 'herobrine', L.throne.x + 0.5, L.throne.y, L.throne.z + 0.5, 0, 0, { hbAnim: 'plugged', hbKind: 'final' });
+        this.renderer!.entities.add(this.boss);
+        break;
+      }
       case 'error_biome': {
         // Circling the broken chunk, close enough to see its glitched blocks
         const h = Math.max(focus.y, w.heightAt(fx, fz));
@@ -218,10 +279,11 @@ export class TitlePanorama {
       case 'power_plant':
       case 'mine':
       case 'farm':
+      case 'computer_lab':
       case 'control_room': {
         // Circling the set scene from just above it
         this.center = { x: fx + 0.5, y: focus.y + (this.scene === 'mine' ? 10 : 8), z: fz + 0.5 };
-        this.orbit = this.scene === 'control_room' ? 17 : 21;
+        this.orbit = this.scene === 'control_room' || this.scene === 'computer_lab' ? 17 : 21;
         break;
       }
       case 'village': {
@@ -251,7 +313,8 @@ export class TitlePanorama {
     const r = this.renderer;
     const look = LOOK[this.scene];
     const c = this.center;
-    const yaw = t * 0.045;
+    // The world inside the computer: a slow look left and right across the lake
+    const yaw = this.fixedYaw !== null ? this.fixedYaw + Math.sin(t * 0.06) * 0.35 : t * 0.045;
     const cam = { x: c.x, y: c.y + Math.sin(t * 0.07) * 1.5, z: c.z };
     if (this.orbit > 0) {
       // Forward is (-sin yaw, -cos yaw): standing here looks straight at the centre
@@ -271,10 +334,20 @@ export class TitlePanorama {
     }
     const boss = this.boss;
     if (boss) {
-      // It watches the camera, and shifts between poses now and then
-      const face = Math.atan2(-(cam.x - boss.x), -(cam.z - boss.z));
-      boss.yaw = boss.headYaw = boss.tyaw = boss.theadYaw = face;
-      boss.meta.errorAnim = ERROR_POSES[Math.floor(t / 5) % ERROR_POSES.length];
+      if (boss.type === 'ender_dragon') {
+        // The dragon circles slowly, coughing up malware now and then
+        const a = t * 0.12;
+        boss.x = boss.px = boss.tx = Math.cos(a) * 9;
+        boss.z = boss.pz = boss.tz = Math.sin(a) * 9;
+        boss.yaw = boss.tyaw = Math.atan2(Math.sin(a), -Math.cos(a)) + Math.PI;
+        if (Math.floor(t * 20) % 70 === 0) r.particles.spawn('malware', boss.x - Math.sin(boss.yaw) * 6, boss.y + 2, boss.z - Math.cos(boss.yaw) * 6, 30, 1.2);
+      } else {
+        // It watches the camera, and shifts between poses now and then
+        const face = Math.atan2(-(cam.x - boss.x), -(cam.z - boss.z));
+        boss.yaw = boss.headYaw = boss.tyaw = boss.theadYaw = face;
+        if (boss.type === 'the_error') boss.meta.errorAnim = ERROR_POSES[Math.floor(t / 5) % ERROR_POSES.length];
+        if (boss.type === 'herobrine' && this.scene === 'herobrine_cave' && Math.floor(t * 20) % 60 === 0) r.particles.spawn('electric', boss.x, boss.y + 1.4, boss.z, 12, 0.5);
+      }
       r.entities.update([boss], 1, t * 20, () => 1);
     }
     const fs: FrameState = {
@@ -383,7 +456,7 @@ function stampScene(scene: EngScene, chunks: Map<number, Chunk>, fx: number, fz:
       const z = fz + dz;
       for (let y = y0; y <= y0 + 12; y++) set(x, y, z, 0);
       const edge = Math.abs(dx) === R || Math.abs(dz) === R;
-      const floor = edge ? S('hazard_stripes') : scene === 'farm' ? S('dirt') : (dx + dz) % 6 === 0 ? S('steel_block') : scene === 'mine' ? S('metal_grate') : S('machine_casing');
+      const floor = edge ? S('hazard_stripes') : scene === 'farm' ? S('dirt') : (dx + dz) % 6 === 0 ? S('steel_block') : scene === 'mine' ? S('metal_grate') : scene === 'computer_lab' ? S('circuit_stone') : S('machine_casing');
       set(x, y0 - 1, z, floor);
       if (edge && dx % 5 === 0 && dz % 5 === 0) for (let y = y0 - 2; y > y0 - 12 && !solidAt(x, y, z); y--) set(x, y, z, S('steel_block'));
     }
@@ -501,6 +574,46 @@ function stampScene(scene: EngScene, chunks: Map<number, Chunk>, fx: number, fz:
       for (const [dx, dz] of [[-10, 3], [10, 3]] as const) put(dx, 0, dz, on('solar_panel'));
       put(10, 0, -3, S('crate'));
       put(10, 0, -2, stateOf('hopper', { facing: 'down' }));
+      break;
+    }
+    case 'computer_lab': {
+      // V5.5: a glass-roofed lab: desks of computers, server racks on network cable, one screen gone wrong
+      const W = 8;
+      for (let dz = -W; dz <= W; dz++)
+        for (let dx = -W; dx <= W; dx++) {
+          const wall = Math.abs(dx) === W || Math.abs(dz) === W;
+          if (wall) for (let y = 0; y <= 3; y++) put(dx, y, dz, y === 1 || y === 2 ? ((dx + dz) % 4 === 0 ? S('machine_casing') : S('industrial_glass')) : S('machine_casing'));
+          put(dx, 4, dz, wall ? S('machine_casing') : (dx % 4 === 0 && dz % 4 === 0 ? S('factory_light') : S('industrial_glass')));
+          if (!wall) put(dx, -1, dz, (dx + dz) % 2 === 0 ? S('steel_block') : S('metal_grate'));
+        }
+      put(0, 1, W, 0);
+      put(0, 0, W, 0);
+      const pc = (screen: string, facing = 'south'): number => stateOf('computer', { facing, screen });
+      // Three rows of desks: a case on the floor, a monitor and keyboard on the desk beside it
+      let k = 0;
+      for (const dz of [-3, 1, 5])
+        for (const dx of [-6, -2, 2]) {
+          const bad = dz === 1 && dx === -2;
+          put(dx, 0, dz, pc(bad ? 'glitch' : k % 4 === 3 ? 'boot' : 'on'));
+          put(dx + 1, 0, dz, S('steel_block'));
+          put(dx + 2, 0, dz, S('steel_block'));
+          put(dx + 1, 1, dz, stateOf('monitor', { facing: 'south', status: bad ? 'error' : 'working' }));
+          put(dx + 2, 1, dz, k % 2 ? stateOf('speaker', { facing: 'south' }) : stateOf('keyboard', { facing: 'south' }));
+          put(dx + 3, 0, dz, stateOf('led_light', { facing: 'south', lit: 'true' }));
+          k++;
+        }
+      // Server racks along the back wall, cabled together
+      for (let dx = -6; dx <= 6; dx++) {
+        put(dx, 0, -W + 1, stateOf('server_rack', { facing: 'south', status: dx === 0 ? 'error' : 'working' }));
+        put(dx, 1, -W + 1, stateOf('server_rack', { facing: 'south', status: 'working' }));
+      }
+      line('network_cable', -6, 6, -W + 2);
+      lineZ('network_cable', -7, -6, 5);
+      // Power outside
+      for (let dx = -10; dx <= 10; dx++) put(dx, 0, -10, on('solar_panel'));
+      for (const [dx, dz] of [[-10, 9], [10, 9]] as const) turbine(dx, dz, 5);
+      for (let dx = -6; dx <= 6; dx += 2) put(dx, 0, 10, stateOf('battery_bank', { charge: '4' }));
+      for (const [dx, dz] of [[-7, 7], [7, 7]] as const) put(dx, 0, dz, stateOf('warning_light', { lit: 'true' }));
       break;
     }
     case 'control_room': {

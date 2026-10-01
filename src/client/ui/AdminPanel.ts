@@ -11,7 +11,7 @@ import type { ItemStack } from '../../common/game/itemstack';
 import { POTIONS } from '../../common/data/potions';
 import { ENCHANTMENTS } from '../../common/data/enchantments';
 import { MOB_DEFS } from '../../common/data/mobs';
-import { structureName, TIME_PRESETS, ADMIN_DIMENSIONS, type AdminAction, type AdminCatalog, type LocateResult, type V4Op, type V5Op } from '../../common/game/admin';
+import { structureName, TIME_PRESETS, ADMIN_DIMENSIONS, type AdminAction, type AdminCatalog, type LocateResult, type V4Op, type V5Op, type V55Op } from '../../common/game/admin';
 import type { DimensionId } from '../../common/data/biomes';
 import { ENDINGS } from '../../common/data/endings';
 
@@ -31,7 +31,7 @@ export interface AdminHost {
   cheats(): boolean;
 }
 
-type Tab = 'items' | 'mobs' | 'teleport' | 'player' | 'world' | 'endgame' | 'v4' | 'v5' | 'perf';
+type Tab = 'items' | 'mobs' | 'teleport' | 'player' | 'world' | 'endgame' | 'v4' | 'v5' | 'v55' | 'perf';
 const TABS: { id: Tab; name: string; icon: string }[] = [
   { id: 'items', name: 'Give Items', icon: 'chest' },
   { id: 'mobs', name: 'Spawn Mobs', icon: 'spawn_egg_zombie' },
@@ -41,9 +41,10 @@ const TABS: { id: Tab; name: string; icon: string }[] = [
   { id: 'endgame', name: 'Endgame', icon: 'corrupted_eye' },
   { id: 'v4', name: 'World Update', icon: 'error_block' },
   { id: 'v5', name: 'Engineering', icon: 'crusher' },
+  { id: 'v55', name: 'Digital Corruption', icon: 'corrupted_flash_drive' },
   { id: 'perf', name: 'Performance', icon: 'redstone' },
 ];
-const DIM_NAMES: Record<string, string> = { overworld: 'Overworld', nether: 'Nether', end: 'The End', farlands: 'Farlands' };
+const DIM_NAMES: Record<string, string> = { overworld: 'Overworld', nether: 'Nether', end: 'The End', farlands: 'Farlands', computer: 'Inside the Computer' };
 const MOB_CATEGORY_NAMES: Record<string, string> = { monster: 'Hostile', creature: 'Animals', water: 'Water', ambient: 'Ambient', npc: 'Villagers', boss: 'Bosses' };
 
 /** Remembered between openings during a session. */
@@ -610,6 +611,49 @@ export function adminScreen(host: AdminHost): Screen {
     );
   };
 
+  // ------------------------------------------------------------------ the Digital Corruption Update (V5.5)
+  const renderV55 = (): HTMLElement => {
+    const state = el('div', { class: 'admin-stats' });
+    const STAGES: Record<string, string> = { none: 'Not started', emerging: 'A computer is being taken over', fight1: 'Herobrine is out (first fight)', gateway: 'The computer is a way in', final: 'In his cave (final fight)', ending: 'The digital world is collapsing' };
+    const showState = (d: unknown): void => {
+      clear(state);
+      const st = d as { stage?: string; gateway?: { x: number; y: number; z: number } | null; cheat?: boolean; dragonKills?: number; legitKills?: number; completions?: number; infected?: boolean; clouds?: number; fight?: { kind: string; state: string; phase: number; health: number; maxHealth: number } | null; party?: number } | undefined;
+      if (!st || st.stage === undefined) return;
+      const rows: [string, string][] = [
+        ['Story', `${STAGES[st.stage] ?? st.stage}${st.cheat ? ' (a cheat run)' : ''}`],
+        ['Computer', st.gateway ? `${st.gateway.x}, ${st.gateway.y}, ${st.gateway.z}` : 'none'],
+        ['Ender Dragon', `${st.infected ? 'sick with malware, ' : ''}killed ${st.dragonKills ?? 0} times (${st.legitKills ?? 0} without cheats)`],
+        ['Malware clouds', String(st.clouds ?? 0)],
+        ['Players in it', String(st.party ?? 0)],
+        ['Herobrine', st.fight ? `${st.fight.kind === 'first' ? 'first fight' : 'final fight'}, ${st.fight.state}${st.fight.kind === 'final' ? `, phase ${st.fight.phase}` : ''}, ${Math.ceil(st.fight.health)} / ${st.fight.maxHealth}` : 'not here'],
+        ['Seen through', `${st.completions ?? 0} time${st.completions === 1 ? '' : 's'}`],
+      ];
+      for (const [k, v] of rows) state.append(el('div', { class: 'row' }, el('span', { class: 'muted' }, k), el('span', {}, v)));
+    };
+    const op = (o: V55Op): void => void send({ a: 'v55', op: o }).then((r) => showState(r.data));
+    const chips = (...b: HTMLElement[]): HTMLElement => el('div', { class: 'admin-chips' }, ...b);
+    op('status');
+    return el(
+      'div',
+      { class: 'admin-cols' },
+      el(
+        'div',
+        { class: 'admin-col' },
+        el('div', { class: 'muted small' }, 'Everything here is a cheat: it never awards an advancement, and a story run it touches only ever records its ending as forced.'),
+        section('Give', chips(btn('Mysterious Potion', () => op('give_potion'), 'btn chip'), btn('Hard Drive', () => op('give_hard_drive'), 'btn chip'), btn('Flash Drive', () => op('give_flash_drive'), 'btn chip'), btn('Corrupted Flash Drive', () => op('give_corrupted'), 'btn chip'))),
+        section('The Ender Dragon', chips(btn('Spawn the dragon (go to the End)', () => op('spawn_dragon'), 'btn chip'), btn('Trigger malware', () => op('trigger_malware'), 'btn chip'))),
+        section(
+          'Herobrine',
+          el('div', { class: 'muted small' }, 'In the Overworld: uses the computer beside you or builds one.'),
+          chips(btn('Trigger the Herobrine event', () => op('trigger_event'), 'btn chip'), btn('Spawn the first Herobrine', () => op('spawn_first'), 'btn chip')),
+        ),
+        section('Inside the Computer', chips(btn('Enter the computer world', () => op('enter_world'), 'btn chip'), btn('Teleport to the seed', () => op('tp_seed'), 'btn chip'), btn('Teleport to the cave', () => op('tp_cave'), 'btn chip'), btn('Spawn the final Herobrine', () => op('spawn_final'), 'btn chip'))),
+        section('Endings & Resets', chips(btn('Force the Herobrine ending', () => op('force_ending'), 'btn chip'), btn('Reset Herobrine progression', () => op('reset_progress'), 'btn chip'), btn('Reset the ending', () => op('reset_ending'), 'btn chip'))),
+      ),
+      el('div', { class: 'admin-col' }, section('Story', state, btn('Refresh', () => op('status'), 'btn chip'))),
+    );
+  };
+
   // ------------------------------------------------------------------ the World Update (V4)
   const renderV4 = (): HTMLElement => {
     const state = el('div', { class: 'admin-stats' });
@@ -713,7 +757,7 @@ export function adminScreen(host: AdminHost): Screen {
     for (const c of tabs.children) c.classList.toggle('active', (c as HTMLElement).dataset.tab === t);
     clear(body);
     hideTooltip();
-    const view = t === 'items' ? renderItems() : t === 'mobs' ? renderMobs() : t === 'teleport' ? renderTeleport() : t === 'player' ? renderPlayer() : t === 'world' ? renderWorld() : t === 'endgame' ? renderEndgame() : t === 'v4' ? renderV4() : t === 'v5' ? renderV5() : renderPerf();
+    const view = t === 'items' ? renderItems() : t === 'mobs' ? renderMobs() : t === 'teleport' ? renderTeleport() : t === 'player' ? renderPlayer() : t === 'world' ? renderWorld() : t === 'endgame' ? renderEndgame() : t === 'v4' ? renderV4() : t === 'v5' ? renderV5() : t === 'v55' ? renderV55() : renderPerf();
     body.append(view);
   };
   for (const t of TABS) {

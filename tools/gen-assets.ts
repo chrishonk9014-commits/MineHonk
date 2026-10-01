@@ -20,6 +20,7 @@ import { registerDims } from './textures/blocksDims';
 import { registerItems } from './textures/items';
 import { registerV4Blocks, registerV4Items } from './textures/v4';
 import { registerV5Blocks, registerV5Items } from './textures/v5';
+import { registerV55Blocks, registerV55Items } from './textures/v55';
 import { BLOCK_DEFS } from '../src/common/data/blocks';
 import { buildFont } from './gen-font';
 
@@ -106,6 +107,7 @@ registerDeco(blockReg);
 registerDims(blockReg);
 registerV4Blocks(blockReg);
 registerV5Blocks(blockReg);
+registerV55Blocks(blockReg);
 
 const referenced = new Set<string>();
 for (const d of BLOCK_DEFS) for (const v of Object.values(d.tex)) if (v) referenced.add(v);
@@ -126,6 +128,7 @@ const itemReg = new PainterRegistry();
 registerItems(itemReg);
 registerV4Items(itemReg);
 registerV5Items(itemReg);
+registerV55Items(itemReg);
 const items = pack('items', itemReg, [...itemReg.painters.keys()]);
 fs.writeFileSync(path.join(OUT, 'items.png'), PNG.sync.write(items.png));
 fs.writeFileSync(path.join(OUT, 'items.json'), JSON.stringify({ tile: 16, columns: 32, width: items.png.width, height: items.png.height, textures: items.map }));

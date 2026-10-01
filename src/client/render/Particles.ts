@@ -331,6 +331,20 @@ export class Particles {
         case 'rain_splash':
           this.add({ x, y, z, vx: ox * 0.05, vy: 0.06, vz: oz * 0.05, maxLife: 6, size: 0.05, r: 0.6, g: 0.7, b: 1, gravity: 0.02 });
           break;
+        case 'malware': {
+          // V5.5: square flecks of corrupted data, green and black, jerking about
+          const dark = Math.random() < 0.4;
+          const bright = !dark && Math.random() < 0.3;
+          this.add({ x: x + ox, y: y + oy, z: z + oz, vx: (Math.random() - 0.5) * 0.03, vy: 0.008 + Math.random() * 0.02, vz: (Math.random() - 0.5) * 0.03, maxLife: 25 + Math.random() * 35, size: dark ? 0.12 : 0.08 + Math.random() * 0.06, r: dark ? 0.01 : bright ? 0.75 : 0.1, g: dark ? 0.05 : 1, b: dark ? 0.02 : bright ? 0.8 : 0.35, emissive: !dark, fade: true, drag: 0.97 });
+          break;
+        }
+        case 'electric': {
+          // Sparks: white-blue, fast and short
+          const a = Math.random() * Math.PI * 2;
+          const sp = 0.08 + Math.random() * 0.12;
+          this.add({ x: x + ox * 0.3, y: y + oy * 0.3, z: z + oz * 0.3, vx: Math.cos(a) * sp, vy: (Math.random() - 0.3) * sp, vz: Math.sin(a) * sp, maxLife: 6 + Math.random() * 8, size: 0.06, r: 0.75, g: 0.95, b: 1, emissive: true, fade: true, drag: 0.85 });
+          break;
+        }
         default:
           this.add({ x: x + ox, y: y + oy, z: z + oz, vy: 0.02, maxLife: 20, size: 0.1 });
       }

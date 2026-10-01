@@ -1750,6 +1750,17 @@ V.ender_dragon = {
     }
     if (dying && Math.floor(time / 2) % 2 === 0) m.material.color.setRGB(1.6, 1.4, 1.8);
   },
+  // V5.5: a dragon that drank the potion leaks data: it flickers green and jerks
+  extra: (m, e, time) => {
+    m.root.position.x = 0;
+    if (!e.meta.malware) return;
+    const tt = Math.floor(time / 2);
+    const g = ((tt * 6271 + e.id * 7919) % 41) < 5;
+    if (g) {
+      m.material.color.setRGB(0.4, 1.6, 0.7);
+      m.root.position.x = ((tt % 3) - 1) * 0.15;
+    } else if (tt % 11 === 0) m.material.color.setRGB(0.8, 1.2, 0.85);
+  },
   scale: 2,
   glow: true,
   nameY: 6,
@@ -1966,6 +1977,154 @@ V.the_error = {
   scale: 4,
   glow: true,
   nameY: 18.5,
+};
+
+// Herobrine (V5.5): the shape everyone knows, with white eyes that light
+// themselves. He comes out of a screen in slices, goes back into it the same
+// way, stands plugged into his machines, and sometimes isn't quite there.
+const hbAnimState = new WeakMap<ClientEntity, { anim: string; since: number }>();
+const hbEyes = new WeakSet<THREE.Object3D>();
+const HB_EYE_MAT = new THREE.MeshBasicMaterial({ color: 0xffffff, fog: true });
+const HB_EYE_GEO = new THREE.PlaneGeometry(2 / 16, 1 / 16);
+const HB_CABLE = '#1a1a1e';
+V.herobrine = {
+  parts: () => [
+    ...humanoidParts({
+      head: { all: '#b4846d', top: '#3b2512', back: '#3b2512' },
+      body: { all: '#00a8a8' },
+      arms: { all: '#b4846d', top: '#00a8a8' },
+      legs: { all: '#3c34a0', bottom: '#4a4a4a' },
+      face: (p) => {
+        // Hair, the face, white eyes with nothing in them, the beard line
+        p.px('front', 0, 0, '#3b2512', 8, 2);
+        p.px('front', 0, 2, '#3b2512', 1, 1);
+        p.px('front', 7, 2, '#3b2512', 1, 1);
+        p.px('front', 1, 4, '#ffffff', 2, 1);
+        p.px('front', 5, 4, '#ffffff', 2, 1);
+        p.px('front', 3, 5, '#946452', 2, 1);
+        p.px('front', 2, 6, '#6a3e2a', 4, 1);
+        p.px('front', 2, 7, '#5a3420', 4, 1);
+        p.px('left', 0, 0, '#3b2512', 8, 3);
+        p.px('right', 0, 0, '#3b2512', 8, 3);
+      },
+      bodyPaint: (p) => p.speckle('front', 'rgba(0,0,0,0.08)', 0.2),
+    }),
+    // Cables from his back into the floor (shown while he is plugged in)
+    { name: 'cableL', parent: 'body', pivot: [-2, 6, -2], from: [-0.5, -18, -0.5], size: [1, 18, 1], rot: [-0.5, 0, 0.15], colors: { all: HB_CABLE } },
+    { name: 'cableR', parent: 'body', pivot: [2, 6, -2], from: [-0.5, -18, -0.5], size: [1, 18, 1], rot: [-0.5, 0, -0.15], colors: { all: HB_CABLE } },
+    { name: 'cableN', parent: 'head', pivot: [0, 4, -4], from: [-0.5, -0.5, -12], size: [1, 1, 12], rot: [0.6, 0, 0], colors: { all: HB_CABLE } },
+  ],
+  anim: (m, e, alpha, time) => {
+    const anim = String(e.meta.hbAnim ?? 'idle');
+    let st = hbAnimState.get(e);
+    if (!st || st.anim !== anim) {
+      st = { anim, since: time };
+      hbAnimState.set(e, st);
+    }
+    const t = time - st.since;
+    const P = (n: string): THREE.Object3D | undefined => m.part(n);
+    // The eyes light themselves (once per model)
+    const head = P('head');
+    if (head && !hbEyes.has(head)) {
+      hbEyes.add(head);
+      for (const x of [-2, 2]) {
+        const eye = new THREE.Mesh(HB_EYE_GEO, HB_EYE_MAT);
+        eye.position.set(x / 16, 3.5 / 16, 4 / 16 + 0.003);
+        head.add(eye);
+      }
+    }
+    const still = anim === 'stare' || anim === 'plugged' || anim === 'emerge' || anim === 'retreat' || anim === 'death';
+    if (still) {
+      for (const n of ['rightLeg', 'leftLeg', 'rightArm', 'leftArm']) {
+        const o = P(n);
+        if (o) o.rotation.set(0, 0, 0);
+      }
+      if (head) {
+        head.rotation.y = anim === 'stare' ? angle(e.headYaw - e.yaw) : 0;
+        head.rotation.x = 0;
+      }
+      m.root.position.y = 0;
+    } else animateHumanoid(m, e, alpha);
+    m.root.scale.set(1, 1, 1);
+    m.root.visible = true;
+    const plugged = anim === 'plugged';
+    for (const n of ['cableL', 'cableR', 'cableN']) {
+      const o = P(n);
+      if (o) o.visible = plugged;
+    }
+    const ra = P('rightArm');
+    const la = P('leftArm');
+    const body = P('body');
+    if (body) body.rotation.x = 0;
+    const k = (d: number): number => Math.min(1, t / d);
+    switch (anim) {
+      case 'emerge': {
+        // Out of the screen a slice at a time
+        const f = k(50);
+        m.root.scale.set(1, 0.15 + 0.85 * f, 0.2 + 0.8 * f);
+        m.root.visible = f > 0.95 || Math.floor(time) % 3 !== 0;
+        if (head) head.rotation.x = 0.4 * (1 - f);
+        break;
+      }
+      case 'retreat': {
+        const f = 1 - k(50);
+        m.root.scale.set(1, Math.max(0.05, f), Math.max(0.1, f));
+        m.root.visible = Math.floor(time) % 3 !== 0;
+        break;
+      }
+      case 'plugged':
+        if (head) head.rotation.x = 0.35 + Math.sin(time * 0.05) * 0.03;
+        if (ra) ra.rotation.z = 0.15;
+        if (la) la.rotation.z = -0.15;
+        break;
+      case 'vanish':
+        m.root.visible = Math.floor(time / 2) % 2 === 0;
+        break;
+      case 'windup':
+        if (ra) {
+          ra.rotation.x = -2.6 * k(6);
+          ra.rotation.z = 0.2;
+        }
+        break;
+      case 'cast':
+        if (ra) ra.rotation.x = -1.45;
+        if (la) la.rotation.x = -1.45;
+        break;
+      case 'slam': {
+        const up = k(12);
+        const down = Math.max(0, Math.min(1, (t - 14) / 5));
+        if (ra) ra.rotation.x = -2.8 * up + 2.4 * down;
+        if (la) la.rotation.x = -2.8 * up + 2.4 * down;
+        break;
+      }
+      case 'pull':
+        if (ra) {
+          ra.rotation.z = 1.3;
+          ra.rotation.x = -0.4;
+        }
+        if (la) {
+          la.rotation.z = -1.3;
+          la.rotation.x = -0.4;
+        }
+        break;
+      case 'death': {
+        const tw = Math.floor(time / 2) % 4 === 0;
+        if (head) head.rotation.z = tw ? 0.3 : -0.1;
+        if (body) body.rotation.x = 0.15 * k(40);
+        m.root.visible = Math.floor(time / 3) % 5 !== 0;
+        break;
+      }
+    }
+  },
+  extra: (m, e, time) => {
+    // Never quite still
+    const tt = Math.floor(time / 2);
+    const glitch = ((tt * 7919 + e.id * 104729) % 89) < (e.meta.apparition ? 3 : 6);
+    m.root.position.x = glitch ? ((tt % 3) - 1) * 0.07 : 0;
+    m.root.position.z = glitch ? (((tt >> 1) % 3) - 1) * 0.07 : 0;
+    if (glitch) m.material.color.setRGB(1.25, 1.25, 1.3);
+  },
+  nameY: 2.3,
 };
 
 function glitchJitter(m: BoxModel, e: ClientEntity, time: number): void {

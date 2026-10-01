@@ -17,6 +17,8 @@ import { romanNumeral } from '../../common/data/enchantments';
 import { RecipeBookPanel, recipeBookOpen, setRecipeBookOpen, playerOwnedSlots } from './RecipeBook';
 import { EngineeringBookPanel } from './EngineeringBook';
 import type { MachineProps } from '../../common/engineering/window';
+import { ComputerPanel } from './ComputerScreen';
+import type { PcView } from '../../common/digital/view';
 
 /** The Engineering Book beside the Engineering Crafting Table (remembered between screens). */
 let engBookOpen = true;
@@ -58,6 +60,7 @@ export class InventoryScreen {
   private book: RecipeBookPanel | null = null;
   private bookKind = '';
   private engBook: EngineeringBookPanel | null = null;
+  private computer: ComputerPanel | null = null;
   private machine: { energy?: HTMLElement; energyText?: HTMLElement; fluid?: HTMLElement; fluidText?: HTMLElement; status?: HTMLElement; info?: HTMLElement; buttons?: HTMLElement; infoSig?: string; buttonSig?: string } = {};
 
   constructor(
@@ -337,6 +340,13 @@ export class InventoryScreen {
       }
       case 'machine':
         this.buildMachine(gui, title);
+        break;
+      case 'computer':
+        this.computer = new ComputerPanel(gui, w.props as unknown as PcView, {
+          slot: (i) => this.slot(i),
+          invSection: (o) => this.invSection(o),
+          cmd: (cmd, arg) => this.send({ t: 'pc_cmd', window: this.win.id, cmd, ...(arg !== undefined ? { arg } : {}) }),
+        });
         break;
       case 'chest': {
         const rows = Math.ceil(w.size / 9);
@@ -773,7 +783,7 @@ export class InventoryScreen {
   }
 
   setProps(props: Record<string, unknown>): void {
-    const merged = { ...this.win.props, ...props };
+    const merged = this.win.kind === 'computer' ? { ...props } : { ...this.win.props, ...props };
     if ((this.win.kind === 'stonecutter' || this.win.kind === 'merchant' || this.win.kind === 'enchanting' || this.win.kind === 'beacon') && JSON.stringify(merged) !== JSON.stringify(this.win.props)) {
       this.setState({ ...this.win, props: merged }, this.cursor);
       return;
@@ -781,6 +791,7 @@ export class InventoryScreen {
     this.win.props = merged;
     if (this.win.kind === 'anvil') this.updateAnvilLabel();
     if (this.win.kind === 'machine') this.updateMachine();
+    if (this.win.kind === 'computer') this.computer?.update(this.win.props as unknown as PcView);
     this.refreshProgress();
   }
 
@@ -804,7 +815,7 @@ export class InventoryScreen {
   }
 
   private refreshProgress(): void {
-    if (this.win.kind === 'machine') return;
+    if (this.win.kind === 'machine' || this.win.kind === 'computer') return;
     const p = this.win.props as Record<string, number>;
     if (this.progress.arrow) {
       const f = p.cookTotal ? p.cook / p.cookTotal : 0;

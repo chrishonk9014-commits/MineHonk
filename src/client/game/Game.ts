@@ -39,6 +39,7 @@ import { keyName } from '../ui/Screens';
 import { Navigator, type Instrument } from '../ui/Navigator';
 import * as THREE from 'three';
 import { GlitchHud } from '../ui/GlitchHud';
+import { DigitalHud } from '../ui/DigitalHud';
 import { TouchControls } from '../ui/TouchControls';
 import { EndingCard } from '../ui/EndingCard';
 import { guideEntry } from '../../common/engineering/guide';
@@ -52,6 +53,8 @@ export interface GameHost {
   setLoading(text: string | null, detail?: string): void;
   openAchievements(): void;
   openEngineeringBook(entry?: string): void;
+  /** V5.5: the Witch's Grimoire. */
+  openGrimoire(): void;
   readonly screenOpen: boolean;
 }
 
@@ -96,6 +99,10 @@ export class Game {
   readonly root = el('div', { class: 'layer' });
   /** Glitch effects on the interface and the ending cards (V3). */
   private readonly glitchHud: GlitchHud;
+  /** V5.5: Herobrine's words and the computer world's screen effects. */
+  private readonly digitalHud: DigitalHud;
+  /** V5.5: movement reversed until this tick (PLAYER CONTROL OVERRIDE). */
+  private reverseControlsUntil = 0;
   /** On-screen controls for phones and tablets. */
   private readonly touch: TouchControls;
   private readonly touchClose = el('div', { class: 'touch-close hidden' }, 'X');
@@ -232,6 +239,7 @@ export class Game {
       { passive: false },
     );
     this.glitchHud = new GlitchHud(this.root, settings);
+    this.digitalHud = new DigitalHud(this.root, settings);
     this.endingCard = new EndingCard(this.root, settings);
     ui.append(this.root);
     this.chat.onSend = (text) => this.send({ t: 'chat', text });
@@ -551,7 +559,9 @@ export class Game {
       case 'window_prop':
         if (this.window && this.window.id === m.window) {
           const props = (m.prop === 'furnace' || m.prop === 'all') && m.value && typeof m.value === 'object' ? (m.value as Record<string, unknown>) : { [m.prop]: m.value };
-          Object.assign(this.window.props, props);
+          // A computer's screen is sent whole each time (fields it no longer shows must go)
+          if (this.window.kind === 'computer' && m.prop === 'all') this.window.props = { ...props };
+          else Object.assign(this.window.props, props);
           this.screen?.setProps(this.window.props);
         }
         break;
@@ -616,7 +626,7 @@ export class Game {
         this.player.yaw = m.yaw;
         this.loadingTerrain = true;
         this.loadingSince = performance.now();
-        this.host.setLoading(m.dimension === 'nether' ? 'Entering the Nether...' : m.dimension === 'end' ? 'Entering the End...' : m.dimension === 'farlands' ? 'Entering the Farlands...' : 'Returning...');
+        this.host.setLoading(m.dimension === 'nether' ? 'Entering the Nether...' : m.dimension === 'end' ? 'Entering the End...' : m.dimension === 'farlands' ? 'Entering the Farlands...' : m.dimension === 'computer' ? 'Connecting...' : 'Returning...');
         break;
       case 'boss':
         this.hud.setBoss(m.id, m.action, m.title, m.progress, m.color);
@@ -756,7 +766,7 @@ export class Game {
   private setDimension(d: DimensionId): void {
     this.dimension = d;
     this.world.dimension = d;
-    this.world.hasSky = d === 'overworld' || d === 'farlands';
+    this.world.hasSky = d === 'overworld' || d === 'farlands' || d === 'computer';
     this.renderer.sky.dimension = d;
   }
 
@@ -888,6 +898,11 @@ export class Game {
       strafe = (inp.isHeld('right') ? 1 : 0) - (inp.isHeld('left') ? 1 : 0) + inp.padMove[0] + inp.touchMove[0];
       forward = Math.max(-1, Math.min(1, forward));
       strafe = Math.max(-1, Math.min(1, strafe));
+      // V5.5: PLAYER CONTROL OVERRIDE
+      if (this.tickNo < this.reverseControlsUntil) {
+        forward = -forward;
+        strafe = -strafe;
+      }
       jump = inp.isHeld('jump') || inp.gpJump || inp.touchJump;
       sneak = inp.isHeld('sneak') || inp.gpSneak || inp.touchSneak;
       sprint = inp.isHeld('sprint') || inp.gpSprint || inp.touchSprint;
@@ -1198,7 +1213,7 @@ export class Game {
         if (m.kind === 'laser') g.pulse(0.35, 12);
         break;
       case 'zone':
-        wf.zone(m.id, m.x ?? 0, m.y ?? 0, m.z ?? 0, m.r ?? 3, m.ticks === undefined ? Infinity : secs, now);
+        wf.zone(m.id, m.x ?? 0, m.y ?? 0, m.z ?? 0, m.r ?? 3, m.ticks === undefined ? Infinity : secs, now, m.text === 'malware' ? 0x18ff6a : m.text === 'static' ? 0xd8e8ff : 0xe020c8);
         break;
       case 'pulse':
         wf.pulse(m.x ?? 0, m.y ?? 0, m.z ?? 0, m.r ?? 20, secs, now);
@@ -1220,6 +1235,43 @@ export class Game {
       case 'boss_death':
         g.pulse(1, m.ticks ?? 80);
         g.corruptWorld(0.9, m.ticks ?? 80);
+        break;
+      // V5.5: the Digital Corruption Update
+      case 'hack': {
+        const mode = Math.round(m.strength ?? 1);
+        this.digitalHud.hack(m.text ?? 'HER0BRINE.EXE', m.ticks ?? 30, mode);
+        if (mode === 1) {
+          g.pulse(0.35, 12);
+          this.audio.play('computer.glitch', NaN, NaN, NaN, 0.6, 0.7, 'ui');
+        } else if (mode === 0) this.audio.play('computer.alert', NaN, NaN, NaN, 0.5, 0.6, 'ui');
+        else if (mode === 3) g.pulse(0.5, 16);
+        break;
+      }
+      case 'takeover':
+        this.digitalHud.takeover(m.text ?? '', m.strength ?? 0);
+        g.pulse(0.15 + (m.strength ?? 0) * 0.35, 8);
+        break;
+      case 'controls_reversed':
+        this.reverseControlsUntil = this.tickNo + (m.ticks ?? 60);
+        break;
+      case 'arc':
+        wf.arc(m.id, new THREE.Vector3(m.x ?? 0, m.y ?? 0, m.z ?? 0), new THREE.Vector3(m.x1 ?? 0, m.y1 ?? 0, m.z1 ?? 0), secs, now, (m.strength ?? 0) > 0);
+        break;
+      case 'bolt':
+        wf.bolt(m.x ?? 0, m.y ?? 0, m.z ?? 0, secs, now);
+        g.pulse(0.2, 6);
+        break;
+      case 'enter_computer':
+        this.digitalHud.enterComputer(m.ticks ?? 36);
+        g.pulse(0.8, m.ticks ?? 36);
+        this.audio.playThrough('computer.enter', 0.8);
+        break;
+      case 'presence':
+        this.digitalHud.presence(m.ticks ?? 80);
+        break;
+      case 'shutdown':
+        this.digitalHud.shutdown(m.ticks ?? 80);
+        this.audio.playThrough('computer.shutdown', 0.8);
         break;
     }
   }
@@ -1260,6 +1312,9 @@ export class Game {
       this.audio.play('nether.ambient', NaN, NaN, NaN, 0.5, 0.8 + Math.random() * 0.4, 'ambient');
     } else if (this.dimension === 'farlands' && this.tickNo % 120 === 0 && Math.random() < 0.4) {
       this.audio.play('farlands.ambient', NaN, NaN, NaN, 0.45, 0.8 + Math.random() * 0.4, 'ambient');
+    } else if (this.dimension === 'computer' && this.tickNo % 120 === 0 && Math.random() < 0.45) {
+      // V5.5: the hum of the machine under the world
+      this.audio.play('computer.ambient', NaN, NaN, NaN, 0.45, 0.9 + Math.random() * 0.2, 'ambient');
     }
     // Rain loop (scaled by sky exposure)
     const snowy = this.world.biomeAt(b.x, b.z).precipitation === 'snow';
@@ -1507,6 +1562,13 @@ export class Game {
     if (def.use === 'engineering_book') {
       this.input.unlock();
       this.host.openEngineeringBook();
+      return;
+    }
+    if (def.use === 'grimoire') {
+      // The server notes the reading (an advancement); the pages open here
+      this.send({ t: 'use', hand: 0, action: 'start' });
+      this.input.unlock();
+      this.host.openGrimoire();
       return;
     }
     if (def.use === 'spyglass') {

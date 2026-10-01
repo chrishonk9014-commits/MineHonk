@@ -245,7 +245,7 @@ export class Hud {
       return;
     }
     if (!b) {
-      b = el('div', { class: color === 'glitch' ? 'boss-bar boss-glitch' : 'boss-bar' }, el('div', { class: 'shadow', style: { textAlign: 'center' } }), el('div', { class: 'bar' }, el('div')));
+      b = el('div', { class: color === 'glitch' ? 'boss-bar boss-glitch' : color === 'herobrine' ? 'boss-bar boss-herobrine' : 'boss-bar' }, el('div', { class: 'shadow', style: { textAlign: 'center' } }), el('div', { class: 'bar' }, el('div')));
       this.bossBars.set(id, b);
       this.bosses.append(b);
     }

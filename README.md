@@ -3,7 +3,8 @@
 A multiplayer voxel survival sandbox that runs in the browser. Every block
 texture, model, sound and line of code is original. The world is infinite and
 deterministic. The server is authoritative. There are four dimensions: the
-Overworld, the Nether, the End and the Farlands.
+Overworld, the Nether, the End and the Farlands (and, since Version 5.5,
+somewhere you can only get to through a computer).
 
 ## Quick start
 
@@ -164,8 +165,8 @@ created before it, V4 worlds included, keep generating exactly as they did**
 
 Power, machines, automation and factories. Engineering works in every world,
 old and new (it adds blocks; it does not change world generation). Design
-notes: [docs/ENGINEERING.md](docs/ENGINEERING.md). Electronics (buildable
-computers) come in Version 5.5.
+notes: [docs/ENGINEERING.md](docs/ENGINEERING.md). Buildable computers came
+in Version 5.5.
 
 - **The Engineering Crafting Table and Book**: every engineering item is made
   at the Engineering Crafting Table (iron, copper and a crafting table, at a
@@ -226,6 +227,47 @@ computers) come in Version 5.5.
 - Everything is server authoritative and saved in block entities with its
   chunk: energy, items, fluids and progress survive saves and unloads
   without duplicating or disappearing. Only loaded chunks run.
+
+### Version 5.5 - The Digital Corruption Update
+
+Computers, drives and data, built on the Engineering systems, and a second
+secret story that runs through them. Design notes (with spoilers):
+[docs/DIGITAL.md](docs/DIGITAL.md).
+
+- **Computers** are engineering machines: a case on an energy network with
+  twelve slots (power supply, motherboard, CPU, four RAM, two hard drives,
+  graphics card, network card, USB). With the core parts in and power it
+  starts up (POST), then runs **HonkOS** from a hard drive, or only its BIOS
+  without one. **Peripherals** count within a block of the case: monitors
+  (they show what it runs), a keyboard (needed to use it), a mouse (graphics
+  programs), speakers (sounds) and LEDs (status lights). Computers send a
+  signal out and read the signals coming in. Parts are made from circuit
+  boards, electronic components and connectors at the Engineering Crafting
+  Table.
+- **Programs** (one window, a Screen tab and a Hardware tab): File Manager,
+  Factory, Power, Storage, Machine and Fluid Managers, Machine
+  Configuration, Automation (if this, then that rules), Engineering Control,
+  Network Manager, Blueprint Manager, Map Viewer, Digital Logs, System
+  Scanner, Diagnostics and Disk Utility (installs HonkOS). Not an operating
+  system to learn: tools for the factory the computer is cabled to.
+- **Drives and data**: hard drives (8 MB) keep files with the world; flash
+  drives (1 MB) carry configurations, automation rules, blueprints, maps
+  and logs between computers: plug in, read, write, take out. Network cable
+  joins computers with network cards and **server racks** (four drives of
+  network storage). Data is copied, never things: building a blueprint
+  costs the blocks it places, taken from your inventory.
+- **A second secret**: the Mysterious Potion opens two doors. The first is
+  the V3 one, unchanged. The second starts somewhere else entirely, ends in
+  a new secret ending, and is only ever hinted at, by a **Witch's Grimoire**
+  of ink drawings found beside the potion in every witch's hut.
+- **Seventeen digital advancements** (most of them secret). **Admin Panel**:
+  a Digital Corruption tab to give the story's items, spawn and test the
+  dragon, and step through (or reset) every part of the story. As always,
+  nothing done there counts.
+- **Title screen**: "V5.5 - The Digital Corruption Update", over a computer
+  lab, a foggy lake, a cave full of machines or a sick dragon.
+- Server authoritative, multiplayer-safe, and old worlds load unchanged
+  (saves gained a `digital` store and the story's state; nothing else moved).
 
 ### Recipe Book
 

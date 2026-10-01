@@ -340,6 +340,10 @@ export class WorldRenderer {
     } else if (this.world.dimension === 'nether') {
       fogNear = Math.min(fogNear, 40);
       fogFar = Math.min(fogFar, 110);
+    } else if (this.world.dimension === 'computer') {
+      // V5.5: the fog across the lake (the far shore is never quite clear)
+      fogNear = Math.min(fogNear, 16);
+      fogFar = Math.min(fogFar, 72);
     }
     if (f.rain > 0 && !f.underwater) fogNear *= 1 - f.rain * 0.4;
     // Caves: the fog turns the cave biome's colour and the sky disappears

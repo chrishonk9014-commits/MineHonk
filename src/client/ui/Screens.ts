@@ -47,6 +47,15 @@ export function wrapClick(host: ScreenHost, f: () => void): () => void {
 // Title
 // ---------------------------------------------------------------------------
 const SPLASHES = [
+  'The Digital Corruption Update!',
+  'Do not plug it in!',
+  'Removed Herobrine!',
+  '478868574082066804',
+  'Now with computers!',
+  'HonkOS 5.5!',
+  'Feed it to the dragon?',
+  'Keyboard not found. Press F1!',
+  'He is never where you saw him.',
   'The Engineering Update!',
   'Now with conveyor belts!',
   'Measured in EU/t!',
@@ -80,7 +89,7 @@ const SPLASHES = [
 ];
 
 export function titleScreen(host: ScreenHost, actions: { singleplayer: () => void; multiplayer: () => void; options: () => void; profile: () => void }, profile: Profile): Screen {
-  const logo = el('div', { class: 'logo' }, 'MINEHONK', el('div', { class: 'logo-edition' }, 'V5 - The Engineering Update'), el('div', { class: 'splash' }, SPLASHES[Math.floor(Math.random() * SPLASHES.length)]!));
+  const logo = el('div', { class: 'logo' }, 'MINEHONK', el('div', { class: 'logo-edition' }, 'V5.5 - The Digital Corruption Update'), el('div', { class: 'splash' }, SPLASHES[Math.floor(Math.random() * SPLASHES.length)]!));
   const body = el(
     'div',
     { class: 'stack', style: { marginTop: 'calc(var(--s) * 40)' } },
@@ -88,7 +97,7 @@ export function titleScreen(host: ScreenHost, actions: { singleplayer: () => voi
     button('Multiplayer', wrapClick(host, actions.multiplayer)),
     el('div', { class: 'row' }, button('Options...', wrapClick(host, actions.options), 'btn half'), button(`Profile: ${profile.name}`, wrapClick(host, actions.profile), 'btn half')),
   );
-  const footer = el('div', { class: 'footer' }, el('span', {}, 'MineHonk V5 - The Engineering Update'), el('span', {}, 'Original game — all art & sound generated'));
+  const footer = el('div', { class: 'footer' }, el('span', {}, 'MineHonk V5.5 - The Digital Corruption Update'), el('span', {}, 'Original game — all art & sound generated'));
   return { root: el('div', { class: 'screen dirt title-screen' }, logo, body, footer), escapable: false };
 }
 

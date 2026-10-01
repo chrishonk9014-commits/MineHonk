@@ -632,6 +632,125 @@ const EFFECTS: Record<string, { dur: number; recipe: Recipe }> = {
   'block.chime': { dur: 1.5, recipe: (s) => s.bell({ f: 1200 + s.rng.next() * 800, ratios: [1, 2.76, 5.4], gain: 0.3, decay: 0.5, dur: 1.4 }) },
   'firework.launch': { dur: 0.8, recipe: (s) => s.noise({ dur: 0.75, gain: 0.7, attack: 0.02, decay: 0.3, hp: 1500, lp: 8000 }) },
   'firework.blast': { dur: 1.5, recipe: (s) => (s.noise({ dur: 1.4, gain: 1, decay: 0.3, lp: 1200 }), s.noise({ start: 0.3, dur: 1, gain: 0.3, decay: 0.3, hp: 3000, grain: 2 })) },
+  // V5.5: computers
+  /** The start-up chime: a fan spinning up, then three rising notes. */
+  'computer.boot': {
+    dur: 1.6,
+    recipe: (s) => {
+      s.noise({ dur: 1.5, gain: 0.15, attack: 0.5, decay: 0.8, bp: [900, 2] });
+      [523, 659, 988].forEach((f, i) => s.tone({ start: 0.35 + i * 0.16, dur: 0.6, gain: 0.25, f0: f, wave: 'tri', decay: 0.3, lp: 3000 }));
+    },
+  },
+  'computer.alert': { dur: 0.8, recipe: (s) => [0, 0.22, 0.44].forEach((t) => s.tone({ start: t, dur: 0.14, gain: 0.35, f0: 1320, wave: 'square', lp: 2600, decay: 0.07 })) },
+  /** A computer breaking up: stuttering beeps over crackle. */
+  'computer.glitch': {
+    dur: 0.7,
+    recipe: (s) => {
+      for (let i = 0; i < 6; i++) s.tone({ start: i * 0.09 + s.rng.next() * 0.03, dur: 0.05, gain: 0.35, f0: 300 + s.rng.next() * 2800, wave: 'square', decay: 0.03 });
+      s.noise({ dur: 0.65, gain: 0.25, decay: 0.3, hp: 1200, grain: 3 });
+      s.crush(4, 5);
+    },
+  },
+  /** Falling into the screen: a rising sweep that tears into static. */
+  'computer.enter': {
+    dur: 2.4,
+    recipe: (s) => {
+      s.tone({ dur: 1.8, gain: 0.5, f0: 60, f1: 2400, wave: 'saw', lp: 4000, attack: 0.6, decay: 1.2, vibrato: 0.04, vibratoRate: 9 });
+      s.noise({ start: 1.2, dur: 1.1, gain: 0.6, attack: 0.3, decay: 0.4, hp: 600 });
+      s.crush(3, 6);
+    },
+  },
+  /** The digital world switching off: a falling whine and a click. */
+  'computer.shutdown': {
+    dur: 3,
+    recipe: (s) => {
+      s.tone({ dur: 2.6, gain: 0.5, f0: 1800, f1: 40, wave: 'sine', decay: 1.6 });
+      s.noise({ dur: 2, gain: 0.3, attack: 0.05, decay: 0.9, lp: 1500 });
+      s.knock({ start: 2.6, f: 300, gain: 0.5, decay: 0.03 });
+    },
+  },
+  'computer.ambient': {
+    dur: 6,
+    recipe: (s) => {
+      const r = s.rng;
+      s.tone({ dur: 5.8, gain: 0.25, f0: 60, f1: 60.5, wave: 'saw', lp: 220, attack: 1.5, decay: 3, vibrato: 0.005, vibratoRate: 0.5 });
+      for (let i = 0; i < 5; i++) s.tone({ start: r.next() * 5, dur: 0.04, gain: 0.12, f0: 1500 + r.next() * 3000, wave: 'square', decay: 0.02 });
+      s.noise({ dur: 5.8, gain: 0.08, attack: 2, decay: 3, bp: [3000, 4] });
+    },
+  },
+  // V5.5: the dragon's malware and the Corrupted Flash Drive
+  'malware.spit': { dur: 1.2, recipe: (s) => (s.noise({ dur: 0.9, gain: 0.7, attack: 0.02, decay: 0.35, bp: [700, 1.5] }), s.tone({ dur: 1, gain: 0.35, f0: 900, f1: 120, wave: 'square', lp: 2000, decay: 0.4 }), s.crush(3, 7)) },
+  'malware.burst': { dur: 1.4, recipe: (s) => (s.noise({ dur: 1.3, gain: 0.6, attack: 0.005, decay: 0.6, hp: 300, grain: 4 }), s.tone({ dur: 0.8, gain: 0.3, f0: 2200, f1: 200, wave: 'square', decay: 0.3 }), s.crush(3, 8)) },
+  'drive.corrupt': {
+    dur: 1.6,
+    recipe: (s) => {
+      s.tone({ dur: 0.5, gain: 0.4, f0: 880, f1: 1760, wave: 'square', decay: 0.2, lp: 3000 });
+      for (let i = 0; i < 10; i++) s.tone({ start: 0.4 + i * 0.08, dur: 0.06, gain: 0.3, f0: 200 + s.rng.next() * 3000, wave: 'square', decay: 0.04 });
+      s.noise({ start: 0.4, dur: 1.1, gain: 0.4, decay: 0.5, hp: 800 });
+      s.crush(3, 6);
+    },
+  },
+  'book.page': { dur: 0.4, recipe: (s) => s.noise({ dur: 0.35, gain: 0.4, attack: 0.05, decay: 0.1, bp: [2400, 1] }) },
+  // V5.5: Herobrine
+  /** Coming out of the screen: a deep, rising tone through static, then nothing. */
+  'herobrine.emerge': {
+    dur: 3.5,
+    recipe: (s) => {
+      s.noise({ dur: 2.6, gain: 0.6, attack: 0.4, decay: 1.4, hp: 200, grain: 2 });
+      s.tone({ dur: 3, gain: 0.5, f0: 30, f1: 110, wave: 'saw', lp: 700, attack: 1.4, decay: 1, vibrato: 0.03, vibratoRate: 3 });
+      s.crush(3, 6);
+    },
+  },
+  /** Something is near: a slow, cold drone. */
+  'herobrine.presence': {
+    dur: 5,
+    recipe: (s) => {
+      s.tone({ dur: 4.8, gain: 0.45, f0: 55, f1: 52, wave: 'tri', attack: 2, decay: 2.5, vibrato: 0.01, vibratoRate: 0.4 });
+      s.tone({ dur: 4.6, gain: 0.25, f0: 77.8, f1: 73.4, wave: 'sine', attack: 2.2, decay: 2.4 });
+      s.noise({ dur: 4.5, gain: 0.12, attack: 2.5, decay: 2, bp: [400, 3] });
+    },
+  },
+  'herobrine.whisper': { dur: 1.4, recipe: (s) => (s.noise({ dur: 1.3, gain: 0.35, attack: 0.3, decay: 0.6, bp: [2200, 3] }), s.noise({ start: 0.2, dur: 0.8, gain: 0.2, attack: 0.2, decay: 0.4, bp: [1100, 4] })) },
+  'herobrine.strike': { dur: 0.6, recipe: (s) => (s.tone({ dur: 0.12, gain: 0.5, f0: 2400, f1: 300, wave: 'square', decay: 0.05 }), s.knock({ start: 0.08, f: 110, gain: 0.8, decay: 0.05 }), s.crush(4, 4)) },
+  'herobrine.charge': { dur: 1.5, recipe: (s) => (s.tone({ dur: 1.4, gain: 0.45, f0: 90, f1: 700, wave: 'square', lp: 1800, attack: 0.5, decay: 0.3, vibrato: 0.05, vibratoRate: 12 }), s.crush(4, 3)) },
+  'herobrine.slam': { dur: 1.2, recipe: (s) => (s.knock({ f: 60, gain: 1, decay: 0.3 }), s.noise({ dur: 1.1, gain: 0.5, attack: 0.01, decay: 0.6, lp: 700 }), s.crush(5, 2)) },
+  'herobrine.bolt': { dur: 0.5, recipe: (s) => (s.tone({ dur: 0.4, gain: 0.45, f0: 1600, f1: 400, wave: 'saw', lp: 4000, decay: 0.15 }), s.noise({ dur: 0.3, gain: 0.3, decay: 0.1, hp: 2000 })) },
+  'herobrine.teleport': { dur: 0.7, recipe: (s) => (s.tone({ dur: 0.3, gain: 0.4, f0: 300, f1: 3000, wave: 'square', decay: 0.1 }), s.noise({ start: 0.2, dur: 0.45, gain: 0.4, decay: 0.15, hp: 1500 }), s.crush(3, 5)) },
+  'herobrine.retreat': {
+    dur: 3,
+    recipe: (s) => {
+      s.tone({ dur: 2.6, gain: 0.5, f0: 900, f1: 40, wave: 'saw', lp: 2000, attack: 0.1, decay: 1.4 });
+      s.noise({ dur: 2.5, gain: 0.4, attack: 0.05, decay: 1.2, hp: 400, grain: 3 });
+      s.crush(3, 6);
+    },
+  },
+  'herobrine.unplug': { dur: 1.2, recipe: (s) => (s.knock({ f: 180, gain: 0.7, decay: 0.04 }), s.tone({ start: 0.05, dur: 1, gain: 0.4, f0: 1200, f1: 60, wave: 'square', lp: 2500, decay: 0.4 }), s.crush(4, 4)) },
+  'herobrine.phase': {
+    dur: 3,
+    recipe: (s) => {
+      for (let i = 0; i < 16; i++) s.tone({ start: i * 0.1, dur: 0.07, gain: 0.3, f0: 400 + s.rng.next() * 2500, wave: 'square', decay: 0.04 });
+      s.tone({ dur: 2.8, gain: 0.45, f0: 50, f1: 160, wave: 'saw', lp: 900, attack: 0.6, decay: 1.4 });
+      s.crush(3, 8);
+    },
+  },
+  'herobrine.death': {
+    dur: 7,
+    recipe: (s) => {
+      s.tone({ dur: 6.5, gain: 0.5, f0: 220, f1: 25, wave: 'saw', lp: 1500, attack: 0.05, decay: 3.5 });
+      s.noise({ dur: 6.8, gain: 0.6, attack: 0.2, decay: 3.5, hp: 150, grain: 2 });
+      for (let i = 0; i < 20; i++) s.tone({ start: s.rng.next() * 6, dur: 0.08, gain: 0.3, f0: 100 + s.rng.next() * 3000, wave: 'square', decay: 0.04 });
+      s.crush(3, 10);
+    },
+  },
+  /** Tesla coils: a crackling zap, and the rising hum before it. */
+  'tesla.zap': {
+    dur: 0.8,
+    recipe: (s) => {
+      s.noise({ dur: 0.7, gain: 0.9, attack: 0.002, decay: 0.15, hp: 1500, grain: 2 });
+      s.tone({ dur: 0.5, gain: 0.35, f0: 120, wave: 'saw', lp: 3000, decay: 0.15, vibrato: 0.2, vibratoRate: 60 });
+    },
+  },
+  'tesla.charge': { dur: 1.6, recipe: (s) => (s.tone({ dur: 1.5, gain: 0.4, f0: 100, f1: 400, wave: 'saw', lp: 2200, attack: 1, decay: 0.3, vibrato: 0.15, vibratoRate: 50 }), s.noise({ dur: 1.5, gain: 0.25, attack: 1, decay: 0.3, hp: 3000, grain: 3 })) },
 };
 
 /** Parameters for generic creature voices, keyed by mob type. */
@@ -676,6 +795,7 @@ const VOICES: Record<string, { f: number; formants: [number, number]; rough: num
   tropical_fish: { f: 600, formants: [1200, 2400], rough: 0.05, dur: 0.15, gain: 0.3 },
   pufferfish: { f: 400, formants: [900, 1800], rough: 0.2, dur: 0.2, gain: 0.4 },
   player: { f: 240, formants: [650, 1100], rough: 0.08, dur: 0.2 },
+  herobrine: { f: 150, formants: [480, 1250], rough: 0.5, dur: 0.6, crush: true },
 };
 
 function mobSound(type: string, kind: string): { dur: number; recipe: Recipe } {

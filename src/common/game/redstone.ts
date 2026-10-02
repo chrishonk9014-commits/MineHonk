@@ -8,7 +8,7 @@ export const H_DIRS = ['north', 'south', 'west', 'east'] as const;
 export const H_DX = [0, 0, -1, 1];
 export const H_DZ = [-1, 1, 0, 0];
 
-export type Kind = 'wire' | 'lever' | 'button' | 'plate' | 'torch' | 'wall_torch' | 'block' | 'door' | 'trapdoor' | 'gate' | 'lamp' | 'note' | 'tnt' | 'sensor' | 'timer' | 'logic' | 'level' | 'detector' | 'pc' | null;
+export type Kind = 'wire' | 'lever' | 'button' | 'plate' | 'torch' | 'wall_torch' | 'block' | 'door' | 'trapdoor' | 'gate' | 'lamp' | 'note' | 'tnt' | 'sensor' | 'timer' | 'logic' | 'level' | 'detector' | 'pc' | 'rail' | null;
 
 let KIND: (Kind | undefined)[] = [];
 
@@ -39,6 +39,8 @@ export function redstoneKind(state: number): Kind {
   else if (id === 'item_sensor') k = 'detector';
   else if (id === 'note_block') k = 'note';
   else if (id === 'tnt') k = 'tnt';
+  // V6 phase 4: a powered rail drives carts while it has a signal
+  else if (id === 'powered_rail') k = 'rail';
   else if (id === 'sculk_sensor' || id === 'calibrated_sculk_sensor') k = 'sensor';
   else k = null;
   KIND[num] = k;

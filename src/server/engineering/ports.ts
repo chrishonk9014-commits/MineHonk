@@ -193,7 +193,8 @@ export function portAt(server: GameServer, dim: Dimension, x: number, y: number,
   const fuel = new Set(range(r.fuel));
   const tool = new Set(range(r.tool));
   const may = (i: number, s: ItemStack): boolean => {
-    if (fuel.has(i)) return fuelTicks(s) > 0 && server.engineering?.isRecipeInput(c, s) !== true;
+    // (V6 phase 4: the Crystal Generator burns End Crystal Fragments and nothing else)
+    if (fuel.has(i)) return c.id === 'crystal_generator' ? items[s.id]?.id === 'end_crystal_fragment' : fuelTicks(s) > 0 && server.engineering?.isRecipeInput(c, s) !== true;
     if (tool.has(i)) return items[s.id]?.def.tool?.type === 'pickaxe';
     // Cheat-made items never mix into a machine's work with legit ones
     const other = inv.slots.find((o, k) => o && k >= r.input[0] && k < r.input[1] && isAdminStack(o) !== isAdminStack(s));

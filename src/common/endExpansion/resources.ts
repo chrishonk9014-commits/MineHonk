@@ -34,8 +34,6 @@ export function endStoneForms(v: string): [natural: string, polished: string, br
 
 /** The Ancient End Fragment's tooltip (exactly this, and no more). */
 export const ANCIENT_TOOLTIP = 'Worked stone. Older than the cities.';
-/** Tooltip of a resource whose uses come in a later update. */
-const LATER = 'Has more uses in a later update.';
 
 export function addExpansionResourceBlocks(k: BlockKit): void {
   const stone = (id: string, name: string, o: Partial<BlockDef> = {}): BlockDef =>
@@ -59,7 +57,7 @@ export function addExpansionResourceBlocks(k: BlockKit): void {
   // Chorus Forest: the giant chorus trees' wood, and cloth and rope from chorus fiber
   k.woodSet('chorus', { stem: 'chorus_stalk', leaves: false, sapling: false, mapColor: 0x8a5a9a });
   k.add({ id: 'chorus_cloth', name: 'Chorus Cloth', hardness: 0.8, sound: 'wool', model: 'cube', tex: { all: 'chorus_cloth' }, tool: 'shears', flammable: true, mapColor: 0xb48ac8, creative: 'building' });
-  k.add({ id: 'chorus_rope', name: 'Chorus Rope', hardness: 0.4, sound: 'wool', model: 'chain', props: { axis: ['y', 'x', 'z'] }, tex: { all: 'chorus_rope' }, climbable: true, flammable: true, data: { tooltip: LATER }, creative: 'building' });
+  k.add({ id: 'chorus_rope', name: 'Chorus Rope', hardness: 0.4, sound: 'wool', model: 'chain', props: { axis: ['y', 'x', 'z'] }, tex: { all: 'chorus_rope' }, climbable: true, flammable: true, data: { tooltip: 'Climbable. Ender Bridge Projectors are strung with it.' }, creative: 'building' });
   // End Highlands: Ender Ore, deep inside the continents
   k.add({ id: 'ender_ore', name: 'Ender Ore', hardness: 30, resistance: 1200, sound: 'metal', model: 'cube', tex: { top: 'ender_ore_top', side: 'ender_ore_side' }, tool: 'pickaxe', harvestLevel: 4, requiresTool: true, tags: ['ore'], mapColor: 0x1f4a44, creative: 'nature' });
   // Shattered End: worked stone buried in the debris
@@ -81,16 +79,16 @@ export function isEnderAlloy(id: string): boolean {
 export function expansionItemDefs(): ItemDef[] {
   const mat = (id: string, name: string, o: Partial<ItemDef> = {}): ItemDef => ({ id, name, creative: 'materials', ...o });
   return [
-    mat('end_crystal_fragment', 'End Crystal Fragment', { tooltip: LATER }),
+    mat('end_crystal_fragment', 'End Crystal Fragment', { tooltip: 'Burns in a Crystal Generator (128 EU/t for 20 seconds).' }),
     mat('chorus_fiber', 'Chorus Fiber'),
     mat('ender_scrap', 'Ender Scrap', { fireResistant: true, rarity: 'uncommon' }),
     mat('ender_alloy_ingot', 'Ender Alloy Ingot', { fireResistant: true, rarity: 'epic' }),
     mat('ancient_fragment', 'Ancient Fragment', { rarity: 'uncommon', tooltip: ANCIENT_TOOLTIP }),
     mat('astral_dust', 'Astral Dust', { rarity: 'rare' }),
-    mat('astral_shard', 'Astral Shard', { rarity: 'rare', tooltip: LATER }),
+    mat('astral_shard', 'Astral Shard', { rarity: 'rare', tooltip: 'Wakes a dormant Ancient Core, with Ancient Fragments.' }),
     mat('void_stalker_hide', 'Void Stalker Hide'),
     mat('void_leather', 'Void Leather', { rarity: 'uncommon' }),
-    mat('end_phantom_membrane', 'End Phantom Membrane', { rarity: 'uncommon', tags: ['membranes'], tooltip: 'Repairs Elytra. Has more uses in a later update.' }),
+    mat('end_phantom_membrane', 'End Phantom Membrane', { rarity: 'uncommon', tags: ['membranes'], tooltip: 'Repairs Elytra, and goes into every Elytra upgrade module.' }),
     { id: 'void_pack', name: 'Void Pack', maxStack: 1, use: 'void_pack', rarity: 'uncommon', creative: 'tools', tooltip: 'Holds 9 stacks. Its contents survive a death in the void.' },
     { id: 'raw_endling', name: 'Raw Endling', creative: 'food', food: { hunger: 2, saturation: 1.2 } },
     { id: 'cooked_endling', name: 'Cooked Endling', creative: 'food', food: { hunger: 6, saturation: 7.2 } },

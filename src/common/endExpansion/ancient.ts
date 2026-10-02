@@ -27,7 +27,7 @@ import type { BlockKit } from './resources';
 /** Glyph faces of Ender Glyph Stone (its `glyph` property). */
 export const GLYPH_FACES = 6;
 
-/** What using an inert ancient block says (it does nothing else until phase 4). */
+/** What using an inert ancient block says (phase 4's quests and engineering handle the ones that can be woken first). */
 export const INERT_MESSAGES: Record<string, string> = {
   ancient_conduit: 'It has no power.',
   ancient_core: 'It has no power.',
@@ -38,8 +38,8 @@ export const INERT_MESSAGES: Record<string, string> = {
   dead_portal: 'Something is missing.',
 };
 
-/** Tooltip of the inert blocks a later update brings to life. */
-const DORMANT = 'Dormant.';
+/** Tooltip of the dormant ancient blocks (phase 4 wakes them: they carry power, and some can be restored). */
+const DORMANT = 'Dormant. It still carries power.';
 
 export function addAncientBlocks(k: BlockKit): void {
   const unbreakable = { hardness: -1, resistance: 3600000, drops: 'none' as const, creative: 'functional' };

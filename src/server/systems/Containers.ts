@@ -9,7 +9,7 @@ import type { GameServer } from '../GameServer';
 import type { ServerPlayer } from '../player/ServerPlayer';
 import { Inventory, ARMOR_START, OFFHAND } from '../player/Inventory';
 import { type ItemStack, type Slot, canStack, cloneStack, maxStack, isEmpty, sameItem, toSaved, fromSaved, type SavedStack, itemIdOf, isAdminStack, markAdmin, maxDurability } from '../../common/game/itemstack';
-import { elytraSmith, elytraUpgrades, ELYTRA } from '../../common/endExpansion/elytra';
+import { elytraSmith, elytraUpgrades, moduleUpgrade, ELYTRA } from '../../common/endExpansion/elytra';
 import { LOCKED_RECIPES } from '../../common/endExpansion/transport';
 import { items, itemById } from '../../common/registry/items';
 import type { C2S, WindowKind } from '../../common/net/protocol';
@@ -448,8 +448,11 @@ export class Containers {
     let wings: ReturnType<typeof elytraSmith> = null;
     const refresh = (): void => {
       const base = inv.get(0);
-      wings = elytraSmith(base, inv.get(1), itemIdOf);
-      const r = wings ? null : smithingResult(base, inv.get(1));
+      const add = inv.get(1);
+      wings = elytraSmith(base, add, itemIdOf);
+      // An Elytra with a module that can't go on (a duplicate, or no slot left) or shears with nothing to take off: nothing
+      const elytraWork = !!base && !!add && itemIdOf(base) === 'elytra' && (!!moduleUpgrade(itemIdOf(add)) || itemIdOf(add) === 'shears');
+      const r = wings || elytraWork ? null : smithingResult(base, add);
       out.stack = wings ? cloneStack(wings.result) : r !== null && base ? { ...cloneStack(base), id: r, count: 1 } : null;
       if (out.stack && (isAdminStack(inv.get(1)) || this.server.admin.inContext(p))) out.stack = markAdmin(out.stack);
     };

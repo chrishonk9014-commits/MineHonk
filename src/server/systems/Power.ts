@@ -429,6 +429,11 @@ export class Power {
       case 'lamp':
         if ((getProp(s, 'lit') === 'true') !== on) dim.setBlock(x, y, z, withProp(s, 'lit', on));
         return;
+      case 'rail':
+        // Powered from beside or from the block it lies on
+        on = on || this.powered(dim, x, y - 1, z);
+        if ((getProp(s, 'powered') === 'true') !== on) dim.setBlock(x, y, z, withProp(s, 'powered', on), { updateNeighbors: false });
+        return;
       case 'door': {
         if (prev === on || (prev === undefined && !on)) return;
         const upper = getProp(s, 'half') === 'upper';

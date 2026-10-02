@@ -386,17 +386,26 @@ export class Mob extends LivingEntity {
     const fromY = b.y;
     const fromZ = b.z;
     const fromGround = b.onGround;
+    const fromFall = b.fallDistance;
     const supported = guard && !this.footprintOverVoid();
     const slow = this.effectSlow();
     const res = stepMovement(this.dim, b, { forward, strafe: 0, jump, sneak: false, sprint: false, yaw: this.yaw }, { flying: false, noClip: false, walkSpeed: def.speed * speed * (this.baby && def.brain === 'zombie' ? 1.5 : 1) * slow, flySpeed: 0 }, this.eyeHeight);
     void res;
     // ...and never takes a step that leaves nothing at all under its feet
     if (supported && this.footprintOverVoid()) {
+      const dy = b.y - fromY;
       this.setPos(fromX, fromY, fromZ);
       b.onGround = fromGround;
+      b.fallDistance = fromFall;
       b.vx = 0;
       b.vz = 0;
       if (fromGround) b.vy = 0;
+      else {
+        // In the air: only the sideways part is undone. It keeps falling where it was, over ground,
+        // rather than hanging at the edge while its fall adds up
+        moveBody(this.dim, b, 0, dy, 0);
+        if (!b.onGround && b.y < fromY) b.fallDistance += fromY - b.y;
+      }
     }
     // Spider climbing
     if (def.brain === 'spider' && b.collidedH) b.vy = 0.2;

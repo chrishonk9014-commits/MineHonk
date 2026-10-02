@@ -409,6 +409,7 @@ for (const id of KINDS) {
   await goTo(at.x + 0.5, at.y + 3, at.z + 0.5);
   const title = await page.waitForFunction(() => /^THE /.test(document.querySelector('.title-overlay')?.innerText ?? ''), null, { timeout: 20000 }).then(() => true, () => false);
   check(`walking into the ${id} shows its title`, title);
+  await page.waitForTimeout(900);
   await page.screenshot({ path: `${OUT}/v6-discovery-title.png` });
 }
 
@@ -541,15 +542,24 @@ if (sites3.glyphs) {
   });
   check('the Nest is under the island (rock overhead)', covered);
   await page.screenshot({ path: `${OUT}/v6-dragon-nest.png` });
-  // And its way in: the crack in front of the Expansion Portal
-  const r3 = await adminTp('tp_portal');
-  check('back at the Expansion Portal', r3.ok);
-  await waitChunks();
-  await fly();
-  await page.evaluate(() => (window.minehonk.game.player.body.y += 10));
-  await look(0, 0.9);
-  await page.waitForTimeout(2500);
-  await page.screenshot({ path: `${OUT}/v6-dragon-nest-crack.png` });
+  // And its way in: the crack in front of the Expansion Portal, seen from above the portal looking down it
+  const ent = (await admin('status')).data?.structures?.nest?.entrance;
+  check("the Nest's entrance is known", Array.isArray(ent));
+  if (ent) {
+    const cam = { x: ent[0] + 0.5, y: ent[1] + 12, z: ent[2] + 7.5 };
+    await goTo(cam.x, cam.y, cam.z);
+    await page.evaluate(([x, y, z]) => {
+      const b = window.minehonk.game.player.body;
+      b.x = x;
+      b.y = y;
+      b.z = z;
+    }, [cam.x, cam.y, cam.z]);
+    await look(0, 0.95);
+    await page.waitForTimeout(2500);
+    const open = await page.evaluate(([x, y, z]) => window.minehonk.game.world.getState(x, y, z), [ent[0], ent[1] - 1, ent[2] - 3]);
+    check('the crack is open in the ground', open === 0);
+    await page.screenshot({ path: `${OUT}/v6-dragon-nest-crack.png` });
+  }
 }
 
 check('no page errors', errors.length === 0);

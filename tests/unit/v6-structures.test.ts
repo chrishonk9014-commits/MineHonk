@@ -413,7 +413,7 @@ function expectUntouched(before: number[], after: number[]): void {
 describe("the Dragon's Nest", () => {
   it('is absent before the dragon dies, carved after it a chunk per tick, once, clear of the portal, pillars and gateways', async () => {
     const { server } = await makeServer({ seed: 'v6-nest' });
-    const { player } = await join(server, 'Hero');
+    const { player, conn } = await join(server, 'Hero');
     await toIsland(server, player);
     const es = server.endStructures!;
     const plan = es.nestPlan();
@@ -440,6 +440,10 @@ describe("the Dragon's Nest", () => {
     }
     expect(es.nest?.built).toBe(true);
     expect(server.level.flags.dragonKilledOnce).toBe(true);
+    // The dragon's boss bar went away with it (it used to come back on the death sequence's last tick)
+    const bars = conn.of('boss');
+    expect(bars.some((b) => b.action === 'add')).toBe(true);
+    expect(bars[bars.length - 1]!.action).toBe('remove');
     expect(end.getState(fx, fy + 1, fz)).toBe(0);
     expect(end.getState(fx, fy, fz) === 0 || !STATE_SOLID[end.getState(fx, fy, fz)]).toBe(true);
     // Its chests, its ring portal, glyphs on its core, shell in some hollows

@@ -496,7 +496,8 @@ export class DragonFight {
     }
     if (m.dead) {
       this.dying(m);
-      this.updateBars(m, players);
+      // (unless the sequence just finished: finish() has cleared the bars for good)
+      if (this.dragon === m) this.updateBars(m, players);
       return;
     }
     this.phaseTicks++;

@@ -156,7 +156,7 @@ export class WorldFX {
       obj: g,
       born: now,
       life: seconds,
-      kind: 'warn',
+      kind: 'warn_cracks',
       update: (age) => {
         const f = Math.min(1, age / Math.max(0.1, seconds));
         ringMat.opacity = 0.5 + 0.4 * Math.abs(Math.sin(age * 7));

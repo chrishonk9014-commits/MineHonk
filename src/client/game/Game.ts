@@ -1777,6 +1777,8 @@ export class Game {
     const light = this.world.getLight(bx, Math.floor(b.y + 1), bz);
     const cs = this.renderer.chunks.stats();
     const biome = this.world.biomeAt(b.x, b.z);
+    // V6: the Expanded End's biome by name
+    const expanded = this.dimension === 'end' ? EndAtmosphere.biomeAt((x, z) => this.world.biomeAt(x, z), b.x, b.z) : null;
     const mem = (performance as unknown as { memory?: { usedJSHeapSize: number; jsHeapSizeLimit: number } }).memory;
     const left = [
       `MineHonk (${this.fps} fps, ${this.renderer.chunks.meshedLastSecond} chunk updates)`,
@@ -1789,7 +1791,7 @@ export class Game {
       `Facing: ${facing} (${deg.toFixed(1)} / ${((p.pitch * 180) / Math.PI).toFixed(1)})`,
       `Light: ${Math.max(light >> 4, light & 15)} (${light >> 4} sky, ${light & 15} block)`,
       `Biome: ${biome.id}`,
-      ...(this.dimension === 'end' && EndAtmosphere.biomeAt((x, z) => this.world.biomeAt(x, z), b.x, b.z) ? [`Expanded End: ${EndAtmosphere.biomeAt((x, z) => this.world.biomeAt(x, z), b.x, b.z)!.name}`] : []),
+      ...(expanded ? [`Expanded End: ${expanded.name}`] : []),
       `Day ${Math.floor(this.time / 24000)}, time ${Math.floor(this.dayTime)}`,
       `Mode: ${p.gamemode}${p.flying ? ' (flying)' : ''}  Ping: ${this.ping} ms`,
     ];

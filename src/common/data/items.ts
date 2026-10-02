@@ -7,6 +7,7 @@ import type { ItemDef } from '../registry/itemTypes';
 import type { ToolType } from '../registry/blockTypes';
 import { COLORS } from './blocks';
 import { engineeringItemDefs } from '../engineering/catalog';
+import { expansionItemDefs } from '../endExpansion/resources';
 
 const defs: ItemDef[] = [];
 const add = (d: ItemDef): ItemDef => {
@@ -43,14 +44,16 @@ export const TIERS: Tier[] = [
   { id: 'diamond', name: 'Diamond', level: 3, speed: 8, durability: 1561, enchantability: 10, bonus: 3, repair: 'diamond' },
   { id: 'netherite', name: 'Netherite', level: 4, speed: 9, durability: 2031, enchantability: 15, bonus: 4, repair: 'netherite_ingot', fireResistant: true, rarity: 'rare' },
   { id: 'glitched', name: 'Glitched', level: 5, speed: 12, durability: 3333, enchantability: 18, bonus: 5, repair: 'glitched_ingot', fireResistant: true, rarity: 'glitched' },
+  // V6 (the End Expansion): netherite upgraded at a smithing table with an Ender Alloy Ingot
+  { id: 'ender_alloy', name: 'Ender Alloy', level: 4, speed: 10, durability: 2500, enchantability: 18, bonus: 5, repair: 'ender_alloy_ingot', fireResistant: true, rarity: 'epic' },
 ];
 
-const SWORD_DMG = [4, 5, 6, 4, 7, 8, 10];
-const AXE_DMG = [7, 9, 9, 7, 9, 10, 12];
-const AXE_SPD = [0.8, 0.8, 0.9, 1.0, 1.0, 1.0, 1.1];
-const PICK_DMG = [2, 3, 4, 2, 5, 6, 7];
-const SHOVEL_DMG = [2.5, 3.5, 4.5, 2.5, 5.5, 6.5, 7.5];
-const HOE_SPD = [1, 2, 3, 1, 4, 4, 4];
+const SWORD_DMG = [4, 5, 6, 4, 7, 8, 10, 9];
+const AXE_DMG = [7, 9, 9, 7, 9, 10, 12, 11];
+const AXE_SPD = [0.8, 0.8, 0.9, 1.0, 1.0, 1.0, 1.1, 1.0];
+const PICK_DMG = [2, 3, 4, 2, 5, 6, 7, 7];
+const SHOVEL_DMG = [2.5, 3.5, 4.5, 2.5, 5.5, 6.5, 7.5, 7.5];
+const HOE_SPD = [1, 2, 3, 1, 4, 4, 4, 4];
 
 TIERS.forEach((t, i) => {
   const common = {
@@ -66,7 +69,7 @@ TIERS.forEach((t, i) => {
     add({
       id: `${t.id}_${type}`,
       name: `${t.name} ${title(type)}`,
-      tool: { type, tier: t.level, speed: t.speed },
+      tool: { type, tier: t.level, speed: t.speed, material: t.id },
       weapon: { damage: dmg, speed: spd },
       use: type === 'hoe' ? 'hoe' : type === 'shovel' ? 'shovel' : type === 'axe' ? 'axe' : undefined,
       tags: ['tools', type + 's'],
@@ -75,7 +78,7 @@ TIERS.forEach((t, i) => {
   add({
     id: `${t.id}_sword`,
     name: `${t.name} Sword`,
-    tool: { type: 'sword', tier: t.level, speed: 1.5 },
+    tool: { type: 'sword', tier: t.level, speed: 1.5, material: t.id },
     weapon: { damage: SWORD_DMG[i]!, speed: 1.6 },
     tags: ['weapons', 'swords'],
     ...common,
@@ -110,6 +113,7 @@ export const ARMOR_MATERIALS: ArmorMat[] = [
   { id: 'diamond', name: 'Diamond', mult: 33, def: [3, 8, 6, 3], toughness: 2, ench: 10, repair: 'diamond' },
   { id: 'netherite', name: 'Netherite', mult: 37, def: [3, 8, 6, 3], toughness: 3, kb: 0.1, ench: 15, repair: 'netherite_ingot', fireResistant: true, rarity: 'rare' },
   { id: 'glitched', name: 'Glitched', mult: 42, def: [4, 9, 7, 4], toughness: 4, kb: 0.15, ench: 18, repair: 'glitched_ingot', fireResistant: true, rarity: 'glitched' },
+  { id: 'ender_alloy', name: 'Ender Alloy', mult: 42, def: [3, 8, 6, 3], toughness: 4, kb: 0.15, ench: 18, repair: 'ender_alloy_ingot', fireResistant: true, rarity: 'epic' },
 ];
 const ARMOR_PIECES = [
   { slot: 'head', piece: 'helmet', base: 11 },
@@ -135,7 +139,8 @@ for (const m of ARMOR_MATERIALS) {
   });
 }
 add({ id: 'turtle_helmet', name: 'Turtle Shell', maxStack: 1, durability: 275, armor: { slot: 'head', defense: 2, material: 'turtle' }, enchantability: 9, creative: 'combat', tags: ['armor'] });
-add({ id: 'elytra', name: 'Elytra', maxStack: 1, durability: 432, armor: { slot: 'chest', defense: 0, material: 'elytra' }, use: 'elytra', rarity: 'epic', creative: 'combat', repair: 'phantom_membrane' });
+// (repaired with either membrane: a phantom's, or a V6 End Phantom's)
+add({ id: 'elytra', name: 'Elytra', maxStack: 1, durability: 432, armor: { slot: 'chest', defense: 0, material: 'elytra' }, use: 'elytra', rarity: 'epic', creative: 'combat', repair: 'membranes' });
 
 // ---------------------------------------------------------------------------
 // Combat & utility
@@ -244,7 +249,7 @@ mat('lumen_shard', { name: 'Lumen Shard' });
 mat('disc_fragment', { name: 'Disc Fragment', rarity: 'uncommon' });
 add({ id: 'resonance_charm', name: 'Resonance Charm', maxStack: 1, rarity: 'epic', creative: 'tools' });
 mat('glow_ink_sac');
-mat('phantom_membrane');
+mat('phantom_membrane', { tags: ['membranes'] });
 mat('rabbit_foot');
 mat('spider_eye', { food: { hunger: 2, saturation: 3.2, effects: [{ effect: 'poison', duration: 100 }] }, creative: 'food' });
 mat('fermented_spider_eye');
@@ -358,5 +363,8 @@ for (const d of engineeringItemDefs()) add(d);
 
 // V5.5 - The Digital Corruption Update: an old book in every witch's hut, full of drawings that should not make sense yet
 add({ id: 'witch_grimoire', name: "Witch's Grimoire", maxStack: 1, use: 'grimoire', rarity: 'rare', creative: 'tools' });
+
+// V6 - The End Expansion, phase 2: the Expanded End's materials, food and the Void Pack
+for (const d of expansionItemDefs()) add(d);
 
 export const ITEM_DEFS: readonly ItemDef[] = defs;

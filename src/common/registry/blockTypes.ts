@@ -189,6 +189,8 @@ export interface BlockDef {
   harvestLevel?: number;
   /** When true (default for stone-like blocks with harvestLevel) no drop without the right tool. */
   requiresTool?: boolean;
+  /** V6: only a tool of this material harvests it, whatever its tier (Astral Ore needs Ender Alloy). */
+  harvestMaterial?: string;
   sound: SoundGroup;
   model: ModelKind;
   tex: TexSpec;

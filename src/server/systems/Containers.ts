@@ -48,6 +48,8 @@ export class Window {
   refresh?: () => void;
   /** Crafting grid of crafting windows (the Engineering Book fills it). */
   craftGrid?: Inventory;
+  /** V6: the player inventory slot holding an open Void Pack (nothing may move it). */
+  lockedInv?: number;
 
   constructor(
     readonly id: number,
@@ -475,6 +477,38 @@ export class Containers {
   }
 
   /** Opens a generic window built by another system (enchanting, anvil, brewing, merchant). */
+  /**
+   * V6: a Void Pack's nine slots. The contents live on the pack itself
+   * (written back at every change), and the pack can't be moved, or put in
+   * a pack, while it is open.
+   */
+  openVoidPack(p: ServerPlayer, slot: number): void {
+    const pack = p.inventory.get(slot);
+    if (!pack || itemIdOf(pack) !== 'void_pack') return;
+    const inv = new Inventory(9);
+    const saved = Array.isArray(pack.tag?.data?.items) ? (pack.tag!.data!.items as (SavedStack | null)[]) : [];
+    for (let i = 0; i < 9; i++) inv.set(i, fromSaved(saved[i] ?? null));
+    const store = (): void => {
+      const cur = p.inventory.get(slot);
+      if (!cur || itemIdOf(cur) !== 'void_pack') return;
+      const list = inv.slots.map((st) => toSaved(st));
+      while (list.length && !list[list.length - 1]) list.pop();
+      const data = { ...(cur.tag?.data ?? {}) };
+      if (list.length) data.items = list;
+      else delete data.items;
+      const tag = { ...(cur.tag ?? {}), data };
+      if (!Object.keys(data).length) delete (tag as { data?: unknown }).data;
+      p.inventory.set(slot, { ...cur, tag: Object.keys(tag).length ? tag : undefined });
+    };
+    const w = new Window(this.newId(), 'chest', 'Void Pack', 9);
+    const bagOk = (st: ItemStack): boolean => itemIdOf(st) !== 'void_pack' && itemIdOf(st) !== 'shulker_box';
+    for (let i = 0; i < 9; i++) w.slots.push(invSlot(inv, i, 'container', bagOk, 64, store));
+    for (let i = 9; i < 36; i++) w.slots.push({ ...invSlot(p.inventory, i, 'main'), locked: () => i === slot });
+    for (let i = 0; i < 9; i++) w.slots.push({ ...invSlot(p.inventory, i, 'hotbar'), locked: () => i === slot });
+    w.lockedInv = slot;
+    this.open(p, w);
+  }
+
   openCustom(p: ServerPlayer, w: Window): void {
     this.addPlayerInventory(w, p);
     this.open(p, w);
@@ -614,7 +648,7 @@ export class Containers {
         break;
       case 'swap': {
         const hotbarIdx = button === 40 ? OFFHAND : button;
-        if (hotbarIdx < 0 || (hotbarIdx > 8 && hotbarIdx !== OFFHAND)) return;
+        if (hotbarIdx < 0 || (hotbarIdx > 8 && hotbarIdx !== OFFHAND) || hotbarIdx === w.lockedInv) return;
         const hs = p.inventory.get(hotbarIdx);
         const cur = slot.get();
         if (slot.output) {

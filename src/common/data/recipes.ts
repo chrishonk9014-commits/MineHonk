@@ -5,6 +5,7 @@
  */
 import { WOOD_TYPES, COLORS } from './blocks';
 import { ENG_TAGS, DUST_SMELTING } from '../engineering/catalog';
+import { addExpansionRecipes } from '../endExpansion/recipes';
 
 export interface ShapedRecipe {
   type: 'shaped';
@@ -496,6 +497,9 @@ for (const [a, b] of [
   ['potato', 'baked_potato'],
   ['sunroot', 'roasted_sunroot'],
 ] as const) smelt(a, b, 0.35, 'food');
+
+// V6 - The End Expansion, phase 2: the Expanded End's resources
+addExpansionRecipes({ shaped, shapeless, smelt, cut, smith: (base, addition, result) => SMITHING.push({ base, addition, result }) });
 
 /** Furnace fuel values not derivable from item defs (ticks). */
 export const EXTRA_FUEL: Record<string, number> = {

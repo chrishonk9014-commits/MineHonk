@@ -234,6 +234,8 @@ registerVisual('small_fireball', fireball(0.35, '#f09020', '#c04010'));
 registerVisual('fireball', fireball(1.0, '#f07020', '#a02808'));
 registerVisual('rift_bolt', fireball(0.5, '#d13fff', '#3a0a5a'));
 registerVisual('shulker_bullet', fireball(0.35, '#f0e8f8', '#8a5a9a'));
+// V6: a Chorus Beast's thrown chorus
+registerVisual('chorus_glob', fireball(0.55, '#e8a8ff', '#8a5a9a'));
 // V5.5: the dragon's malware: a tumbling clump of green and black data
 registerVisual('malware', () =>
   spriteVisual(

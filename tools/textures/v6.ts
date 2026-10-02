@@ -1,6 +1,7 @@
 /**
  * V6 - The End Expansion: textures for the Expansion Portal and the
- * Expanded End's landscape blocks.
+ * Expanded End's landscape blocks, and (phase 2) its stone, ores, crystal,
+ * chorus, ancient and astral blocks and its items.
  *
  * The portal is set apart from the End's other ways through: the exit
  * portal and the gateways are a dark starfield, nether portals swirl in
@@ -9,7 +10,7 @@
  * and empty while it sleeps and glow once it is alive.
  */
 import { Tex, type RGB, hex, mix, shade } from './canvas';
-import { bevel, blotchy, voronoi } from './patterns';
+import { bevel, blotchy, bricks, frame, oreSpots, tiles, voronoi, wool } from './patterns';
 import type { PainterRegistry } from './registry';
 
 const SLATE: RGB[] = [hex(0x1c1828), hex(0x241f34), hex(0x2b2540), hex(0x342d4c)];
@@ -185,4 +186,220 @@ export function registerV6Blocks(r: PainterRegistry): void {
       t.set(x, len - 1, hex(0xb8a0ff));
     }
   });
+}
+
+// ---------------------------------------------------------------------------
+// Phase 2: the Expanded End's resources
+// ---------------------------------------------------------------------------
+/** Palettes of the four end stone variants: [mortar/dark, ...light]. */
+const VARIANT_PAL: Record<string, RGB[]> = {
+  cracked: [hex(0x8f8c5e), hex(0xb9b583), hex(0xc8c493), hex(0xd3cf9f), hex(0xdedaad)],
+  dark: [hex(0x17141f), hex(0x2a2636), hex(0x332e42), hex(0x3c364c), hex(0x474058)],
+  crystalline: [hex(0xa898b8), hex(0xd8cce4), hex(0xe4d8ee), hex(0xece2f4), hex(0xf6f0fb)],
+  astral: [hex(0x1a2050), hex(0x2c3a86), hex(0x34449a), hex(0x3e50ae), hex(0x4a5cc2)],
+};
+
+/** Cracks: dark lines wandering across the stone. */
+function cracks(t: Tex, c: RGB, n: number): void {
+  for (let i = 0; i < n; i++) {
+    let x = t.rng.int(16);
+    let y = t.rng.int(16);
+    const len = 4 + t.rng.int(6);
+    for (let k = 0; k < len; k++) {
+      t.set(x, y, c);
+      if (t.rng.chance(0.5)) x = (x + (t.rng.chance(0.5) ? 1 : 15)) % 16;
+      else y = (y + 1) % 16;
+    }
+  }
+}
+
+/** Astral glow specks: stars in the stone. */
+function stars(t: Tex, n: number): void {
+  for (let i = 0; i < n; i++) {
+    const x = t.rng.int(16);
+    const y = t.rng.int(16);
+    t.set(x, y, t.rng.chance(0.3) ? hex(0xffffff) : hex(0xb8c8ff));
+  }
+}
+
+/** Crystalline sparkle frame f of 16: a few glints that come and go. */
+function sparkle(t: Tex, f: number): void {
+  for (let i = 0; i < 6; i++) {
+    const x = (i * 7 + 3) % 16;
+    const y = (i * 11 + 5) % 16;
+    const phase = (f + i * 5) % 16;
+    if (phase < 3) t.set(x, y, phase === 1 ? hex(0xffffff) : hex(0xf4e8ff));
+    if (phase === 1) for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) t.set((x + dx + 16) % 16, (y + dy + 16) % 16, hex(0xf0e0ff));
+  }
+}
+
+function variantStone(t: Tex, v: string, form: 'natural' | 'polished' | 'bricks', f = 0): void {
+  const pal = VARIANT_PAL[v]!;
+  if (form === 'natural') {
+    blotchy(t, pal.slice(1, 5), 1, 0.9);
+    if (v === 'cracked') cracks(t, pal[0]!, 4);
+    if (v === 'dark') {
+      t.speckle(hex(0x5a3a8a), 0.05);
+      t.speckle(pal[0]!, 0.08);
+    }
+  } else if (form === 'polished') {
+    blotchy(t, pal.slice(2, 5), 1, 0.4);
+    frame(t, pal[1]!);
+    bevel(t, pal[4]!, pal[1]!, 1);
+  } else bricks(t, pal.slice(1), pal[0]!, 8, 4, 4);
+  if (v === 'cracked' && form !== 'natural') cracks(t, pal[0]!, 1);
+  if (v === 'astral') stars(t, form === 'natural' ? 7 : 4);
+  if (v === 'crystalline') sparkle(t, f);
+}
+
+export function registerV6Phase2Blocks(r: PainterRegistry): void {
+  for (const v of Object.keys(VARIANT_PAL)) {
+    const forms: [string, 'natural' | 'polished' | 'bricks'][] = [
+      [`${v}_end_stone`, 'natural'],
+      [`polished_${v}_end_stone`, 'polished'],
+      [`${v}_end_stone_bricks`, 'bricks'],
+    ];
+    for (const [name, form] of forms) {
+      // The crystalline stone sparkles faintly (an animation)
+      if (v === 'crystalline') r.anim(name, 16, 3, (t, f) => variantStone(t, v, form, f));
+      else r.add(name, (t) => variantStone(t, v, form));
+    }
+  }
+  // End Crystal Fields
+  r.add('end_crystal_cluster', (t) => {
+    t.clear();
+    const c = [hex(0xc8a0f0), hex(0xe8d0ff), hex(0xffffff)];
+    for (const [x0, h, w] of [[2, 6, 2], [5, 11, 2], [8, 14, 3], [12, 8, 2]] as const) {
+      for (let y = 16 - h; y < 16; y++) for (let x = x0; x < x0 + w; x++) t.set(x, y, x === x0 ? c[1]! : c[0]!);
+      t.set(x0, 16 - h, c[2]!);
+      t.set(x0 + w - 1, 16 - h + 1, c[1]!);
+    }
+  });
+  r.add('crystal_lamp', (t) => {
+    blotchy(t, [hex(0xe8d8ff), hex(0xf2e8ff), hex(0xfaf4ff)], 1, 0.6);
+    frame(t, hex(0x9a7ac8));
+    for (const [x, y] of [[4, 4], [11, 4], [4, 11], [11, 11], [7, 7], [8, 8]] as const) t.set(x, y, hex(0xffffff));
+    t.rect(6, 6, 4, 4, hex(0xffffff));
+  });
+  r.add('crystal_glass', (t) => {
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) t.set(x, y, hex(0xe8d0ff), 70);
+    frame(t, hex(0xc8a0f0));
+    for (let i = 2; i < 7; i++) t.set(i, 9 - i, hex(0xffffff), 200);
+  });
+  // Void Wastes
+  r.add('void_crystal_ore', (t) => {
+    variantStone(t, 'dark', 'natural');
+    oreSpots(t, hex(0xb07aff), hex(0x5a2aa0), 5, hex(0x8a4ae0));
+  });
+  r.add('void_glass', (t) => {
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) t.set(x, y, hex(0x2a1a44), 120);
+    frame(t, hex(0x6a3ad0));
+    t.speckle(hex(0x9a6af0), 0.03);
+  });
+  // Chorus Forest: cloth and rope from chorus fiber (the wood is in blocksWood.ts)
+  r.add('chorus_cloth', (t) => {
+    wool(t, hex(0xb48ac8));
+    for (let y = 1; y < 16; y += 4) for (let x = 0; x < 16; x++) if ((x + y) % 3 === 0) t.set(x, y, hex(0x9a6aae));
+  });
+  r.add('chorus_rope', (t) => {
+    t.clear();
+    for (let y = 0; y < 16; y++) {
+      t.set(7, y, (y % 4) < 2 ? hex(0xc89ae0) : hex(0x9a6aae));
+      t.set(8, y, (y % 4) < 2 ? hex(0x9a6aae) : hex(0xc89ae0));
+    }
+  });
+  // End Highlands: Ender Ore, deep in the voidstone
+  r.add('ender_ore_side', (t) => {
+    voronoi(t, 10, (x, y, c) => t.set(x, y, c.d2 - c.d1 < 0.9 ? hex(0x17111f) : [hex(0x1f1729), hex(0x271d34), hex(0x30243f)][c.cell % 3]!));
+    oreSpots(t, hex(0x4ad8b8), hex(0x14584a), 4, hex(0x2a9a84));
+    for (let i = 0; i < 4; i++) t.set(t.rng.int(16), t.rng.int(16), hex(0xb07aff));
+  });
+  r.add('ender_ore_top', (t) => {
+    voronoi(t, 8, (x, y, c) => t.set(x, y, c.d2 - c.d1 < 0.9 ? hex(0x17111f) : [hex(0x1f1729), hex(0x271d34)][c.cell % 2]!));
+    for (let i = 0; i < 3; i++) {
+      const x = 3 + t.rng.int(10);
+      const y = 3 + t.rng.int(10);
+      t.rect(x, y, 2, 2, hex(0x2a9a84));
+      t.set(x, y, hex(0x6af0d0));
+    }
+  });
+  // Shattered End: worked stone, older than the cities
+  r.add('ancient_end_fragment', (t) => {
+    voronoi(t, 10, (x, y, c) => t.set(x, y, c.d2 - c.d1 < 0.9 ? hex(0x17111f) : [hex(0x1f1729), hex(0x271d34), hex(0x30243f)][c.cell % 3]!));
+    // A carved slab set into the stone: grooves of a pattern nobody knows
+    t.rect(3, 4, 10, 8, hex(0x8a7a5a));
+    t.rect(4, 5, 8, 6, hex(0x9a8a68));
+    for (const [x, y] of [[5, 6], [7, 6], [9, 6], [6, 8], [8, 8], [10, 8], [5, 9], [9, 9]] as const) t.set(x, y, hex(0x5a4a34));
+  });
+  r.add('ancient_end_bricks', (t) => {
+    bricks(t, [hex(0x7a6a4c), hex(0x8a7a5a), hex(0x9a8a68), hex(0xa89876)], hex(0x4a3e2a), 8, 4, 4);
+    for (let i = 0; i < 5; i++) t.set(t.rng.int(16), t.rng.int(16), hex(0x5a4a34));
+  });
+  // Astral End
+  r.add('astral_ore', (t) => {
+    variantStone(t, 'astral', 'natural');
+    oreSpots(t, hex(0xffffff), hex(0x7a8ae8), 5, hex(0xc8d4ff));
+  });
+  r.add('astral_lantern', (t) => {
+    t.clear();
+    t.rect(5, 5, 6, 8, hex(0x2a3060));
+    t.rect(6, 7, 4, 5, hex(0xd8e4ff));
+    t.set(7, 8, hex(0xffffff));
+    t.set(8, 10, hex(0xffffff));
+    t.rect(6, 4, 4, 1, hex(0x1a2050));
+    t.rect(7, 2, 2, 2, hex(0x2a3060));
+  });
+  r.add('astral_glass', (t) => {
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) t.set(x, y, hex(0x34449a), 90);
+    frame(t, hex(0x6a7ad8));
+    for (let i = 0; i < 6; i++) t.set(1 + t.rng.int(14), 1 + t.rng.int(14), hex(0xffffff), 220);
+  });
+  void tiles;
+}
+
+/** Items of the Expanded End (Ender Alloy tools and armor are painted with the other tiers in items.ts). */
+export function registerV6Items(r: PainterRegistry, paint: (t: Tex, mask: string, base: RGB, outline?: number) => void): void {
+  r.add('end_crystal_fragment', (t) => paint(t, 'shard', hex(0xe0c8ff)));
+  r.add('chorus_fiber', (t) => paint(t, 'string', hex(0xb48ac8)));
+  r.add('ender_scrap', (t) => {
+    paint(t, 'raw', hex(0x2a8a7a));
+    for (let i = 0; i < 3; i++) if (t.alpha(5 + i * 2, 7)) t.set(5 + i * 2, 7, hex(0xb07aff));
+  });
+  r.add('ender_alloy_ingot', (t) => {
+    paint(t, 'ingot', hex(0x2a8a7a));
+    for (let x = 0; x < 16; x++) for (let y = 0; y < 16; y++) if (t.alpha(x, y) && (x + y) % 7 === 0) t.set(x, y, hex(0x9a6af0));
+  });
+  r.add('ancient_fragment', (t) => paint(t, 'shard', hex(0x9a8a68)));
+  r.add('astral_dust', (t) => {
+    paint(t, 'dust', hex(0x8a9aff));
+    for (let i = 0; i < 4; i++) {
+      const x = 4 + t.rng.int(8);
+      const y = 6 + t.rng.int(6);
+      if (t.alpha(x, y)) t.set(x, y, hex(0xffffff));
+    }
+  });
+  r.add('astral_shard', (t) => {
+    paint(t, 'gem', hex(0x6a7ae8));
+    for (let i = 0; i < 3; i++) {
+      const x = 5 + t.rng.int(6);
+      const y = 5 + t.rng.int(6);
+      if (t.alpha(x, y)) t.set(x, y, hex(0xffffff));
+    }
+  });
+  r.add('void_stalker_hide', (t) => paint(t, 'leather', hex(0x2a1f3a)));
+  r.add('void_leather', (t) => {
+    paint(t, 'leather', hex(0x3a2a5a));
+    for (let i = 0; i < 4; i++) {
+      const x = 4 + t.rng.int(8);
+      const y = 4 + t.rng.int(8);
+      if (t.alpha(x, y)) t.set(x, y, hex(0x8a5ae0));
+    }
+  });
+  r.add('end_phantom_membrane', (t) => paint(t, 'membrane', hex(0xd8dcf4)));
+  r.add('void_pack', (t) => {
+    paint(t, 'saddle', hex(0x3a2a5a));
+    for (let y = 6; y < 10; y++) for (let x = 6; x < 10; x++) if (t.alpha(x, y)) t.set(x, y, (x + y) % 2 ? hex(0x6a3ad0) : hex(0x9a6af0));
+  });
+  r.add('raw_endling', (t) => paint(t, 'meat', hex(0xd8a8c8)));
+  r.add('cooked_endling', (t) => paint(t, 'meat', hex(0xa86a58)));
 }

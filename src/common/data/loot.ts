@@ -93,6 +93,12 @@ export const LOOT_TABLES: Record<string, LootTable> = {
   'mob/wither_skeleton': { xp: 5, pools: [{ rolls: 1, entries: [mob('coal', 0, 1)] }, { rolls: 1, entries: [mob('bone', 0, 2)] }] },
   'mob/shulker': { xp: 5, pools: [{ rolls: 1, conditions: [{ c: 'chance', chance: 0.5, lootingBonus: 0.0625 }], entries: [e('shulker_shell', 1)] }] },
   'mob/phantom': { xp: 5, pools: [{ rolls: 1, conditions: [{ c: 'killed_by_player' }], entries: [mob('phantom_membrane', 0, 1)] }] },
+  // V6 phase 2: the Expanded End
+  'mob/endling': { xp: [1, 3], pools: [{ rolls: 1, entries: [mob('raw_endling', 1, 2, { functions: [{ fn: 'smelt' }] })] }] },
+  'mob/void_stalker': { xp: 8, pools: [{ rolls: 1, entries: [mob('void_shard', 0, 2)] }, { rolls: 1, entries: [{ item: 'void_stalker_hide', count: [0, 1] }] }] },
+  'mob/chorus_beast': { xp: 15, pools: [{ rolls: 1, entries: [{ item: 'chorus_fiber', count: [3, 6] }] }, { rolls: 1, entries: [{ item: 'chorus_fruit', count: [2, 4] }] }] },
+  'mob/end_crystal_mite': { xp: 3, pools: [{ rolls: 1, entries: [mob('end_crystal_fragment', 0, 1)] }] },
+  'mob/end_phantom': { xp: 20, pools: [{ rolls: 1, entries: [mob('end_phantom_membrane', 1, 1)] }, { rolls: 1, entries: [{ item: 'astral_dust', count: [0, 1] }] }] },
   'mob/silverfish': { xp: 5, pools: [] },
   'mob/pillager': { xp: 5, pools: [{ rolls: 1, entries: [mob('arrow', 0, 2)] }] },
   // Original mobs

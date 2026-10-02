@@ -147,7 +147,7 @@ export type S2C =
    * corrupting, warning markers on the ground, lasers, shockwaves...
    * Positions are world coordinates; `id` ties a marker to its later updates.
    */
-  | { t: 'fx'; kind: FxKind; strength?: number; ticks?: number; text?: string; x?: number; y?: number; z?: number; r?: number; x1?: number; y1?: number; z1?: number; id?: number }
+  | { t: 'fx'; kind: FxKind; strength?: number; ticks?: number; text?: string; x?: number; y?: number; z?: number; r?: number; x1?: number; y1?: number; z1?: number; id?: number; color?: number }
   | { t: 'teleport'; x: number; y: number; z: number; yaw?: number; pitch?: number; seq: number }
   | { t: 'dig_progress'; x: number; y: number; z: number; stage: number; by: number }
   | { t: 'gamemode'; mode: GameMode; abilities: AbilitiesMsg }
@@ -238,6 +238,8 @@ export type FxKind =
   | 'warn_circle'
   | 'warn_end'
   | 'warn_beam'
+  /** V6: the arc a Chorus Beast's throw will follow (x..z to x1..z1, `strength` = flight ticks). */
+  | 'warn_arc'
   | 'laser'
   | 'zone'
   | 'zone_end'

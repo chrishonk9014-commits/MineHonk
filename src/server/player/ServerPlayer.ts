@@ -1,4 +1,5 @@
 /** Server-side player entity + connection session state. */
+import { items } from '../../common/registry/items';
 import { newAdminState, type AdminPlayerState } from '../admin/adminState';
 import { Entity } from '../entity/Entity';
 import type { Connection, Identity } from '../net/Connection';
@@ -130,6 +131,8 @@ export class ServerPlayer extends Entity {
   visitedCaveBiomes = new Set<number>();
   /** V6: Expanded End biomes visited (ids). */
   visitedEndBiomes = new Set<string>();
+  /** V6 phase 2: kinds of Expanded End mob this player has killed (for "Hunter of the Expanded End"). */
+  expansionKills = new Set<string>();
   /** Endings this player has reached (V3). */
   endings = new Set<string>();
   /** An ending card waiting to be shown (after walking out through the End portal). */
@@ -221,6 +224,12 @@ export class ServerPlayer extends Entity {
     if (this.vehicle) m.riding = this.vehicle.id;
     const chest = this.inventory.get(38);
     if (chest && chest.id === ELYTRA()) m.elytra = true;
+    // V6: worn armor, head to feet, by material (drawn on the player model)
+    const worn = [39, 38, 37, 36].map((i) => {
+      const a = items[this.inventory.get(i)?.id ?? -1]?.def.armor;
+      return a && a.material !== 'elytra' ? a.material : '';
+    });
+    if (worn.some(Boolean)) m.armor = worn;
     return m;
   }
 

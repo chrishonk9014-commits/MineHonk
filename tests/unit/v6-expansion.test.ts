@@ -326,7 +326,7 @@ describe('the Expansion Portal in multiplayer', () => {
 describe('V6 Admin Panel', () => {
   it('validates End Expansion requests', () => {
     expect(validateAdmin({ a: 'v6', op: 'status' })).toEqual({ a: 'v6', op: 'status' });
-    expect(validateAdmin({ a: 'v6', op: 'tp_biome', biome: 'dune_isles' })).toEqual({ a: 'v6', op: 'tp_biome', biome: 'dune_isles' });
+    expect(validateAdmin({ a: 'v6', op: 'tp_biome', biome: 'chorus_forest' })).toEqual({ a: 'v6', op: 'tp_biome', biome: 'chorus_forest' });
     expect(validateAdmin({ a: 'v6', op: 'tp_biome', biome: 'plains' })).toBeNull();
     expect(validateAdmin({ a: 'v6', op: 'tp_biome' })).toBeNull();
     expect(validateAdmin({ a: 'v6', op: 'nope' })).toBeNull();

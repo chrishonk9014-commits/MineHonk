@@ -14,6 +14,7 @@
  * of events started by a cheat stays advancement-neutral. Normal play is
  * untouched.
  */
+import { EXPANSION_BIOME_IDS } from '../../common/endExpansion/biomes';
 import type { GameServer } from '../GameServer';
 import type { ServerPlayer } from '../player/ServerPlayer';
 import type { Dimension } from '../world/Dimension';
@@ -455,7 +456,7 @@ export class AdminService {
         return herobrineAdmin(this.server.herobrine, { moveTo: (pl, dim, x, y, z) => this.moveTo(pl, dim, x, y, z), give: (pl, id, n) => this.giveMarked(pl, id, n), safeSpot: (dim, x, y, z) => this.safeSpot(dim, x, y, z, false) }, p, a.op);
       case 'v6':
         if (!this.server.endExpansion) return { ok: false, text: 'The End Expansion is not running.' };
-        return expansionAdmin(this.server.endExpansion, { queueTeleport: (pl, x, y, z, label, surface) => this.queueTeleport(pl, req, 'end', x, y, z, label, surface) }, p, a.op, a.biome);
+        return expansionAdmin(this.server.endExpansion, { queueTeleport: (pl, x, y, z, label, surface) => this.queueTeleport(pl, req, 'end', x, y, z, label, surface), give: (pl, id, n) => void this.give(pl, id, n) }, p, a.op, a.biome, a.set);
       case 'v5':
         if (!this.server.engineering) return { ok: false, text: 'Engineering is not running.' };
         return engineeringAdmin(this.server.engineering, { mark: (dim, x, y, z) => this.setBlockMark(dim, x, y, z, true), give: (pl, id, n) => this.giveMarked(pl, id, n) }, p, a.op);
@@ -964,7 +965,8 @@ export class AdminService {
     for (const d of ADMIN_DIMENSIONS) {
       structures[d] = s.dim(d).generator.structureTypes?.() ?? [];
       if (s.dim(d).generator.caves) caves[d] = caveFeatures();
-      bl[d] = biomes.filter((b) => b.dimension === d && b.id !== 'error_biome').map((b) => ({ id: b.id, name: b.name }));
+      // (the Expanded End's biomes are reached from the End Expansion tab)
+      bl[d] = biomes.filter((b) => b.dimension === d && b.id !== 'error_biome' && !EXPANSION_BIOME_IDS.includes(b.id)).map((b) => ({ id: b.id, name: b.name }));
     }
     return {
       structures,

@@ -15,6 +15,9 @@
  * - The Admin Panel can switch it on and off. Opened by the panel before the
  *   dragon's defeat, travel through it is a cheat (nothing it leads to counts).
  */
+import { EXPANSION_MOBS } from '../../common/endExpansion/mobs';
+import { expansionGiveSets } from '../../common/endExpansion/resources';
+import { mobDef } from '../../common/data/mobs';
 import type { GameServer } from '../GameServer';
 import type { Dimension } from '../world/Dimension';
 import type { ServerPlayer } from '../player/ServerPlayer';
@@ -287,6 +290,13 @@ export class EndExpansionSystem {
       arrival: { x: a.x, y: a.floor, z: a.z, biome: EXPANSION_BIOMES[a.biome]?.name ?? '' },
       here: { dim: p.dim.id, x: Math.floor(p.x), y: Math.floor(p.y), z: Math.floor(p.z), inExpansion: p.dim.id === 'end' && inExpansion(p.x, p.z), biome: def?.name ?? null },
       biomes: EXPANSION_BIOMES.map((b) => ({ id: b.id, name: b.name, visited: p.visitedEndBiomes.has(b.id) })),
+      // Phase 2: the Expanded End's mobs (natural spawning, and how many live in each biome's loaded chunks) and resource kits
+      mobs: {
+        spawning: this.server.endMobs?.spawning ?? false,
+        kinds: EXPANSION_MOBS.map((id) => ({ id, name: mobDef(id)?.name ?? id })),
+        counts: this.server.endMobs?.countsByBiome(this.end) ?? {},
+      },
+      sets: expansionGiveSets().map((g) => ({ id: g.id, name: g.name, items: g.items.map(([id]) => id) })),
     };
   }
 }

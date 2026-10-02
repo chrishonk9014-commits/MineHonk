@@ -667,10 +667,14 @@ export function adminScreen(host: AdminHost): Screen {
             arrival: { x: number; y: number; z: number; biome: string };
             here: { dim: string; x: number; y: number; z: number; inExpansion: boolean; biome: string | null };
             biomes: { id: string; name: string; visited: boolean }[];
+            mobs?: { spawning: boolean; kinds: { id: string; name: string }[]; counts: Record<string, Record<string, number>> };
+            sets?: { id: string; name: string; items: string[] }[];
           }
         | undefined;
       if (!st?.arrival) return;
       clear(state);
+      showMobs(st);
+      showSets(st.sets);
       const pt = st.portal;
       const rows: [string, string][] = [
         ['Expansion Portal', pt ? `${pt.active ? 'open' : 'dormant'}${pt.cheat ? ' (opened by a cheat)' : ''}${pt.built ? ` at ${pt.x}, ${pt.y}, ${pt.z}` : ', not built yet'}` : 'not built yet (the End has not been visited)'],
@@ -684,6 +688,36 @@ export function adminScreen(host: AdminHost): Screen {
     };
     const op = (o: V6Op, biome?: string): void => void send(biome ? { a: 'v6', op: o, biome } : { a: 'v6', op: o }).then((r) => showState(r.data));
     const chips = (...b: HTMLElement[]): HTMLElement => el('div', { class: 'admin-chips' }, ...b);
+    // Phase 2: the Expanded End's mobs (spawned as cheat mobs: killing them never counts) and resources
+    const mobBox = el('div', {});
+    const counts = el('div', { class: 'admin-stats' });
+    const spawning = el('div', { class: 'muted small' });
+    const showMobs = (st: { mobs?: { spawning: boolean; kinds: { id: string; name: string }[]; counts: Record<string, Record<string, number>> } }): void => {
+      const m = st.mobs;
+      if (!m) return;
+      clear(mobBox);
+      for (const k of m.kinds)
+        mobBox.append(el('div', { class: 'row' }, el('span', { class: 'label' }, k.name), btn('Spawn 1', () => void send({ a: 'spawn', mob: k.id, count: 1 }), 'btn chip'), btn('Spawn a group', () => void send({ a: 'spawn', mob: k.id, count: k.id === 'chorus_beast' || k.id === 'end_phantom' ? 2 : 4 }), 'btn chip')));
+      spawning.textContent = `Natural spawning of these mobs is ${m.spawning ? 'on' : 'off'}.`;
+      clear(counts);
+      for (const b of EXPANSION_BIOMES) {
+        const row = m.counts[b.id] ?? {};
+        const parts = m.kinds.filter((k) => row[k.id]).map((k) => `${row[k.id]} ${k.name}`);
+        counts.append(el('div', { class: 'row' }, el('span', { class: 'muted' }, b.name), el('span', {}, parts.length ? parts.join(', ') : 'none')));
+      }
+    };
+    const itemName = (id: string): string => itemById.get(id)?.def.name ?? id;
+    const setBox = el('div', {});
+    let setsShown = false;
+    const showSets = (sets: { id: string; name: string; items: string[] }[] | undefined): void => {
+      if (!sets || setsShown) return;
+      setsShown = true;
+      for (const g of sets)
+        setBox.append(
+          el('div', { class: 'muted small' }, g.name),
+          chips(btn(`All of ${g.name}`, () => void send({ a: 'v6', op: 'give_set', set: g.id }), 'btn chip'), ...g.items.map((id) => btn(itemName(id), () => void send({ a: 'give', item: id, count: 1 }), 'btn chip'))),
+        );
+    };
     op('status');
     return el(
       'div',
@@ -696,8 +730,10 @@ export function adminScreen(host: AdminHost): Screen {
         section('The Expanded End', chips(btn('Teleport to the arrival platform', () => op('tp_arrival'), 'btn chip'))),
         section('The Ender Dragon', el('div', { class: 'muted small' }, 'In the End: ends the fight at once, so the portal can be tested. Nothing it drops counts.'), chips(btn('Defeat the Ender Dragon', () => op('defeat_dragon'), 'btn chip'))),
         section('Biomes', chips(...EXPANSION_BIOMES.map((b) => btn(b.name, () => op('tp_biome', b.id), 'btn chip')))),
+        section('Mobs', el('div', { class: 'muted small' }, 'Spawned in front of you, as cheat mobs: defeating them never counts.'), mobBox, chips(btn('Remove expansion mobs nearby', () => op('kill_mobs'), 'btn chip'), btn('Natural spawning on', () => op('mob_spawning_on'), 'btn chip'), btn('Natural spawning off', () => op('mob_spawning_off'), 'btn chip')), spawning),
+        section('Resources', el('div', { class: 'muted small' }, 'Cheat-marked items: they never count for advancements.'), setBox),
       ),
-      el('div', { class: 'admin-col' }, section('Status', state, chips(btn('Refresh', () => op('status'), 'btn chip'), btn('Where am I?', () => op('where'), 'btn chip')))),
+      el('div', { class: 'admin-col' }, section('Status', state, chips(btn('Refresh', () => op('status'), 'btn chip'), btn('Where am I?', () => op('where'), 'btn chip'))), section('Mobs by biome (loaded areas)', counts)),
     );
   };
 

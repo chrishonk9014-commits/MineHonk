@@ -795,25 +795,50 @@ const EFFECTS: Record<string, { dur: number; recipe: Recipe }> = {
     },
   },
   'tesla.charge': { dur: 1.6, recipe: (s) => (s.tone({ dur: 1.5, gain: 0.4, f0: 100, f1: 400, wave: 'saw', lp: 2200, attack: 1, decay: 0.3, vibrato: 0.15, vibratoRate: 50 }), s.noise({ dur: 1.5, gain: 0.25, attack: 1, decay: 0.3, hp: 3000, grain: 3 })) },
+  // V6 phase 2: the Expanded End's mobs. Wind-ups are clearly audible (they telegraph an attack).
+  /** Endling: a quick bright chirp (scattering from a stalker) and the soft pop of its blink. */
+  'mob.endling.chirp': { dur: 0.3, recipe: (s) => (s.tone({ dur: 0.09, gain: 0.35, f0: 1500, f1: 2300, decay: 0.05 }), s.tone({ start: 0.11, dur: 0.12, gain: 0.3, f0: 1900, f1: 2700, decay: 0.07 })) },
+  'mob.endling.blink': { dur: 0.35, recipe: (s) => (s.tone({ dur: 0.3, gain: 0.25, f0: 900, f1: 1800, wave: 'tri', decay: 0.15 }), s.noise({ dur: 0.2, gain: 0.12, hp: 3000, decay: 0.1 })) },
+  /** Void Stalker: a growl rising through the crouch, the leap, the slip, the void taking it, and the climb back. */
+  'mob.void_stalker.windup': { dur: 1.3, recipe: (s) => (s.voice({ dur: 1.2, gain: 0.8, f0: 60, f1: 110, formants: [300, 1000], rough: 0.85 }), s.noise({ dur: 1.2, gain: 0.15, attack: 1, decay: 0.2, lp: 900 })) },
+  'mob.void_stalker.leap': { dur: 0.4, recipe: (s) => (s.noise({ dur: 0.35, gain: 0.5, attack: 0.01, decay: 0.2, bp: [700, 2] }), s.voice({ dur: 0.3, gain: 0.6, f0: 130, f1: 80, formants: [400, 1300], rough: 0.9 })) },
+  'mob.void_stalker.slip': { dur: 0.8, recipe: (s) => s.voice({ dur: 0.7, gain: 0.7, f0: 160, f1: 70, formants: [350, 1200], rough: 0.6 }) },
+  'mob.void_stalker.vanish': { dur: 1.6, recipe: (s) => (s.tone({ dur: 1.5, gain: 0.5, f0: 220, f1: 40, wave: 'saw', lp: 900, decay: 0.8 }), s.noise({ dur: 1.4, gain: 0.3, decay: 0.8, lp: 600 })) },
+  'mob.void_stalker.rise': { dur: 1.7, recipe: (s) => (s.tone({ dur: 1.6, gain: 0.55, f0: 38, f1: 120, wave: 'saw', lp: 500, attack: 1.2, decay: 0.2 }), s.noise({ dur: 1.6, gain: 0.25, attack: 1.2, decay: 0.2, lp: 400 })) },
+  'mob.void_stalker.emerge': { dur: 0.6, recipe: (s) => (s.noise({ dur: 0.5, gain: 0.5, decay: 0.3, lp: 1200 }), s.voice({ dur: 0.45, gain: 0.7, f0: 95, f1: 70, formants: [320, 1100], rough: 0.85 })) },
+  /** Chorus Beast: rearing up, the slam, winding up a throw, the throw, the splat, and settling down. */
+  'mob.chorus_beast.rear': { dur: 1.5, recipe: (s) => (s.voice({ dur: 1.4, gain: 1, f0: 45, f1: 75, formants: [240, 600], rough: 0.6 }), s.noise({ dur: 1.4, gain: 0.2, attack: 1.2, decay: 0.1, lp: 300 })) },
+  'mob.chorus_beast.slam': { dur: 1.2, recipe: (s) => (s.noise({ dur: 1.1, gain: 1, attack: 0.005, decay: 0.4, lp: 280 }), s.tone({ dur: 0.9, gain: 0.8, f0: 70, f1: 28, decay: 0.5 }), s.noise({ dur: 0.4, gain: 0.35, decay: 0.15, bp: [1400, 2] })) },
+  'mob.chorus_beast.windup': { dur: 1.2, recipe: (s) => (s.voice({ dur: 1.1, gain: 0.8, f0: 55, f1: 90, formants: [260, 700], rough: 0.5 }), s.tone({ dur: 1.1, gain: 0.25, f0: 300, f1: 900, wave: 'tri', attack: 0.9, decay: 0.1 })) },
+  'mob.chorus_beast.throw': { dur: 0.5, recipe: (s) => (s.noise({ dur: 0.4, gain: 0.5, decay: 0.2, bp: [500, 2] }), s.voice({ dur: 0.35, gain: 0.7, f0: 80, f1: 60, formants: [260, 640], rough: 0.6 })) },
+  'mob.chorus_beast.splat': { dur: 0.5, recipe: (s) => (s.noise({ dur: 0.35, gain: 0.6, decay: 0.15, lp: 1800 }), s.tone({ dur: 0.4, gain: 0.3, f0: 600, f1: 1400, wave: 'tri', decay: 0.2 })) },
+  'mob.chorus_beast.calm': { dur: 1.6, recipe: (s) => s.voice({ dur: 1.5, gain: 0.7, f0: 70, f1: 50, formants: [260, 620], rough: 0.25, vibrato: 0.03 }) },
+  /** End Crystal Mite: a glassy shiver before it bites, and a tinkle as it burrows into a cluster. */
+  'mob.end_crystal_mite.windup': { dur: 1.2, recipe: (s) => { for (let i = 0; i < 10; i++) s.bell({ start: i * 0.1, f: 2400 + s.rng.next() * 900, ratios: [1, 2.76], gain: 0.12 + i * 0.015, decay: 0.08, dur: 0.15 }); } },
+  'mob.end_crystal_mite.burrow': { dur: 0.6, recipe: (s) => { for (let i = 0; i < 5; i++) s.bell({ start: i * 0.08, f: 3200 - i * 300, ratios: [1, 2.76], gain: 0.2, decay: 0.12, dur: 0.2 }); } },
+  /** End Phantom: the screech before its dive, the rush of the dive, and the crack when it is stunned. */
+  'mob.end_phantom.screech': { dur: 1.6, recipe: (s) => (s.voice({ dur: 1.5, gain: 0.9, f0: 900, f1: 1400, formants: [1600, 3400], rough: 0.4, vibrato: 0.05 }), s.noise({ dur: 1.4, gain: 0.2, attack: 0.3, decay: 0.3, hp: 4000 })) },
+  'mob.end_phantom.dive': { dur: 1.2, recipe: (s) => s.noise({ dur: 1.1, gain: 0.7, attack: 0.15, decay: 0.5, bp: [900, 1.5] }) },
+  'mob.end_phantom.stun': { dur: 0.6, recipe: (s) => (s.noise({ dur: 0.15, gain: 0.7, decay: 0.05, hp: 2000 }), s.voice({ dur: 0.5, gain: 0.6, f0: 1100, f1: 500, formants: [1500, 3000], rough: 0.3 })) },
   // V6: the Expanded End's ambient beds (looped by AudioEngine.setBed, one per biome)
-  /** Pale Plains: soft, open wind over a faint low tone. */
-  'bed.pale_plains': {
+  /** End Barrens: soft, open wind over a faint low tone. */
+  'bed.end_barrens': {
     dur: 9,
     recipe: (s) => {
       s.wash({ gain: 0.5, lp: 900, hp: 120, swell: 0.6 });
       s.drone({ f: 110, gain: 0.06, beat: 0.3 });
     },
   },
-  /** Shattered Spires: a deep hum with wind whistling between the spires. */
-  'bed.shattered_spires': {
+  /** Shattered End: a deep hum with wind whistling between the spires. */
+  'bed.shattered_end': {
     dur: 9,
     recipe: (s) => {
       s.drone({ f: 55, gain: 0.35, wave: 'saw', lp: 300, beat: 0.4, swell: 0.3 });
       s.wash({ gain: 0.25, bp: [1800, 8], swell: 0.8 });
     },
   },
-  /** Floating Archipelago: an airy chord with soft chimes now and then. */
-  'bed.floating_archipelago': {
+  /** Astral End: an airy chord with soft chimes now and then. */
+  'bed.astral_end': {
     dur: 10,
     recipe: (s) => {
       s.drone({ f: 220, gain: 0.14, wave: 'tri', beat: 0.5, lp: 1800 });
@@ -822,8 +847,8 @@ const EFFECTS: Record<string, { dur: number; recipe: Recipe }> = {
       for (let i = 0; i < 4; i++) s.bell({ start: 0.5 + i * 2.2 + s.rng.next() * 0.8, f: [880, 990, 1320, 1480][s.rng.int(4)]!, ratios: [1, 2.76], gain: 0.05, decay: 0.8, dur: 1.4 });
     },
   },
-  /** Hollow Isles: a cave rumble with distant drips. */
-  'bed.hollow_isles': {
+  /** End Highlands: a cave rumble with distant drips. */
+  'bed.highlands': {
     dur: 9,
     recipe: (s) => {
       s.wash({ gain: 0.8, lp: 120, swell: 0.4 });
@@ -831,8 +856,8 @@ const EFFECTS: Record<string, { dur: number; recipe: Recipe }> = {
       for (let i = 0; i < 5; i++) s.tone({ start: 0.6 + i * 1.6 + s.rng.next(), dur: 0.08, gain: 0.08, f0: 1500 + s.rng.next() * 900, f1: 2600, decay: 0.03 });
     },
   },
-  /** Crystal Fields: a high shimmer of small bells over a thin tone. */
-  'bed.crystal_fields': {
+  /** End Crystal Fields: a high shimmer of small bells over a thin tone. */
+  'bed.end_crystal_fields': {
     dur: 9,
     recipe: (s) => {
       s.drone({ f: 660, gain: 0.05, beat: 1.2 });
@@ -840,20 +865,21 @@ const EFFECTS: Record<string, { dur: number; recipe: Recipe }> = {
       s.wash({ gain: 0.08, hp: 3000, lp: 9000, swell: 0.5 });
     },
   },
-  /** Dune Isles: sand hissing in a steady, gusting wind. */
-  'bed.dune_isles': {
+  /** Chorus Forest: a soft rustle through the stalks, a warm low tone and a hollow knock now and then. */
+  'bed.chorus_forest': {
     dur: 9,
     recipe: (s) => {
-      s.wash({ gain: 0.35, hp: 1500, lp: 6000, swell: 0.9 });
-      s.wash({ gain: 0.3, lp: 300, swell: 0.5 });
+      s.wash({ gain: 0.22, hp: 300, lp: 1400, swell: 0.7 });
+      s.drone({ f: 98, gain: 0.08, wave: 'tri', beat: 0.3, lp: 900 });
+      for (let i = 0; i < 3; i++) s.tone({ start: 1 + i * 2.6 + s.rng.next(), dur: 0.12, gain: 0.07, f0: 260 + s.rng.next() * 80, f1: 180, decay: 0.06 });
     },
   },
-  /** Mist Hollows: a muffled hush and a slow low tone. */
-  'bed.mist_hollows': {
+  /** Void Wastes: a dark, slowly swelling hush over a very low tone. */
+  'bed.void_wastes': {
     dur: 9,
     recipe: (s) => {
-      s.wash({ gain: 0.3, lp: 2500, hp: 200, swell: 0.3 });
-      s.drone({ f: 82, gain: 0.2, beat: 0.2, swell: 0.4 });
+      s.wash({ gain: 0.45, lp: 500, hp: 60, swell: 0.5 });
+      s.drone({ f: 41, gain: 0.26, wave: 'saw', lp: 160, beat: 0.15, swell: 0.6 });
     },
   },
 };
@@ -901,6 +927,12 @@ const VOICES: Record<string, { f: number; formants: [number, number]; rough: num
   pufferfish: { f: 400, formants: [900, 1800], rough: 0.2, dur: 0.2, gain: 0.4 },
   player: { f: 240, formants: [650, 1100], rough: 0.08, dur: 0.2 },
   herobrine: { f: 150, formants: [480, 1250], rough: 0.5, dur: 0.6, crush: true },
+  // V6 phase 2: the Expanded End (Endlings chirp, stalkers rasp, beasts rumble, mites tick, phantoms keen)
+  endling: { f: 1250, formants: [2200, 3600], rough: 0.04, dur: 0.18, gain: 0.55 },
+  void_stalker: { f: 75, formants: [320, 1100], rough: 0.8, dur: 1.1, gain: 0.85 },
+  chorus_beast: { f: 52, formants: [260, 640], rough: 0.55, dur: 1.5, gain: 1 },
+  end_crystal_mite: { f: 1800, formants: [2800, 4800], rough: 0.6, dur: 0.15, bell: true, gain: 0.5 },
+  end_phantom: { f: 680, formants: [1400, 3000], rough: 0.25, dur: 1.1, gain: 0.7 },
 };
 
 function mobSound(type: string, kind: string): { dur: number; recipe: Recipe } {

@@ -11,15 +11,18 @@ import { arrivalLayout } from '../../common/gen/endExpansion';
 import { EXPANSION_BIOMES, expansionBiomeIndex } from '../../common/endExpansion/biomes';
 import { inExpansion } from '../../common/endExpansion/region';
 import type { EndExpansionSystem } from '../systems/EndExpansion';
+import { expansionGiveSets } from '../../common/endExpansion/resources';
 
 export interface ExpansionAdminHelpers {
   /** Teleports (as a cheat) once the destination has loaded; the result follows as a second reply. */
   queueTeleport(p: ServerPlayer, x: number, y: number, z: number, label: string, surface: boolean): void;
+  /** Gives cheat-marked items (they never count for advancements). */
+  give(p: ServerPlayer, id: string, count: number): void;
 }
 
 type Result = { ok: boolean; text: string; data?: unknown } | null;
 
-export function expansionAdmin(sys: EndExpansionSystem, h: ExpansionAdminHelpers, p: ServerPlayer, op: V6Op, biome?: string): Result {
+export function expansionAdmin(sys: EndExpansionSystem, h: ExpansionAdminHelpers, p: ServerPlayer, op: V6Op, biome?: string, set?: string): Result {
   const s = sys.server;
   const gen = s.dim('end').generator as EndGenerator;
   const ex = gen.terrain.expansion;
@@ -69,6 +72,22 @@ export function expansionAdmin(sys: EndExpansionSystem, h: ExpansionAdminHelpers
       d.hurt(d.health + 10000, { source: 'mob', attacker: p });
       return ok('The Ender Dragon is defeated (a cheat: no advancement, its drops are cheat-made).');
     }
+    // Phase 2: the Expanded End's mobs and resources (spawning single mobs and groups uses the
+    // panel's usual spawn action, which marks them as cheat-made)
+    case 'give_set': {
+      const g = expansionGiveSets().find((k) => k.id === set);
+      if (!g) return { ok: false, text: 'Unknown set.' };
+      for (const [id, n] of g.items) h.give(p, id, n);
+      return ok(`Gave the ${g.name} set (cheat items: they never count for advancements).`);
+    }
+    case 'kill_mobs': {
+      const n = s.endMobs?.killNear(p.dim, p.x, p.y, p.z, 96) ?? 0;
+      return ok(n ? `Removed ${n} Expanded End mob${n === 1 ? '' : 's'} nearby.` : 'No Expanded End mobs nearby.');
+    }
+    case 'mob_spawning_on':
+    case 'mob_spawning_off':
+      if (s.endMobs) s.endMobs.spawning = op === 'mob_spawning_on';
+      return ok(op === 'mob_spawning_on' ? 'Expanded End mobs spawn naturally again.' : 'Expanded End mobs no longer spawn naturally.');
     case 'where': {
       const st = sys.status(p) as { here: { x: number; y: number; z: number; inExpansion: boolean; biome: string | null } };
       const here = st.here;

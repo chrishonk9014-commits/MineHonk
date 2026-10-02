@@ -2,6 +2,7 @@
  * Survival stats: health/damage, God Mode health rules, hunger, air,
  * environmental hazards, status effects, experience and death.
  */
+import { itemIdOf } from '../../common/game/itemstack';
 import type { GameServer } from '../GameServer';
 import type { ServerPlayer } from '../player/ServerPlayer';
 import { ARMOR_SLOTS, ARMOR_START } from '../player/Inventory';
@@ -546,7 +547,8 @@ export class Survival {
     const level = this.server.level;
     const score = p.xpTotal;
     if (!level.rules.keepInventory) {
-      this.server.interaction.dropAll(p);
+      // V6: a Void Pack (and all it holds) survives a death in the void, and only that
+      this.server.interaction.dropAll(p, info.source === 'void' ? (st) => itemIdOf(st) === 'void_pack' : undefined);
       const lvl = p.xpLevel().level;
       const xp = Math.min(100, lvl * 7);
       if (xp > 0) this.server.mining.dropXp(p.dim, p.x, p.y + 0.5, p.z, xp, p.cheat.xp > 0);

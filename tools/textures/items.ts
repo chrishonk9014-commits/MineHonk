@@ -1294,6 +1294,7 @@ const TOOL_MATS: Record<string, RGB> = {
   diamond: hex(0x4fe3d6),
   netherite: hex(0x4a3f42),
   glitched: hex(0xc050ff),
+  ender_alloy: hex(0x2a8a7a),
 };
 const ARMOR_MATS: Record<string, RGB> = {
   leather: hex(0x8f5a32),
@@ -1303,7 +1304,18 @@ const ARMOR_MATS: Record<string, RGB> = {
   diamond: hex(0x4fe3d6),
   netherite: hex(0x4a3f42),
   glitched: hex(0xc050ff),
+  ender_alloy: hex(0x2a8a7a),
 };
+
+/** V6: Ender Alloy's violet sheen over teal. */
+function enderify(t: Tex): void {
+  for (let y = 0; y < 16; y++)
+    for (let x = 0; x < 16; x++) {
+      const c = t.get(x, y);
+      // On the teal metal only (not on wooden handles)
+      if (t.alpha(x, y) && (x * 3 + y) % 9 === 0 && c[1] > c[0] + 30 && c[1] > 90) t.set(x, y, hex(0x9a6af0));
+    }
+}
 
 function glitchify(t: Tex): void {
   // magenta/cyan pixel sparkle for glitched items
@@ -1318,8 +1330,9 @@ export function registerItems(r: PainterRegistry): void {
   for (const [mat, base] of Object.entries(TOOL_MATS)) {
     for (const tool of ['sword', 'pickaxe', 'axe', 'shovel', 'hoe'] as const) {
       r.add(`${mat}_${tool}`, (t) => {
-        paintMask(t, tool, matPal(base, mat === 'netherite' ? 0.55 : 0.42));
+        paintMask(t, tool, matPal(base, mat === 'netherite' || mat === 'ender_alloy' ? 0.55 : 0.42));
         if (mat === 'glitched') glitchify(t);
+        if (mat === 'ender_alloy') enderify(t);
       });
     }
   }
@@ -1329,6 +1342,7 @@ export function registerItems(r: PainterRegistry): void {
         paintMask(t, piece, matPal(base));
         if (mat === 'chainmail') for (let y = 0; y < 16; y += 2) for (let x = y % 4 === 0 ? 0 : 1; x < 16; x += 2) if (t.alpha(x, y) && t.get(x, y)[0] > 100) t.set(x, y, hex(0x606060));
         if (mat === 'glitched') glitchify(t);
+        if (mat === 'ender_alloy') enderify(t);
       });
     }
   }

@@ -10,6 +10,10 @@
  * and heights, floating chains, cliffs and caves), lays its own surface
  * palette and grows its own landscape features.
  *
+ * From generator 7 on (phase 2) each biome lays its own stone and grows its
+ * own plants, and ores are seeded into its land; generator 6 worlds keep
+ * their phase 1 surfaces (see surfaceOf), with the same land shapes.
+ *
  * Only called by the End generator for columns inside the ring: the classic
  * End never reaches this code.
  */
@@ -19,9 +23,10 @@ import { Random, hash3, hashInts } from '../math/rng';
 import { S } from '../registry/blocks';
 import { biomeNum } from '../registry/biomes';
 import type { DecorView } from './decorate/view';
-import { EXPANSION_BIOMES, type ExpansionBiome, type FeatureSpec } from '../endExpansion/biomes';
+import { EXPANSION_BIOMES, surfaceOf, type ExpansionBiome, type FeatureSpec, type OreSpec } from '../endExpansion/biomes';
+import { placeTree } from './features/trees';
 import { buildExpansionPortal } from '../endExpansion/portal';
-import { ARRIVAL_NOMINAL, EXPANSION_INNER, EXPANSION_MARGIN, EXPANSION_OUTER, REGION_CELL, REGION_WARP, chunkInExpansion, inExpansion } from '../endExpansion/region';
+import { ARRIVAL_NOMINAL, EXPANSION_RESOURCES_GENERATOR, EXPANSION_INNER, EXPANSION_MARGIN, EXPANSION_OUTER, REGION_CELL, REGION_WARP, chunkInExpansion, inExpansion } from '../endExpansion/region';
 
 /** Half-width of the void gap between two biomes (before the noise wobble). */
 const GAP = 22;
@@ -81,8 +86,14 @@ export class ExpansionTerrain {
   /** Scratch for regionAt: distances to the 3x3 sites around a column and their biomes. */
   private readonly nearD = new Float64Array(9);
   private readonly nearB = new Int32Array(9);
+  /** Each biome's surface, features and ores in this world's generator version. */
+  private readonly surfaces: ReturnType<typeof surfaceOf>[];
 
-  constructor(readonly seed: number) {
+  constructor(
+    readonly seed: number,
+    readonly version = EXPANSION_RESOURCES_GENERATOR,
+  ) {
+    this.surfaces = EXPANSION_BIOMES.map((b) => surfaceOf(b, version));
     const r = (salt: number): Random => new Random(hashInts(seed, salt, 0xe6a));
     this.warpX = new Octave2(r(1), 2, 520);
     this.warpZ = new Octave2(r(2), 2, 520);
@@ -268,7 +279,7 @@ export class ExpansionTerrain {
     const bx = c.cx << 4;
     const bz = c.cz << 4;
     const out: number[] = [];
-    const states = EXPANSION_BIOMES.map((b) => ({ top: S(b.palette.top), under: S(b.palette.under), core: S(b.palette.core), depth: b.palette.depth }));
+    const states = this.surfaces.map(({ palette: p }) => ({ top: S(p.top), under: S(p.under), core: S(p.core), depth: p.depth }));
     for (let z = 0; z < 16; z++)
       for (let x = 0; x < 16; x++) {
         const wx = bx + x;
@@ -376,10 +387,11 @@ export class ExpansionTerrain {
     const bx = ocx << 4;
     const bz = ocz << 4;
     const mid = this.regionAt(bx + 8, bz + 8);
-    const def = EXPANSION_BIOMES[mid.biome]!;
+    const surface = this.surfaces[mid.biome]!;
+    const top = S(surface.palette.top);
     const arr = this.arrival();
-    for (let fi = 0; fi < def.features.length; fi++) {
-      const f = def.features[fi]!;
+    for (let fi = 0; fi < surface.features.length; fi++) {
+      const f = surface.features[fi]!;
       const rng = new Random(hashInts(this.seed, ocx, ocz, fi, 0xfea7));
       const tries = Math.floor(f.perChunk) + (rng.next() < f.perChunk % 1 ? 1 : 0);
       for (let i = 0; i < tries; i++) {
@@ -398,12 +410,64 @@ export class ExpansionTerrain {
         const y = v.height(x, z) - 1;
         if (y < 2) continue;
         const ground = v.proto(x, y, z);
-        if (ground !== S(def.palette.top) && !(f.onAnyGround && ground !== 0)) continue;
+        if (ground !== top && !(f.onAnyGround && ground !== 0)) continue;
         placeFeature(v, f, fr, x, y + 1, z);
+      }
+    }
+    for (let oi = 0; oi < surface.ores.length; oi++) this.oresFrom(v, ocx, ocz, mid.biome, surface.ores[oi]!, oi);
+  }
+
+  /**
+   * Ore veins seeded in chunk (ocx, ocz): each starts `minDepth`..`maxDepth`
+   * below the column's top and wanders at most two blocks from its start,
+   * replacing only the listed stone of the pure terrain.
+   */
+  private oresFrom(v: DecorView, ocx: number, ocz: number, biome: number, o: OreSpec, oi: number): void {
+    const bx = ocx << 4;
+    const bz = ocz << 4;
+    const rng = new Random(hashInts(this.seed, ocx, ocz, oi, 0x04e5));
+    const tries = Math.floor(o.perChunk) + (rng.next() < o.perChunk % 1 ? 1 : 0);
+    const host = new Set(o.in.map((id) => S(id)));
+    const ore = S(o.block);
+    for (let i = 0; i < tries; i++) {
+      const x = bx + 2 + rng.int(12);
+      const z = bz + 2 + rng.int(12);
+      const depth = o.minDepth + rng.int(o.maxDepth - o.minDepth + 1);
+      const size = 1 + rng.int(o.size);
+      if (x + 2 < v.bx || x - 2 >= v.bx + 16 || z + 2 < v.bz || z - 2 >= v.bz + 16) continue;
+      if (!inExpansion(x, z) || this.regionAt(x, z).biome !== biome) continue;
+      let px = x;
+      let py = v.height(x, z) - 1 - depth;
+      let pz = z;
+      const vr = new Random(hashInts(this.seed, x, py, z, oi, 0x04e6));
+      for (let k = 0; k < size; k++) {
+        if (py > 1 && host.has(v.proto(px, py, pz)) && v.get(px, py, pz) === v.proto(px, py, pz) && (!o.enclosed || enclosed(v, px, py, pz))) v.set(px, py, pz, ore);
+        // Wander to a neighbour, staying within two blocks of the start
+        const d = N6[vr.int(6)]!;
+        if (Math.abs(px + d[0] - x) <= 2 && Math.abs(pz + d[2] - z) <= 2) {
+          px += d[0];
+          py += d[1];
+          pz += d[2];
+        }
       }
     }
   }
 }
+
+/** True when all six neighbours of a block are solid in the pure terrain. */
+function enclosed(v: DecorView, x: number, y: number, z: number): boolean {
+  for (const d of N6) if (v.proto(x + d[0], y + d[1], z + d[2]) === 0) return false;
+  return true;
+}
+
+const N6 = [
+  [1, 0, 0],
+  [-1, 0, 0],
+  [0, 1, 0],
+  [0, -1, 0],
+  [0, 0, 1],
+  [0, 0, -1],
+] as const;
 
 /** Places one landscape feature with its base at (x, y, z) (the first air above the ground). */
 function placeFeature(v: DecorView, f: FeatureSpec, rng: Random, x: number, y: number, z: number): void {
@@ -458,6 +522,10 @@ function placeFeature(v: DecorView, f: FeatureSpec, rng: Random, x: number, y: n
     }
     case 'hanging':
       placeHanging(v, f, rng, x, z);
+      return;
+    case 'tree':
+      // A generated tree (src/common/gen/features/trees.ts): decisions read the pure terrain
+      placeTree({ getState: (a, b, c) => v.proto(a, b, c), current: (a, b, c) => v.get(a, b, c) }, (a, b, c, s) => v.set(a, b, c, s), rng, f.tree ?? 'chorus', x, y, z);
       return;
   }
 }

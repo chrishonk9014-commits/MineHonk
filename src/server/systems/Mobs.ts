@@ -16,6 +16,7 @@ import { installBrain } from '../ai/brains';
 import type { RangedKind } from '../ai/goals';
 import { canSee } from '../ai/goals';
 import { MOB_DEFS, mobDef, type MobCategory } from '../../common/data/mobs';
+import { isExpansionMob } from '../../common/endExpansion/mobs';
 import { TRADES, PROFESSIONS, type Profession } from '../../common/data/trades';
 import { biomeOf } from '../../common/registry/biomes';
 import type { SpawnEntry } from '../../common/data/biomes';
@@ -289,6 +290,8 @@ export class MobSystem {
         m.health = Math.min(m.maxHealth, hp);
       }
       installBrain(m);
+      // V6: an Expanded End mob forgets attacks it was in the middle of (a void slip resumes its return)
+      if (isExpansionMob(m.type)) this.server.endMobs?.onRestore(m);
       return m;
     }
     if (d.kind === 'projectile') {
@@ -361,6 +364,14 @@ export class MobSystem {
         break;
       case 'warden':
         s.warden?.tick(m);
+        break;
+      // V6 phase 2: the Expanded End's mobs
+      case 'endling':
+      case 'void_stalker':
+      case 'chorus_beast':
+      case 'end_crystal_mite':
+      case 'end_phantom':
+        s.endMobs?.mobTick(m);
         break;
       default:
         this.animalTick(m);
@@ -651,7 +662,16 @@ export class MobSystem {
     if (!entry) return;
     const def = mobDef(entry.mob);
     if (!def) return;
-    const n = entry.min + r.int(entry.max - entry.min + 1);
+    let n = entry.min + r.int(entry.max - entry.min + 1);
+    // V6: the Expanded End's own limits (spawning switched off from the Admin Panel, caps around the
+    // player, the End Phantom's rarity and height)
+    const expansion = isExpansionMob(def.id);
+    if (expansion) {
+      const ok = this.server.endMobs?.allowSpawn(p, def.id, x, y, z) ?? null;
+      if (!ok) return;
+      y = ok.y;
+      n = Math.min(n, ok.limit);
+    }
     let spawned = 0;
     for (let i = 0; i < n * 3 && spawned < n; i++) {
       const sx = x + r.int(9) - 4;
@@ -678,12 +698,15 @@ export class MobSystem {
       if (m && this.server.admin.skyTainted) m.admin = true;
       if (m) {
         if (cat === 'creature') m.persistenceRequired = true;
+        if (expansion) this.server.endMobs?.onNaturalSpawn(p, m);
         spawned++;
       }
     }
   }
 
   private spawnConditions(dim: Dimension, type: string, x: number, y: number, z: number, cat: MobCategory): boolean {
+    // V6: the Expanded End's mobs have their own ground and light rules
+    if (isExpansionMob(type)) return this.server.endMobs?.spawnConditions(dim, type, x, y, z) ?? false;
     const def = mobDef(type)!;
     const light = dim.getLight(x, y, z);
     const sky = light >> 4;
@@ -1346,6 +1369,7 @@ export class MobSystem {
       killer.addStat('mob_kills');
       s.interaction.onMobKilled?.(killer, m);
     }
+    if (isExpansionMob(m.type)) s.endMobs?.onDeath(m, killer);
     // Villager deaths are announced to nearby players (like named pets)
     if (m.customName || m.owner) s.broadcastChat(`${m.customName ?? m.def.name} died`, 'death');
   }
@@ -1499,6 +1523,7 @@ export class MobSystem {
         consume();
         m.loveTicks = 600;
         if (cheatFood) m.data.cheatLove = true;
+        if (m.type === 'endling' && !cheatFood && !m.admin) s.interaction.grant(p, 'feed_endling');
         return true;
       }
     }

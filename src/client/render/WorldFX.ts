@@ -12,6 +12,7 @@
  * Everything is a handful of cheap meshes that live for a few seconds.
  */
 import * as THREE from 'three';
+import { arcPoint, arcVelocity } from '../../common/endExpansion/combat';
 
 interface Marker {
   obj: THREE.Object3D;
@@ -87,16 +88,16 @@ export class WorldFX {
     });
   }
 
-  /** A warning ring on the ground: something will hit here. */
-  warnCircle(id: number | undefined, x: number, y: number, z: number, r: number, seconds: number, now: number): void {
+  /** A warning ring on the ground: something will hit here (V6: in the attacker's own colour). */
+  warnCircle(id: number | undefined, x: number, y: number, z: number, r: number, seconds: number, now: number, color = 0xff2a6a): void {
     const geo = new THREE.RingGeometry(Math.max(0.1, r - 0.35), r, 48, 1);
     geo.rotateX(-Math.PI / 2);
-    const mat = new THREE.MeshBasicMaterial({ color: 0xff2a6a, transparent: true, opacity: 0.8, depthWrite: false, side: THREE.DoubleSide, fog: false });
+    const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.8, depthWrite: false, side: THREE.DoubleSide, fog: false });
     const ring = new THREE.Mesh(geo, mat);
     // The inside fills in as the moment approaches
     const fillGeo = new THREE.CircleGeometry(r, 48);
     fillGeo.rotateX(-Math.PI / 2);
-    const fillMat = new THREE.MeshBasicMaterial({ color: 0xff2a6a, transparent: true, opacity: 0.1, depthWrite: false, side: THREE.DoubleSide, fog: false });
+    const fillMat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.1, depthWrite: false, side: THREE.DoubleSide, fog: false });
     const fill = new THREE.Mesh(fillGeo, fillMat);
     const g = new THREE.Group();
     g.add(ring, fill);
@@ -144,13 +145,13 @@ export class WorldFX {
   }
 
   /** A beam from a to b: a thin targeting line (`warn`) or the full Error Laser. */
-  beam(id: number | undefined, a: THREE.Vector3, b: THREE.Vector3, seconds: number, now: number, warn: boolean): void {
+  beam(id: number | undefined, a: THREE.Vector3, b: THREE.Vector3, seconds: number, now: number, warn: boolean, color = 0xff2a6a): void {
     const len = a.distanceTo(b);
     const width = warn ? 0.12 : 2.2;
     const g = new THREE.Group();
     // Two crossed planes read as a beam from any side
     const mat = warn
-      ? new THREE.MeshBasicMaterial({ color: 0xff2a6a, transparent: true, opacity: 0.7, depthWrite: false, side: THREE.DoubleSide, fog: false })
+      ? new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.7, depthWrite: false, side: THREE.DoubleSide, fog: false })
       : new THREE.ShaderMaterial({ vertexShader: RING_VERT, fragmentShader: LASER_FRAG, uniforms: { uTime: { value: 0 }, uAlpha: { value: 1 } }, transparent: true, depthWrite: false, side: THREE.DoubleSide });
     for (const rot of [0, Math.PI / 2]) {
       const p = new THREE.Mesh(new THREE.PlaneGeometry(width, len), mat);
@@ -175,6 +176,44 @@ export class WorldFX {
           const s = 1 + Math.sin(t * 30) * 0.05;
           g.scale.set(s, 1, s);
         }
+      },
+    });
+  }
+
+  /**
+   * V6: the arc a thrown thing will follow (a Chorus Beast's chorus): a
+   * dotted path from a to b, the points the projectile passes each tick of
+   * its `flight`, with a ring where it comes down.
+   */
+  warnArc(id: number | undefined, a: THREE.Vector3, b: THREE.Vector3, flight: number, seconds: number, now: number, color: number): void {
+    const v = arcVelocity(a.x, a.y, a.z, b.x, b.y, b.z, flight);
+    const g = new THREE.Group();
+    const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.85, depthWrite: false, fog: false });
+    const dot = new THREE.BoxGeometry(0.14, 0.14, 0.14);
+    const dots: THREE.Mesh[] = [];
+    for (let n = 1; n <= flight; n++) {
+      const [x, y, z] = arcPoint(a.x, a.y, a.z, v, n);
+      const d = new THREE.Mesh(dot, mat);
+      d.position.set(x, y, z);
+      g.add(d);
+      dots.push(d);
+    }
+    const ringGeo = new THREE.RingGeometry(0.6, 0.85, 32, 1);
+    ringGeo.rotateX(-Math.PI / 2);
+    const ring = new THREE.Mesh(ringGeo, mat);
+    ring.position.set(b.x, b.y - 0.55, b.z);
+    g.add(ring);
+    this.add(id, {
+      obj: g,
+      born: now,
+      life: seconds,
+      kind: 'warn_arc',
+      update: (age) => {
+        // The dots light up in order, start to finish, as the throw comes
+        const f = Math.min(1, age / Math.max(0.1, seconds));
+        mat.opacity = 0.5 + 0.4 * Math.abs(Math.sin(age * 8));
+        const lit = Math.ceil(f * dots.length);
+        dots.forEach((d, i) => d.scale.setScalar(i < lit ? 1.4 : 0.8));
       },
     });
   }

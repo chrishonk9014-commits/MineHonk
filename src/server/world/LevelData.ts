@@ -8,7 +8,7 @@ import type { DimensionId } from '../../common/data/biomes';
 
 export const LEVEL_VERSION = 1;
 /** Worlds created from V2 on generate with the Caves Update terrain (see GeneratorOptions.version). */
-export const GENERATOR_VERSION = 6;
+export const GENERATOR_VERSION = 7;
 
 export interface GameRules {
   doDaylightCycle: boolean;

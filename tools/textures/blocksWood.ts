@@ -9,6 +9,8 @@ export interface WoodPalette {
   leaf: RGB[] | null; // null => grayscale tinted
   leafTinted: boolean;
   special?: 'birch' | 'crimson' | 'warped' | 'null' | 'cherry';
+  /** The log's name when it is not `<name>_log` (V6: chorus stalks), for a set without leaves or a sapling. */
+  log?: string;
 }
 
 export const WOODS: Record<string, WoodPalette> = {
@@ -23,6 +25,8 @@ export const WOODS: Record<string, WoodPalette> = {
   crimson: { plank: [hex(0x44192c), hex(0x622a40), hex(0x6e304a), hex(0x7b3654), hex(0x89405e)], bark: [hex(0x3a0c14), hex(0x5b1422), hex(0x7a1d2d), hex(0x952b3a)], leaf: null, leafTinted: false, special: 'crimson' },
   warped: { plank: [hex(0x16453f), hex(0x236b62), hex(0x2a7a70), hex(0x33897e), hex(0x3b978b)], bark: [hex(0x1d1a2a), hex(0x2e2743), hex(0x3a3155), hex(0x44395f)], leaf: null, leafTinted: false, special: 'warped' },
   null: { plank: [hex(0x3c4650), hex(0x5d6b77), hex(0x6c7b88), hex(0x7b8c99), hex(0x8b9ca9)], bark: [hex(0x12161a), hex(0x2a3238), hex(0x384249), hex(0x46525a)], leaf: [hex(0x1d4a45), hex(0x2a6860), hex(0x36847a), hex(0x44a094), hex(0xd24fd0)], leafTinted: false, special: 'null' },
+  // V6 phase 2: the giant chorus trees of the Expanded End's Chorus Forest
+  chorus: { plank: [hex(0x5a3a66), hex(0x7a5288), hex(0x8a5e98), hex(0x9a6ca8), hex(0xaa7ab8)], bark: [hex(0x3a2244), hex(0x5a3a66), hex(0x6e4a7c), hex(0x845c92)], leaf: null, leafTinted: false, log: 'chorus_stalk' },
 };
 
 function logSide(t: Tex, w: WoodPalette): void {
@@ -121,7 +125,7 @@ function trapdoor(t: Tex, w: WoodPalette): void {
 export function registerWood(r: PainterRegistry): void {
   for (const [name, w] of Object.entries(WOODS)) {
     const nether = name === 'crimson' || name === 'warped';
-    const log = nether ? name + '_stem' : name + '_log';
+    const log = w.log ?? (nether ? name + '_stem' : name + '_log');
     r.add(name + '_planks', (t) => {
       planks(t, w.plank);
       if (w.special === 'null') glitchRows(t, 3);
@@ -130,7 +134,7 @@ export function registerWood(r: PainterRegistry): void {
     r.add(log + '_top', (t) => logTop(t, w, false));
     r.add('stripped_' + log, (t) => strippedSide(t, w));
     r.add('stripped_' + log + '_top', (t) => logTop(t, w, true));
-    if (!nether) {
+    if (!nether && !w.log) {
       r.add(name + '_leaves', (t) => {
         if (w.leafTinted || !w.leaf) {
           leaves(t, [hex(0x2c2c2c), hex(0x505050), hex(0x6a6a6a), hex(0x858585), hex(0x9e9e9e)], 0.12);

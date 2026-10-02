@@ -3,6 +3,7 @@
  * (grass/foliage/water tints), expressed as explicit per-biome values.
  */
 import { EXPANSION_BIOMES } from '../endExpansion/biomes';
+import { EXPANSION_SPAWNS } from '../endExpansion/mobs';
 
 /** V5.5: 'computer' is the world inside the computer (the Herobrine seed). */
 export type DimensionId = 'overworld' | 'nether' | 'end' | 'farlands' | 'computer';
@@ -28,7 +29,9 @@ export type TreeKind =
   | 'crimson_fungus'
   | 'warped_fungus'
   | 'null_tree'
-  | 'chorus';
+  | 'chorus'
+  /** V6: the Expanded End's Chorus Forest. */
+  | 'giant_chorus';
 
 export interface SpawnEntry {
   mob: string;
@@ -227,6 +230,6 @@ defs.push({ id: 'error_biome', name: 'Error Biome', dimension: 'overworld', cate
 // Placed by the End generator in the ring far beyond the outer islands (biome regions,
 // not climate). Appended last so earlier biome numbers never move. Mobs come later.
 for (const b of EXPANSION_BIOMES)
-  defs.push({ id: b.id, name: b.name, dimension: 'end', category: 'end', temperature: 0.5, downfall: 0, precipitation: 'none', grass: 0x8eb971, foliage: 0x71a74d, water: 0x3f76e4, sky: b.sky, fog: b.fog, surface: { top: b.palette.top, filler: b.palette.under }, rare: false, spawns: { creature: [], monster: [], ambient: [] } });
+  defs.push({ id: b.id, name: b.name, dimension: 'end', category: 'end', temperature: 0.5, downfall: 0, precipitation: 'none', grass: 0x8eb971, foliage: 0x71a74d, water: 0x3f76e4, sky: b.sky, fog: b.fog, surface: { top: b.palette.top, filler: b.palette.under }, rare: false, spawns: { creature: [...(EXPANSION_SPAWNS[b.id]?.creature ?? [])], monster: [...(EXPANSION_SPAWNS[b.id]?.monster ?? [])], ambient: [] } });
 
 export const BIOME_DEFS: readonly BiomeDef[] = defs;

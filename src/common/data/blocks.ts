@@ -8,6 +8,7 @@ import type { BlockDef, SoundGroup, TintKind } from '../registry/blockTypes';
 import { engineeringBlockDefs } from '../engineering/catalog';
 import { digitalBlockDefs } from '../digital/blocks';
 import { expansionBlockDefs } from '../endExpansion/blocks';
+import { addExpansionResourceBlocks } from '../endExpansion/resources';
 
 const defs: BlockDef[] = [];
 const add = (d: BlockDef): BlockDef => {
@@ -435,16 +436,28 @@ const LEAF_TINT: Record<WoodType, TintKind> = {
 };
 const SAPLING_DROP_CHANCE = 0.05;
 
-function woodSet(w: string, opts: { nether?: boolean; leaves?: boolean; tint?: TintKind; sapling?: boolean } = {}): void {
+export interface WoodSetOptions {
+  nether?: boolean;
+  leaves?: boolean;
+  tint?: TintKind;
+  sapling?: boolean;
+  /** The log's id when it is not `<w>_log` (V6 chorus stalks); such a set has no bark-covered "wood" blocks. */
+  stem?: string;
+  /** Creative tab of the whole set. */
+  creative?: string;
+  mapColor?: number;
+}
+
+function woodSet(w: string, opts: WoodSetOptions = {}): void {
   const nether = !!opts.nether;
-  const log = nether ? w + '_stem' : w + '_log';
-  const wood = nether ? w + '_hyphae' : w + '_wood';
+  const log = opts.stem ?? (nether ? w + '_stem' : w + '_log');
+  const wood = opts.stem ? null : nether ? w + '_hyphae' : w + '_wood';
   const sound: SoundGroup = nether ? 'nylium' : 'wood';
-  const woodProps: Opt = { tool: 'axe', flammable: !nether };
-  column(log, 2, sound, { ...woodProps, tex: { top: log + '_top', side: log }, tags: ['logs', w + '_logs'], mapColor: 0x6b5132 });
-  column(wood, 2, sound, { ...woodProps, tex: { top: log, side: log }, tags: ['logs', w + '_logs'] });
+  const woodProps: Opt = { tool: 'axe', flammable: !nether, ...(opts.creative ? { creative: opts.creative } : {}) };
+  column(log, 2, sound, { ...woodProps, tex: { top: log + '_top', side: log }, tags: ['logs', w + '_logs'], mapColor: opts.mapColor ?? 0x6b5132 });
+  if (wood) column(wood, 2, sound, { ...woodProps, tex: { top: log, side: log }, tags: ['logs', w + '_logs'] });
   column('stripped_' + log, 2, sound, { ...woodProps, tex: { top: 'stripped_' + log + '_top', side: 'stripped_' + log }, tags: ['logs', w + '_logs'] });
-  column('stripped_' + wood, 2, sound, { ...woodProps, tex: { top: 'stripped_' + log, side: 'stripped_' + log }, tags: ['logs', w + '_logs'] });
+  if (wood) column('stripped_' + wood, 2, sound, { ...woodProps, tex: { top: 'stripped_' + log, side: 'stripped_' + log }, tags: ['logs', w + '_logs'] });
   cube(w + '_planks', 2, sound, { ...woodProps, tags: ['planks'], mapColor: 0x9c7f4e });
   family(w + '_planks', w + '_planks', 2, sound, false, woodProps);
   // rename stairs/slab ids to be natural ("oak_stairs")
@@ -917,7 +930,8 @@ family('end_stone_bricks', 'end_stone_bricks', 3, 'stone', true);
 stoneLike('purpur_block', 1.5);
 column('purpur_pillar', 1.5, 'stone', { tool: 'pickaxe', harvestLevel: 0, requiresTool: true, tex: { top: 'purpur_pillar_top', side: 'purpur_pillar' } });
 family('purpur_block', 'purpur_block', 1.5, 'stone', false);
-add({ id: 'chorus_plant', name: 'Chorus Plant', hardness: 0.4, sound: 'wood', model: 'custom', props: { north: BOOL, south: BOOL, west: BOOL, east: BOOL, up: BOOL, down: BOOL }, tex: { all: 'chorus_plant' }, tool: 'axe', drops: { item: 'chorus_fruit', min: 0, max: 1 }, collide: true, layer: 'cutout' });
+// (V6: one in ten chorus plants also gives a Chorus Fiber)
+add({ id: 'chorus_plant', name: 'Chorus Plant', hardness: 0.4, sound: 'wood', model: 'custom', props: { north: BOOL, south: BOOL, west: BOOL, east: BOOL, up: BOOL, down: BOOL }, tex: { all: 'chorus_plant' }, tool: 'axe', drops: { item: 'chorus_fruit', min: 0, max: 1, extra: [{ item: 'chorus_fiber', chance: 0.1 }] }, collide: true, layer: 'cutout' });
 add({ id: 'chorus_flower', name: 'Chorus Flower', hardness: 0.4, sound: 'wood', model: 'cube', props: { age: ['0', '1', '2', '3', '4', '5'] }, tex: { all: 'chorus_flower' }, tool: 'axe', randomTicks: true, layer: 'cutout' });
 add({ id: 'end_portal', name: 'End Portal', hardness: -1, sound: 'none', model: 'end_portal', tex: { all: 'end_portal' }, light: 15, collide: false, drops: 'none', item: false, creative: 'hidden', layer: 'opaque', entity: 'end_portal' });
 add({ id: 'end_gateway', name: 'End Gateway', hardness: -1, sound: 'none', model: 'cube', tex: { all: 'end_portal' }, light: 15, collide: false, drops: 'none', item: false, creative: 'hidden', layer: 'opaque' });
@@ -1014,5 +1028,7 @@ for (const d of digitalBlockDefs()) add(d);
 
 // V6 - The End Expansion: the Expansion Portal and the Expanded End's landscape
 for (const d of expansionBlockDefs()) add(d);
+// V6, phase 2: the Expanded End's stone, ores, crystal, chorus wood and astral blocks
+addExpansionResourceBlocks({ add, family, woodSet });
 
 export const BLOCK_DEFS: readonly BlockDef[] = defs;

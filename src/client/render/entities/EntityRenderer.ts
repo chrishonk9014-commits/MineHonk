@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import type { ClientEntity } from '../../game/ClientEntity';
 import { BoxModel, humanoidDef } from './BoxModel';
 import { playerSkin } from './skins';
+import { armorOverlay } from './armorOverlay';
 import type { ItemIcons } from '../ItemIcons';
 import { items } from '../../../common/registry/items';
 import { blocks, STATE_BLOCK } from '../../../common/registry/blocks';
@@ -156,10 +157,13 @@ registerVisual('player', (e, ctx) => {
       wings.push(w);
     }
   }
+  // Worn armor (V6), in each piece's material
+  const armor = armorOverlay(m);
   const v = boxVisual(
     m,
     (mm, ee, a) => {
       animateHumanoid(mm, ee, a);
+      armor.set(Array.isArray(ee.meta.armor) ? (ee.meta.armor as string[]) : undefined);
       const gliding = ee.meta.glide === true;
       const hasWings = ee.meta.elytra === true;
       wings.forEach((w, i) => {
@@ -200,9 +204,11 @@ registerVisual('player', (e, ctx) => {
   v.setBrightness = (b) => {
     baseBright(b);
     wingMat.color.setHex(0x8e8aa8).multiplyScalar(b);
+    armor.setBrightness(b);
   };
   const baseDispose = v.dispose.bind(v);
   v.dispose = () => {
+    armor.dispose();
     baseDispose();
     for (const w of wings) w.geometry.dispose();
     wingMat.dispose();

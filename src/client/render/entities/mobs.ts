@@ -2135,6 +2135,282 @@ function glitchJitter(m: BoxModel, e: ClientEntity, time: number): void {
   if (glitch) m.material.color.setRGB(0.8, 1.3, 1.3);
 }
 
+// ---------------------------------------------------------------- V6 phase 2: the Expanded End
+// Every attack shows: the server sets `tele` (lunge, slam, throw, bite, dive) for the whole wind-up.
+
+/** Bright, unlit bits (flaring eyes, flared wings, a held orb) that ignore the area's light level. */
+const flareBits = new WeakMap<BoxModel, Map<string, THREE.Mesh>>();
+function flare(m: BoxModel, part: string, key: string, size: [number, number, number], at: [number, number, number], color: number): THREE.Mesh | null {
+  let bits = flareBits.get(m);
+  if (!bits) flareBits.set(m, (bits = new Map()));
+  let mesh = bits.get(key);
+  if (!mesh) {
+    const p = m.part(part);
+    if (!p) return null;
+    mesh = new THREE.Mesh(new THREE.BoxGeometry(size[0] / 16, size[1] / 16, size[2] / 16), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.95, depthWrite: false }));
+    mesh.position.set(at[0] / 16, at[1] / 16, at[2] / 16);
+    mesh.visible = false;
+    p.add(mesh);
+    bits.set(key, mesh);
+  }
+  return mesh;
+}
+
+V.endling = {
+  parts: () => {
+    const lav = '#d8c8f0';
+    const leg = (n: string, x: number, z: number): KitPart => ({ name: n, pivot: [x, 2, z], from: [-0.75, -2, -0.75], size: [1.5, 2, 1.5], colors: { all: '#b8a8d8' } });
+    return [
+      { name: 'body', pivot: [0, 2, 0], from: [-3, 0, -3.5], size: [6, 4, 7], colors: { all: lav, bottom: '#ece4fa' }, paint: (p) => p.speckle('top', '#c4b0e8', 0.25) },
+      { name: 'head', pivot: [0, 5, 1.5], from: [-3.5, -1, -2.5], size: [7, 5, 6], colors: { all: lav }, paint: (p) => {
+        // Big dark eyes with a glint, and a small mouth
+        p.px('front', 0, 1, '#1a1028', 3, 3);
+        p.px('front', 4, 1, '#1a1028', 3, 3);
+        p.px('front', 1, 1, '#ffffff');
+        p.px('front', 5, 1, '#ffffff');
+        p.px('front', 3, 4, '#9a7ab8');
+        p.speckle('top', '#c4b0e8', 0.2);
+      } },
+      { name: 'earL', parent: 'head', pivot: [2.5, 4, 0], from: [-0.5, 0, -1], size: [1, 3, 2], rot: [0, 0, -0.3], colors: { all: lav, front: '#f0b8e0' } },
+      { name: 'earR', parent: 'head', pivot: [-2.5, 4, 0], from: [-0.5, 0, -1], size: [1, 3, 2], rot: [0, 0, 0.3], colors: { all: lav, front: '#f0b8e0' } },
+      { name: 'tail', parent: 'body', pivot: [0, 3, -3.5], from: [-0.5, -0.5, -2], size: [1, 1, 2], rot: [0.5, 0, 0], colors: { all: '#c4b0e8' } },
+      leg('leg0', -2, 2),
+      leg('leg1', 2, 2),
+      leg('leg2', -2, -2),
+      leg('leg3', 2, -2),
+    ];
+  },
+  anim: (m, e, alpha, time) => {
+    animQuad(m, e, alpha, time);
+    babyScale(m, e);
+    // A little hop as it trots, and twitching ears
+    m.root.position.y = Math.abs(Math.sin(walkPhase(e, alpha) * 1.2)) * 0.08 * Math.min(1, e.limbSpeed * 2);
+    const tw = Math.sin(time * 0.15 + e.id) > 0.92 ? 0.35 : 0;
+    const el = m.part('earL');
+    const er = m.part('earR');
+    if (el) el.rotation.z = -0.3 - tw;
+    if (er) er.rotation.z = 0.3 + tw;
+  },
+  nameY: 0.9,
+};
+
+V.void_stalker = {
+  parts: () => {
+    const dark = '#120c1c';
+    const vein = (p: FacePainter): void => p.speckle('all', '#3a1a5a', 0.12);
+    return [
+      { name: 'rightLeg', pivot: [-2, 16, 0], from: [-1.5, -16, -1.5], size: [3, 16, 3], colors: { all: dark }, paint: vein },
+      { name: 'leftLeg', pivot: [2, 16, 0], from: [-1.5, -16, -1.5], size: [3, 16, 3], colors: { all: dark }, paint: vein },
+      { name: 'body', pivot: [0, 16, 0], from: [-4, 0, -2], size: [8, 12, 4], colors: { all: dark }, paint: (p) => {
+        vein(p);
+        // Ribs of faint violet light
+        for (let y = 3; y < 10; y += 2) p.px('front', 2, y, '#4a2a78', 4, 1);
+      } },
+      { name: 'head', parent: 'body', pivot: [0, 12, 0], from: [-3.5, 0, -3.5], size: [7, 7, 7], colors: { all: dark }, paint: (p) => {
+        vein(p);
+        p.px('front', 1, 3, '#9a4dff', 2, 1);
+        p.px('front', 4, 3, '#9a4dff', 2, 1);
+        p.px('front', 1, 4, '#3a1a5a', 5, 1);
+      } },
+      { name: 'rightArm', parent: 'body', pivot: [-5, 11, 0], from: [-1, -19, -1], size: [2, 20, 2], colors: { all: dark, bottom: '#6a3aa8' }, paint: vein },
+      { name: 'leftArm', parent: 'body', pivot: [5, 11, 0], from: [-1, -19, -1], size: [2, 20, 2], colors: { all: dark, bottom: '#6a3aa8' }, paint: vein },
+    ];
+  },
+  anim: (m, e, alpha, time) => {
+    // Hidden while it is in the void (and until it has climbed out)
+    const away = e.meta.slip === 'gone' || e.meta.slip === 'rise';
+    m.root.visible = !away;
+    animateHumanoid(m, e, alpha, { armsForward: e.meta.angry === true });
+    const body = m.part('body');
+    const crouch = e.meta.tele === 'lunge';
+    if (body) body.rotation.x = crouch ? 0.75 : 0.28;
+    const rl = m.part('rightLeg');
+    const ll = m.part('leftLeg');
+    if (crouch) {
+      // Coiled to spring, swaying a little
+      m.root.position.y = -0.32 + Math.sin(time * 0.8) * 0.02;
+      if (rl) rl.rotation.x = -0.9;
+      if (ll) ll.rotation.x = -0.9;
+      const ra = m.part('rightArm');
+      const la = m.part('leftArm');
+      if (ra) ra.rotation.x = -1.1;
+      if (la) la.rotation.x = -1.1;
+    } else m.root.position.y = 0;
+    // Its eyes flare through the wind-up
+    const pulse = 0.7 + Math.sin(time * 1.2) * 0.3;
+    for (const [k, x] of [['eyeL', 1.5], ['eyeR', -1.5]] as const) {
+      const eye = flare(m, 'head', k, [2.2, 1.2, 0.4], [x, 3.6, 3.7], 0xe0b0ff);
+      if (eye) {
+        eye.visible = crouch;
+        eye.scale.setScalar(crouch ? 0.8 + pulse * 0.5 : 1);
+      }
+    }
+  },
+  nameY: 2.5,
+};
+
+V.chorus_beast = {
+  parts: () => {
+    const hide = '#8a5a9a';
+    const stalk = (p: FacePainter): void => {
+      p.speckle('all', '#5a3a6a', 0.18);
+      p.speckle('all', '#b07ac4', 0.08);
+    };
+    const bloom = (n: string, x: number, z: number, s: number): KitPart => ({ name: n, parent: 'body', pivot: [x, 20, z], from: [-s / 2, 0, -s / 2], size: [s, s, s], colors: { all: '#c890e0', top: '#f0d0ff' }, paint: (p) => p.speckle('all', '#e0b0f0', 0.3) });
+    return [
+      { name: 'rightLeg', pivot: [-6, 18, -4], from: [-4, -18, -4], size: [8, 18, 8], colors: { all: hide, bottom: '#4a2a5a' }, paint: stalk },
+      { name: 'leftLeg', pivot: [6, 18, -4], from: [-4, -18, -4], size: [8, 18, 8], colors: { all: hide, bottom: '#4a2a5a' }, paint: stalk },
+      { name: 'body', pivot: [0, 18, 0], from: [-12, 0, -10], size: [24, 20, 20], colors: { all: hide, bottom: '#a878b8' }, paint: (p) => {
+        stalk(p);
+        // Stalk-like ridges down its flanks
+        for (let x = 2; x < 20; x += 5) p.px('left', x, 2, '#5a3a6a', 1, 16);
+        for (let x = 2; x < 20; x += 5) p.px('right', x, 2, '#5a3a6a', 1, 16);
+      } },
+      { name: 'head', parent: 'body', pivot: [0, 14, 10], from: [-6, -5, 0], size: [12, 10, 9], colors: { all: '#7a4a8a' }, paint: (p) => {
+        stalk(p);
+        p.px('front', 2, 3, '#f0d8ff', 3, 2);
+        p.px('front', 7, 3, '#f0d8ff', 3, 2);
+        p.px('front', 3, 7, '#3a1a4a', 6, 1);
+      } },
+      { name: 'rightArm', parent: 'body', pivot: [-14, 16, 4], from: [-4, -30, -4], size: [8, 32, 8], colors: { all: hide, bottom: '#4a2a5a' }, paint: stalk },
+      { name: 'leftArm', parent: 'body', pivot: [14, 16, 4], from: [-4, -30, -4], size: [8, 32, 8], colors: { all: hide, bottom: '#4a2a5a' }, paint: stalk },
+      bloom('bloom0', -6, -3, 6),
+      bloom('bloom1', 5, 2, 5),
+      bloom('bloom2', 1, -7, 4),
+    ];
+  },
+  anim: (m, e, alpha, time) => {
+    const w = walkPhase(e, alpha);
+    const sw = Math.sin(w * 0.45) * 0.5 * Math.min(1, e.limbSpeed * 1.5);
+    const rl = m.part('rightLeg');
+    const ll = m.part('leftLeg');
+    const ra = m.part('rightArm');
+    const la = m.part('leftArm');
+    const body = m.part('body');
+    if (rl) rl.rotation.x = sw;
+    if (ll) ll.rotation.x = -sw;
+    if (ra) ra.rotation.set(-sw * 0.8, 0, 0);
+    if (la) la.rotation.set(sw * 0.8, 0, 0);
+    lookHead(m, e);
+    // Breathing
+    if (body) {
+      body.rotation.x = 0.15;
+      body.scale.y = 1 + Math.sin(time * 0.08 + e.id) * 0.015;
+    }
+    const tele = e.meta.tele;
+    if (tele === 'slam') {
+      // Rears up, both arms high
+      if (body) body.rotation.x = -0.45;
+      if (ra) ra.rotation.x = -2.7;
+      if (la) la.rotation.x = -2.7;
+    } else if (tele === 'throw') {
+      if (ra) ra.rotation.set(-2.4, 0, 0.3);
+    } else if (e.swingTime > 0) {
+      // The blow lands
+      const t = e.swingTime / 6;
+      if (ra) ra.rotation.x = -2.7 * t;
+      if (la) la.rotation.x = -2.7 * t;
+      if (body) body.rotation.x = 0.15 + 0.3 * (1 - t);
+    }
+    // The chorus it is about to throw, glowing in its fist
+    const orb = flare(m, 'rightArm', 'orb', [7, 7, 7], [0, -30, 0], 0xe8a8ff);
+    if (orb) {
+      orb.visible = tele === 'throw';
+      orb.rotation.y = time * 0.1;
+    }
+  },
+  nameY: 3.4,
+};
+
+V.end_crystal_mite = {
+  parts: () => [
+    { name: 'body', pivot: [0, 1.5, 0], from: [-2.5, -1, -3], size: [5, 2.5, 6], colors: { all: '#e8d8f8', bottom: '#b8a0d8' }, paint: (p) => p.speckle('all', '#c8b0f0', 0.3) },
+    { name: 'shard1', parent: 'body', pivot: [-1, 1.5, 0.5], from: [-0.5, 0, -0.5], size: [1, 3, 1], rot: [0.3, 0, -0.35], colors: { all: '#c8a8ff', top: '#ffffff' } },
+    { name: 'shard2', parent: 'body', pivot: [1, 1.5, -1], from: [-0.5, 0, -0.5], size: [1, 4, 1], rot: [-0.2, 0, 0.3], colors: { all: '#e0ccff', top: '#ffffff' } },
+    { name: 'shard3', parent: 'body', pivot: [0, 1.5, -2.5], from: [-0.5, 0, -0.5], size: [1, 2, 1], rot: [-0.45, 0, 0], colors: { all: '#b090f0', top: '#f8f0ff' } },
+    { name: 'head', parent: 'body', pivot: [0, 0.5, 3], from: [-1.5, -1, 0], size: [3, 2, 1.5], colors: { all: '#d0c0ec' }, paint: (p) => {
+      p.px('front', 0, 0, '#5a2a9a');
+      p.px('front', 2, 0, '#5a2a9a');
+    } },
+    ...[0, 1, 2].flatMap((i) => [
+      { name: `legL${i}`, parent: 'body', pivot: [2.5, -0.5, 2 - i * 2], from: [0, -1, -0.5], size: [1.5, 1, 1], colors: { all: '#a890c8' } } as KitPart,
+      { name: `legR${i}`, parent: 'body', pivot: [-2.5, -0.5, 2 - i * 2], from: [-1.5, -1, -0.5], size: [1.5, 1, 1], colors: { all: '#a890c8' } } as KitPart,
+    ]),
+  ],
+  anim: (m, e, alpha, time) => {
+    const w = walkPhase(e, alpha);
+    for (let i = 0; i < 3; i++) {
+      const k = i % 2 ? 1 : -1;
+      const l = m.part(`legL${i}`);
+      const r = m.part(`legR${i}`);
+      if (l) l.rotation.y = Math.sin(w * 2) * 0.6 * e.limbSpeed * k;
+      if (r) r.rotation.y = -Math.sin(w * 2) * 0.6 * e.limbSpeed * k;
+    }
+    const body = m.part('body');
+    // Rears up and shivers before it bites
+    const rear = e.meta.tele === 'bite';
+    if (body) {
+      body.rotation.x = rear ? -0.55 : e.swingTime > 0 ? 0.3 : 0;
+      body.position.x = rear ? Math.sin(time * 3) * 0.02 : 0;
+    }
+    m.root.position.y = rear ? 0.06 : 0;
+  },
+  glow: true,
+  nameY: 0.6,
+};
+
+V.end_phantom = {
+  parts: () => {
+    const ink = '#1a1a3a';
+    const edge = (p: FacePainter): void => {
+      p.speckle('top', '#2a2a5a', 0.3);
+      p.px('top', 0, 0, '#c8d0ff', 1, 99);
+    };
+    return [
+      { name: 'body', pivot: [0, 6, 0], from: [-4, -2, -9], size: [8, 4, 18], colors: { all: ink, bottom: '#2a2a4a' }, paint: (p) => p.speckle('top', '#3a3a7a', 0.2) },
+      { name: 'head', parent: 'body', pivot: [0, 0, 9], from: [-4.5, -2, 0], size: [9, 4, 6], colors: { all: ink }, paint: (p) => {
+        p.px('front', 1, 1, '#f0f4ff', 2, 1);
+        p.px('front', 6, 1, '#f0f4ff', 2, 1);
+      } },
+      { name: 'wingL', parent: 'body', pivot: [4, 1, 0], from: [0, 0, -7], size: [14, 1, 14], colors: { all: '#22224a', bottom: '#14142a' }, paint: edge },
+      { name: 'wingL2', parent: 'wingL', pivot: [14, 0, 0], from: [0, 0, -5], size: [10, 1, 10], colors: { all: '#22224a', bottom: '#14142a' }, paint: edge },
+      { name: 'wingR', parent: 'body', pivot: [-4, 1, 0], from: [-14, 0, -7], size: [14, 1, 14], colors: { all: '#22224a', bottom: '#14142a' }, paint: edge },
+      { name: 'wingR2', parent: 'wingR', pivot: [-14, 0, 0], from: [-10, 0, -5], size: [10, 1, 10], colors: { all: '#22224a', bottom: '#14142a' }, paint: edge },
+      { name: 'tail', parent: 'body', pivot: [0, 0, -9], from: [-2, -1, -8], size: [4, 2, 8], colors: { all: ink } },
+      { name: 'tail2', parent: 'tail', pivot: [0, 0, -8], from: [-1, -0.5, -8], size: [2, 1, 8], colors: { all: '#22224a' } },
+    ];
+  },
+  anim: (m, e, alpha, time) => {
+    const stun = e.meta.stun === true;
+    const dive = e.meta.tele === 'dive';
+    const flap = stun ? Math.sin(time * 1.5) * 0.15 - 0.5 : dive ? -0.15 : Math.sin(time * 0.35 + e.id) * 0.55;
+    for (const [n, k] of [['wingL', 1], ['wingR', -1]] as const) {
+      const w = m.part(n);
+      if (w) w.rotation.z = flap * k;
+    }
+    for (const [n, k] of [['wingL2', 1], ['wingR2', -1]] as const) {
+      const w = m.part(n);
+      if (w) w.rotation.z = (stun ? -0.6 : flap * 0.6) * k;
+    }
+    const tail = m.part('tail');
+    if (tail) tail.rotation.x = Math.sin(time * 0.3 + e.id) * 0.2;
+    lookHead(m, e);
+    m.root.rotation.x = stun ? 0.4 : -e.pitch * 0.6;
+    m.root.position.y = Math.sin(time * 0.1 + e.id) * 0.06;
+    // Wings flare white through the screech before the dive
+    const pulse = 0.85 + Math.sin(time * 1.4) * 0.15;
+    for (const [part, key, x] of [['wingL', 'flareL', 7], ['wingR', 'flareR', -7], ['wingL2', 'flareL2', 5], ['wingR2', 'flareR2', -5]] as const) {
+      const big = key.length === 6;
+      const f = flare(m, part, key, big ? [14.2, 1.3, 14.2] : [10.2, 1.3, 10.2], [x, 0.5, 0], 0xf0f4ff);
+      if (f) {
+        f.visible = dive;
+        (f.material as THREE.MeshBasicMaterial).opacity = 0.75 * pulse;
+      }
+    }
+  },
+  nameY: 1.2,
+};
+
 // ---------------------------------------------------------------- registration
 function makeVisual(def: MobVisualDef, e: ClientEntity, ctx: VisualContext): EntityVisual {
   const variant = def.variant ? def.variant(e) : e.type;

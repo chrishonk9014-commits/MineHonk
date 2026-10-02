@@ -56,7 +56,13 @@ export type Brain =
   | 'frog'
   | 'axolotl'
   | 'warden'
-  | 'sporeling';
+  | 'sporeling'
+  // V6 phase 2: the Expanded End's mobs (src/server/ai/endGoals.ts)
+  | 'endling'
+  | 'void_stalker'
+  | 'chorus_beast'
+  | 'end_crystal_mite'
+  | 'end_phantom';
 
 export interface MobDef {
   id: string;
@@ -98,6 +104,8 @@ export interface MobDef {
   xp?: number;
   /** Rideable: rider feet height above the mob, who steers ('client': the rider; 'carrot': a Carrot on a Stick), and whether it must be tamed first. */
   mount?: { seat: number; control: 'client' | 'carrot'; tame: boolean };
+  /** V6: treats void edges as walls (never walks off an island). */
+  edgeGuard?: boolean;
 }
 
 const M: MobDef[] = [];
@@ -189,6 +197,17 @@ mob({ id: 'glitch_beast', name: 'Glitch Beast', category: 'boss', width: 2.2, he
 mob({ id: 'the_error', name: 'The Error', category: 'boss', width: 3.4, height: 18, health: 600, speed: 0, damage: 12, armor: 8, knockbackRes: 1, followRange: 96, brain: 'the_error', model: 'the_error', egg: [0x07030c, 0xff2bd6], fireImmune: true, farlands: true });
 // V5.5: he comes out of a computer (driven by the Herobrine system, never spawned naturally)
 mob({ id: 'herobrine', name: 'Herobrine', category: 'boss', width: 0.6, height: 1.95, eye: 1.62, health: 300, speed: 0.12, damage: 6, armor: 6, knockbackRes: 0.85, followRange: 64, brain: 'herobrine', model: 'herobrine', egg: [0x1e8a8a, 0xffffff], fireImmune: true });
+// V6 phase 2: the Expanded End (spawned only in its biomes, see src/common/endExpansion/mobs.ts)
+/** Small and shy; hops away when hit and scatters from Void Stalkers. Breeds on chorus fruit. */
+mob({ id: 'endling', name: 'Endling', category: 'creature', width: 0.5, height: 0.6, health: 8, speed: 0.1, brain: 'endling', model: 'endling', egg: [0xd8c8f0, 0x2a2040], breedItems: ['chorus_fruit'], babyChance: 0, idleInterval: 240, edgeGuard: true });
+/** Lunges after a long crouch; slips into the void when hurt or stared at, and climbs back behind you. */
+mob({ id: 'void_stalker', name: 'Void Stalker', category: 'monster', width: 0.7, height: 2.2, eye: 2, health: 30, speed: 0.16, damage: 7, armor: 4, followRange: 32, brain: 'void_stalker', model: 'void_stalker', egg: [0x120c1c, 0x9a4dff], maxSpawnLight: 15, xp: 8, idleInterval: 260, edgeGuard: true });
+/** Neutral giant of the Chorus Forest: slams the ground and throws chorus. */
+mob({ id: 'chorus_beast', name: 'Chorus Beast', category: 'monster', width: 2.4, height: 3, eye: 2.6, health: 80, speed: 0.07, damage: 12, armor: 8, knockbackRes: 0.8, followRange: 24, brain: 'chorus_beast', model: 'chorus_beast', egg: [0x8a5a9a, 0xe0c0f0], maxSpawnLight: 15, xp: 15, idleInterval: 300, edgeGuard: true });
+/** Tiny swarming crystal-backs of the End Crystal Fields (not the caves' Crystal Mite). */
+mob({ id: 'end_crystal_mite', name: 'End Crystal Mite', category: 'monster', width: 0.4, height: 0.3, health: 6, speed: 0.14, damage: 2, followRange: 16, brain: 'end_crystal_mite', model: 'end_crystal_mite', egg: [0xe8d8f8, 0x8a5ad0], arthropod: true, maxSpawnLight: 15, xp: 3, idleInterval: 200, edgeGuard: true });
+/** Circles high over the outer Expanded End and dives on players, gliders too. */
+mob({ id: 'end_phantom', name: 'End Phantom', category: 'monster', width: 2, height: 0.8, health: 40, speed: 0.22, damage: 9, followRange: 64, brain: 'end_phantom', model: 'end_phantom', egg: [0x1a1a3a, 0xf0f4ff], flying: true, maxSpawnLight: 15, xp: 20, idleInterval: 220 });
 mob({ id: 'ender_dragon', name: 'Ender Dragon', category: 'boss', width: 16, height: 8, health: 200, speed: 0.3, damage: 10, knockbackRes: 1, followRange: 150, brain: 'dragon', model: 'ender_dragon', egg: [0x1c1c1c, 0xe079fa], fireImmune: true, flying: true });
 
 export const MOB_DEFS: readonly MobDef[] = M;

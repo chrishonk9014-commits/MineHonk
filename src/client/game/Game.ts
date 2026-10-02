@@ -279,6 +279,14 @@ export class Game {
     return (hand === 0 ? this.invSlots[HOTBAR0 + this.selected] : this.invSlots[OFFHAND]) ?? null;
   }
 
+  /** V6: worn armor materials, head to feet ('' for an empty slot or Elytra), for the inventory doll. */
+  private wornArmor(): string[] {
+    return [0, 1, 2, 3].map((i) => {
+      const a = items[this.invSlots[HELMET + i]?.id ?? -1]?.def.armor;
+      return a && a.material !== 'elytra' ? a.material : '';
+    });
+  }
+
   /**
    * How dark the view is: blindness is total; the Darkness effect (Warden,
    * shriekers) pulses between dim and nearly black. The pulsing strength is
@@ -350,7 +358,7 @@ export class Game {
       playerSlots: () => this.invSlots,
       onClose: () => this.closeWindow(true),
       advancedTooltips: this.debug,
-      attachPreview: (host: HTMLElement) => attachPlayerPreview(host, this.playerName),
+      attachPreview: (host: HTMLElement) => attachPlayerPreview(host, this.playerName, () => this.wornArmor()),
     });
     this.root.append(this.screen.root);
     this.input.enabled = false;
@@ -1204,7 +1212,10 @@ export class Game {
         this.audio.silence(false, 1);
         break;
       case 'warn_circle':
-        wf.warnCircle(m.id, m.x ?? 0, m.y ?? 0, m.z ?? 0, m.r ?? 2, secs, now);
+        wf.warnCircle(m.id, m.x ?? 0, m.y ?? 0, m.z ?? 0, m.r ?? 2, secs, now, m.color);
+        break;
+      case 'warn_arc':
+        wf.warnArc(m.id, new THREE.Vector3(m.x ?? 0, m.y ?? 0, m.z ?? 0), new THREE.Vector3(m.x1 ?? 0, m.y1 ?? 0, m.z1 ?? 0), Math.max(1, Math.round(m.strength ?? 20)), secs, now, m.color ?? 0xe8a8ff);
         break;
       case 'warn_end':
       case 'zone_end':
@@ -1212,7 +1223,7 @@ export class Game {
         break;
       case 'warn_beam':
       case 'laser':
-        wf.beam(m.id, new THREE.Vector3(m.x ?? 0, m.y ?? 0, m.z ?? 0), new THREE.Vector3(m.x1 ?? 0, m.y1 ?? 0, m.z1 ?? 0), secs, now, m.kind === 'warn_beam');
+        wf.beam(m.id, new THREE.Vector3(m.x ?? 0, m.y ?? 0, m.z ?? 0), new THREE.Vector3(m.x1 ?? 0, m.y1 ?? 0, m.z1 ?? 0), secs, now, m.kind === 'warn_beam', m.color);
         if (m.kind === 'laser') g.pulse(0.35, 12);
         break;
       case 'zone':

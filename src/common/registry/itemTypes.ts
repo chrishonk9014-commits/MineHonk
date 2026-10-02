@@ -55,7 +55,9 @@ export type UseKind =
   | 'music_disc'
   | 'totem'
   | 'elytra'
-  | 'firework';
+  | 'firework'
+  /** V6: opens the pack's nine slots. */
+  | 'void_pack';
 
 export interface ItemDef {
   id: string;
@@ -63,7 +65,8 @@ export interface ItemDef {
   tex?: string;
   maxStack?: number;
   durability?: number;
-  tool?: { type: ToolType; tier: number; speed: number };
+  /** `material` is the tier's id (iron, netherite, ender_alloy...) for blocks that need one material. */
+  tool?: { type: ToolType; tier: number; speed: number; material?: string };
   weapon?: { damage: number; speed: number };
   armor?: { slot: ArmorSlot; defense: number; toughness?: number; knockbackRes?: number; material: string };
   food?: FoodDef;
@@ -85,5 +88,7 @@ export interface ItemDef {
   /** Repair material for anvils. */
   repair?: string;
   fireResistant?: boolean;
+  /** V6: a short line under the name in the tooltip (for blocks: their def's `data.tooltip`). */
+  tooltip?: string;
   data?: Record<string, unknown>;
 }

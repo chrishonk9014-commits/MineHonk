@@ -11,8 +11,9 @@ import { STATE_SOLID, STATE_FLUID } from '../../common/registry/blocks';
 import type { EntitySpawn } from '../../common/net/protocol';
 import { entityInfo } from '../../common/data/entities';
 import { toSaved, fromSaved, type ItemStack, type SavedStack } from '../../common/game/itemstack';
+import { CHORUS_GLOB_GRAVITY } from '../../common/endExpansion/combat';
 
-export type ProjectileKind = 'arrow' | 'snowball' | 'egg' | 'ender_pearl' | 'small_fireball' | 'fireball' | 'dragon_fireball' | 'potion' | 'shulker_bullet' | 'rift_bolt' | 'experience_bottle' | 'trident' | 'malware' | 'herobrine_bolt';
+export type ProjectileKind = 'arrow' | 'snowball' | 'egg' | 'ender_pearl' | 'small_fireball' | 'fireball' | 'dragon_fireball' | 'potion' | 'shulker_bullet' | 'rift_bolt' | 'experience_bottle' | 'trident' | 'malware' | 'herobrine_bolt' | 'chorus_glob';
 
 const GRAVITY: Record<ProjectileKind, number> = {
   arrow: 0.05,
@@ -29,6 +30,8 @@ const GRAVITY: Record<ProjectileKind, number> = {
   rift_bolt: 0,
   malware: 0,
   herobrine_bolt: 0,
+  // V6: a Chorus Beast's throw (no drag: it follows exactly the arc it showed)
+  chorus_glob: CHORUS_GLOB_GRAVITY,
 };
 
 export interface ProjectileHit {
@@ -209,7 +212,7 @@ export class Projectile extends Entity {
     }
     // Drag & gravity
     const inWater = this.dim.getState(Math.floor(this.x), Math.floor(this.y), Math.floor(this.z)) !== 0 && this.isInFluid();
-    const drag = inWater ? 0.6 : this.kind === 'fireball' || this.kind === 'small_fireball' || this.kind === 'dragon_fireball' || this.kind === 'rift_bolt' || this.kind === 'malware' || this.kind === 'herobrine_bolt' ? 1 : 0.99;
+    const drag = inWater ? 0.6 : this.kind === 'fireball' || this.kind === 'small_fireball' || this.kind === 'dragon_fireball' || this.kind === 'rift_bolt' || this.kind === 'malware' || this.kind === 'herobrine_bolt' || this.kind === 'chorus_glob' ? 1 : 0.99;
     this.vx *= drag;
     this.vy *= drag;
     this.vz *= drag;

@@ -38,6 +38,17 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   // V6 - The End Expansion
   { id: 'enter_expanded_end', title: 'The Expanded End', description: 'Reach the Expanded End', icon: 'end_stone_bricks', parent: 'kill_dragon', category: 'end' },
   { id: 'all_expanded_biomes', title: 'Every Corner of the End', description: 'Visit all seven biomes of the Expanded End', icon: 'compass', parent: 'enter_expanded_end', category: 'end' },
+  // V6 phase 2: the Expanded End's mobs and resources
+  { id: 'feed_endling', title: 'A Small Friend', description: 'Feed an Endling', icon: 'chorus_fruit', parent: 'enter_expanded_end', category: 'end' },
+  { id: 'void_slip', title: 'Back From the Edge', description: "Survive a Void Stalker's void slip, then defeat it", icon: 'void_stalker_hide', parent: 'enter_expanded_end', category: 'end' },
+  { id: 'chorus_beast', title: 'Gentle Giant', description: 'Calm or defeat an angered Chorus Beast', icon: 'chorus_fiber', parent: 'enter_expanded_end', category: 'end' },
+  { id: 'kill_end_phantom', title: 'Out of the Light', description: 'Defeat an End Phantom', icon: 'end_phantom_membrane', parent: 'enter_expanded_end', category: 'end' },
+  { id: 'mine_crystal_cluster', title: 'Crystal Clear', description: 'Mine an End Crystal Cluster', icon: 'end_crystal_cluster', parent: 'enter_expanded_end', category: 'end' },
+  { id: 'obtain_ender_scrap', title: 'Deep in the Highlands', description: 'Obtain Ender Scrap', icon: 'ender_scrap', parent: 'enter_expanded_end', category: 'end' },
+  { id: 'obtain_ender_alloy', title: 'Forged in the End', description: 'Obtain an Ender Alloy Ingot', icon: 'ender_alloy_ingot', parent: 'obtain_ender_scrap', category: 'end' },
+  { id: 'obtain_astral_dust', title: 'Stardust', description: 'Obtain Astral Dust', icon: 'astral_dust', parent: 'obtain_ender_alloy', category: 'end' },
+  { id: 'ender_alloy_armor', title: 'Clad in the End', description: 'Wear a full set of Ender Alloy armor', icon: 'ender_alloy_chestplate', parent: 'obtain_ender_alloy', category: 'end' },
+  { id: 'expansion_hunter', title: 'Hunter of the Expanded End', description: 'Defeat every kind of creature of the Expanded End', icon: 'void_shard', parent: 'enter_expanded_end', category: 'end' },
   // The hidden chain (V3): nothing here is explained before it happens
   { id: 'mysterious_potion', title: 'Unlabeled', description: 'Find the potion hidden in a witch\'s hut', icon: 'mysterious_potion', parent: 'root', category: 'farlands', secret: true },
   { id: 'enderman_kills_dragon', title: 'The Farlands Remains', description: 'Let an Enderman end the Ender Dragon, with every crystal broken', icon: 'ender_pearl', parent: 'mysterious_potion', category: 'farlands', secret: true },

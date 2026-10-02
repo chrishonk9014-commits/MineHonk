@@ -457,7 +457,7 @@ await run('end-outer', async () => {
   await setLook(0.785, 0.3);
   return measure('end-outer');
 });
-for (const biome of ['pale_plains', 'shattered_spires', 'floating_archipelago', 'hollow_isles', 'crystal_fields', 'dune_isles', 'mist_hollows']) {
+for (const biome of ['end_barrens', 'shattered_end', 'astral_end', 'highlands', 'end_crystal_fields', 'chorus_forest', 'void_wastes']) {
   await run(`end-${biome}`, async () => {
     const r = await page.evaluate((b) => window.minehonk.game.adminRequest({ a: 'v6', op: 'tp_biome', biome: b }), biome);
     if (!r.ok) throw new Error(r.text);

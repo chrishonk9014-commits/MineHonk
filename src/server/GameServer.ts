@@ -59,6 +59,8 @@ export class GameServer {
   theEnd: import('./systems/TheEnd').EndSystem | null = null;
   /** V6: the Expansion Portal and the Expanded End. */
   endExpansion: import('./systems/EndExpansion').EndExpansionSystem | null = null;
+  /** V6 phase 2: the Expanded End's mobs. */
+  endMobs: import('./systems/EndMobs').EndMobsSystem | null = null;
   farlands: import('./systems/Farlands').FarlandsSystem | null = null;
   /** Fireworks, fishing, compasses, jukeboxes, beacons (installed by gameplay). */
   gadgets: import('./systems/Gadgets').Gadgets | null = null;

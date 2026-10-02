@@ -9,6 +9,11 @@
 
 /** World generator version that first has the approach gap (V6 worlds). */
 export const EXPANSION_GENERATOR = 6;
+/**
+ * Generator version from which the Expanded End has its phase 2 surfaces,
+ * ores and plants. Worlds made by generator 6 keep their phase 1 Expanded End.
+ */
+export const EXPANSION_RESOURCES_GENERATOR = 7;
 
 /**
  * V6 worlds: the outer islands thin out between these distances from (0, 0)

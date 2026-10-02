@@ -231,7 +231,9 @@ export class Workstations {
     if (right) {
       const rdef = items[right.id]!;
       const maxDur = ldef.def.durability ?? 0;
-      if (maxDur > 0 && ldef.def.repair && rdef.id === ldef.def.repair) {
+      // The repair material is an item id or an item tag (planks; V6: either membrane for Elytra)
+      const rep = ldef.def.repair;
+      if (maxDur > 0 && rep && (rdef.id === rep || rdef.tags.has(rep))) {
         // Repair with material: each unit restores a quarter
         let dmg = left.damage ?? 0;
         if (dmg <= 0) return { stack: null, cost: 0, material: 0 };

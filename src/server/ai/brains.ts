@@ -2,6 +2,7 @@
 import type { Mob } from '../entity/Mob';
 import { isPlayer } from '../entity/Mob';
 import * as G from './goals';
+import * as E from './endGoals';
 import type { Entity } from '../entity/Entity';
 import { items } from '../../common/registry/items';
 
@@ -317,6 +318,47 @@ export function installBrain(m: Mob): void {
       m.addGoal(6, new G.LookAtPlayerGoal(24));
       m.addTargetGoal(1, new G.HurtByTargetGoal());
       m.addTargetGoal(2, new G.NearestTargetGoal(G.nearestPlayerTarget(64), false, 0.5));
+      break;
+    // V6 phase 2: the Expanded End (telegraphed attacks, see endGoals.ts)
+    case 'endling':
+      m.addGoal(0, new G.FloatGoal());
+      m.addGoal(1, new G.PanicGoal(1.6));
+      m.addGoal(2, new G.BreedGoal());
+      m.addGoal(3, new G.TemptGoal(breed, 1.1));
+      m.addGoal(4, new G.FollowParentGoal());
+      m.addGoal(5, new G.WanderGoal(0.9, 1 / 60, 8));
+      m.addGoal(6, new G.LookAtPlayerGoal(6));
+      m.addGoal(7, new G.LookRandomGoal());
+      break;
+    case 'void_stalker':
+      m.addGoal(0, new G.FloatGoal());
+      m.addGoal(1, new E.VoidSlipGoal());
+      m.addGoal(2, new E.StalkerLungeGoal());
+      m.addGoal(5, new G.WanderGoal(0.8, 1 / 80));
+      m.addGoal(6, new G.LookAtPlayerGoal(12));
+      m.addGoal(7, new G.LookRandomGoal());
+      m.addTargetGoal(1, new G.HurtByTargetGoal());
+      m.addTargetGoal(2, new G.NearestTargetGoal(G.nearestPlayerTarget(24), true, 0.2));
+      break;
+    case 'chorus_beast':
+      m.addGoal(0, new G.FloatGoal());
+      m.addGoal(2, new E.BeastAttackGoal());
+      m.addGoal(5, new G.WanderGoal(0.6, 1 / 160, 8));
+      m.addGoal(6, new G.LookAtPlayerGoal(10));
+      m.addGoal(7, new G.LookRandomGoal());
+      m.addTargetGoal(1, new E.BeastTargetGoal());
+      break;
+    case 'end_crystal_mite':
+      m.addGoal(0, new G.FloatGoal());
+      m.addGoal(2, new E.MiteGoal());
+      m.addGoal(5, new G.WanderGoal(0.8, 1 / 40, 6));
+      m.addTargetGoal(1, new G.HurtByTargetGoal());
+      m.addTargetGoal(2, new G.NearestTargetGoal(G.nearestPlayerTarget(12), true, 0.1));
+      break;
+    case 'end_phantom':
+      m.addGoal(2, new E.PhantomGoal());
+      m.addTargetGoal(1, new G.HurtByTargetGoal());
+      m.addTargetGoal(2, new G.NearestTargetGoal(G.nearestPlayerTarget(48), false, 0.05));
       break;
     case 'dragon':
     case 'the_error':

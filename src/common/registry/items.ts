@@ -92,6 +92,7 @@ export function initItems(): void {
       creative: autoTab(bd),
       fuel: typeof bd.data?.fuel === 'number' ? bd.data.fuel : bd.flammable && ['planks', 'logs'].some((t) => bd.tags?.includes(t)) ? 300 : bd.flammable && bd.tags?.includes('wooden_slabs') ? 150 : bd.id === 'coal_block' ? 16000 : undefined,
       tags: [...(bd.tags ?? []), 'block'],
+      tooltip: typeof bd.data?.tooltip === 'string' ? bd.data.tooltip : undefined,
     });
   }
   for (const d of explicit.values()) register(d);

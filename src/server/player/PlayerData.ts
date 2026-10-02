@@ -5,6 +5,7 @@ import type { DimensionId } from '../../common/data/biomes';
 import { stackOf } from '../../common/game/itemstack';
 import { maxHealthFor, GAME_MODES, type GameMode } from '../../common/game/gamemode';
 import { loadAdminState } from '../admin/adminState';
+import { PHASE1_BIOME_IDS } from '../../common/endExpansion/biomes';
 
 export const PLAYER_DATA_VERSION = 1;
 
@@ -59,7 +60,9 @@ export class PlayerData {
     (p as { fireTicks?: number }).fireTicks = num(raw.fire, 0);
     if (Array.isArray(raw.caveBiomes)) for (const b of raw.caveBiomes) if (typeof b === 'number' && b > 0 && b < 16) p.visitedCaveBiomes.add(b);
     // V6: the Expanded End's biomes this player has been to
-    if (Array.isArray(raw.endBiomes)) for (const b of raw.endBiomes) if (typeof b === 'string' && b.length < 64) p.visitedEndBiomes.add(b);
+    // (V6 phase 2 renamed the Expanded End's biomes: a phase 1 save lists them under their old ids)
+    if (Array.isArray(raw.endBiomes)) for (const b of raw.endBiomes) if (typeof b === 'string' && b.length < 64) p.visitedEndBiomes.add(PHASE1_BIOME_IDS[b] ?? b);
+    if (Array.isArray(raw.endKills)) for (const k of raw.endKills) if (typeof k === 'string' && k.length < 64) p.expansionKills.add(k);
     if (typeof raw.wardenWarning === 'number' && raw.wardenWarning >= 0 && raw.wardenWarning <= 4) p.wardenWarning = Math.floor(raw.wardenWarning);
     const ld = raw.lastDeath as Record<string, unknown> | undefined;
     if (ld && DIMS.includes(ld.dim as DimensionId) && [ld.x, ld.y, ld.z].every((v) => typeof v === 'number' && Number.isFinite(v))) p.lastDeath = { dim: ld.dim as DimensionId, x: ld.x as number, y: ld.y as number, z: ld.z as number };
@@ -100,6 +103,7 @@ export class PlayerData {
       wardenWarning: p.wardenWarning || undefined,
       caveBiomes: p.visitedCaveBiomes.size ? [...p.visitedCaveBiomes] : undefined,
       endBiomes: p.visitedEndBiomes.size ? [...p.visitedEndBiomes] : undefined,
+      endKills: p.expansionKills.size ? [...p.expansionKills] : undefined,
       endings: p.endings.size ? [...p.endings] : undefined,
       pendingEnding: p.pendingEnding ?? undefined,
       endEntry: p.endEntry ?? undefined,

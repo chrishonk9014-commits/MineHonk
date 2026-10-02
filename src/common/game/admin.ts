@@ -6,6 +6,7 @@
 import type { DimensionId } from '../data/biomes';
 import { GAME_MODES, DIFFICULTIES, type GameMode, type Difficulty } from './gamemode';
 import { EXPANSION_BIOME_IDS } from '../endExpansion/biomes';
+import { expansionGiveSets } from '../endExpansion/resources';
 
 export const ADMIN_DIMENSIONS: DimensionId[] = ['overworld', 'nether', 'end', 'farlands', 'computer'];
 
@@ -96,7 +97,7 @@ export const V55_OPS = [
 ] as const;
 export type V55Op = (typeof V55_OPS)[number];
 /** V6: the End Expansion's portal and travel to the Expanded End (all cheats: never advancements). */
-export const V6_OPS = ['status', 'activate', 'deactivate', 'build_portal', 'tp_portal', 'tp_arrival', 'tp_biome', 'where', 'defeat_dragon'] as const;
+export const V6_OPS = ['status', 'activate', 'deactivate', 'build_portal', 'tp_portal', 'tp_arrival', 'tp_biome', 'where', 'defeat_dragon', 'give_set', 'kill_mobs', 'mob_spawning_on', 'mob_spawning_off'] as const;
 export type V6Op = (typeof V6_OPS)[number];
 
 export function structureName(id: string): string {
@@ -141,7 +142,7 @@ export type AdminAction =
   /** V5.5: the Herobrine story (all cheats: never advancements). */
   | { a: 'v55'; op: V55Op }
   /** V6: the End Expansion (tp_biome names one of the Expanded End's biomes). */
-  | { a: 'v6'; op: V6Op; biome?: string };
+  | { a: 'v6'; op: V6Op; biome?: string; set?: string };
 
 export type AdminActionName = AdminAction['a'];
 
@@ -165,6 +166,7 @@ export function validateAdmin(raw: unknown): AdminAction | null {
     case 'v6':
       if (!V6_OPS.includes(m.op as V6Op)) return null;
       if (m.op === 'tp_biome') return typeof m.biome === 'string' && EXPANSION_BIOME_IDS.includes(m.biome) ? { a: 'v6', op: 'tp_biome', biome: m.biome } : null;
+      if (m.op === 'give_set') return typeof m.set === 'string' && expansionGiveSets().some((g) => g.id === m.set) ? { a: 'v6', op: 'give_set', set: m.set } : null;
       return { a: 'v6', op: m.op as V6Op };
     case 'v4':
       if (!V4_OPS.includes(m.op as V4Op)) return null;

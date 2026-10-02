@@ -6,6 +6,7 @@ import { items } from '../../common/registry/items';
 import type { ServerPlayer } from '../player/ServerPlayer';
 import { STATE_FLUID, blocks, STATE_BLOCK } from '../../common/registry/blocks';
 import { beltUnder } from '../../common/engineering/conveyor';
+import { isEnderAlloy } from '../../common/endExpansion/resources';
 
 export const ITEM_DESPAWN_TICKS = 6000;
 
@@ -61,7 +62,10 @@ export class ItemEntity extends Entity {
     b.vz *= f;
     b.vy *= 0.98;
     if (b.onGround && b.vy < 0) b.vy *= -0.5;
+    if (b.onGround && this.age % 10 === 0) this.lastGround = { x: Math.floor(b.x), y: Math.floor(b.y), z: Math.floor(b.z) };
     if (b.y < -64) {
+      // V6: Ender Alloy comes back out of the void, onto the nearest safe ground
+      if (isEnderAlloy(itemIdOf(this.stack)) && this.returnFromVoid()) return;
       this.remove();
       return;
     }
@@ -85,6 +89,28 @@ export class ItemEntity extends Entity {
     // Burn in fire
     const inside = this.dim.getState(Math.floor(b.x), Math.floor(b.y), Math.floor(b.z));
     if (STATE_FLUID[inside] === 0 && blocks[STATE_BLOCK[inside]!]!.def.model === 'fire' && !items[this.stack.id]?.def.fireResistant) this.remove();
+  }
+
+  /** Where it last lay on the ground (for Ender Alloy's way back out of the void). */
+  private lastGround: { x: number; y: number; z: number } | null = null;
+
+  /**
+   * Puts an Ender Alloy item that fell into the void back on the nearest safe
+   * ground (or where it last lay); with nowhere loaded to go yet, it waits
+   * just above the void's floor and tries again.
+   */
+  private returnFromVoid(): boolean {
+    const b = this.body;
+    const spot = this.dim.server.endMobs?.groundNear(this.dim, b.x, b.z, 48) ?? this.lastGround;
+    b.vx = b.vy = b.vz = 0;
+    if (!spot) {
+      b.y = -63;
+      return true;
+    }
+    this.setPos(spot.x + 0.5, spot.y + 0.1, spot.z + 0.5);
+    this.dim.server.particles(this.dim, 'portal', spot.x + 0.5, spot.y + 0.4, spot.z + 0.5, 20, 0.4);
+    this.dim.server.playSound(this.dim, 'teleport', spot.x + 0.5, spot.y, spot.z + 0.5, 0.6, 1.4);
+    return true;
   }
 
   /** Attempts pickup by a player; returns true if anything was collected. */

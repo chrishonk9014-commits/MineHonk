@@ -24,6 +24,9 @@ import { TempleTrials } from './systems/TempleTrials';
 import { Engineering } from './engineering/Engineering';
 import { HerobrineSystem } from './herobrine/Herobrine';
 import { EndExpansionSystem } from './systems/EndExpansion';
+import { EndMobsSystem } from './systems/EndMobs';
+import { itemIdOf, type ItemStack } from '../common/game/itemstack';
+import { OFFHAND } from './player/Inventory';
 
 export function installGameplay(server: GameServer): void {
   const mobs = new MobSystem(server);
@@ -40,6 +43,9 @@ export function installGameplay(server: GameServer): void {
   // V6: the Expansion Portal on the main island and the Expanded End beyond
   const expansion = new EndExpansionSystem(server);
   server.endExpansion = expansion;
+  // V6 phase 2: the Expanded End's mobs
+  const endMobs = new EndMobsSystem(server);
+  server.endMobs = endMobs;
   const far = new FarlandsSystem(server);
   server.farlands = far;
   const gadgets = new Gadgets(server);
@@ -52,7 +58,13 @@ export function installGameplay(server: GameServer): void {
   server.sculk = sculk;
   server.warden = new WardenSystem(server);
   power.extraPower = (dim, x, y, z) => sculk.sensorPower(dim, x, y, z);
-  h.useItem = (p, stack, hand) => !!server.herobrine?.useItem(p, stack) || !!server.endgame?.useItem(p, stack) || mobs.useItem(p, stack) || end.fillBottle(p, stack) || ws.fillBottle(p, stack) || ws.throwSplash(p, stack) || end.useItem(p, stack) || far.useItem(p, stack) || gadgets.useItem(p, stack, hand);
+  // V6: a Void Pack opens its nine slots
+  const voidPack = (p: Parameters<NonNullable<typeof h.useItem>>[0], stack: ItemStack, hand: number): boolean => {
+    if (itemIdOf(stack) !== 'void_pack') return false;
+    it.containers.openVoidPack(p, hand === 1 ? OFFHAND : p.selectedSlot);
+    return true;
+  };
+  h.useItem = (p, stack, hand) => voidPack(p, stack, hand) || !!server.herobrine?.useItem(p, stack) || !!server.endgame?.useItem(p, stack) || mobs.useItem(p, stack) || end.fillBottle(p, stack) || ws.fillBottle(p, stack) || ws.throwSplash(p, stack) || end.useItem(p, stack) || far.useItem(p, stack) || gadgets.useItem(p, stack, hand);
   const quests = new StructureQuests(server);
   server.structureQuests = quests;
   const temples = new TempleTrials(server);
@@ -62,7 +74,7 @@ export function installGameplay(server: GameServer): void {
   h.useBlock = (p, x, y, z, state) => !!server.herobrine?.useBlock(p, x, y, z, state) || quests.useBlock(p, x, y, z, state) || temples.useBlock(p, x, y, z, state) || engineering.useBlock(p, x, y, z, state) || ws.useBlock(p, x, y, z, state);
   h.windowAction = (p, m) => ws.windowAction(p, m);
   const prevUseOnBlock = h.useItemOnBlock;
-  h.useItemOnBlock = (p, stack, x, y, z, face) => end.useOnBlock(p, stack, x, y, z) || far.useOnBlock(p, stack, x, y, z) || mobs.useSpawnEgg(p, stack, x, y, z, face) || gadgets.useOnBlock(p, stack, x, y, z, face) || !!prevUseOnBlock?.(p, stack, x, y, z, face);
+  h.useItemOnBlock = (p, stack, x, y, z, face) => voidPack(p, stack, 0) || end.useOnBlock(p, stack, x, y, z) || far.useOnBlock(p, stack, x, y, z) || mobs.useSpawnEgg(p, stack, x, y, z, face) || gadgets.useOnBlock(p, stack, x, y, z, face) || !!prevUseOnBlock?.(p, stack, x, y, z, face);
   h.enterPortal = (p, kind) => end.enterPortal(p, kind);
   mobs.extraEntity = (dim, type, x, y, z) => {
     if (type !== 'end_crystal') return false;
@@ -104,6 +116,7 @@ export function installGameplay(server: GameServer): void {
   h.tick = () => {
     prevTick?.();
     mobs.tick();
+    endMobs.tick();
     mobs.tickArrowPickup();
     ws.tick();
     portals.tick();

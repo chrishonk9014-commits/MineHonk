@@ -80,12 +80,14 @@ export class EndTerrain {
   /** V6 worlds: the outer islands stop short of the Expanded End. */
   private readonly approachGap: boolean;
   private expansionTerrain: ExpansionTerrain | null = null;
+  private readonly version: number;
 
   constructor(
     readonly seed: number,
     version = LATEST_GENERATOR,
   ) {
     this.approachGap = version >= EXPANSION_GENERATOR;
+    this.version = version;
     const r = (salt: number): Random => new Random(hashInts(seed, salt, 0xe4d));
     this.field = new Octave2(r(1), 3, 110);
     this.hills = new Octave2(r(2), 2, 36);
@@ -96,7 +98,7 @@ export class EndTerrain {
 
   /** The Expanded End's terrain (built on first use). */
   get expansion(): ExpansionTerrain {
-    return (this.expansionTerrain ??= new ExpansionTerrain(this.seed));
+    return (this.expansionTerrain ??= new ExpansionTerrain(this.seed, this.version));
   }
 
   private fieldValue(x: number, z: number, d: number): number {

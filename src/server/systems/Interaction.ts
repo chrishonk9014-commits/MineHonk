@@ -882,10 +882,11 @@ export class Interaction {
     this.containers.syncInventory(p, false);
   }
 
-  dropAll(p: ServerPlayer): void {
+  /** Drops a dead player's whole inventory (except what `keep` says stays). */
+  dropAll(p: ServerPlayer, keep?: (s: ItemStack) => boolean): void {
     for (let i = 0; i < p.inventory.size; i++) {
       const s = p.inventory.get(i);
-      if (!s) continue;
+      if (!s || keep?.(s)) continue;
       if (enchantLevel(s, 'vanishing_curse')) {
         p.inventory.set(i, null);
         continue;
@@ -1113,7 +1114,8 @@ export class Interaction {
     if (def.entity === 'furnace' || def.entity === 'chest' || def.entity === 'barrel') {
       this.containers.refreshViewers(dim, x, y, z);
     }
-    void p;
+    // V6: chorus broken near a Chorus Beast angers it; a mined End Crystal Cluster may let mites out
+    this.server.endMobs?.onBlockBroken(p, dim, x, y, z, def.id);
   }
 
   // ------------------------------------------------------------------ achievements
@@ -1141,6 +1143,7 @@ export class Interaction {
   onBlockMined(p: ServerPlayer, blockId: string, drops: ItemStack[], cheat = false): void {
     if (cheat) return;
     this.grant(p, 'mine_block');
+    if (blockId === 'end_crystal_cluster' && drops.length) this.grant(p, 'mine_crystal_cluster');
     const held = p.heldItem();
     if (held && items[held.id]!.def.tool?.type === 'pickaxe' && (blockId === 'stone' || blockId === 'cobblestone' || blockId === 'deepslate')) this.grant(p, 'stone_age');
     void drops;
@@ -1159,6 +1162,14 @@ export class Interaction {
     if (id.endsWith('_froglight')) this.grant(p, 'froglight');
     if (id === 'resonance_charm') this.grant(p, 'vault_reward');
     if (id === 'enchanted_book' && stack.tag?.stored?.silent_stride) this.grant(p, 'silent_stride');
+    this.expansionItem(p, id);
+  }
+
+  /** V6 phase 2: the Expanded End's resources (picked up, crafted or smelted). */
+  private expansionItem(p: ServerPlayer, id: string): void {
+    if (id === 'ender_scrap') this.grant(p, 'obtain_ender_scrap');
+    if (id === 'ender_alloy_ingot') this.grant(p, 'obtain_ender_alloy');
+    if (id === 'astral_dust') this.grant(p, 'obtain_astral_dust');
   }
 
   onCrafted(p: ServerPlayer, stack: ItemStack): void {
@@ -1178,12 +1189,15 @@ export class Interaction {
       const all = [36, 37, 38, 39].every((i) => items[p.inventory.get(i)?.id ?? 0]?.id.startsWith('netherite_'));
       if (all) this.grant(p, 'netherite_armor');
     }
+    this.expansionItem(p, id);
+    if (id.startsWith('ender_alloy_')) this.server.endMobs?.checkArmor(p);
   }
 
   onSmelted(p: ServerPlayer, stack: ItemStack): void {
     if (isAdminStack(stack)) return;
     const id = itemIdOf(stack);
     if (id === 'iron_ingot') this.grant(p, 'smelt_iron');
+    this.expansionItem(p, id);
   }
 
   checkXpAchievements(p: ServerPlayer, level: number): void {
@@ -1211,7 +1225,7 @@ export function lookDir(yaw: number, pitch: number): [number, number, number] {
 
 function strippedOf(id: string): string | null {
   if (id.startsWith('stripped_')) return null;
-  if (id.endsWith('_log') || id.endsWith('_wood') || id.endsWith('_stem') || id.endsWith('_hyphae')) return 'stripped_' + id;
+  if (id.endsWith('_log') || id.endsWith('_wood') || id.endsWith('_stem') || id.endsWith('_hyphae') || id === 'chorus_stalk') return 'stripped_' + id;
   return null;
 }
 

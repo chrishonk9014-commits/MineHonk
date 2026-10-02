@@ -96,7 +96,7 @@ export const V55_OPS = [
 ] as const;
 export type V55Op = (typeof V55_OPS)[number];
 /** V6: the End Expansion's portal and travel to the Expanded End (all cheats: never advancements). */
-export const V6_OPS = ['status', 'activate', 'deactivate', 'build_portal', 'tp_portal', 'tp_arrival', 'tp_biome', 'where'] as const;
+export const V6_OPS = ['status', 'activate', 'deactivate', 'build_portal', 'tp_portal', 'tp_arrival', 'tp_biome', 'where', 'defeat_dragon'] as const;
 export type V6Op = (typeof V6_OPS)[number];
 
 export function structureName(id: string): string {

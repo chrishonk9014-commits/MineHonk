@@ -16,7 +16,7 @@
 import type { Chunk } from '../world/chunk';
 import { Octave2, clamp } from '../math/noise';
 import { Random, hash3, hashInts } from '../math/rng';
-import { S, stateOf } from '../registry/blocks';
+import { S } from '../registry/blocks';
 import { biomeNum } from '../registry/biomes';
 import type { DecorView } from './decorate/view';
 import { EXPANSION_BIOMES, type ExpansionBiome, type FeatureSpec } from '../endExpansion/biomes';
@@ -35,9 +35,6 @@ export interface Region {
   biome: number;
   /** Approximate distance (blocks) to the nearest region of another biome. */
   edge: number;
-  /** Cell coordinates (for admin lookups). */
-  gx: number;
-  gz: number;
 }
 
 /** Arrival island: the platform and return portal stand on it. */
@@ -81,6 +78,9 @@ export class ExpansionTerrain {
   private readonly noise: BiomeNoise[];
   private readonly biomeNums: number[];
   private arrivalCache: Arrival | null = null;
+  /** Scratch for regionAt: distances to the 3x3 sites around a column and their biomes. */
+  private readonly nearD = new Float64Array(9);
+  private readonly nearB = new Int32Array(9);
 
   constructor(readonly seed: number) {
     const r = (salt: number): Random => new Random(hashInts(seed, salt, 0xe6a));
@@ -138,10 +138,8 @@ export class ExpansionTerrain {
     const b1 = bs[i1]!;
     let d2 = Infinity;
     for (let i = 0; i < 9; i++) if (bs[i] !== b1 && ds[i]! < d2) d2 = ds[i]!;
-    return { biome: b1, edge: Number.isFinite(d2) ? (d2 - d1) / 2 : REGION_CELL / 2, gx: cx + (i1 % 3) - 1, gz: cz + Math.floor(i1 / 3) - 1 };
+    return { biome: b1, edge: Number.isFinite(d2) ? (d2 - d1) / 2 : REGION_CELL / 2 };
   }
-  private readonly nearD = new Float64Array(9);
-  private readonly nearB = new Int32Array(9);
 
   /** Registry biome number at a column inside the ring. */
   biomeAt(x: number, z: number): number {
@@ -216,7 +214,8 @@ export class ExpansionTerrain {
         const floor = bottom + Math.floor((topY - bottom) * 0.38);
         const h = Math.min(topY - floor - 7, Math.floor(4 + open * 32));
         push(bottom, floor - 1);
-        push(floor + h, topY);
+        // Where the caves are widest their roof has fallen in: sinkholes open to the sky
+        if (open < 0.3) push(floor + h, topY);
       } else push(bottom, topY);
     }
     // Floating chains: strings of small islands at two heights, broken into beads
@@ -489,8 +488,3 @@ const N4 = [
   [0, 1],
   [0, -1],
 ] as const;
-
-/** The return portal's frame states, for builders that need them without the server. */
-export function portalFrameState(lit: boolean): number {
-  return stateOf('expansion_portal_frame', { lit });
-}

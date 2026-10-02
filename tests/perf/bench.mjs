@@ -445,6 +445,30 @@ for (const dim of ['nether', 'end', 'farlands']) {
   });
 }
 
+// V6: the End's outer islands next to the Expanded End's seven biomes (compare at RD=8)
+await run('end-outer', async () => {
+  if ((await page.evaluate(() => window.minehonk.game.dimension)) !== 'end') {
+    await cmd('/dimension end');
+    await page.waitForFunction(() => window.minehonk.game.dimension === 'end', null, { timeout: 180000 });
+  }
+  await page.evaluate(() => (window.minehonk.game.player.flying = true));
+  await cmd('/tp 1500 95 0');
+  await settle(60000);
+  await setLook(0.785, 0.3);
+  return measure('end-outer');
+});
+for (const biome of ['pale_plains', 'shattered_spires', 'floating_archipelago', 'hollow_isles', 'crystal_fields', 'dune_isles', 'mist_hollows']) {
+  await run(`end-${biome}`, async () => {
+    const r = await page.evaluate((b) => window.minehonk.game.adminRequest({ a: 'v6', op: 'tp_biome', biome: b }), biome);
+    if (!r.ok) throw new Error(r.text);
+    await page.evaluate(() => (window.minehonk.game.player.flying = true));
+    await page.evaluate(() => (window.minehonk.game.player.body.y += 25));
+    await settle(60000);
+    await setLook(0.785, 0.3);
+    return measure(`end-${biome}`);
+  });
+}
+
 await cmd('/dimension overworld').catch(() => {});
 await page.waitForFunction(() => window.minehonk.game.dimension === 'overworld', null, { timeout: 180000 }).catch(() => {});
 await wait(2000);

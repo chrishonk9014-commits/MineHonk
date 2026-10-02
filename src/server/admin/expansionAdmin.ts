@@ -24,6 +24,8 @@ export function expansionAdmin(sys: EndExpansionSystem, h: ExpansionAdminHelpers
   const gen = s.dim('end').generator as EndGenerator;
   const ex = gen.terrain.expansion;
   const ok = (text: string): Result => ({ ok: true, text, data: sys.status(p) });
+  // Teleports answer twice: this first (the panel shows it as progress), then the landing
+  const pending = (text: string): Result => ({ ok: true, text, data: { ...sys.status(p), pending: true } });
   switch (op) {
     case 'status':
       return { ok: true, text: '', data: sys.status(p) };
@@ -38,12 +40,12 @@ export function expansionAdmin(sys: EndExpansionSystem, h: ExpansionAdminHelpers
     case 'tp_portal': {
       const site = sys.site();
       h.queueTeleport(p, site.x, site.y, site.z - 3, 'Expansion Portal', true);
-      return ok('Preparing a landing by the Expansion Portal...');
+      return pending('Preparing a landing by the Expansion Portal...');
     }
     case 'tp_arrival': {
       const L = arrivalLayout(ex.arrival());
       h.queueTeleport(p, L.stand.x, L.stand.y, L.stand.z, 'arrival platform', false);
-      return ok('Preparing a landing on the arrival platform...');
+      return pending('Preparing a landing on the arrival platform...');
     }
     case 'tp_biome': {
       const i = expansionBiomeIndex(biome ?? '');
@@ -55,7 +57,17 @@ export function expansionAdmin(sys: EndExpansionSystem, h: ExpansionAdminHelpers
       const spot = ex.findBiome(i, from.x, from.z);
       if (!spot) return { ok: false, text: `No ${def.name} found.` };
       h.queueTeleport(p, spot.x, spot.y, spot.z, def.name, true);
-      return ok(`Found the ${def.name} at ${spot.x}, ${spot.z}. Preparing a landing...`);
+      return pending(`Found the ${def.name} at ${spot.x}, ${spot.z}. Preparing a landing...`);
+    }
+    case 'defeat_dragon': {
+      // For testing the portal: the dragon is marked cheat-made first, so its defeat awards
+      // nothing and its drops and experience are cheat-made; the fight ends as usual (finish())
+      const d = s.theEnd?.fight.dragon;
+      if (!d || d.dead) return { ok: false, text: s.level.flags.dragonKilledOnce === true && !s.level.flags.dragonAlive ? 'The Ender Dragon has already been defeated.' : 'The Ender Dragon is not here: go to the End first.' };
+      d.admin = true;
+      s.level.flags.dragonAdmin = true;
+      d.hurt(d.health + 10000, { source: 'mob', attacker: p });
+      return ok('The Ender Dragon is defeated (a cheat: no advancement, its drops are cheat-made).');
     }
     case 'where': {
       const st = sys.status(p) as { here: { x: number; y: number; z: number; inExpansion: boolean; biome: string | null } };

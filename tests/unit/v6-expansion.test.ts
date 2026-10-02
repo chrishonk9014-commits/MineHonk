@@ -376,6 +376,20 @@ describe('V6 Admin Panel', () => {
       expect(where.text).toContain(b.name);
       expect(where.text).toContain(String(Math.floor(player.x)));
     }
+    // Defeating the dragon from the panel: a cheat kill (no advancement) that still opens the portal
+    await ok({ a: 'v6', op: 'deactivate' });
+    server.level.flags.dragonKilled = false;
+    server.level.flags.dragonKilledOnce = false;
+    const st2 = server.endExpansion!.state!;
+    server.level.flags.expansionPortal = { ...st2, opened: false, cheat: false };
+    server.teleport(player, 0.5, exitPortalY((player.dim.generator as EndGenerator).terrain) + 1, 40.5);
+    await settle(server, 200, () => !!server.theEnd!.fight.dragon);
+    await ok({ a: 'v6', op: 'defeat_dragon' });
+    tick(server, 205);
+    await settle(server, 40);
+    expect(server.level.flags.dragonKilledOnce).toBe(true);
+    expect(player.achievements.has('kill_dragon')).toBe(false);
+    expect(server.endExpansion!.state).toMatchObject({ active: true, opened: true, cheat: false });
     // None of it counts
     expect(player.achievements.has('enter_expanded_end')).toBe(false);
     expect(player.achievements.has('all_expanded_biomes')).toBe(false);

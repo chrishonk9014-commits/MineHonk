@@ -269,6 +269,57 @@ secret story that runs through them. Design notes (with spoilers):
 - Server authoritative, multiplayer-safe, and old worlds load unchanged
   (saves gained a `digital` store and the story's state; nothing else moved).
 
+### Version 6 - The End Expansion
+
+V6 comes in five phases. **Phase 1** adds the Expansion Portal and the
+**Expanded End**, a deeper, farther part of the End, more than 6,000 blocks out.
+It is still the End: going there never changes dimension. Later phases add the
+End City 2.0, mobs, resources, quests, Elytra upgrades, weather events and
+bosses. Design notes: [docs/END_EXPANSION.md](docs/END_EXPANSION.md).
+
+- **The Expansion Portal** stands on the main End island, apart from the exit
+  portal: an upright frame of its own.
+  - It is dark until the Ender Dragon has been defeated, then it comes alive.
+  - The dragon's defeat counts whether it was a normal kill, a cheat-spawned
+    dragon's kill or the Voidbound secret ending.
+  - Worlds where the dragon is already dead get it alive the first time the
+    End loads.
+  - Its frame can't be broken outside creative.
+- **Travel there and back**: the portal takes you to an arrival platform in
+  the Expanded End, always on safe ground. A return portal there takes you back
+  to the main island beside the Expansion Portal. Every player can use it once
+  it is open.
+- **The way there**: in worlds created in V6, the outer islands stop at about
+  4,600 blocks, and nothing but void lies between them and the Expanded End.
+  Older worlds keep their End exactly as it generated (hash tests guard it),
+  and get the Expanded End too.
+- **Seven biomes** in large regions with void gaps between them. Each has its
+  own land, ground, plants, sky tint, fog, light, drifting particles and
+  ambient sound:
+  - **Pale Plains**: wide, flat islands of pale end stone, scattered with
+    tufts of pale grass.
+  - **Shattered Spires**: tall, narrow islands of dark voidstone, broken into
+    sheer stepped cliffs and needle-like spires.
+  - **Floating Archipelago**: strings of small islands hanging in the air at
+    many heights, their tops covered in glowing moss.
+  - **Hollow Isles**: thick islands hollowed out by wide caves, with vines
+    hanging from the cave roofs.
+  - **Crystal Fields**: rolling islands where clusters and spikes of glowing
+    crystal grow from the ground.
+  - **Dune Isles**: large islands of soft end sand shaped into low dunes,
+    under a dusty sky.
+  - **Mist Hollows**: low, scattered islands lost in thick white mist.
+
+  Ten new blocks come with them: Pale End Stone, Voidstone, Luminous Moss,
+  End Sand, Prism Crystal, Pale Grass, Dune Reed, Mist Bloom, Prism Cluster and
+  Void Vines. The F3 screen names the biome you are in.
+- **Two advancements** in the End tab: reaching the Expanded End, and visiting
+  all seven biomes.
+- **Admin Panel**: an End Expansion tab to switch, build and reach the
+  portal, teleport to the arrival platform or any biome, show where you are,
+  and end the dragon fight for testing. As always, nothing done there counts
+  towards advancements.
+
 ### Recipe Book
 
 The book button in the top corner of the inventory and of every workstation
@@ -329,6 +380,7 @@ test also needs `npm run build:server`. More browser checks:
 npm run test:e2e:v1       # Recipe Book, Admin Panel, cheat-free advancements
 npm run test:e2e:render   # culling never changes a pixel
 npm run test:e2e:v4       # the World Update: Error Biome, Glitched Structure, admin tab
+npm run test:e2e:v6       # the End Expansion: the portal, travel, every biome (screenshots)
 ```
 
 ### Performance tools

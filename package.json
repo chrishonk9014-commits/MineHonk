@@ -1,6 +1,6 @@
 {
   "name": "minehonk",
-  "version": "5.5.0",
+  "version": "6.0.0-phase1",
   "private": true,
   "description": "MineHonk - a multiplayer voxel survival sandbox",
   "type": "module",
@@ -20,6 +20,7 @@
     "test:e2e:render": "node tests/e2e/render-equivalence.mjs",
     "test:e2e:v4": "node tests/e2e/v4.mjs",
     "test:e2e:v5": "node tests/e2e/v5.mjs",
+    "test:e2e:v6": "node tests/e2e/v6.mjs",
     "bench": "node tests/perf/bench.mjs"
   },
   "engines": {

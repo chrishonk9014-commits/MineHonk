@@ -63,6 +63,8 @@ export interface ExpansionBiome {
   fog: number;
   /** 0 = clear air, 1 = thick fog. */
   fogDensity: number;
+  /** Ambient light (0..1; the classic End's is 0.2): how bright the biome's ground looks. */
+  light: number;
   /** Ambient particles drifting around the player: colour, motion, how many (0..1), and whether they glow. */
   particles?: { color: number; motion: 'rise' | 'fall' | 'float'; rate: number; glow?: boolean };
   /** Ambient sound bed (a looping synth recipe in src/client/audio/synth.ts). */
@@ -83,6 +85,7 @@ export const EXPANSION_BIOMES: readonly ExpansionBiome[] = [
     sky: 0x3b3552,
     fog: 0x6e6888,
     fogDensity: 0.12,
+    light: 0.62,
     particles: { color: 0xe8e4ff, motion: 'float', rate: 0.15 },
     bed: 'pale_plains',
     palette: { top: 'pale_end_stone', under: 'pale_end_stone', core: 'end_stone', depth: 2 },
@@ -101,6 +104,7 @@ export const EXPANSION_BIOMES: readonly ExpansionBiome[] = [
     sky: 0x24123a,
     fog: 0x3a1f52,
     fogDensity: 0.3,
+    light: 0.42,
     particles: { color: 0x9a6ad8, motion: 'rise', rate: 0.25, glow: true },
     bed: 'shattered_spires',
     palette: { top: 'voidstone', under: 'voidstone', core: 'voidstone', depth: 6 },
@@ -118,10 +122,11 @@ export const EXPANSION_BIOMES: readonly ExpansionBiome[] = [
     sky: 0x0f2f36,
     fog: 0x1d4a50,
     fogDensity: 0.18,
+    light: 0.46,
     particles: { color: 0x6fe3d0, motion: 'rise', rate: 0.35, glow: true },
     bed: 'floating_archipelago',
     palette: { top: 'luminous_moss', under: 'end_stone', core: 'end_stone', depth: 2 },
-    terrain: { scale: 80, cover: 0.36, base: 56, rise: 10, relief: 3, reliefScale: 30, depth: 20, chains: { lift: 28, wave: 20, density: 0.34, thickness: 10, scale: 120 } },
+    terrain: { scale: 80, cover: 0.34, base: 56, rise: 10, relief: 3, reliefScale: 30, depth: 18, chains: { lift: 28, wave: 20, density: 0.27, thickness: 8, scale: 120 } },
     features: [{ kind: 'plant', block: 'pale_grass', perChunk: 4, reach: 0 }],
     mapColor: 0x3fc8b4,
   },
@@ -132,12 +137,13 @@ export const EXPANSION_BIOMES: readonly ExpansionBiome[] = [
     sky: 0x0c1430,
     fog: 0x18244a,
     fogDensity: 0.4,
+    light: 0.3,
     particles: { color: 0x5a7aff, motion: 'fall', rate: 0.2, glow: true },
     bed: 'hollow_isles',
     palette: { top: 'end_stone', under: 'end_stone', core: 'voidstone', depth: 3 },
-    terrain: { scale: 200, cover: 0.55, base: 74, rise: 14, relief: 4, reliefScale: 50, depth: 56, caves: 0.6, caveScale: 46 },
+    terrain: { scale: 200, cover: 0.55, base: 74, rise: 14, relief: 4, reliefScale: 50, depth: 46, caves: 0.5, caveScale: 46 },
     features: [
-      { kind: 'hanging', block: 'void_vines', perChunk: 26, height: 7, reach: 0 },
+      { kind: 'hanging', block: 'void_vines', perChunk: 10, height: 6, reach: 0 },
       { kind: 'cluster', block: 'voidstone', perChunk: 0.4, size: 2, reach: 3 },
     ],
     mapColor: 0x3c3a5a,
@@ -149,14 +155,15 @@ export const EXPANSION_BIOMES: readonly ExpansionBiome[] = [
     sky: 0x3a2440,
     fog: 0x6a4a72,
     fogDensity: 0.15,
+    light: 0.52,
     particles: { color: 0xffe8ff, motion: 'float', rate: 0.3, glow: true },
     bed: 'crystal_fields',
     palette: { top: 'end_stone', under: 'end_stone', core: 'end_stone', depth: 3 },
     terrain: { scale: 150, cover: 0.55, base: 66, rise: 12, relief: 6, reliefScale: 40, depth: 40 },
     features: [
-      { kind: 'spire', block: 'prism_crystal', perChunk: 1.4, height: 4, size: 1, tip: 'prism_cluster', reach: 0 },
-      { kind: 'cluster', block: 'prism_crystal', perChunk: 0.6, size: 1, reach: 2 },
-      { kind: 'plant', block: 'prism_cluster', perChunk: 9, reach: 0 },
+      { kind: 'spire', block: 'prism_crystal', perChunk: 1, height: 4, size: 1, tip: 'prism_cluster', reach: 0 },
+      { kind: 'cluster', block: 'prism_crystal', perChunk: 0.4, size: 1, reach: 2 },
+      { kind: 'plant', block: 'prism_cluster', perChunk: 6, reach: 0 },
     ],
     mapColor: 0xf0c8f0,
   },
@@ -167,6 +174,7 @@ export const EXPANSION_BIOMES: readonly ExpansionBiome[] = [
     sky: 0x3a2c22,
     fog: 0x7a6248,
     fogDensity: 0.5,
+    light: 0.58,
     particles: { color: 0xd8c49a, motion: 'float', rate: 0.6 },
     bed: 'dune_isles',
     palette: { top: 'end_sand', under: 'end_sand', core: 'end_stone', depth: 4 },
@@ -184,6 +192,7 @@ export const EXPANSION_BIOMES: readonly ExpansionBiome[] = [
     sky: 0x8a8e9c,
     fog: 0xc8ccd8,
     fogDensity: 0.85,
+    light: 0.6,
     particles: { color: 0xf0f4ff, motion: 'float', rate: 0.7 },
     bed: 'mist_hollows',
     palette: { top: 'pale_end_stone', under: 'end_stone', core: 'end_stone', depth: 2 },

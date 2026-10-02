@@ -236,7 +236,7 @@ export class Sky {
    * Updates sky for the given time of day. Returns lighting values for the
    * world shader.
    */
-  update(camera: THREE.Camera, dayTime: number, time: number, biomeSky: number, rain: number, thunder: number, underwater: boolean, endAtmos?: { sky: THREE.Color; fog: THREE.Color; density: number; amount: number }): SkyState {
+  update(camera: THREE.Camera, dayTime: number, time: number, biomeSky: number, rain: number, thunder: number, underwater: boolean, endAtmos?: { sky: THREE.Color; fog: THREE.Color; density: number; light: number; amount: number }): SkyState {
     this.group.position.copy(camera.position);
     const u = this.domeMat.uniforms;
     u.uTime!.value = time;
@@ -260,7 +260,7 @@ export class Sky {
       u.uGlowStrength!.value = 0;
       (this.stars.material as THREE.PointsMaterial).opacity = dim === 'end' ? 0.5 * (1 - (ea ? ea.density * ea.amount : 0)) : 0;
       state.daylight = 0;
-      state.ambient = dim === 'nether' ? 0.12 : 0.2;
+      state.ambient = dim === 'nether' ? 0.12 : ea ? 0.2 + (ea.light - 0.2) * ea.amount : 0.2;
       state.fog.copy(fog);
       state.skyTint.setRGB(1, 1, 1);
       u.uGlitch!.value = 0;

@@ -67,7 +67,7 @@ export interface FrameState {
   /** Underground in a cave biome: fog colour/thickness and how far the view has blended in (0..1). */
   cave?: { color: number; density: number; amount: number };
   /** V6: the Expanded End's blended sky tint, fog colour and density, and how far the view has blended in. */
-  endAtmos?: { sky: THREE.Color; fog: THREE.Color; density: number; amount: number };
+  endAtmos?: { sky: THREE.Color; fog: THREE.Color; density: number; light: number; amount: number };
 }
 
 export class WorldRenderer {

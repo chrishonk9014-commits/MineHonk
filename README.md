@@ -275,8 +275,11 @@ V6 comes in five phases. **Phase 1** adds the Expansion Portal and the
 **Expanded End**, a deeper, farther part of the End, more than 6,000 blocks out.
 It is still the End: going there never changes dimension. **Phase 2** fills it
 with five new mobs and its own stone, ores, crystal, chorus wood and Ender
-Alloy. Later phases add the End Guardian construct, machines and Elytra
-upgrades, and the Citadel's boss. Design notes:
+Alloy. **Phase 3** builds it up: new End Cities, the remains of an older
+civilization, five giant structures, their Guardian Constructs, and the
+Dragon's Nest under the main island. Later phases bring quests and the
+ancient machines to life, then Void Storms, the Dragon's expansion and the
+Citadel's boss. Design notes:
 [docs/END_EXPANSION.md](docs/END_EXPANSION.md).
 
 - **The Expansion Portal** stands on the main End island, apart from the exit
@@ -343,13 +346,63 @@ upgrades, and the Citadel's boss. Design notes:
   the **Void Pack**, a 9-slot bag that keeps its contents when you die in the
   void; Endling meat; and the End Phantom Membrane, which repairs Elytra.
   Every recipe is in the Recipe Book.
-- **Twelve advancements** in the End tab: reaching the Expanded End, visiting
-  all seven biomes, and ten for its mobs and resources.
-- **Admin Panel**: an End Expansion tab to switch, build and reach the
-  portal, teleport to the arrival platform or any biome, show where you are,
-  end the dragon fight for testing, spawn the new mobs, give any resource or
-  whole kits, remove the mobs nearby, switch their spawning and count them per
-  biome. As always, nothing done there counts towards advancements.
+- **Eight End City variants** (phase 3), each assembled from pieces with
+  random rotations, sizes and branches, and dressed in its biome's stone and
+  glass:
+  - **Outposts**: watchtowers with bridge stubs, the most common.
+  - **Settlements**: houses round a plaza among chorus gardens, home to
+    Endlings.
+  - **Ruins**: weathered, collapsed and floating pieces of the others.
+  - **Libraries**: floors of bookshelf halls and a sealed archive.
+  - **Observatories**: spires with a dome and a dormant telescope.
+  - **Shipyards**: docks, ships and a crane, sometimes with Elytra (about one
+    in seven).
+  - **Metropolises**: towers linked by sky bridges round a plaza and vault.
+  - **Palaces**: a throne hall behind a sealed crystal vault door, the rarest.
+- **The ancient civilization**, told only in fragments:
+  - Ender Glyph Stone in a script nobody can read.
+  - Broken portals, dormant machines and sealed doors that tell you what they
+    lack.
+  - 38 lore fragments (torn pages, logs, rubbings, star charts) that raise
+    more questions than they answer.
+  - Six End Artifacts and Ancient Maps whose needles point to "a place".
+  - Three ancient weapons: the armor-piercing Ancient Blade, the Voidpiercer,
+    whose bolts fly straight for 32 blocks, and the Shardstaff.
+- **Five giant structures**, about one per 200 x 200 chunks, each announced
+  with a title and a music sting:
+  - the End Colossus, a broken statue floating in pieces;
+  - the Crystal Cathedral;
+  - the Void Observatory over open void;
+  - the End Fortress;
+  - the Fallen City.
+- **Guardian Constructs** guard them, built rather than born: the patrolling
+  Sentinel (a glowing punch, a crystal bolt along a marked line) and the
+  Bulwark (a ground pound telegraphed by glowing cracks, and a shield). They
+  never leave their posts and never come back once destroyed.
+- **The Dragon's Nest**: once the Ender Dragon has died, a crack opens beside
+  the Expansion Portal into a vast hollow under the main island. It is full of
+  empty nest hollows, older stone and its own broken portal. Worlds where the
+  dragon is already dead get it too.
+- **Twenty-five advancements** in the End tab:
+  - reaching the Expanded End and visiting all seven biomes;
+  - ten for its mobs and resources (phase 2);
+  - thirteen for its structures, lore, giants, the Nest and the Bulwark
+    (phase 3).
+- **Admin Panel**: an End Expansion tab to:
+  - switch, build and reach the portal;
+  - teleport to the arrival platform or any biome, and show where you are;
+  - end the dragon fight for testing;
+  - spawn the new mobs and Constructs, remove them, switch their spawning and
+    count them per biome;
+  - give any resource, artifact, weapon, map or lore book, or whole kits;
+  - locate and teleport to the nearest of every structure;
+  - build any structure where you stand;
+  - build the Dragon's Nest and reset a structure's loot.
+
+  As always, nothing done there counts towards advancements.
+- **Old worlds**: phase 3 structures appear only in worlds created from now
+  on, in newly explored chunks. Older worlds load unchanged, and still get the
+  Nest.
 
 ### Recipe Book
 
@@ -411,7 +464,7 @@ test also needs `npm run build:server`. More browser checks:
 npm run test:e2e:v1       # Recipe Book, Admin Panel, cheat-free advancements
 npm run test:e2e:render   # culling never changes a pixel
 npm run test:e2e:v4       # the World Update: Error Biome, Glitched Structure, admin tab
-npm run test:e2e:v6       # the End Expansion: the portal, travel, every biome, the mobs, ores and armor (screenshots)
+npm run test:e2e:v6       # the End Expansion: the portal, travel, every biome, the mobs, ores and armor, every structure, the Constructs and the Dragon's Nest (screenshots)
 ```
 
 ### Performance tools

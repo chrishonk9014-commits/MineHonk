@@ -119,7 +119,9 @@ export class Plan {
   }
 
   add(kind: string, box: Box, build: (v: DecorView) => void): KindPiece {
-    const p = piece(kind, box, build);
+    // Whole blocks: some pieces are laid out along angles
+    const whole = { x0: Math.floor(box.x0), y0: Math.floor(box.y0), z0: Math.floor(box.z0), x1: Math.ceil(box.x1), y1: Math.ceil(box.y1), z1: Math.ceil(box.z1) };
+    const p = piece(kind, whole, build);
     this.pieces.push(p);
     return p;
   }

@@ -80,13 +80,13 @@ function starts(seed: string): Start[] {
 
 describe('where the structures go', () => {
   it('each variant and giant only in its own biomes, inside the ring, clear of the arrival island', () => {
-    for (const seed of ['v6-structures', 'alpha']) {
+    const kinds = new Set<string>();
+    for (const seed of ['v6-structures', 'alpha', 'v6-e2e']) {
       const g = gen(seed);
       const site = new Site(g.terrain.expansion);
       const all = starts(seed);
       expect(all.length).toBeGreaterThan(100);
-      const kinds = new Set(all.map((s) => s.type));
-      for (const v of END_VARIANTS) if (v.id !== 'end_metropolis') expect(kinds.has(v.id), `${seed}: ${v.id}`).toBe(true);
+      for (const s of all) kinds.add(s.type);
       const a = g.terrain.expansion.arrival();
       for (const s of all) {
         const biome = site.biomeId(s.x, s.z);
@@ -106,6 +106,8 @@ describe('where the structures go', () => {
         expect(Math.hypot(nx - a.x, nz - a.z)).toBeGreaterThan(30);
       }
     }
+    // The Palace and the Metropolis can miss a world, not all three
+    for (const v of END_VARIANTS) expect(kinds.has(v.id), v.id).toBe(true);
   }, 300000);
 
   it('nothing new in the classic End: no start reaches a chunk outside the ring', () => {
@@ -383,18 +385,29 @@ function killDragon(server: GameServer, player: ServerPlayer): void {
 }
 
 /** Snapshot of the blocks the Nest must never touch: the exit portal, the pillars, the ring gateways. */
-function protectedBlocks(server: GameServer): string {
+function protectedBlocks(server: GameServer): number[] {
   const end = server.dim('end');
   const g = end.generator as EndGenerator;
   const out: number[] = [];
   const py = exitPortalY(g.terrain);
-  for (let x = -5; x <= 5; x++) for (let z = -5; z <= 5; z++) for (let y = py - 12; y <= py + 5; y++) out.push(end.getState(x, y, z));
+  for (let x = -5; x <= 5; x++) for (let z = -5; z <= 5; z++) for (let y = py - 3; y <= py + 5; y++) out.push(end.getState(x, y, z));
   for (const p of endPillars(g.seed)) for (let dx = -p.radius - 1; dx <= p.radius + 1; dx++) for (let dz = -p.radius - 1; dz <= p.radius + 1; dz++) for (let y = 20; y <= p.height + 1; y++) if (end.isLoaded(p.x + dx, p.z + dz)) out.push(end.getState(p.x + dx, y, p.z + dz));
   for (let n = 0; n < 3; n++) {
     const gw = EndSystem.ringGateway(n);
     if (end.isLoaded(gw.x, gw.z)) for (let dy = -3; dy <= 3; dy++) for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) out.push(end.getState(gw.x + dx, gw.y + dy, gw.z + dz));
   }
-  return out.join(',');
+  return out;
+}
+
+/** The dragon's death fills the exit portal, sets the egg and opens a gateway; nothing else may change. */
+function expectUntouched(before: number[], after: number[]): void {
+  expect(after.length).toBe(before.length);
+  const death = new Set(['end_portal', 'dragon_egg', 'end_gateway', 'bedrock']);
+  for (let i = 0; i < before.length; i++) {
+    if (before[i] === after[i]) continue;
+    expect(before[i], `protected block ${i} was ${blockId(before[i]!)}`).toBe(0);
+    expect(death.has(blockId(after[i]!)), `protected block ${i} became ${blockId(after[i]!)}`).toBe(true);
+  }
 }
 
 describe("the Dragon's Nest", () => {
@@ -411,16 +424,22 @@ describe("the Dragon's Nest", () => {
     tick(server, 40);
     expect(es.nest?.done.length ?? 0).toBe(0);
     const before = protectedBlocks(server);
-    killDragon(server, player);
-    // A chunk per tick: never two in one tick
+    const py = exitPortalY((end.generator as EndGenerator).terrain);
+    const under: [number, number, number][] = [];
+    for (let x = -4; x <= 4; x++) for (let z = -4; z <= 4; z++) for (let y = py - 14; y < py - 3; y++) under.push([x, y, z]);
+    const underBefore = under.map((q) => !!STATE_SOLID[end.getState(...q)]);
+    expect(underBefore.filter(Boolean).length).toBeGreaterThan(under.length / 2);
+    server.theEnd!.fight.dragon!.hurt(10000, { source: 'mob', attacker: player });
+    // A chunk per tick, from the death on: never two in one tick
     let last = es.nest?.done.length ?? 0;
-    for (let i = 0; i < 200 && !es.nest?.built; i++) {
+    for (let i = 0; i < 600 && !es.nest?.built; i++) {
       tick(server, 1);
       const now = es.nest?.done.length ?? 0;
       expect(now - last).toBeLessThanOrEqual(1);
       last = now;
     }
     expect(es.nest?.built).toBe(true);
+    expect(server.level.flags.dragonKilledOnce).toBe(true);
     expect(end.getState(fx, fy + 1, fz)).toBe(0);
     expect(end.getState(fx, fy, fz) === 0 || !STATE_SOLID[end.getState(fx, fy, fz)]).toBe(true);
     // Its chests, its ring portal, glyphs on its core, shell in some hollows
@@ -436,7 +455,9 @@ describe("the Dragon's Nest", () => {
     expect(glyphs).toBeGreaterThan(10);
     expect(shells).toBeGreaterThan(2);
     expect(plan.hollows).toBeGreaterThanOrEqual(12);
-    expect(protectedBlocks(server)).toBe(before);
+    expectUntouched(before, protectedBlocks(server));
+    // Under the exit portal the island stays solid (the Nest's brick core may face the stone, never hollow it)
+    underBefore.forEach((solid, i) => expect(!!STATE_SOLID[end.getState(...under[i]!)] || !solid, `under the portal at ${under[i]!.join(',')}`).toBe(true));
     // Built only once: an edit inside stays
     end.setBlock(fx, fy + 1, fz, S('stone'));
     tick(server, 200);
@@ -745,7 +766,7 @@ describe('finding things', () => {
     end.setBlock(x + 2, y, z, S('ender_glyph_stone'));
     end.setBlock(x - 2, y, z, S('ancient_core'));
     end.setBlock(x, y, z - 2, S('ancient_vault_door'));
-    const use = (bx: number, by: number, bz: number): void => w.server.handle(w.conns[0]!, { t: 'use_block', x: bx, y: by, z: bz, face: 2, hand: 0, seq: 1 } as never);
+    const use = (bx: number, by: number, bz: number): void => w.server.handle(w.conns[0]!, { t: 'use_on', x: bx, y: by, z: bz, face: 1, hx: 0.5, hy: 1, hz: 0.5, hand: 0, yaw: 0, pitch: 0.5, seq: 1 });
     use(x + 2, y, z);
     expect(w.conns[0]!.of('glyphs').length).toBe(1);
     expect(p!.achievements.has('read_glyph')).toBe(true);
@@ -769,7 +790,7 @@ describe('finding things', () => {
     end.setBlock(x + 1, y, z + 1, S('chest'));
     end.setBlockEntity(x + 1, y, z + 1, { type: 'chest', loot: 'chest/dragon_nest_a', lootSeed: 5 });
     w.server.interaction.containers.materializeLoot(end, x + 1, y, z + 1);
-    const be = end.getBlockEntity(x + 1, y, z + 1) as { items: ({ id: string; tag?: { data?: { map?: string; target?: number[] } } } | null)[] };
+    const be = end.getBlockEntity(x + 1, y, z + 1) as unknown as { items: ({ id: string; tag?: { data?: { map?: string; target?: number[] } } } | null)[] };
     const map = be.items.find((s) => s?.id === 'ancient_map');
     expect(map?.tag?.data?.map).toBe('marked');
     const giant = w.server.endStructures!.nearestGiant(x + 1, z + 1)!;

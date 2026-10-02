@@ -26,6 +26,7 @@ import { isAdminStack, itemIdOf } from '../../common/game/itemstack';
 import { inExpansion } from '../../common/endExpansion/region';
 import { EXPANSION_BIOME_IDS } from '../../common/endExpansion/biomes';
 import { EXPANSION_MOBS, EXPANSION_MOB_CAPS, MITE_FORMATION_RANGE, PHANTOM_COOLDOWN, PHANTOM_MIN_DISTANCE, SPAWN_AREA, isExpansionMob, type ExpansionMob } from '../../common/endExpansion/mobs';
+import { isConstruct } from '../../common/endExpansion/structures';
 import { TELEGRAPH_CROWD_RANGE, TELEGRAPH_TICKS, TELEGRAPH_TICKS_CROWD, arcVelocity } from '../../common/endExpansion/combat';
 
 /** Colours of the telegraph markers (the client's warning rings, lines and arcs). */
@@ -870,7 +871,7 @@ export class EndMobsSystem {
   /** Removes the expansion's mobs within r of a point (no drops, no experience). */
   killNear(dim: Dimension, x: number, y: number, z: number, r: number): number {
     let n = 0;
-    for (const e of dim.entitiesNear(x, y, z, r, (o) => o instanceof Mob && isExpansionMob(o.type) && !o.dead)) {
+    for (const e of dim.entitiesNear(x, y, z, r, (o) => o instanceof Mob && (isExpansionMob(o.type) || isConstruct(o.type)) && !o.dead)) {
       e.remove();
       n++;
     }

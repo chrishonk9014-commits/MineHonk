@@ -9,7 +9,7 @@
  * earlier type, so two big structures never overlap.
  */
 import { Random, hashInts } from '../../../math/rng';
-import { inExpansion } from '../../../endExpansion/region';
+import { EXPANSION_INNER, EXPANSION_OUTER, inExpansion } from '../../../endExpansion/region';
 import { END_VARIANTS, GIANT_SALT, GIANT_SEPARATION, GIANT_SPACING, GIANT_TYPE } from '../../../endExpansion/structures';
 import type { ExpansionTerrain } from '../../endExpansion';
 import type { Start, StructureType } from '../manager';
@@ -22,8 +22,24 @@ const GIANT_SEARCH = 128;
 /** Farthest a giant reaches from its spot. */
 const GIANT_REACH = 132;
 
+/**
+ * Blocks a variant may move from its region's start chunk to find its biome
+ * and room. Only the Metropolis searches: it lives in the End Highlands
+ * alone and needs a lot of them, and without a search it would be rarer than
+ * the Palace, which is meant to be the rarest.
+ */
+const VARIANT_SEARCH: Record<string, { reach: number; tries: number }> = {
+  end_metropolis: { reach: 112, tries: 10 },
+};
+
 /** Variant order in the manager: rarest and largest first. */
 const VARIANT_ORDER = ['end_palace', 'end_metropolis', 'end_shipyard', 'end_observatory', 'end_library', 'end_settlement', 'end_ruins', 'end_outpost'];
+
+/** Within `pad` blocks of the ring. */
+function nearRing(x: number, z: number, pad: number): boolean {
+  const d = Math.hypot(x, z);
+  return d > EXPANSION_INNER - pad && d < EXPANSION_OUTER + pad;
+}
 
 export function expansionStructureTypes(ex: ExpansionTerrain): StructureType[] {
   const site = new Site(ex);
@@ -49,18 +65,24 @@ export function expansionStructureTypes(ex: ExpansionTerrain): StructureType[] {
   };
   const variants = VARIANT_ORDER.map((id): StructureType => {
     const info = END_VARIANTS.find((v) => v.id === id)!;
+    const search = VARIANT_SEARCH[id];
+    const fits = (x: number, z: number): boolean => inExpansion(x, z) && info.biomes.includes(site.biomeId(x, z));
     return {
       id,
       spacing: info.spacing,
       separation: info.separation,
       salt: info.salt,
-      radius: Math.ceil(VARIANT_REACH[id]! / 16) + 1,
-      candidate: (_ctx, x, z) => inExpansion(x, z) && info.biomes.includes(site.biomeId(x, z)),
+      radius: Math.ceil((VARIANT_REACH[id]! + (search?.reach ?? 0)) / 16) + 1,
+      candidate: (_ctx, x, z) => (search ? nearRing(x, z, search.reach) : fits(x, z)),
       plan(ctx, cx, cz, rng) {
-        const x = (cx << 4) + 4 + rng.int(9);
-        const z = (cz << 4) + 4 + rng.int(9);
-        if (!inExpansion(x, z) || !info.biomes.includes(site.biomeId(x, z))) return null;
-        return VARIANT_PLANS[id]!(site, { x, z }, rng, hashInts(ctx.seed, x, z, info.salt));
+        for (let t = 0; t < (search?.tries ?? 1); t++) {
+          const x = (cx << 4) + 4 + rng.int(9) + (t ? rng.int(search!.reach * 2 + 1) - search!.reach : 0);
+          const z = (cz << 4) + 4 + rng.int(9) + (t ? rng.int(search!.reach * 2 + 1) - search!.reach : 0);
+          if (!fits(x, z)) continue;
+          const s = VARIANT_PLANS[id]!(site, { x, z }, rng, hashInts(ctx.seed, x, z, info.salt));
+          if (s) return s;
+        }
+        return null;
       },
     };
   });

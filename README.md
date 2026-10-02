@@ -273,9 +273,11 @@ secret story that runs through them. Design notes (with spoilers):
 
 V6 comes in five phases. **Phase 1** adds the Expansion Portal and the
 **Expanded End**, a deeper, farther part of the End, more than 6,000 blocks out.
-It is still the End: going there never changes dimension. Later phases add the
-End City 2.0, mobs, resources, quests, Elytra upgrades, weather events and
-bosses. Design notes: [docs/END_EXPANSION.md](docs/END_EXPANSION.md).
+It is still the End: going there never changes dimension. **Phase 2** fills it
+with five new mobs and its own stone, ores, crystal, chorus wood and Ender
+Alloy. Later phases add the End Guardian construct, machines and Elytra
+upgrades, and the Citadel's boss. Design notes:
+[docs/END_EXPANSION.md](docs/END_EXPANSION.md).
 
 - **The Expansion Portal** stands on the main End island, apart from the exit
   portal: an upright frame of its own.
@@ -296,29 +298,58 @@ bosses. Design notes: [docs/END_EXPANSION.md](docs/END_EXPANSION.md).
 - **Seven biomes** in large regions with void gaps between them. Each has its
   own land, ground, plants, sky tint, fog, light, drifting particles and
   ambient sound:
-  - **Pale Plains**: wide, flat islands of pale end stone, scattered with
-    tufts of pale grass.
-  - **Shattered Spires**: tall, narrow islands of dark voidstone, broken into
+  - **End Barrens**: wide, flat islands of cracked end stone, strewn with
+    boulders.
+  - **Shattered End**: tall, narrow islands of dark voidstone, broken into
     sheer stepped cliffs and needle-like spires.
-  - **Floating Archipelago**: strings of small islands hanging in the air at
-    many heights, their tops covered in glowing moss.
-  - **Hollow Isles**: thick islands hollowed out by wide caves, with vines
-    hanging from the cave roofs.
-  - **Crystal Fields**: rolling islands where clusters and spikes of glowing
-    crystal grow from the ground.
-  - **Dune Isles**: large islands of soft end sand shaped into low dunes,
-    under a dusty sky.
-  - **Mist Hollows**: low, scattered islands lost in thick white mist.
+  - **Astral End**: strings of small islands hanging at many heights, their
+    stone glowing with a cold light.
+  - **End Highlands**: thick, high continents of end stone, hollowed out by
+    wide caves with vines hanging from their roofs.
+  - **End Crystal Fields**: rolling islands of sparkling stone where
+    formations of glowing crystal grow from the ground.
+  - **Chorus Forest**: large islands overgrown with chorus plants, under the
+    branches of giant chorus trees.
+  - **Void Wastes**: low, scattered islands of dark end stone, half lost in a
+    dark haze.
 
-  Ten new blocks come with them: Pale End Stone, Voidstone, Luminous Moss,
-  End Sand, Prism Crystal, Pale Grass, Dune Reed, Mist Bloom, Prism Cluster and
-  Void Vines. The F3 screen names the biome you are in.
-- **Two advancements** in the End tab: reaching the Expanded End, and visiting
-  all seven biomes.
+  The F3 screen names the biome you are in. (Phase 2 renamed the phase 1
+  biomes; worlds created in phase 1 keep their phase 1 ground and plants.)
+- **Five new mobs** (phase 2), each with its own model, animations, sounds and
+  spawn egg. Every attack is telegraphed for at least 24 ticks (32 with other
+  players near), no hit ever throws you into the void, and none of them walks
+  off an island:
+  - **Endling**: a small, shy lavender creature with big dark eyes. It blinks
+    away when hit, scatters when a Void Stalker comes near, and breeds on
+    chorus fruit.
+  - **Void Stalker**: a tall, dark hunter that crouches before it lunges. Hurt
+    badly, or stared at, it runs off the island edge into the void and climbs
+    back a few seconds later behind you.
+  - **Chorus Beast**: a neutral giant of the Chorus Forest. Anger it (or break
+    chorus near it) and it slams the ground and throws chorus along an arc
+    you can see coming.
+  - **End Crystal Mite**: tiny crystal-backed swarmers that come out of mined
+    crystal clusters.
+  - **End Phantom**: a very rare flyer of the outer band that screeches,
+    flares its wings and dives, at Elytra gliders too.
+- **Resources** (phase 2): four end stone variants (cracked, dark,
+  crystalline, glowing astral) with polished, brick, stair, slab and wall
+  forms; End Crystal Clusters, Crystal Lamps and Crystal Glass; Void Crystal
+  Ore and Void Glass; giant chorus trees with a full chorus wood set, Chorus
+  Cloth and Chorus Rope; Ender Ore deep in the Highlands, smelted into Ender
+  Scrap for **Ender Alloy** (upgrade netherite gear at a smithing table; it
+  comes back out of the void if dropped); Ancient End Fragments and bricks;
+  Astral Ore (an Ender Alloy pickaxe only), Astral Lanterns and Astral Glass;
+  the **Void Pack**, a 9-slot bag that keeps its contents when you die in the
+  void; Endling meat; and the End Phantom Membrane, which repairs Elytra.
+  Every recipe is in the Recipe Book.
+- **Twelve advancements** in the End tab: reaching the Expanded End, visiting
+  all seven biomes, and ten for its mobs and resources.
 - **Admin Panel**: an End Expansion tab to switch, build and reach the
   portal, teleport to the arrival platform or any biome, show where you are,
-  and end the dragon fight for testing. As always, nothing done there counts
-  towards advancements.
+  end the dragon fight for testing, spawn the new mobs, give any resource or
+  whole kits, remove the mobs nearby, switch their spawning and count them per
+  biome. As always, nothing done there counts towards advancements.
 
 ### Recipe Book
 
@@ -380,7 +411,7 @@ test also needs `npm run build:server`. More browser checks:
 npm run test:e2e:v1       # Recipe Book, Admin Panel, cheat-free advancements
 npm run test:e2e:render   # culling never changes a pixel
 npm run test:e2e:v4       # the World Update: Error Biome, Glitched Structure, admin tab
-npm run test:e2e:v6       # the End Expansion: the portal, travel, every biome (screenshots)
+npm run test:e2e:v6       # the End Expansion: the portal, travel, every biome, the mobs, ores and armor (screenshots)
 ```
 
 ### Performance tools

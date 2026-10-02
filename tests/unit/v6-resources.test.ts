@@ -32,6 +32,7 @@ import { computeBlockDrops } from '../../src/common/game/drops';
 import { CRAFTING, RECIPE_TAGS } from '../../src/common/data/recipes';
 import { TIERS, ARMOR_MATERIALS } from '../../src/common/data/items';
 import { matchCrafting, smeltingFor, smithingResult, stonecutterOptions } from '../../src/common/game/crafting';
+import { recipeBook } from '../../src/common/game/recipeBook';
 import { stackOf, isAdminStack, type ItemStack } from '../../src/common/game/itemstack';
 import { validateAdmin } from '../../src/common/game/admin';
 import { MemoryStorage } from '../../src/server/storage/Storage';
@@ -249,6 +250,18 @@ describe('items and recipes', () => {
     }
   });
 
+  it('shows every new recipe in the Recipe Book (crafting, furnace, stonecutter, smithing, anvil)', () => {
+    const book = recipeBook();
+    const has = (id: string, station: string): boolean => book.some((e) => e.result.id === itemById.get(id)!.num && e.station === station);
+    for (const id of ['crystal_lamp', 'crystal_glass', 'void_glass', 'chorus_planks', 'chorus_cloth', 'chorus_rope', 'ender_alloy_ingot', 'ancient_end_bricks', 'astral_shard', 'astral_lantern', 'astral_glass', 'void_leather', 'void_pack', 'polished_astral_end_stone']) expect(has(id, 'crafting'), id).toBe(true);
+    expect(book.filter((e) => e.result.id === itemById.get('end_crystal')!.num && e.station === 'crafting').length).toBe(2);
+    for (const id of ['ender_scrap', 'cooked_endling']) expect(has(id, 'furnace'), id).toBe(true);
+    for (const id of ['dark_end_stone_bricks', 'cracked_end_stone_wall', 'ancient_end_bricks_stairs']) expect(has(id, 'stonecutter'), id).toBe(true);
+    for (const piece of ['sword', 'pickaxe', 'helmet', 'boots']) expect(has(`ender_alloy_${piece}`, 'smithing'), piece).toBe(true);
+    // Elytra: repaired with either membrane at the anvil
+    expect(book.some((e) => e.station === 'anvil' && e.requirements.some((r) => r.options.includes(itemById.get('end_phantom_membrane')!.num)))).toBe(true);
+  });
+
   it('puts Ender Alloy in the tier tables', () => {
     const t = TIERS.find((x) => x.id === 'ender_alloy')!;
     expect(t).toMatchObject({ level: 4, speed: 10, durability: 2500, enchantability: 18, bonus: 5, repair: 'ender_alloy_ingot', fireResistant: true, rarity: 'epic' });
@@ -335,10 +348,10 @@ describe('Ender Alloy and the Void Pack', () => {
     expect((kept.tag!.data!.items as { id: string }[])[0]!.id).toBe('diamond');
     expect(player.inventory.get(4)).toBeNull();
     // Any other death: the pack is dropped like everything else
-    server.interaction.survival.respawn?.(player);
     (player as { dead: boolean }).dead = false;
     player.health = 20;
     player.inventory.set(3, packed());
+    tick(server, 25);
     server.interaction.survival.damage(player, 1000, { source: 'mob', attacker: null });
     expect(player.dead).toBe(true);
     expect(player.inventory.get(3)).toBeNull();
@@ -359,8 +372,11 @@ describe('Ender Alloy and the Void Pack', () => {
     server.handle(conn as FakeConn, { t: 'click', window: w, slot: 9, button: 0, mode: 'quick', seq: 1 });
     const pack = player.inventory.get(0)!;
     expect((pack.tag!.data!.items as { id: string; count: number }[])[0]).toMatchObject({ id: 'diamond', count: 7 });
+    // Another pack never goes into the bag (shift-click moves it along the inventory instead)
     server.handle(conn as FakeConn, { t: 'click', window: w, slot: 10, button: 0, mode: 'quick', seq: 2 });
-    expect(items[player.inventory.get(10)!.id]!.id).toBe('void_pack');
+    const bag = player.inventory.get(0)!.tag!.data!.items as ({ id: string } | null)[];
+    expect(bag.filter(Boolean).map((e) => e!.id)).toEqual(['diamond']);
+    expect([...Array(36).keys()].filter((i) => player.inventory.get(i) && items[player.inventory.get(i)!.id]!.id === 'void_pack').length).toBe(2);
     server.handle(conn as FakeConn, { t: 'click', window: w, slot: 9 + 27, button: 0, mode: 'pickup', seq: 3 });
     expect(items[player.inventory.get(0)!.id]!.id).toBe('void_pack');
   }, 60000);
@@ -462,7 +478,7 @@ describe('V6 phase 2 Admin Panel', () => {
   });
 
   it('spawns, gives, removes and switches spawning, and none of it awards anything', async () => {
-    const { server } = await makeServer({ seed: 'v6-admin2' });
+    const { server } = await makeServer({ seed: 'v6-admin2', cheats: true });
     const { player, conn } = await join(server, 'Op', 'uuid-op');
     await atArrival(server, [player]);
     let req = 1;
@@ -498,7 +514,7 @@ describe('V6 phase 2 Admin Panel', () => {
     admin({ a: 'spawn', mob: 'void_stalker', count: 3 });
     const k = admin({ a: 'v6', op: 'kill_mobs' });
     expect(k.ok).toBe(true);
-    expect([...end.entities.values()].filter((e) => e instanceof Mob && EXPANSION_MOBS.includes(e.type as never) && !(e as Mob).dead).length).toBe(0);
+    expect([...end.entities.values()].filter((e) => e instanceof Mob && EXPANSION_MOBS.includes(e.type as never) && !e.removed).length).toBe(0);
     admin({ a: 'v6', op: 'mob_spawning_off' });
     expect(server.endMobs!.spawning).toBe(false);
     admin({ a: 'v6', op: 'mob_spawning_on' });

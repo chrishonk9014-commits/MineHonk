@@ -31,7 +31,7 @@ function spread(gen: DimensionGenerator, step: number): Chunk[] {
 describe('the classic End is unchanged by V6', () => {
   const seed = seedFromString('v6-regression');
 
-  for (const version of [1, 3, 5, 6]) {
+  for (const version of [1, 3, 5, 6, 7]) {
     it(`main island, outer islands and an End city (generator ${version})`, () => {
       const g = createGenerator('end', seed, { version });
       expect(hashChunks(around(g, 0, 0, 2)), 'main island').toBe('f9c2209d');
@@ -68,7 +68,7 @@ describe('the classic End is unchanged by V6', () => {
   });
 });
 
-describe('generator 6 changes nothing outside the End', () => {
+describe('generators 6 and 7 change nothing outside the End', () => {
   const seed = seedFromString('v6-regression');
   for (const [dim, step] of [
     ['overworld', 9],
@@ -76,7 +76,9 @@ describe('generator 6 changes nothing outside the End', () => {
     ['farlands', 13],
   ] as const) {
     it(dim, () => {
-      expect(hashChunks(spread(createGenerator(dim, seed, { version: 6 }), step))).toBe(hashChunks(spread(createGenerator(dim, seed, { version: 5 }), step)));
-    }, 240000);
+      const base = hashChunks(spread(createGenerator(dim, seed, { version: 5 }), step));
+      expect(hashChunks(spread(createGenerator(dim, seed, { version: 6 }), step))).toBe(base);
+      expect(hashChunks(spread(createGenerator(dim, seed, { version: 7 }), step))).toBe(base);
+    }, 360000);
   }
 });

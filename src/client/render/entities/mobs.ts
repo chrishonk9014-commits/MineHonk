@@ -2236,13 +2236,14 @@ V.void_stalker = {
       if (ra) ra.rotation.x = -1.1;
       if (la) la.rotation.x = -1.1;
     } else m.root.position.y = 0;
-    // Its eyes flare through the wind-up
+    // Faintly glowing eyes (it is all but invisible in the dark otherwise) that flare through the wind-up
     const pulse = 0.7 + Math.sin(time * 1.2) * 0.3;
     for (const [k, x] of [['eyeL', 1.5], ['eyeR', -1.5]] as const) {
       const eye = flare(m, 'head', k, [2.2, 1.2, 0.4], [x, 3.6, 3.7], 0xe0b0ff);
       if (eye) {
-        eye.visible = crouch;
-        eye.scale.setScalar(crouch ? 0.8 + pulse * 0.5 : 1);
+        (eye.material as THREE.MeshBasicMaterial).color.setHex(crouch ? 0xe8c0ff : 0x8a4ae0);
+        eye.scale.setScalar(crouch ? 0.8 + pulse * 0.5 : 0.7);
+        eye.visible = true;
       }
     }
   },

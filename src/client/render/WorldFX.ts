@@ -188,17 +188,31 @@ export class WorldFX {
   warnArc(id: number | undefined, a: THREE.Vector3, b: THREE.Vector3, flight: number, seconds: number, now: number, color: number): void {
     const v = arcVelocity(a.x, a.y, a.z, b.x, b.y, b.z, flight);
     const g = new THREE.Group();
-    const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.85, depthWrite: false, fog: false });
-    const dot = new THREE.BoxGeometry(0.14, 0.14, 0.14);
-    const dots: THREE.Mesh[] = [];
-    for (let n = 1; n <= flight; n++) {
+    // A thin dashed line along the path (it stays thin even right in front of the target's eyes)...
+    const pts: THREE.Vector3[] = [];
+    for (let n = 0; n <= flight * 2; n++) {
+      const [x, y, z] = arcPoint(a.x, a.y, a.z, v, n / 2);
+      pts.push(new THREE.Vector3(x, y, z));
+    }
+    const lineGeo = new THREE.BufferGeometry().setFromPoints(pts);
+    const lineMat = new THREE.LineDashedMaterial({ color, dashSize: 0.35, gapSize: 0.2, transparent: true, opacity: 0.9, depthWrite: false, fog: false });
+    const line = new THREE.Line(lineGeo, lineMat);
+    line.computeLineDistances();
+    g.add(line);
+    // ...small glowing beads on it, kept away from the target itself...
+    const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9, depthWrite: false, fog: false });
+    const bead = new THREE.BoxGeometry(0.12, 0.12, 0.12);
+    const beads: THREE.Mesh[] = [];
+    for (let n = 2; n < flight; n += 2) {
       const [x, y, z] = arcPoint(a.x, a.y, a.z, v, n);
-      const d = new THREE.Mesh(dot, mat);
+      if (Math.hypot(x - b.x, y - b.y, z - b.z) < 2.5) continue;
+      const d = new THREE.Mesh(bead, mat);
       d.position.set(x, y, z);
       g.add(d);
-      dots.push(d);
+      beads.push(d);
     }
-    const ringGeo = new THREE.RingGeometry(0.6, 0.85, 32, 1);
+    // ...and a ring on the ground where it comes down
+    const ringGeo = new THREE.RingGeometry(0.75, 1, 32, 1);
     ringGeo.rotateX(-Math.PI / 2);
     const ring = new THREE.Mesh(ringGeo, mat);
     ring.position.set(b.x, b.y - 0.55, b.z);
@@ -209,11 +223,12 @@ export class WorldFX {
       life: seconds,
       kind: 'warn_arc',
       update: (age) => {
-        // The dots light up in order, start to finish, as the throw comes
+        // The beads light up in order, start to finish, as the throw comes
         const f = Math.min(1, age / Math.max(0.1, seconds));
-        mat.opacity = 0.5 + 0.4 * Math.abs(Math.sin(age * 8));
-        const lit = Math.ceil(f * dots.length);
-        dots.forEach((d, i) => d.scale.setScalar(i < lit ? 1.4 : 0.8));
+        mat.opacity = 0.55 + 0.4 * Math.abs(Math.sin(age * 8));
+        lineMat.opacity = 0.5 + 0.4 * f;
+        const lit = Math.ceil(f * beads.length);
+        beads.forEach((d, i) => d.scale.setScalar(i < lit ? 1.6 : 1));
       },
     });
   }

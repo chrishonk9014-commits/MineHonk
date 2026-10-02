@@ -189,6 +189,8 @@ export function canSurvive(state: number, w: WorldReader, x: number, y: number, 
     case 'fire':
       return STATE_SOLID[below] === 1 || flammableNeighbour(w, x, y, z);
     case 'portal': {
+      // The ancient portals' sheets (dead, or a mended gateway) belong to their structure's frame, whatever it's made of
+      if (def.id === 'ancient_gateway' || def.id === 'dead_portal') return true;
       // A portal sheet needs portal or frame blocks on every side within its plane
       const frame = def.id === 'far_portal' ? 'far_portal_frame' : def.id === 'expansion_portal' ? 'expansion_portal_frame' : 'obsidian';
       const ok = (s: number): boolean => STATE_BLOCK[s] === STATE_BLOCK[state] || blocks[STATE_BLOCK[s]!]!.id === frame;

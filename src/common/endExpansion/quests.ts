@@ -201,37 +201,35 @@ export function portalKey(s: PortalSite): string {
 }
 
 /**
- * Broken portals pair up within square cells of the band this wide
- * (blocks): a census of one cell finds every broken portal in it.
- */
-export const GATE_CELL = 3584;
-
-export function gateCell(x: number, z: number): [number, number] {
-  return [Math.floor(x / GATE_CELL), Math.floor(z / GATE_CELL)];
-}
-
-/**
- * Seed-determined pairs within one cell: the cell's broken portals, sorted
- * by their angle round the cell's middle (starting from `turn`, the seed's
- * choice), pair with the one half the list on, so the two ends of a pair
- * face each other across the cell, usually a long way apart. Pairing is
- * symmetric. With an odd count, one is left with no pair (it stays a dead
+ * Seed-determined pairs over the whole band: every broken portal, sorted by
+ * where it lies round the band (its angle about the End's centre, starting
+ * from `turn`, the seed's choice), is paired with the one `k` places on (k
+ * is a sixteenth of them, so the two ends of a pair lie about a sixteenth of
+ * the way round the band apart: some thousands of blocks). Pairing is
+ * symmetric. What doesn't fill a whole run of 2k pairs off with its
+ * neighbour; with an odd count, the last one has no pair (it stays a dead
  * portal).
  */
-export function pairPortals(portals: { key: string; x: number; z: number }[], mx: number, mz: number, turn = 0): Map<string, string | null> {
+export function pairPortals(portals: { key: string; x: number; z: number }[], turn = 0): Map<string, string | null> {
   const ang = (p: { x: number; z: number }): number => {
-    const a = Math.atan2(p.z - mz, p.x - mx) - turn;
+    const a = Math.atan2(p.z, p.x) - turn;
     return ((a % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
   };
   const sorted = [...portals].sort((a, b) => ang(a) - ang(b) || (a.key < b.key ? -1 : 1));
   const n = sorted.length;
-  const k = Math.floor(n / 2);
   const out = new Map<string, string | null>();
-  for (let i = 0; i < k; i++) {
-    out.set(sorted[i]!.key, sorted[i + k]!.key);
-    out.set(sorted[i + k]!.key, sorted[i]!.key);
+  const k = Math.max(1, Math.floor(n / 16));
+  const block = 2 * k;
+  const full = Math.floor(n / block) * block;
+  for (let i = 0; i < full; i++) {
+    const j = i % block < k ? i + k : i - k;
+    out.set(sorted[i]!.key, sorted[j]!.key);
   }
-  if (n % 2 === 1) out.set(sorted[n - 1]!.key, null);
+  for (let i = full; i + 1 < n; i += 2) {
+    out.set(sorted[i]!.key, sorted[i + 1]!.key);
+    out.set(sorted[i + 1]!.key, sorted[i]!.key);
+  }
+  if ((n - full) % 2 === 1) out.set(sorted[n - 1]!.key, null);
   return out;
 }
 

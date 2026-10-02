@@ -54,6 +54,16 @@ export interface NestState {
   forced?: boolean;
 }
 
+/** An Admin Panel structure, as saved in `level.flags.endGenerated` (enough to plan it again). */
+interface GeneratedRec {
+  kind: string;
+  x: number;
+  y: number;
+  z: number;
+  seed: number;
+  biome?: string;
+}
+
 /** A structure being built into loaded chunks, a chunk per tick (Admin Panel). */
 interface LiveBuild {
   dim: Dimension;
@@ -187,8 +197,15 @@ export class EndStructuresSystem {
     const y = Math.floor(p.y);
     const z = Math.floor(p.z);
     const biome = inExpansion(x, z) && p.dim.id === 'end' ? undefined : 'highlands';
-    const s = planExpansionStructureAt(this.gen.terrain.expansion, kind, { x, z, y, biome }, hashInts(this.server.level.seedNum, x, y, z, this.server.tickNo));
+    const seed = hashInts(this.server.level.seedNum, x, y, z, this.server.tickNo);
+    const s = planExpansionStructureAt(this.gen.terrain.expansion, kind, { x, z, y, biome }, seed);
     if (!s) return null;
+    // V6 phase 4: remembered (and saved), so its quests can be tried out; it is a cheat's, so they count for nothing
+    const list = (this.flags.endGenerated as GeneratedRec[] | undefined) ?? [];
+    list.push({ kind, x, y, z, seed, ...(biome ? { biome } : {}) });
+    this.flags.endGenerated = list.slice(-64);
+    this.generated = null;
+    this.server.endQuests?.onGenerated(s);
     const set = new Set<number>();
     for (const pc of s.pieces) for (let cx = pc.box.x0 >> 4; cx <= pc.box.x1 >> 4; cx++) for (let cz = pc.box.z0 >> 4; cz <= pc.box.z1 >> 4; cz++) set.add(chunkIndex(cx, cz));
     this.builds.push({ dim: p.dim, start: s, chunks: [...set], by: p });
@@ -220,6 +237,24 @@ export class EndStructuresSystem {
       }
     }
     return false;
+  }
+
+  /** Structures the Admin Panel built (planned again from what was saved). */
+  private generated: Start[] | null = null;
+
+  generatedStarts(): Start[] {
+    if (this.generated) return this.generated;
+    const out: Start[] = [];
+    for (const g of (this.flags.endGenerated as GeneratedRec[] | undefined) ?? []) {
+      const s = planExpansionStructureAt(this.gen.terrain.expansion, g.kind, { x: g.x, z: g.z, y: g.y, biome: g.biome }, g.seed);
+      if (s) out.push(s);
+    }
+    return (this.generated = out);
+  }
+
+  /** Admin Panel structures whose pieces hold a position (only the quests look at these). */
+  generatedAt(x: number, y: number, z: number): Start[] {
+    return this.generatedStarts().filter((s) => y >= s.bounds.y0 - 2 && y <= s.bounds.y1 + 2 && s.pieces.some((p) => x >= p.box.x0 - 1 && x <= p.box.x1 + 1 && z >= p.box.z0 - 1 && z <= p.box.z1 + 1));
   }
 
   /** Builds still in progress (the Admin Panel's status). */

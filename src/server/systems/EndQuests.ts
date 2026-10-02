@@ -45,7 +45,7 @@ import { Mob } from '../entity/Mob';
 import { S, blocks, STATE_BLOCK, STATE_SOLID, STATE_FLUID, getProp, withProp, stateOf } from '../../common/registry/blocks';
 import { itemIdOf, stackOf, markAdmin, type ItemStack } from '../../common/game/itemstack';
 import { hashInts, Random } from '../../common/math/rng';
-import { END_QUESTS, END_QUEST_IDS, QUEST, GATE_CELL, gateCell, pairPortals, portalCells, portalKey, type EndQuestId, type EndQuestSpec, type PortalSite } from '../../common/endExpansion/quests';
+import { END_QUESTS, END_QUEST_IDS, QUEST, pairPortals, portalCells, portalKey, type EndQuestId, type EndQuestSpec, type PortalSite } from '../../common/endExpansion/quests';
 import { LORE, LORE_BY_ID, NEST_LORE } from '../../common/endExpansion/lore';
 import { GIANT_TYPE, isConstruct } from '../../common/endExpansion/structures';
 import { EXPANSION_INNER, EXPANSION_OUTER, inExpansion } from '../../common/endExpansion/region';
@@ -130,9 +130,9 @@ export class EndQuestsSystem {
   /** Pointers to quests just finished: shown as complete for a while, then dropped. */
   private readonly doneSince = new Map<ServerPlayer, number>();
   private readonly jobs: Job[] = [];
-  /** Census results by cell ('cx,cz'): portal key -> its site and pair. */
-  private readonly cells = new Map<string, Map<string, { site: PortalSite; pair: string | null }>>();
-  private readonly censusRunning = new Map<string, Generator<void, Map<string, { site: PortalSite; pair: string | null }>>>();
+  /** The census of the band's broken portals: portal key -> its site and pair (null until it has run). */
+  private portals: Map<string, { site: PortalSite; pair: string | null }> | null = null;
+  private censusRunning: Generator<void, Map<string, { site: PortalSite; pair: string | null }>> | null = null;
   private sheets: Map<string, string> | null = null;
   private hostJob = false;
   /** Crystal Vaults lighting up: record key -> pedestals lit so far and when the next lights. */
@@ -180,13 +180,35 @@ export class EndQuestsSystem {
 
   /** Quest structures whose pieces hold a block. */
   private startsAt(x: number, y: number, z: number): Start[] {
-    return this.server.endStructures?.structuresAt(x, y, z).filter((s) => this.questOf(s)) ?? [];
+    const es = this.server.endStructures;
+    if (!es) return [];
+    return [...es.structuresAt(x, y, z), ...es.generatedAt(x, y, z)].filter((s) => this.questOf(s));
+  }
+
+  /**
+   * The Admin Panel built a structure: its quests work (to try them out), but
+   * their records start cheat-flagged, so nothing there ever earns anything.
+   */
+  onGenerated(s: Start): void {
+    const q = this.questOf(s);
+    if (!q) return;
+    const keys: string[] = [];
+    if (q.lens) keys.push(`obs:${k3(q.lens.lens)}`);
+    if (q.vault) keys.push(`vault:${k3(q.vault.pedestals[0]!)}`);
+    for (const site of q.portals ?? []) keys.push(`gate:${portalKey(site)}`);
+    for (const seal of q.seals ?? []) if (seal.kind !== 'vault') keys.push(`seal:${k3(seal.door[0]!)}`);
+    if (q.cores?.length) keys.push(`core:${s.type}@${s.x},${s.z}`);
+    for (const k of keys) this.flag(this.rec(k), 'cheat');
   }
 
   /** Quest structures around a player (their bounds, a little padded upwards and downwards). */
   private startsNear(p: ServerPlayer): Start[] {
-    if (!this.on || !inExpansion(p.x, p.z)) return [];
-    return this.gen.expansionStartsAt(Math.floor(p.x), Math.floor(p.z)).filter((s) => this.questOf(s) && p.y >= s.bounds.y0 - 8 && p.y <= s.bounds.y1 + 8);
+    if (!this.on || p.dim.id !== 'end') return [];
+    const x = Math.floor(p.x);
+    const z = Math.floor(p.z);
+    const natural = inExpansion(x, z) ? this.gen.expansionStartsAt(x, z) : [];
+    const built = this.server.endStructures?.generatedStarts().filter((s) => x >= s.bounds.x0 && x <= s.bounds.x1 && z >= s.bounds.z0 && z <= s.bounds.z1) ?? [];
+    return [...natural, ...built].filter((s) => this.questOf(s) && p.y >= s.bounds.y0 - 8 && p.y <= s.bounds.y1 + 8);
   }
 
   private present(dim: Dimension, at: P3, r = 32): ServerPlayer[] {
@@ -296,13 +318,12 @@ export class EndQuestsSystem {
         j.done(r.value);
       }
     }
-    for (const [k, g] of this.censusRunning) {
-      if (performance.now() - t0 >= budgetMs) break;
-      let r = g.next();
-      while (!r.done && performance.now() - t0 < budgetMs) r = g.next();
+    if (this.censusRunning && performance.now() - t0 < budgetMs) {
+      let r = this.censusRunning.next();
+      while (!r.done && performance.now() - t0 < budgetMs) r = this.censusRunning.next();
       if (r.done) {
-        this.censusRunning.delete(k);
-        this.cells.set(k, r.value);
+        this.censusRunning = null;
+        this.portals = r.value;
       }
     }
   }
@@ -466,69 +487,60 @@ export class EndQuestsSystem {
     return (this.gates[key] ??= { site });
   }
 
-  /** The census of one cell: every broken portal in it, and their pairs. */
-  private *census(cx: number, cz: number): Generator<void, Map<string, { site: PortalSite; pair: string | null }>> {
+  /** The census: every broken portal in the band, and their pairs (cheap: a fraction of a second, once). */
+  private *census(): Generator<void, Map<string, { site: PortalSite; pair: string | null }>> {
     const out = new Map<string, { site: PortalSite; pair: string | null }>();
     const m = this.gen.censusManager();
     if (!m) return out;
-    const x0 = cx * GATE_CELL;
-    const z0 = cz * GATE_CELL;
-    const margin = 320;
+    const margin = 400;
     const found = new Map<string, { site: PortalSite; x: number; z: number }>();
     for (const type of ['end_ruins', GIANT_TYPE]) {
       const span = m.spacingOf(type) * 16;
       if (!span) continue;
-      for (let rx = Math.floor((x0 - margin) / span); rx <= Math.floor((x0 + GATE_CELL + margin) / span); rx++)
-        for (let rz = Math.floor((z0 - margin) / span); rz <= Math.floor((z0 + GATE_CELL + margin) / span); rz++) {
-          // Regions wholly outside the band have nothing
+      const n = Math.ceil((EXPANSION_OUTER + margin) / span) + 1;
+      for (let rx = -n; rx <= n; rx++) {
+        for (let rz = -n; rz <= n; rz++) {
+          // Regions wholly inside the band's hole or outside it have nothing
           const nx = Math.max(rx * span, Math.min(0, (rx + 1) * span));
           const nz = Math.max(rz * span, Math.min(0, (rz + 1) * span));
-          if (Math.hypot(nx, nz) > EXPANSION_OUTER + margin) continue;
+          const fx = Math.max(Math.abs(rx * span), Math.abs((rx + 1) * span));
+          const fz = Math.max(Math.abs(rz * span), Math.abs((rz + 1) * span));
+          if (Math.hypot(nx, nz) > EXPANSION_OUTER + margin || Math.hypot(fx, fz) < EXPANSION_INNER - margin) continue;
           const s = m.regionStart(type, rx, rz);
           for (const site of (s && this.questOf(s)?.portals) || []) {
             const b = portalCells(site).base;
-            if (b[0] < x0 || b[0] >= x0 + GATE_CELL || b[2] < z0 || b[2] >= z0 + GATE_CELL) continue;
             found.set(portalKey(site), { site, x: b[0], z: b[2] });
           }
-          yield;
         }
+        yield;
+      }
     }
-    const turn = ((hashInts(this.server.level.seedNum, cx, cz, 0x6a7e) >>> 0) / 4294967296) * Math.PI * 2;
-    const pairs = pairPortals([...found].map(([key, f]) => ({ key, x: f.x, z: f.z })), x0 + GATE_CELL / 2, z0 + GATE_CELL / 2, turn);
+    // Where the sorting starts round the band (so which portal is left over) is the seed's
+    const turn = ((hashInts(this.server.level.seedNum, 0x6a7e) >>> 0) / 4294967296) * Math.PI * 2;
+    const pairs = pairPortals([...found].map(([key, f]) => ({ key, x: f.x, z: f.z })), turn);
     for (const [key, f] of found) out.set(key, { site: f.site, pair: pairs.get(key) ?? null });
     return out;
   }
 
-  private cellKey(site: PortalSite): string {
-    const b = portalCells(site).base;
-    return gateCell(b[0], b[2]).join(',');
+  /** Starts the census in the background (an inspected portal will soon want its pair). */
+  private startCensus(): void {
+    if (this.portals || this.censusRunning) return;
+    this.censusRunning = this.census();
   }
 
-  /** Starts a cell's census in the background (an inspected portal will soon want its pair). */
-  private startCensus(site: PortalSite): void {
-    const k = this.cellKey(site);
-    if (this.cells.has(k) || this.censusRunning.has(k)) return;
-    const [cx, cz] = k.split(',').map(Number) as [number, number];
-    this.censusRunning.set(k, this.census(cx, cz));
+  /** The census, finished now if it has to be. */
+  censusNow(): Map<string, { site: PortalSite; pair: string | null }> {
+    if (this.portals) return this.portals;
+    const g = this.censusRunning ?? this.census();
+    this.censusRunning = null;
+    return (this.portals = drain(g));
   }
 
-  /** A cell's census, finished now if it has to be. */
-  censusNow(site: PortalSite): Map<string, { site: PortalSite; pair: string | null }> {
-    const k = this.cellKey(site);
-    let c = this.cells.get(k);
-    if (c) return c;
-    const g = this.censusRunning.get(k) ?? this.census(...(k.split(',').map(Number) as [number, number]));
-    this.censusRunning.delete(k);
-    c = drain(g);
-    this.cells.set(k, c);
-    return c;
-  }
-
-  /** A portal's pair (running its cell's census if need be). Both ends learn of each other. */
+  /** A portal's pair (running the census if need be). Both ends learn of each other. */
   pairOf(key: string, site: PortalSite): string | null {
     const st = this.gateOf(key, site);
     if (st.pair !== undefined) return st.pair;
-    const c = this.censusNow(site);
+    const c = this.censusNow();
     const pair = c.get(key)?.pair ?? null;
     st.pair = pair;
     if (pair) {
@@ -555,7 +567,7 @@ export class EndQuestsSystem {
     }
     if (r.stage < 1) {
       r.stage = 1;
-      this.startCensus(pt.site);
+      this.startCensus();
     }
     const bricks = this.count(p, 'ancient_end_bricks');
     const crystals = this.count(p, 'end_crystal');
@@ -718,7 +730,7 @@ export class EndQuestsSystem {
       }
       const a = this.take(p, 'ancient_fragment', QUEST.coreFragments)!;
       const b = this.take(p, 'astral_shard', QUEST.coreShards)!;
-      const cheat = a.cheat || b.cheat;
+      const cheat = a.cheat || b.cheat || this.has(r, 'cheat');
       this.restoreCore(p.dim, x, y, z, p.uuid, cheat);
       r.done = true;
       this.flag(r, `at:${x},${y},${z}`);
@@ -1045,7 +1057,7 @@ export class EndQuestsSystem {
       return;
     }
     this.lighting.delete(v.key);
-    // Was any of the power a cheat's?
+    // Was any of the power a cheat's? (A vault the Admin Panel built is a cheat's from the start.)
     if (v.q.pedestals.some((q) => (dim.getBlockEntity(...q) as { cheat?: number } | undefined)?.cheat) || eng?.energy.netAt(dim, ...v.q.pedestals[0]!)?.devices.some((d) => d.be()?.cheat)) this.flag(r, 'cheat');
     this.openVault(dim, v, r, true);
   }
@@ -1439,6 +1451,8 @@ export class EndQuestsSystem {
         if (h && !this.host) this.flags.silentCity = h;
       });
     }
+    // The broken portals' census starts in the background once anyone is out in the band
+    if (this.on && !this.portals && [...s.players.values()].some((p) => p.dim.id === 'end' && inExpansion(p.x, p.z))) this.startCensus();
     this.buildSilent();
     // Linked gateways whose sheets weren't loaded when they linked
     for (const st of Object.values(this.gates)) if (st.linked && !st.open) st.open = this.openSheet(this.end, st.site);
@@ -1693,7 +1707,7 @@ export class EndQuestsSystem {
       silentCity: h ? { type: h.type, hall: h.hall, built: h.built.length } : null,
       gates: Object.values(this.gates).filter((g) => g.linked).length,
       sanctum: this.sanctumState(),
-      jobs: this.jobs.length + this.censusRunning.size,
+      jobs: this.jobs.length + (this.censusRunning ? 1 : 0),
     };
   }
 }

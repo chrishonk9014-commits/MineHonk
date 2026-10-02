@@ -6,7 +6,8 @@
  * - `structures`: the start nearest the arrival platform of each End City
  *   variant and giant structure (missing kinds are left out: the e2e builds
  *   those from the Admin Panel), each with a camera spot outside it whose
- *   line of sight to its middle is clear of terrain;
+ *   line of sight to its middle is clear of terrain, and a spot inside it
+ *   (on top of its biggest piece);
  * - `glyphs`: a wall of Ender Glyph Stone in one of them, with a spot to
  *   stand in front of it.
  *
@@ -70,10 +71,17 @@ function camera(s: Start): { x: number; y: number; z: number; yaw: number; pitch
   return cam;
 }
 
-const structures: Record<string, { x: number; y: number; z: number; bounds: Start['bounds']; cam: ReturnType<typeof camera> }> = {};
+/** A spot standing on top of a start's biggest piece (inside the structure, for discovery). */
+function inside(s: Start): { x: number; y: number; z: number } {
+  const vol = (b: Start['bounds']): number => (b.x1 - b.x0 + 1) * (b.y1 - b.y0 + 1) * (b.z1 - b.z0 + 1);
+  const p = [...s.pieces].sort((a, b) => vol(b.box) - vol(a.box))[0]!;
+  return { x: Math.floor((p.box.x0 + p.box.x1) / 2) + 0.5, y: p.box.y1 + 1, z: Math.floor((p.box.z0 + p.box.z1) / 2) + 0.5 };
+}
+
+const structures: Record<string, { x: number; y: number; z: number; bounds: Start['bounds']; cam: ReturnType<typeof camera>; inside: ReturnType<typeof inside> }> = {};
 for (const id of EXPANSION_STRUCTURE_IDS) {
   const s = nearest(id);
-  if (s) structures[id] = { x: s.x, y: s.y, z: s.z, bounds: s.bounds, cam: camera(s) };
+  if (s) structures[id] = { x: s.x, y: s.y, z: s.z, bounds: s.bounds, cam: camera(s), inside: inside(s) };
 }
 
 /** The densest patch of Ender Glyph Stone with open air in front, in the given starts. */

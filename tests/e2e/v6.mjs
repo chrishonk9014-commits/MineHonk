@@ -295,9 +295,16 @@ if (sites.tree) {
   const bs = await groundAt(p.x, p.y, p.z, 1, 0, 4.5);
   await cmd(`/summon chorus_beast ${bs.x} ${bs.y} ${bs.z}`);
   await page.waitForTimeout(1500);
+  // Up close for the hit (a punch from where the player stood can fall short of the beast)
   const beast = (await entitiesOf('chorus_beast'))[0];
-  if (beast) await page.evaluate((id) => window.minehonk.game.send({ t: 'attack', id }), beast.id);
-  await page.waitForTimeout(300);
+  check('the Chorus Beast is there', !!beast);
+  if (beast) {
+    await cmd(`/tp ${beast.x - 2.4} ${bs.y} ${beast.z}`);
+    for (let i = 0; i < 3; i++) {
+      await page.evaluate((id) => window.minehonk.game.send({ t: 'attack', id }), beast.id);
+      await page.waitForTimeout(250);
+    }
+  }
   const back = await groundAt(bs.x, bs.y, bs.z, -1, 0, 11);
   if (back) await cmd(`/tp ${back.x} ${back.y} ${back.z}`);
   await look(-Math.PI / 2, 0.05);
@@ -350,21 +357,57 @@ await page.evaluate(() => window.minehonk.game.adminRequest({ a: 'heal' }));
   check("the locator shows the Dragon's Nest", !!loc.data?.nest);
 }
 
-/** Looks at a structure from a camera spot outside it, then screenshots it. */
-const view = async (id, cam, wait) => {
-  await goTo(cam.x, cam.y, cam.z);
-  await page.evaluate(([x, y, z]) => {
-    const b = window.minehonk.game.player.body;
+/** Holds the camera at a spot in creative flight (set again after the landing settles). */
+const pin = (x, y, z) =>
+  page.evaluate(([x, y, z]) => {
+    const g = window.minehonk.game;
+    g.player.flying = true;
+    const b = g.player.body;
     b.x = x;
     b.y = y;
     b.z = z;
-  }, [cam.x, cam.y, cam.z]);
+    b.vx = b.vy = b.vz = 0;
+    return b.y;
+  }, [x, y, z]);
+
+/** Looks at a structure from a camera spot outside it, then screenshots it. */
+const view = async (id, cam, wait) => {
+  await goTo(cam.x, cam.y, cam.z);
+  await pin(cam.x, cam.y, cam.z);
   await look(cam.yaw, cam.pitch);
   await page.waitForTimeout(wait);
+  await pin(cam.x, cam.y, cam.z);
   await look(cam.yaw, cam.pitch);
   await page.waitForTimeout(1200);
   await page.screenshot({ path: `${OUT}/v6-structure-${id}.png` });
 };
+
+// Walking into a giant for the first time: its title on screen (the music sting plays with it). The title
+// shows once per giant per player, and the biome teleports above may already have passed through the nearest
+// giants, so the farthest from the arrival platform are tried first
+{
+  const a = sites3.arrival;
+  const giants = KINDS.filter((k) => GIANTS.has(k) && sites3.structures[k]).sort((p, q) => Math.hypot(sites3.structures[q].x - a.x, sites3.structures[q].z - a.z) - Math.hypot(sites3.structures[p].x - a.x, sites3.structures[p].z - a.z));
+  let shown = null;
+  for (const id of giants) {
+    const at = sites3.structures[id];
+    await page.evaluate(() => {
+      const t = document.querySelector('.title-overlay');
+      if (t) t.textContent = '';
+    });
+    await goTo(at.inside.x, at.inside.y, at.inside.z);
+    await pin(at.inside.x, at.inside.y, at.inside.z);
+    const title = await page.waitForFunction(() => {
+      const t = document.querySelector('.title-overlay');
+      return !!t && /^THE /.test(t.innerText) && Number(getComputedStyle(t).opacity) > 0.6;
+    }, null, { timeout: 12000 }).then(() => true, () => false);
+    if (!title) continue;
+    shown = id;
+    await page.screenshot({ path: `${OUT}/v6-discovery-title.png` });
+    break;
+  }
+  check(`walking into a giant shows its title (${shown})`, !!shown);
+}
 
 // Each variant and each giant: the world's own where it has one, otherwise built here from the Admin Panel
 for (const id of KINDS) {
@@ -400,17 +443,6 @@ for (const id of KINDS) {
   check(`the ${id} is built around the player, a chunk at a time (${total - left} of ${total} chunks loaded)`, total > 0 && left < total);
   const d = GIANTS.has(id) ? 95 : 45;
   await view(id, { x: p.x + d * 0.7, y: p.y + d * 0.4, z: p.z + d * 0.7, yaw: Math.atan2(0.7, 0.7), pitch: Math.atan2(d * 0.4 + 1.62 - 10, d) }, 6000);
-}
-
-// Walking into a giant: its title, once (the music sting plays with it)
-{
-  const id = KINDS.find((k) => GIANTS.has(k) && sites3.structures[k]);
-  const at = sites3.structures[id];
-  await goTo(at.x + 0.5, at.y + 3, at.z + 0.5);
-  const title = await page.waitForFunction(() => /^THE /.test(document.querySelector('.title-overlay')?.innerText ?? ''), null, { timeout: 20000 }).then(() => true, () => false);
-  check(`walking into the ${id} shows its title`, title);
-  await page.waitForTimeout(900);
-  await page.screenshot({ path: `${OUT}/v6-discovery-title.png` });
 }
 
 // The Guardian Constructs, standing still for their picture, then winding up on a survival player
@@ -546,16 +578,18 @@ if (sites3.glyphs) {
   const ent = (await admin('status')).data?.structures?.nest?.entrance;
   check("the Nest's entrance is known", Array.isArray(ent));
   if (ent) {
-    const cam = { x: ent[0] + 0.5, y: ent[1] + 12, z: ent[2] + 7.5 };
+    const cam = { x: ent[0] + 0.5, y: ent[1] + 14, z: ent[2] + 7.5 };
     await goTo(cam.x, cam.y, cam.z);
-    await page.evaluate(([x, y, z]) => {
-      const b = window.minehonk.game.player.body;
-      b.x = x;
-      b.y = y;
-      b.z = z;
-    }, [cam.x, cam.y, cam.z]);
-    await look(0, 0.95);
-    await page.waitForTimeout(2500);
+    await pin(cam.x, cam.y, cam.z);
+    await page.waitForTimeout(1500);
+    // Down the crack: from the top of it towards the chamber
+    const aim = { x: ent[0] + 0.5, y: ent[1] - 6, z: ent[2] - 12 };
+    const pitch = Math.atan2(cam.y + 1.62 - aim.y, cam.z - aim.z);
+    await pin(cam.x, cam.y, cam.z);
+    await look(0, pitch);
+    await page.waitForTimeout(2000);
+    const camY = await pin(cam.x, cam.y, cam.z);
+    check('the camera is up over the crack', Math.abs(camY - cam.y) < 1);
     const open = await page.evaluate(([x, y, z]) => window.minehonk.game.world.getState(x, y, z), [ent[0], ent[1] - 1, ent[2] - 3]);
     check('the crack is open in the ground', open === 0);
     await page.screenshot({ path: `${OUT}/v6-dragon-nest-crack.png` });

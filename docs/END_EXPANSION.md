@@ -570,7 +570,7 @@ Rules for both:
 
 Entering the chamber earns "Beneath the Pillars".
 
-**The dragon.** The Nest lies under the island and away from the fight, and the dragon's AI ignores it. `DragonFight.nearest()` skips players in the Nest, so the dragon never dives at someone down there. That is the only change to the dragon fight. A respawned dragon (the End Crystal ritual) fights as before and never touches the Nest (tested).
+**The dragon.** The Nest lies under the island and away from the fight, and the dragon's AI ignores it. `DragonFight.nearest()` skips players in the Nest, so the dragon never dives at someone down there. That is the only change to how the dragon fights. (Phase 3 also fixes its boss bar: the death sequence's last tick used to add the bar back after `finish()` had cleared it, so it stayed on screen at 0% for the rest of the session.) A respawned dragon (the End Crystal ritual) fights as before and never touches the Nest (tested).
 
 ### Loot
 
@@ -631,6 +631,12 @@ The End Expansion tab gains a Structures section and a Dragon's Nest section. Ev
 - **New registry entries.** The blocks and items are appended to the registries, so no saved number moves.
 - **Phase 1 and 2 worlds (generators 6 and 7)** load and play as before. They get no structures, since their generator never plans any. They do get the Nest once their dragon is dead (it is the server's work, not the generator's), and their Ancient Maps stay unmarked.
 - **Unexplored chunks.** In a generator 8 world, structures appear only in chunks generated from now on.
+
+### Fixes along the way
+
+- **The dragon's boss bar** stayed on screen after every kill (see [the Dragon's Nest](#the-dragons-nest)).
+- **The void edge guard (phase 2):** a mob in the air whose step would have taken it over the void was put back where it was, keeping its whole fall. It hung at the ledge while its fall distance grew, then died of the fall when it landed. The "never walk off the island" test failed about half its runs. Now only the sideways part of the step is undone and the fall distance is kept as it was.
+- **`kill_mobs`** also removes Guardian Constructs.
 
 ### Tests (phase 3)
 

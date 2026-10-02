@@ -5,6 +5,7 @@
  */
 import type { DimensionId } from '../data/biomes';
 import { GAME_MODES, DIFFICULTIES, type GameMode, type Difficulty } from './gamemode';
+import { EXPANSION_BIOME_IDS } from '../endExpansion/biomes';
 
 export const ADMIN_DIMENSIONS: DimensionId[] = ['overworld', 'nether', 'end', 'farlands', 'computer'];
 
@@ -94,6 +95,9 @@ export const V55_OPS = [
   'reset_ending',
 ] as const;
 export type V55Op = (typeof V55_OPS)[number];
+/** V6: the End Expansion's portal and travel to the Expanded End (all cheats: never advancements). */
+export const V6_OPS = ['status', 'activate', 'deactivate', 'build_portal', 'tp_portal', 'tp_arrival', 'tp_biome', 'where'] as const;
+export type V6Op = (typeof V6_OPS)[number];
 
 export function structureName(id: string): string {
   return STRUCTURE_NAMES[id] ?? id.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
@@ -135,7 +139,9 @@ export type AdminAction =
   /** V5: engineering (kits, energy, test rigs; all cheats). */
   | { a: 'v5'; op: V5Op }
   /** V5.5: the Herobrine story (all cheats: never advancements). */
-  | { a: 'v55'; op: V55Op };
+  | { a: 'v55'; op: V55Op }
+  /** V6: the End Expansion (tp_biome names one of the Expanded End's biomes). */
+  | { a: 'v6'; op: V6Op; biome?: string };
 
 export type AdminActionName = AdminAction['a'];
 
@@ -156,6 +162,10 @@ export function validateAdmin(raw: unknown): AdminAction | null {
     case 'v55':
       if (!V55_OPS.includes(m.op as V55Op)) return null;
       return { a: 'v55', op: m.op as V55Op };
+    case 'v6':
+      if (!V6_OPS.includes(m.op as V6Op)) return null;
+      if (m.op === 'tp_biome') return typeof m.biome === 'string' && EXPANSION_BIOME_IDS.includes(m.biome) ? { a: 'v6', op: 'tp_biome', biome: m.biome } : null;
+      return { a: 'v6', op: m.op as V6Op };
     case 'v4':
       if (!V4_OPS.includes(m.op as V4Op)) return null;
       return { a: 'v4', op: m.op as V4Op };

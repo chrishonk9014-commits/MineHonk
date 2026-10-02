@@ -126,6 +126,50 @@ export class SynthCtx {
     }
   }
 
+  /**
+   * V6: a sustained tone for ambient beds: constant level (no decay) with a
+   * slow swell, and an optional second voice detuned by `beat` Hz.
+   */
+  drone(opts: { f: number; gain: number; wave?: 'sine' | 'tri' | 'saw'; beat?: number; swell?: number; lp?: number }): void {
+    const { sr, data } = this;
+    const lp = opts.lp ? onePoleCoef(opts.lp, sr) : 1;
+    const swell = opts.swell ?? 0;
+    const fs = [opts.f, ...(opts.beat ? [opts.f + opts.beat] : [])];
+    for (const f of fs) {
+      let ph = this.rng.next();
+      let l = 0;
+      for (let i = 0; i < data.length; i++) {
+        ph += f / sr;
+        ph -= Math.floor(ph);
+        const w = opts.wave ?? 'sine';
+        const v = w === 'tri' ? 1 - Math.abs(ph * 4 - 2) : w === 'saw' ? ph * 2 - 1 : Math.sin(ph * Math.PI * 2);
+        l += (v - l) * lp;
+        // The swell completes whole cycles over the buffer so the loop stays smooth
+        const env = swell ? 1 - swell * 0.5 * (1 - Math.cos((i / data.length) * Math.PI * 4)) : 1;
+        data[i]! += l * env * (opts.gain / fs.length);
+      }
+    }
+  }
+
+  /** V6: sustained filtered noise for ambient beds (wind, hiss, rumble), with a slow swell. */
+  wash(opts: { gain: number; lp?: number; hp?: number; bp?: [number, number]; swell?: number }): void {
+    const { sr, data, rng } = this;
+    const lp = opts.lp ? onePoleCoef(opts.lp, sr) : 1;
+    const hp = opts.hp ? onePoleCoef(opts.hp, sr) : 0;
+    const bp = opts.bp ? new Biquad('bandpass', opts.bp[0], opts.bp[1], sr) : null;
+    const swell = opts.swell ?? 0;
+    let l = 0;
+    let h = 0;
+    for (let i = 0; i < data.length; i++) {
+      l += (rng.next() * 2 - 1 - l) * lp;
+      h += (l - h) * hp;
+      let out = l - (hp ? h : 0);
+      if (bp) out = bp.process(out);
+      const env = 1 - swell * 0.5 * (1 - Math.cos((i / data.length) * Math.PI * 6));
+      data[i]! += out * env * opts.gain;
+    }
+  }
+
   /** Reduces bit depth / sample rate (glitch effects). */
   crush(bits: number, hold: number): void {
     const q = Math.pow(2, bits - 1);
@@ -751,6 +795,67 @@ const EFFECTS: Record<string, { dur: number; recipe: Recipe }> = {
     },
   },
   'tesla.charge': { dur: 1.6, recipe: (s) => (s.tone({ dur: 1.5, gain: 0.4, f0: 100, f1: 400, wave: 'saw', lp: 2200, attack: 1, decay: 0.3, vibrato: 0.15, vibratoRate: 50 }), s.noise({ dur: 1.5, gain: 0.25, attack: 1, decay: 0.3, hp: 3000, grain: 3 })) },
+  // V6: the Expanded End's ambient beds (looped by AudioEngine.setBed, one per biome)
+  /** Pale Plains: soft, open wind over a faint low tone. */
+  'bed.pale_plains': {
+    dur: 9,
+    recipe: (s) => {
+      s.wash({ gain: 0.5, lp: 900, hp: 120, swell: 0.6 });
+      s.drone({ f: 110, gain: 0.06, beat: 0.3 });
+    },
+  },
+  /** Shattered Spires: a deep hum with wind whistling between the spires. */
+  'bed.shattered_spires': {
+    dur: 9,
+    recipe: (s) => {
+      s.drone({ f: 55, gain: 0.35, wave: 'saw', lp: 300, beat: 0.4, swell: 0.3 });
+      s.wash({ gain: 0.25, bp: [1800, 8], swell: 0.8 });
+    },
+  },
+  /** Floating Archipelago: an airy chord with soft chimes now and then. */
+  'bed.floating_archipelago': {
+    dur: 10,
+    recipe: (s) => {
+      s.drone({ f: 220, gain: 0.14, wave: 'tri', beat: 0.5, lp: 1800 });
+      s.drone({ f: 330, gain: 0.09, beat: 0.25 });
+      s.wash({ gain: 0.15, lp: 1500, hp: 400, swell: 0.5 });
+      for (let i = 0; i < 4; i++) s.bell({ start: 0.5 + i * 2.2 + s.rng.next() * 0.8, f: [880, 990, 1320, 1480][s.rng.int(4)]!, ratios: [1, 2.76], gain: 0.05, decay: 0.8, dur: 1.4 });
+    },
+  },
+  /** Hollow Isles: a cave rumble with distant drips. */
+  'bed.hollow_isles': {
+    dur: 9,
+    recipe: (s) => {
+      s.wash({ gain: 0.8, lp: 120, swell: 0.4 });
+      s.drone({ f: 41, gain: 0.3, swell: 0.3 });
+      for (let i = 0; i < 5; i++) s.tone({ start: 0.6 + i * 1.6 + s.rng.next(), dur: 0.08, gain: 0.08, f0: 1500 + s.rng.next() * 900, f1: 2600, decay: 0.03 });
+    },
+  },
+  /** Crystal Fields: a high shimmer of small bells over a thin tone. */
+  'bed.crystal_fields': {
+    dur: 9,
+    recipe: (s) => {
+      s.drone({ f: 660, gain: 0.05, beat: 1.2 });
+      for (let i = 0; i < 14; i++) s.bell({ start: s.rng.next() * 8, f: [1568, 1760, 2093, 2349, 2637][s.rng.int(5)]!, ratios: [1, 2.76, 5.4], gain: 0.04, decay: 0.6, dur: 1 });
+      s.wash({ gain: 0.08, hp: 3000, lp: 9000, swell: 0.5 });
+    },
+  },
+  /** Dune Isles: sand hissing in a steady, gusting wind. */
+  'bed.dune_isles': {
+    dur: 9,
+    recipe: (s) => {
+      s.wash({ gain: 0.35, hp: 1500, lp: 6000, swell: 0.9 });
+      s.wash({ gain: 0.3, lp: 300, swell: 0.5 });
+    },
+  },
+  /** Mist Hollows: a muffled hush and a slow low tone. */
+  'bed.mist_hollows': {
+    dur: 9,
+    recipe: (s) => {
+      s.wash({ gain: 0.3, lp: 2500, hp: 200, swell: 0.3 });
+      s.drone({ f: 82, gain: 0.2, beat: 0.2, swell: 0.4 });
+    },
+  },
 };
 
 /** Parameters for generic creature voices, keyed by mob type. */

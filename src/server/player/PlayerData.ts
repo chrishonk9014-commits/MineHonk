@@ -58,6 +58,8 @@ export class PlayerData {
     }
     (p as { fireTicks?: number }).fireTicks = num(raw.fire, 0);
     if (Array.isArray(raw.caveBiomes)) for (const b of raw.caveBiomes) if (typeof b === 'number' && b > 0 && b < 16) p.visitedCaveBiomes.add(b);
+    // V6: the Expanded End's biomes this player has been to
+    if (Array.isArray(raw.endBiomes)) for (const b of raw.endBiomes) if (typeof b === 'string' && b.length < 64) p.visitedEndBiomes.add(b);
     if (typeof raw.wardenWarning === 'number' && raw.wardenWarning >= 0 && raw.wardenWarning <= 4) p.wardenWarning = Math.floor(raw.wardenWarning);
     const ld = raw.lastDeath as Record<string, unknown> | undefined;
     if (ld && DIMS.includes(ld.dim as DimensionId) && [ld.x, ld.y, ld.z].every((v) => typeof v === 'number' && Number.isFinite(v))) p.lastDeath = { dim: ld.dim as DimensionId, x: ld.x as number, y: ld.y as number, z: ld.z as number };
@@ -97,6 +99,7 @@ export class PlayerData {
       lastDeath: p.lastDeath ?? undefined,
       wardenWarning: p.wardenWarning || undefined,
       caveBiomes: p.visitedCaveBiomes.size ? [...p.visitedCaveBiomes] : undefined,
+      endBiomes: p.visitedEndBiomes.size ? [...p.visitedEndBiomes] : undefined,
       endings: p.endings.size ? [...p.endings] : undefined,
       pendingEnding: p.pendingEnding ?? undefined,
       endEntry: p.endEntry ?? undefined,

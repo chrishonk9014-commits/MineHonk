@@ -3,6 +3,12 @@
  * with end crystals and holding the (inactive) exit portal, an empty void
  * out to 1000 blocks, and beyond it a field of outer islands with chorus
  * forests, void crystals and end cities.
+ *
+ * V6: far beyond, between EXPANSION_INNER and EXPANSION_OUTER, lies the
+ * Expanded End (./endExpansion.ts), in every world. In worlds made with
+ * generator 6 or later the outer islands thin out and stop well before it
+ * (APPROACH_FADE_START..APPROACH_FADE_END), leaving open void; older worlds
+ * keep their End exactly as it generated before, up to the ring.
  */
 import { Chunk } from '../world/chunk';
 import { Octave2 } from '../math/noise';
@@ -13,7 +19,9 @@ import { DecorView } from './decorate/view';
 import { placeTree } from './features/trees';
 import { StructureManager } from './structures/manager';
 import { END_CITY } from './structures/end';
-import { ProtoCache, cloneChunk, addGenEntities, type DimensionGenerator, type GeneratorOptions, type SpawnPoint } from './pipeline';
+import { ProtoCache, cloneChunk, addGenEntities, LATEST_GENERATOR, type DimensionGenerator, type GeneratorOptions, type SpawnPoint } from './pipeline';
+import { ExpansionTerrain } from './endExpansion';
+import { APPROACH_FADE_END, APPROACH_FADE_START, EXPANSION_GENERATOR, EXPANSION_INNER, EXPANSION_OUTER, chunkInExpansion, inExpansion } from '../endExpansion/region';
 
 /** Distance from the centre where the outer islands begin. */
 export const OUTER_ISLANDS = 1000;
@@ -69,8 +77,15 @@ export class EndTerrain {
   private readonly edge: Octave2;
   private readonly under: Octave2;
   private readonly rare: Octave2;
+  /** V6 worlds: the outer islands stop short of the Expanded End. */
+  private readonly approachGap: boolean;
+  private expansionTerrain: ExpansionTerrain | null = null;
 
-  constructor(readonly seed: number) {
+  constructor(
+    readonly seed: number,
+    version = LATEST_GENERATOR,
+  ) {
+    this.approachGap = version >= EXPANSION_GENERATOR;
     const r = (salt: number): Random => new Random(hashInts(seed, salt, 0xe4d));
     this.field = new Octave2(r(1), 3, 110);
     this.hills = new Octave2(r(2), 2, 36);
@@ -79,9 +94,19 @@ export class EndTerrain {
     this.rare = new Octave2(r(5), 2, 420);
   }
 
+  /** The Expanded End's terrain (built on first use). */
+  get expansion(): ExpansionTerrain {
+    return (this.expansionTerrain ??= new ExpansionTerrain(this.seed));
+  }
+
   private fieldValue(x: number, z: number, d: number): number {
     // Fade the outer field in past OUTER_ISLANDS
-    const t = 0.2 + Math.max(0, (OUTER_ISLANDS + 120 - d) / 120) * 0.6;
+    let t = 0.2 + Math.max(0, (OUTER_ISLANDS + 120 - d) / 120) * 0.6;
+    if (this.approachGap && d > APPROACH_FADE_START) {
+      // V6: the field thins out to nothing on the way to the Expanded End
+      if (d >= APPROACH_FADE_END) return 0;
+      t += (1 - t) * ((d - APPROACH_FADE_START) / (APPROACH_FADE_END - APPROACH_FADE_START));
+    }
     const v = this.field.sample(x, z);
     return v > t ? (v - t) / (1 - t) : 0;
   }
@@ -98,6 +123,7 @@ export class EndTerrain {
       return { top, bottom: Math.max(1, bottom) };
     }
     if (d < OUTER_ISLANDS) return null;
+    if (d >= EXPANSION_INNER && d < EXPANSION_OUTER) return this.expansion.topColumn(x, z);
     const a = this.fieldValue(x, z, d);
     if (a <= 0) return null;
     const top = 50 + Math.floor(Math.min(0.8, a) * 42 + this.hills.sample(x, z) * 4);
@@ -110,6 +136,7 @@ export class EndTerrain {
     const b = eb();
     const d = Math.hypot(x, z);
     if (d < OUTER_ISLANDS) return b.end;
+    if (d >= EXPANSION_INNER && d < EXPANSION_OUTER) return this.expansion.biomeAt(x, z);
     if (d > 2500 && this.rare.sample(x, z) > 0.5) return b.voidReach;
     const a = this.fieldValue(x, z, d);
     if (a > 0.3) return b.highlands;
@@ -122,13 +149,16 @@ export class EndTerrain {
     const stone = S('end_stone');
     const bx = cx << 4;
     const bz = cz << 4;
+    const ring = chunkInExpansion(cx, cz);
     for (let z = 0; z < 16; z++)
       for (let x = 0; x < 16; x++) {
+        if (ring && inExpansion(bx + x, bz + z)) continue;
         c.biomes[(z << 4) | x] = this.biomeAt(bx + x, bz + z);
         const col = this.column(bx + x, bz + z);
         if (!col) continue;
         for (let y = col.bottom; y <= col.top; y++) c.setRaw(x, y, z, stone);
       }
+    if (ring) this.expansion.fill(c);
     c.recomputeHeightmap();
     return c;
   }
@@ -247,6 +277,12 @@ function voidCrystals(v: DecorView, seed: number, cx: number, cz: number): void 
     }
 }
 
+/** True when chunk (cx, cz) or a neighbour lies in the Expanded End (its features may reach in). */
+function nearExpansion(cx: number, cz: number): boolean {
+  for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) if (chunkInExpansion(cx + dx, cz + dz)) return true;
+  return false;
+}
+
 export class EndGenerator implements DimensionGenerator {
   readonly dimension = 'end' as const;
   readonly terrain: EndTerrain;
@@ -257,7 +293,7 @@ export class EndGenerator implements DimensionGenerator {
     readonly seed: number,
     opts: GeneratorOptions = {},
   ) {
-    this.terrain = new EndTerrain(seed);
+    this.terrain = new EndTerrain(seed, opts.version ?? LATEST_GENERATOR);
     this.protos = new ProtoCache(400, (cx, cz) => this.terrain.generate(cx, cz));
     const top = (x: number, z: number): number => this.terrain.column(x, z)?.top ?? -1;
     this.structures = new StructureManager(
@@ -282,6 +318,8 @@ export class EndGenerator implements DimensionGenerator {
     mainIsland(v, this.seed, this.terrain, c);
     const starts = this.structures.build(v);
     voidCrystals(v, this.seed, cx, cz);
+    // V6: the Expanded End's landscape and the arrival site
+    if (nearExpansion(cx, cz)) this.terrain.expansion.decorate(v);
     c.recount();
     c.recomputeHeightmap();
     for (const s of starts) addGenEntities(c, s);

@@ -17,13 +17,14 @@ export interface GeneratorOptions {
    * 1 = V1 terrain, 2 = V2 (the Caves Update), 3 = V3 (corrupted caves,
    * glitched portals, powder snow ice caves), 4 = V4 (the World Update),
    * 5 = V4 temples and bunkers (temple trials, the desert pyramid, bunkers
-   * with random layouts and biome styles). Defaults to the latest.
+   * with random layouts and biome styles), 6 = V6 (the End Expansion: the
+   * End's outer islands stop short of the Expanded End). Defaults to the latest.
    */
   version?: number;
 }
 
 /** Newest world generator version (new worlds use this). */
-export const LATEST_GENERATOR = 5;
+export const LATEST_GENERATOR = 6;
 
 export interface SpawnPoint {
   x: number;

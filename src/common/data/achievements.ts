@@ -35,6 +35,9 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: 'destroy_end_crystal', title: 'Shattered Light', description: 'Destroy an End Crystal', icon: 'end_crystal', parent: 'enter_end', category: 'end' },
   { id: 'find_end_city', title: 'The City at the End of the Game', description: 'Go on in, what could happen?', icon: 'purpur_block', parent: 'kill_dragon', category: 'end' },
   { id: 'elytra', title: 'Sky\'s the Limit', description: 'Find Elytra', icon: 'elytra', parent: 'find_end_city', category: 'end' },
+  // V6 - The End Expansion
+  { id: 'enter_expanded_end', title: 'The Expanded End', description: 'Reach the Expanded End', icon: 'end_stone_bricks', parent: 'kill_dragon', category: 'end' },
+  { id: 'all_expanded_biomes', title: 'Every Corner of the End', description: 'Visit all seven biomes of the Expanded End', icon: 'compass', parent: 'enter_expanded_end', category: 'end' },
   // The hidden chain (V3): nothing here is explained before it happens
   { id: 'mysterious_potion', title: 'Unlabeled', description: 'Find the potion hidden in a witch\'s hut', icon: 'mysterious_potion', parent: 'root', category: 'farlands', secret: true },
   { id: 'enderman_kills_dragon', title: 'The Farlands Remains', description: 'Let an Enderman end the Ender Dragon, with every crystal broken', icon: 'ender_pearl', parent: 'mysterious_potion', category: 'farlands', secret: true },

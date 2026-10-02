@@ -21,6 +21,7 @@ import { registerItems } from './textures/items';
 import { registerV4Blocks, registerV4Items } from './textures/v4';
 import { registerV5Blocks, registerV5Items } from './textures/v5';
 import { registerV55Blocks, registerV55Items } from './textures/v55';
+import { registerV6Blocks } from './textures/v6';
 import { BLOCK_DEFS } from '../src/common/data/blocks';
 import { buildFont } from './gen-font';
 
@@ -108,6 +109,7 @@ registerDims(blockReg);
 registerV4Blocks(blockReg);
 registerV5Blocks(blockReg);
 registerV55Blocks(blockReg);
+registerV6Blocks(blockReg);
 
 const referenced = new Set<string>();
 for (const d of BLOCK_DEFS) for (const v of Object.values(d.tex)) if (v) referenced.add(v);

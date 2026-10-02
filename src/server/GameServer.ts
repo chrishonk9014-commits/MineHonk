@@ -57,6 +57,8 @@ export class GameServer {
   workstations: import('./systems/Workstations').Workstations | null = null;
   portals: import('./systems/Portals').Portals | null = null;
   theEnd: import('./systems/TheEnd').EndSystem | null = null;
+  /** V6: the Expansion Portal and the Expanded End. */
+  endExpansion: import('./systems/EndExpansion').EndExpansionSystem | null = null;
   farlands: import('./systems/Farlands').FarlandsSystem | null = null;
   /** Fireworks, fishing, compasses, jukeboxes, beacons (installed by gameplay). */
   gadgets: import('./systems/Gadgets').Gadgets | null = null;

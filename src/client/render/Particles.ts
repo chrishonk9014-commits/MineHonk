@@ -314,6 +314,16 @@ export class Particles {
         case 'snowflake':
           this.add({ x: x + ox, y: y + oy, z: z + oz, vx: (Math.random() - 0.5) * 0.012, vy: -0.012, vz: (Math.random() - 0.5) * 0.012, maxLife: 80 + Math.random() * 40, size: 0.05, r: 0.92, g: 0.96, b: 1, drag: 0.99, collide: true, fade: true });
           break;
+        case 'end_mote_rise':
+        case 'end_mote_fall':
+        case 'end_mote_float': {
+          // V6: the Expanded End's ambient motes (colour in data, glowing when its top bit is set)
+          const c = data ?? 0xffffff;
+          const glow = (c & 0x1000000) !== 0;
+          const vy = kind === 'end_mote_rise' ? 0.008 + Math.random() * 0.006 : kind === 'end_mote_fall' ? -0.01 - Math.random() * 0.006 : (Math.random() - 0.5) * 0.004;
+          this.add({ x: x + ox, y: y + oy, z: z + oz, vx: (Math.random() - 0.5) * 0.01, vy, vz: (Math.random() - 0.5) * 0.01, maxLife: 80 + Math.random() * 70, size: 0.05 + Math.random() * 0.03, r: ((c >> 16) & 255) / 255, g: ((c >> 8) & 255) / 255, b: (c & 255) / 255, emissive: glow, fade: true, drag: 0.99 });
+          break;
+        }
         case 'void_aura':
           // Voidbound Endermen: dark violet and black motes drifting up
           this.add({ x: x + ox, y: y + oy, z: z + oz, vx: (Math.random() - 0.5) * 0.01, vy: 0.012 + Math.random() * 0.01, vz: (Math.random() - 0.5) * 0.01, maxLife: 30 + Math.random() * 30, size: 0.07, r: Math.random() < 0.4 ? 0.05 : 0.55, g: 0.05, b: Math.random() < 0.4 ? 0.08 : 0.9, emissive: true, fade: true, drag: 0.98 });

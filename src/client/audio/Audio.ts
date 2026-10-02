@@ -18,6 +18,8 @@ export class AudioEngine {
   private underwaterFilter!: BiquadFilterNode;
   private readonly cache = new Map<string, AudioBuffer[] | null>();
   private rainNode: { src: AudioBufferSourceNode; gain: GainNode; filter: BiquadFilterNode } | null = null;
+  /** V6: looping ambient beds, cross-faded as the player moves between biomes. */
+  private readonly beds = new Map<string, { src: AudioBufferSourceNode; gain: GainNode }>();
   private reverb: ConvolverNode | null = null;
   private listener = { x: 0, y: 0, z: 0 };
   private active = 0;
@@ -139,7 +141,9 @@ export class AudioEngine {
     const sr = this.ctx.sampleRate;
     let seed = 0;
     for (let i = 0; i < name.length; i++) seed = (seed * 31 + name.charCodeAt(i)) | 0;
-    for (let v = 0; v < VARIANTS; v++) {
+    // Ambient beds are long loops: one rendering is enough
+    const variants = name.startsWith('bed.') ? 1 : VARIANTS;
+    for (let v = 0; v < variants; v++) {
       const s = new SynthCtx(sr, r.dur, seed + v * 7919);
       r.recipe(s);
       const data = s.normalize(0.8);
@@ -269,7 +273,57 @@ export class AudioEngine {
     }
   }
 
+  /**
+   * Ambient bed: a looping synth recipe on the ambient bus. Setting a new
+   * one fades the others out; null fades everything out. `level` is 0..1.
+   */
+  setBed(name: string | null, level: number): void {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    if (name && level > 0.01 && !this.beds.has(name)) {
+      const bufs = this.buffers(name);
+      if (bufs) {
+        // Cross-fade the loop seam on a copy (the cached buffer stays as rendered)
+        const src0 = bufs[0]!.getChannelData(0);
+        const len = src0.length;
+        const fade = Math.min(Math.floor(ctx.sampleRate * 0.75), len >> 2);
+        const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+        const d = buf.getChannelData(0);
+        d.set(src0);
+        for (let i = 0; i < fade; i++) d[len - fade + i] = d[len - fade + i]! * (1 - i / fade) + src0[i]! * (i / fade);
+        const src = ctx.createBufferSource();
+        src.buffer = buf;
+        src.loop = true;
+        src.loopStart = fade / ctx.sampleRate;
+        const gain = ctx.createGain();
+        gain.gain.value = 0;
+        src.connect(gain);
+        gain.connect(this.buses.get('ambient')!);
+        src.start();
+        this.beds.set(name, { src, gain });
+      }
+    }
+    for (const [n, b] of this.beds) {
+      const target = n === name ? Math.max(0, Math.min(1, level)) * 0.5 : 0;
+      b.gain.gain.setTargetAtTime(target, t, 1.2);
+      // Long silent beds are stopped
+      if (target === 0 && b.gain.gain.value < 0.002) {
+        b.src.stop();
+        b.src.disconnect();
+        b.gain.disconnect();
+        this.beds.delete(n);
+      }
+    }
+  }
+
   stopAll(): void {
+    for (const b of this.beds.values()) {
+      b.src.stop();
+      b.src.disconnect();
+      b.gain.disconnect();
+    }
+    this.beds.clear();
     if (this.rainNode) {
       this.rainNode.src.stop();
       this.rainNode.src.disconnect();

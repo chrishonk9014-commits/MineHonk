@@ -11,7 +11,8 @@ import type { ItemStack } from '../../common/game/itemstack';
 import { POTIONS } from '../../common/data/potions';
 import { ENCHANTMENTS } from '../../common/data/enchantments';
 import { MOB_DEFS } from '../../common/data/mobs';
-import { structureName, TIME_PRESETS, ADMIN_DIMENSIONS, type AdminAction, type AdminCatalog, type LocateResult, type V4Op, type V5Op, type V55Op } from '../../common/game/admin';
+import { structureName, TIME_PRESETS, ADMIN_DIMENSIONS, type AdminAction, type AdminCatalog, type LocateResult, type V4Op, type V5Op, type V55Op, type V6Op } from '../../common/game/admin';
+import { EXPANSION_BIOMES } from '../../common/endExpansion/biomes';
 import type { DimensionId } from '../../common/data/biomes';
 import { ENDINGS } from '../../common/data/endings';
 
@@ -31,7 +32,7 @@ export interface AdminHost {
   cheats(): boolean;
 }
 
-type Tab = 'items' | 'mobs' | 'teleport' | 'player' | 'world' | 'endgame' | 'v4' | 'v5' | 'v55' | 'perf';
+type Tab = 'items' | 'mobs' | 'teleport' | 'player' | 'world' | 'endgame' | 'v4' | 'v5' | 'v55' | 'v6' | 'perf';
 const TABS: { id: Tab; name: string; icon: string }[] = [
   { id: 'items', name: 'Give Items', icon: 'chest' },
   { id: 'mobs', name: 'Spawn Mobs', icon: 'spawn_egg_zombie' },
@@ -42,6 +43,7 @@ const TABS: { id: Tab; name: string; icon: string }[] = [
   { id: 'v4', name: 'World Update', icon: 'error_block' },
   { id: 'v5', name: 'Engineering', icon: 'crusher' },
   { id: 'v55', name: 'Digital Corruption', icon: 'corrupted_flash_drive' },
+  { id: 'v6', name: 'End Expansion', icon: 'end_stone_bricks' },
   { id: 'perf', name: 'Performance', icon: 'redstone' },
 ];
 const DIM_NAMES: Record<string, string> = { overworld: 'Overworld', nether: 'Nether', end: 'The End', farlands: 'Farlands', computer: 'Inside the Computer' };
@@ -654,6 +656,50 @@ export function adminScreen(host: AdminHost): Screen {
     );
   };
 
+  // ------------------------------------------------------------------ the End Expansion (V6)
+  const renderV6 = (): HTMLElement => {
+    const state = el('div', { class: 'admin-stats' });
+    const showState = (d: unknown): void => {
+      const st = d as
+        | {
+            portal: { built: boolean; x: number; y: number; z: number; active: boolean; opened: boolean; cheat: boolean } | null;
+            dragonDefeated: boolean;
+            arrival: { x: number; y: number; z: number; biome: string };
+            here: { dim: string; x: number; y: number; z: number; inExpansion: boolean; biome: string | null };
+            biomes: { id: string; name: string; visited: boolean }[];
+          }
+        | undefined;
+      if (!st?.arrival) return;
+      clear(state);
+      const pt = st.portal;
+      const rows: [string, string][] = [
+        ['Expansion Portal', pt ? `${pt.active ? 'open' : 'dormant'}${pt.cheat ? ' (opened by a cheat)' : ''}${pt.built ? ` at ${pt.x}, ${pt.y}, ${pt.z}` : ', not built yet'}` : 'not built yet (the End has not been visited)'],
+        ['Ender Dragon', st.dragonDefeated ? 'defeated' : 'not defeated yet'],
+        ['Arrival platform', `${st.arrival.x}, ${st.arrival.y}, ${st.arrival.z} (${st.arrival.biome})`],
+        ['You', `${DIM_NAMES[st.here.dim] ?? st.here.dim} ${st.here.x}, ${st.here.y}, ${st.here.z}`],
+        ['Biome here', st.here.inExpansion ? st.here.biome ?? '?' : 'not in the Expanded End'],
+        ['Biomes visited', `${st.biomes.filter((b) => b.visited).length} of ${st.biomes.length}`],
+      ];
+      for (const [k, v] of rows) state.append(el('div', { class: 'row' }, el('span', { class: 'muted' }, k), el('span', {}, v)));
+    };
+    const op = (o: V6Op, biome?: string): void => void send(biome ? { a: 'v6', op: o, biome } : { a: 'v6', op: o }).then((r) => showState(r.data));
+    const chips = (...b: HTMLElement[]): HTMLElement => el('div', { class: 'admin-chips' }, ...b);
+    op('status');
+    return el(
+      'div',
+      { class: 'admin-cols' },
+      el(
+        'div',
+        { class: 'admin-col' },
+        el('div', { class: 'muted small' }, 'Everything here is a cheat: it never awards an advancement. A portal opened here before the Ender Dragon is defeated leads to a cheat visit.'),
+        section('Expansion Portal', chips(btn('Activate', () => op('activate'), 'btn chip'), btn('Deactivate', () => op('deactivate'), 'btn chip'), btn('Build the portal', () => op('build_portal'), 'btn chip'), btn('Teleport to the portal', () => op('tp_portal'), 'btn chip'))),
+        section('The Expanded End', chips(btn('Teleport to the arrival platform', () => op('tp_arrival'), 'btn chip'))),
+        section('Biomes', chips(...EXPANSION_BIOMES.map((b) => btn(b.name, () => op('tp_biome', b.id), 'btn chip')))),
+      ),
+      el('div', { class: 'admin-col' }, section('Status', state, chips(btn('Refresh', () => op('status'), 'btn chip'), btn('Where am I?', () => op('where'), 'btn chip')))),
+    );
+  };
+
   // ------------------------------------------------------------------ the World Update (V4)
   const renderV4 = (): HTMLElement => {
     const state = el('div', { class: 'admin-stats' });
@@ -757,7 +803,7 @@ export function adminScreen(host: AdminHost): Screen {
     for (const c of tabs.children) c.classList.toggle('active', (c as HTMLElement).dataset.tab === t);
     clear(body);
     hideTooltip();
-    const view = t === 'items' ? renderItems() : t === 'mobs' ? renderMobs() : t === 'teleport' ? renderTeleport() : t === 'player' ? renderPlayer() : t === 'world' ? renderWorld() : t === 'endgame' ? renderEndgame() : t === 'v4' ? renderV4() : t === 'v5' ? renderV5() : t === 'v55' ? renderV55() : renderPerf();
+    const view = t === 'items' ? renderItems() : t === 'mobs' ? renderMobs() : t === 'teleport' ? renderTeleport() : t === 'player' ? renderPlayer() : t === 'world' ? renderWorld() : t === 'endgame' ? renderEndgame() : t === 'v4' ? renderV4() : t === 'v5' ? renderV5() : t === 'v55' ? renderV55() : t === 'v6' ? renderV6() : renderPerf();
     body.append(view);
   };
   for (const t of TABS) {

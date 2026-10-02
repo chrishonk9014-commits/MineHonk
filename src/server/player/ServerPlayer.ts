@@ -128,6 +128,8 @@ export class ServerPlayer extends Entity {
   /** Cave biome the player is in (0 = none) and every cave biome visited so far. */
   caveBiome = 0;
   visitedCaveBiomes = new Set<number>();
+  /** V6: Expanded End biomes visited (ids). */
+  visitedEndBiomes = new Set<string>();
   /** Endings this player has reached (V3). */
   endings = new Set<string>();
   /** An ending card waiting to be shown (after walking out through the End portal). */

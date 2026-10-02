@@ -43,6 +43,7 @@ import { DigitalHud } from '../ui/DigitalHud';
 import { TouchControls } from '../ui/TouchControls';
 import { EndingCard } from '../ui/EndingCard';
 import { guideEntry } from '../../common/engineering/guide';
+import { EndAtmosphere } from './EndAtmosphere';
 
 export interface GameHost {
   openPause(): void;
@@ -150,7 +151,7 @@ export class Game {
   private playerName: string | null = null;
   /** Portal swirl strength 0..1 while standing in a portal, and its colour. */
   private portalFx = 0;
-  private portalKind: 'nether_portal' | 'far_portal' | null = null;
+  private portalKind: 'nether_portal' | 'far_portal' | 'expansion_portal' | null = null;
   private hurtTilt = 0;
   private shake = 0;
   private eyeCur = 1.62;
@@ -180,6 +181,8 @@ export class Game {
   /** Cave biome the server says we are in (0 = none) and how far the view has blended into it. */
   caveBiome = 0;
   private caveBlend = 0;
+  /** V6: the Expanded End's blended sky, fog and ambience around the player. */
+  readonly endAtmos = new EndAtmosphere();
 
   constructor(
     readonly canvas: HTMLCanvasElement,
@@ -1088,7 +1091,7 @@ export class Game {
   /** Local portal overlay: builds up while standing in a portal sheet. */
   private tickPortalFx(): void {
     const b = this.player.body;
-    let kind: 'nether_portal' | 'far_portal' | null = null;
+    let kind: 'nether_portal' | 'far_portal' | 'expansion_portal' | null = null;
     for (let y = Math.floor(b.y); y <= Math.floor(b.y + 1.7) && !kind; y++)
       for (const [dx, dz] of [
         [-0.3, -0.3],
@@ -1097,7 +1100,7 @@ export class Game {
         [0.3, -0.3],
       ] as const) {
         const id = blockOf(this.world.getState(Math.floor(b.x + dx), y, Math.floor(b.z + dz))).id;
-        if (id === 'nether_portal' || id === 'far_portal') {
+        if (id === 'nether_portal' || id === 'far_portal' || id === 'expansion_portal') {
           kind = id;
           break;
         }
@@ -1117,7 +1120,7 @@ export class Game {
         for (let dz = -4; dz <= 4; dz++)
           for (let dx = -4; dx <= 4; dx++) {
             const id = blockOf(this.world.getState(px + dx, py + dy, pz + dz)).id;
-            if (id === 'nether_portal' || id === 'far_portal') {
+            if (id === 'nether_portal' || id === 'far_portal' || id === 'expansion_portal') {
               this.audio.play('portal.ambient', px + dx + 0.5, py + dy + 0.5, pz + dz + 0.5, 0.5, 0.8 + Math.random() * 0.4, 'ambient');
               break search;
             }
@@ -1299,6 +1302,7 @@ export class Game {
     const b = p.body;
     this.caveAmbience();
     this.errorAmbience();
+    this.expansionAmbience();
     const light = this.world.getLight(Math.floor(b.x), Math.floor(b.y + 1.6), Math.floor(b.z));
     const skyLight = light >> 4;
     if (this.dimension === 'overworld') {
@@ -1327,6 +1331,23 @@ export class Game {
       const boss = this.hud.hasBoss();
       this.audio.music.update(MusicPlayer.moodFor(this.dimension, this.player.gamemode === 'creative', p.body.eyesInWater, boss, this.caveBiome));
     }
+  }
+
+  /** V6: the Expanded End: blended atmosphere, ambient motes and the biome's sound bed. */
+  private expansionAmbience(): void {
+    const b = this.player.body;
+    const atm = this.endAtmos;
+    atm.update(this.dimension === 'end', b.x, b.z, (x, z) => this.world.biomeAt(x, z));
+    const def = atm.dominant;
+    this.audio.setBed(def ? `bed.${def.bed}` : null, atm.state.amount);
+    const pt = def?.particles;
+    if (!pt || this.settings.particles === 'minimal') return;
+    const rate = pt.rate * atm.state.amount * (this.settings.particles === 'decreased' ? 0.4 : 1);
+    if (Math.random() > rate) return;
+    const x = b.x + (Math.random() - 0.5) * 20;
+    const y = b.y + (Math.random() - 0.3) * 10;
+    const z = b.z + (Math.random() - 0.5) * 20;
+    if (!STATE_SOLID[this.world.getState(Math.floor(x), Math.floor(y), Math.floor(z))]) this.renderer.particles.spawn(`end_mote_${pt.motion}`, x, y, z, 1, 0.3, pt.color | (pt.glow ? 0x1000000 : 0));
   }
 
   private inErrorBiome = false;
@@ -1667,11 +1688,12 @@ export class Game {
       shake: this.shake,
       darkness: this.darknessAmount(),
       cave: this.caveFog(),
+      endAtmos: this.dimension === 'end' && this.endAtmos.state.amount > 0 ? this.endAtmos.state : undefined,
       hurtTilt: this.hurtTilt,
       camDist,
       portal: this.portalFx,
       nausea: this.effectLevel('nausea') > 0 && !this.settings.reduceMotion ? 1 : 0,
-      portalColor: this.portalKind === 'far_portal' ? 0x2ad7c2 : 0x8a2be2,
+      portalColor: this.portalKind === 'far_portal' ? 0x2ad7c2 : this.portalKind === 'expansion_portal' ? 0x9ad8ff : 0x8a2be2,
     };
     // Lines (fishing, leads) end at the local player's hand: lower right of the view
     const game = this;
@@ -1767,6 +1789,7 @@ export class Game {
       `Facing: ${facing} (${deg.toFixed(1)} / ${((p.pitch * 180) / Math.PI).toFixed(1)})`,
       `Light: ${Math.max(light >> 4, light & 15)} (${light >> 4} sky, ${light & 15} block)`,
       `Biome: ${biome.id}`,
+      ...(this.dimension === 'end' && EndAtmosphere.biomeAt((x, z) => this.world.biomeAt(x, z), b.x, b.z) ? [`Expanded End: ${EndAtmosphere.biomeAt((x, z) => this.world.biomeAt(x, z), b.x, b.z)!.name}`] : []),
       `Day ${Math.floor(this.time / 24000)}, time ${Math.floor(this.dayTime)}`,
       `Mode: ${p.gamemode}${p.flying ? ' (flying)' : ''}  Ping: ${this.ping} ms`,
     ];

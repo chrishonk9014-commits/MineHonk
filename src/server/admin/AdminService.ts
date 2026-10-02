@@ -40,6 +40,7 @@ import { ADMIN_ZONE_RADIUS, MAX_ADMIN_ZONES } from './adminState';
 import { CAVE_BIOMES } from '../../common/gen/caves/caveBiomes';
 import { engineeringAdmin } from '../engineering/admin';
 import { herobrineAdmin } from '../herobrine/admin';
+import { expansionAdmin } from './expansionAdmin';
 
 /** Work budget for searches per server tick (ms). */
 const SEARCH_BUDGET_MS = 6;
@@ -452,6 +453,9 @@ export class AdminService {
       case 'v55':
         if (!this.server.herobrine || !this.server.engineering) return { ok: false, text: 'The Herobrine story is not running.' };
         return herobrineAdmin(this.server.herobrine, { moveTo: (pl, dim, x, y, z) => this.moveTo(pl, dim, x, y, z), give: (pl, id, n) => this.giveMarked(pl, id, n), safeSpot: (dim, x, y, z) => this.safeSpot(dim, x, y, z, false) }, p, a.op);
+      case 'v6':
+        if (!this.server.endExpansion) return { ok: false, text: 'The End Expansion is not running.' };
+        return expansionAdmin(this.server.endExpansion, { queueTeleport: (pl, x, y, z, label, surface) => this.queueTeleport(pl, req, 'end', x, y, z, label, surface) }, p, a.op, a.biome);
       case 'v5':
         if (!this.server.engineering) return { ok: false, text: 'Engineering is not running.' };
         return engineeringAdmin(this.server.engineering, { mark: (dim, x, y, z) => this.setBlockMark(dim, x, y, z, true), give: (pl, id, n) => this.giveMarked(pl, id, n) }, p, a.op);
@@ -847,6 +851,14 @@ export class AdminService {
     }
     this.pending.push({ p, req: q.req, dim: q.dim, x: pos.x, y: pos.y, z: pos.z, label, surface: q.kind === 'biome', since: this.server.tickNo });
     p.send({ t: 'admin_result', req: q.req, ok: true, text: `Found ${label} ${res.distance} blocks away. Preparing a safe landing...`, data: { ...res, pending: true } });
+  }
+
+  /**
+   * Moves a player (as a cheat) to a place that may not be loaded yet: the
+   * landing waits for the chunks, then picks a safe spot near (x, y, z).
+   */
+  queueTeleport(p: ServerPlayer, req: number, dim: DimensionId, x: number, y: number, z: number, label: string, surface: boolean): void {
+    this.pending.push({ p, req, dim, x, y, z, label, surface, since: this.server.tickNo });
   }
 
   /** Waits for the destination to generate, then lands the player somewhere safe. */

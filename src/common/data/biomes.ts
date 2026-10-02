@@ -2,6 +2,8 @@
  * Biome definitions. Colours follow the familiar Minecraft-like palette
  * (grass/foliage/water tints), expressed as explicit per-biome values.
  */
+import { EXPANSION_BIOMES } from '../endExpansion/biomes';
+
 /** V5.5: 'computer' is the world inside the computer (the Herobrine seed). */
 export type DimensionId = 'overworld' | 'nether' | 'end' | 'farlands' | 'computer';
 export type TreeKind =
@@ -220,5 +222,11 @@ far({ id: 'null_forest', name: 'Null Forest', category: 'farlands', grass: 0x2f6
 // One chunk that failed to load, in the Overworld or the Nether (never the End or the
 // Farlands). Placed by the V4 generators, not by climate; nothing spawns there naturally.
 defs.push({ id: 'error_biome', name: 'Error Biome', dimension: 'overworld', category: 'error', temperature: 0.5, downfall: 0, precipitation: 'none', grass: 0x3a0060, foliage: 0x3a0060, water: 0x7a00ff, sky: 0x1a0024, fog: 0x2a0040, surface: { top: 'error_block', filler: 'null_block', depth: 1 }, rare: true, spawns: { creature: [], monster: [], ambient: [] }, ambience: { particles: 'glitch' } });
+
+// --- V6: the Expanded End -------------------------------------------------------------
+// Placed by the End generator in the ring far beyond the outer islands (biome regions,
+// not climate). Appended last so earlier biome numbers never move. Mobs come later.
+for (const b of EXPANSION_BIOMES)
+  defs.push({ id: b.id, name: b.name, dimension: 'end', category: 'end', temperature: 0.5, downfall: 0, precipitation: 'none', grass: 0x8eb971, foliage: 0x71a74d, water: 0x3f76e4, sky: b.sky, fog: b.fog, surface: { top: b.palette.top, filler: b.palette.under }, rare: false, spawns: { creature: [], monster: [], ambient: [] } });
 
 export const BIOME_DEFS: readonly BiomeDef[] = defs;

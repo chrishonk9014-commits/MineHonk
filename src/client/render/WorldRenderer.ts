@@ -66,6 +66,8 @@ export interface FrameState {
   portalColor?: number;
   /** Underground in a cave biome: fog colour/thickness and how far the view has blended in (0..1). */
   cave?: { color: number; density: number; amount: number };
+  /** V6: the Expanded End's blended sky tint, fog colour and density, and how far the view has blended in. */
+  endAtmos?: { sky: THREE.Color; fog: THREE.Color; density: number; amount: number };
 }
 
 export class WorldRenderer {
@@ -318,7 +320,7 @@ export class WorldRenderer {
     cam.far = Math.max(300, rd * 1.8 + 200);
     cam.updateProjectionMatrix();
 
-    const skyState = this.sky.update(cam, f.dayTime, f.time, f.biomeSky, f.rain, f.thunder, f.underwater);
+    const skyState = this.sky.update(cam, f.dayTime, f.time, f.biomeSky, f.rain, f.thunder, f.underwater, f.endAtmos);
     this.lastSky = skyState;
     const u = this.chunks.uniforms;
     u.uDaylight!.value = skyState.daylight;
@@ -340,6 +342,12 @@ export class WorldRenderer {
     } else if (this.world.dimension === 'nether') {
       fogNear = Math.min(fogNear, 40);
       fogFar = Math.min(fogFar, 110);
+    } else if (this.world.dimension === 'end' && f.endAtmos) {
+      // V6: each Expanded End biome has its own fog density
+      const a = f.endAtmos;
+      const far = Math.max(28, rd * 0.98 * (1 - a.density * 0.8));
+      fogFar = fogFar + (far - fogFar) * a.amount;
+      fogNear = Math.min(fogNear, fogFar * (0.75 - 0.55 * a.density * a.amount));
     } else if (this.world.dimension === 'computer') {
       // V5.5: the fog across the lake (the far shore is never quite clear)
       fogNear = Math.min(fogNear, 16);

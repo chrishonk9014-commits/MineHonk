@@ -15,6 +15,7 @@ import type { PortalRecord } from '../world/LevelData';
 import type { DimensionId } from '../../common/data/biomes';
 import { S, stateOf, getProp, STATE_BLOCK, STATE_SOLID, STATE_FLUID, STATE_REPLACEABLE, blocks } from '../../common/registry/blocks';
 import { WORLD_BORDER } from '../../common/world/constants';
+import { EXPANSION_PORTAL_DELAY } from './EndExpansion';
 
 const MAX_SIZE = 21;
 /** Blocks that frame a Farlands portal. */
@@ -175,7 +176,7 @@ export class Portals {
       for (let z = z0; z <= z1; z++)
         for (let x = x0; x <= x1; x++) {
           const id = blocks[STATE_BLOCK[p.dim.getState(x, y, z)]!]!.id;
-          if (id === 'nether_portal' || id === 'end_portal' || id === 'far_portal' || id === 'end_gateway') return id;
+          if (id === 'nether_portal' || id === 'end_portal' || id === 'far_portal' || id === 'end_gateway' || id === 'expansion_portal') return id;
         }
     // An End Gateway is a single block between bedrock that no body fits
     // into: pressing against its open side is enough to go through
@@ -207,13 +208,14 @@ export class Portals {
         p.portalCooldown = Math.max(p.portalCooldown, 20);
         continue;
       }
-      if (kind === 'nether_portal' || kind === 'far_portal') {
+      if (kind === 'nether_portal' || kind === 'far_portal' || kind === 'expansion_portal') {
         p.portalTicks++;
-        const delay = kind === 'far_portal' ? FAR_PORTAL_DELAY : NETHER_PORTAL_DELAY;
+        const delay = kind === 'far_portal' ? FAR_PORTAL_DELAY : kind === 'expansion_portal' ? EXPANSION_PORTAL_DELAY : NETHER_PORTAL_DELAY;
         const need = p.gamemode === 'creative' || p.gamemode === 'spectator' ? 1 : delay;
         if (p.portalTicks >= need) {
           p.portalTicks = 0;
           if (kind === 'far_portal') this.travelFar(p);
+          else if (kind === 'expansion_portal') this.server.endExpansion?.enter(p);
           else this.travelNether(p);
         }
       } else {

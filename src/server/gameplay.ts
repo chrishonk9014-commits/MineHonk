@@ -23,6 +23,7 @@ import { StructureQuests } from './systems/StructureQuests';
 import { TempleTrials } from './systems/TempleTrials';
 import { Engineering } from './engineering/Engineering';
 import { HerobrineSystem } from './herobrine/Herobrine';
+import { EndExpansionSystem } from './systems/EndExpansion';
 
 export function installGameplay(server: GameServer): void {
   const mobs = new MobSystem(server);
@@ -36,6 +37,9 @@ export function installGameplay(server: GameServer): void {
   server.workstations = ws;
   const end = new EndSystem(server);
   server.theEnd = end;
+  // V6: the Expansion Portal on the main island and the Expanded End beyond
+  const expansion = new EndExpansionSystem(server);
+  server.endExpansion = expansion;
   const far = new FarlandsSystem(server);
   server.farlands = far;
   const gadgets = new Gadgets(server);
@@ -104,6 +108,7 @@ export function installGameplay(server: GameServer): void {
     ws.tick();
     portals.tick();
     end.tick();
+    expansion.tick();
     endgame.tick();
     errorBoss.tick();
     glitched.tick();

@@ -7,6 +7,7 @@
 import type { BlockDef, SoundGroup, TintKind } from '../registry/blockTypes';
 import { engineeringBlockDefs } from '../engineering/catalog';
 import { digitalBlockDefs } from '../digital/blocks';
+import { expansionBlockDefs } from '../endExpansion/blocks';
 
 const defs: BlockDef[] = [];
 const add = (d: BlockDef): BlockDef => {
@@ -1010,5 +1011,8 @@ for (const d of engineeringBlockDefs()) add(d);
 
 // V5.5 - The Digital Corruption Update: the computer world and Herobrine's cave
 for (const d of digitalBlockDefs()) add(d);
+
+// V6 - The End Expansion: the Expansion Portal and the Expanded End's landscape
+for (const d of expansionBlockDefs()) add(d);
 
 export const BLOCK_DEFS: readonly BlockDef[] = defs;

@@ -236,7 +236,7 @@ export class Sky {
    * Updates sky for the given time of day. Returns lighting values for the
    * world shader.
    */
-  update(camera: THREE.Camera, dayTime: number, time: number, biomeSky: number, rain: number, thunder: number, underwater: boolean): SkyState {
+  update(camera: THREE.Camera, dayTime: number, time: number, biomeSky: number, rain: number, thunder: number, underwater: boolean, endAtmos?: { sky: THREE.Color; fog: THREE.Color; density: number; amount: number }): SkyState {
     this.group.position.copy(camera.position);
     const u = this.domeMat.uniforms;
     u.uTime!.value = time;
@@ -247,11 +247,18 @@ export class Sky {
       this.sun.visible = this.moon.visible = false;
       this.clouds.visible = false;
       const fog = dim === 'nether' ? new THREE.Color(0x330808) : new THREE.Color(0x100a18);
-      u.uZenith!.value.copy(fog);
+      const zenith = fog.clone();
+      // V6: the Expanded End's biomes tint the sky and fog (already blended across borders)
+      const ea = dim === 'end' && endAtmos && endAtmos.amount > 0 ? endAtmos : null;
+      if (ea) {
+        zenith.lerp(ea.sky, ea.amount);
+        fog.lerp(ea.fog, ea.amount);
+      }
+      u.uZenith!.value.copy(zenith);
       u.uHorizon!.value.copy(fog);
-      u.uVoid!.value.copy(fog);
+      u.uVoid!.value.copy(ea ? fog.clone().multiplyScalar(0.55) : fog);
       u.uGlowStrength!.value = 0;
-      (this.stars.material as THREE.PointsMaterial).opacity = dim === 'end' ? 0.5 : 0;
+      (this.stars.material as THREE.PointsMaterial).opacity = dim === 'end' ? 0.5 * (1 - (ea ? ea.density * ea.amount : 0)) : 0;
       state.daylight = 0;
       state.ambient = dim === 'nether' ? 0.12 : 0.2;
       state.fog.copy(fog);

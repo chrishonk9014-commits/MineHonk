@@ -133,6 +133,13 @@ export class ServerPlayer extends Entity {
   visitedEndBiomes = new Set<string>();
   /** V6 phase 2: kinds of Expanded End mob this player has killed (for "Hunter of the Expanded End"). */
   expansionKills = new Set<string>();
+  /** V6 phase 3: Expanded End structure kinds found (variants and giants, never under a cheat). */
+  endFound = new Set<string>();
+  /** V6 phase 3: giant structures whose title this player has seen (type@x,z). */
+  endTitles = new Set<string>();
+  /** V6 phase 3: lore fragments and End Artifacts this player has held. */
+  endLore = new Set<string>();
+  endArtifacts = new Set<string>();
   /** Endings this player has reached (V3). */
   endings = new Set<string>();
   /** An ending card waiting to be shown (after walking out through the End portal). */

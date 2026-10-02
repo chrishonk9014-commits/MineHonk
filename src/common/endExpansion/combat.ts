@@ -24,3 +24,18 @@ export function arcVelocity(ax: number, ay: number, az: number, bx: number, by: 
 export function arcPoint(ax: number, ay: number, az: number, v: readonly [number, number, number], n: number): [number, number, number] {
   return [ax + v[0] * n, ay + v[1] * n - (CHORUS_GLOB_GRAVITY * n * (n - 1)) / 2, az + v[2] * n];
 }
+
+// V6 phase 3: the Guardian Constructs' attacks (each lasts at least this long, or
+// TELEGRAPH_TICKS_CROWD when more than one player is near, whichever is longer)
+/** The Sentinel's charged punch: its arm glows. */
+export const SENTINEL_PUNCH_TICKS = 24;
+/** The Sentinel's crystal bolt: a beam marks the line first. */
+export const SENTINEL_BOLT_TICKS = 30;
+/** The Bulwark's ground pound: a ring of glowing cracks. */
+export const BULWARK_POUND_TICKS = 32;
+/** The Bulwark's shield phase (it takes half damage). */
+export const BULWARK_SHIELD_TICKS = 24;
+/** Reach of the pound (blocks from the Bulwark). */
+export const BULWARK_POUND_RADIUS = 5;
+/** Damage of the Sentinel's bolt (the punch and the pound use the mobs' own damage). */
+export const SENTINEL_BOLT_DAMAGE = 6;

@@ -5,7 +5,9 @@
  * way out to the Expanded End. The hashes were recorded from the last commit
  * before V6 (V5.5).
  *
- * The other dimensions don't change in generator 6 at all.
+ * The other dimensions don't change in generators 6, 7 or 8 at all, and
+ * generator 8 (phase 3: the Expanded End's structures) leaves the classic End
+ * byte-identical too.
  */
 import { describe, it, expect } from 'vitest';
 import { initItems } from '../../src/common/registry/items';
@@ -31,7 +33,7 @@ function spread(gen: DimensionGenerator, step: number): Chunk[] {
 describe('the classic End is unchanged by V6', () => {
   const seed = seedFromString('v6-regression');
 
-  for (const version of [1, 3, 5, 6, 7]) {
+  for (const version of [1, 3, 5, 6, 7, 8]) {
     it(`main island, outer islands and an End city (generator ${version})`, () => {
       const g = createGenerator('end', seed, { version });
       expect(hashChunks(around(g, 0, 0, 2)), 'main island').toBe('f9c2209d');
@@ -68,7 +70,7 @@ describe('the classic End is unchanged by V6', () => {
   });
 });
 
-describe('generators 6 and 7 change nothing outside the End', () => {
+describe('generators 6, 7 and 8 change nothing outside the End', () => {
   const seed = seedFromString('v6-regression');
   for (const [dim, step] of [
     ['overworld', 9],
@@ -79,6 +81,7 @@ describe('generators 6 and 7 change nothing outside the End', () => {
       const base = hashChunks(spread(createGenerator(dim, seed, { version: 5 }), step));
       expect(hashChunks(spread(createGenerator(dim, seed, { version: 6 }), step))).toBe(base);
       expect(hashChunks(spread(createGenerator(dim, seed, { version: 7 }), step))).toBe(base);
+      expect(hashChunks(spread(createGenerator(dim, seed, { version: 8 }), step))).toBe(base);
     }, 360000);
   }
 });

@@ -25,6 +25,8 @@ import { Engineering } from './engineering/Engineering';
 import { HerobrineSystem } from './herobrine/Herobrine';
 import { EndExpansionSystem } from './systems/EndExpansion';
 import { EndMobsSystem } from './systems/EndMobs';
+import { ConstructsSystem } from './systems/Constructs';
+import { EndStructuresSystem } from './systems/EndStructures';
 import { itemIdOf, type ItemStack } from '../common/game/itemstack';
 import { OFFHAND } from './player/Inventory';
 
@@ -46,6 +48,10 @@ export function installGameplay(server: GameServer): void {
   // V6 phase 2: the Expanded End's mobs
   const endMobs = new EndMobsSystem(server);
   server.endMobs = endMobs;
+  // V6 phase 3: the Guardian Constructs, and the structures, ancient civilization and Dragon's Nest
+  server.constructs = new ConstructsSystem(server);
+  const endStructures = new EndStructuresSystem(server);
+  server.endStructures = endStructures;
   const far = new FarlandsSystem(server);
   server.farlands = far;
   const gadgets = new Gadgets(server);
@@ -64,14 +70,14 @@ export function installGameplay(server: GameServer): void {
     it.containers.openVoidPack(p, hand === 1 ? OFFHAND : p.selectedSlot);
     return true;
   };
-  h.useItem = (p, stack, hand) => voidPack(p, stack, hand) || !!server.herobrine?.useItem(p, stack) || !!server.endgame?.useItem(p, stack) || mobs.useItem(p, stack) || end.fillBottle(p, stack) || ws.fillBottle(p, stack) || ws.throwSplash(p, stack) || end.useItem(p, stack) || far.useItem(p, stack) || gadgets.useItem(p, stack, hand);
+  h.useItem = (p, stack, hand) => voidPack(p, stack, hand) || endStructures.useItem(p, stack, hand) || !!server.herobrine?.useItem(p, stack) || !!server.endgame?.useItem(p, stack) || mobs.useItem(p, stack) || end.fillBottle(p, stack) || ws.fillBottle(p, stack) || ws.throwSplash(p, stack) || end.useItem(p, stack) || far.useItem(p, stack) || gadgets.useItem(p, stack, hand);
   const quests = new StructureQuests(server);
   server.structureQuests = quests;
   const temples = new TempleTrials(server);
   server.templeTrials = temples;
   const engineering = new Engineering(server);
   server.engineering = engineering;
-  h.useBlock = (p, x, y, z, state) => !!server.herobrine?.useBlock(p, x, y, z, state) || quests.useBlock(p, x, y, z, state) || temples.useBlock(p, x, y, z, state) || engineering.useBlock(p, x, y, z, state) || ws.useBlock(p, x, y, z, state);
+  h.useBlock = (p, x, y, z, state) => endStructures.useBlock(p, x, y, z, state) || !!server.herobrine?.useBlock(p, x, y, z, state) || quests.useBlock(p, x, y, z, state) || temples.useBlock(p, x, y, z, state) || engineering.useBlock(p, x, y, z, state) || ws.useBlock(p, x, y, z, state);
   h.windowAction = (p, m) => ws.windowAction(p, m);
   const prevUseOnBlock = h.useItemOnBlock;
   h.useItemOnBlock = (p, stack, x, y, z, face) => voidPack(p, stack, 0) || end.useOnBlock(p, stack, x, y, z) || far.useOnBlock(p, stack, x, y, z) || mobs.useSpawnEgg(p, stack, x, y, z, face) || gadgets.useOnBlock(p, stack, x, y, z, face) || !!prevUseOnBlock?.(p, stack, x, y, z, face);
@@ -122,6 +128,7 @@ export function installGameplay(server: GameServer): void {
     portals.tick();
     end.tick();
     expansion.tick();
+    endStructures.tick();
     endgame.tick();
     errorBoss.tick();
     glitched.tick();

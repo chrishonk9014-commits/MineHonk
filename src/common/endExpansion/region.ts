@@ -14,6 +14,12 @@ export const EXPANSION_GENERATOR = 6;
  * ores and plants. Worlds made by generator 6 keep their phase 1 Expanded End.
  */
 export const EXPANSION_RESOURCES_GENERATOR = 7;
+/**
+ * Generator version from which the Expanded End has its structures (phase 3):
+ * the End City 2.0 variants and the giant structures. Worlds made by earlier
+ * generators never get them, so no saved chunk ever meets half a structure.
+ */
+export const EXPANSION_STRUCTURES_GENERATOR = 8;
 
 /**
  * V6 worlds: the outer islands thin out between these distances from (0, 0)

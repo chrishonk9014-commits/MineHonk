@@ -2412,6 +2412,174 @@ V.end_phantom = {
   nameY: 1.2,
 };
 
+// ---------------------------------------------------------------------------
+// V6 phase 3: the Guardian Constructs. Built, not born: Ancient End Bricks
+// laid in courses, held together by glowing crystal joints.
+// ---------------------------------------------------------------------------
+const BRICK = '#8a7a5a';
+const BRICK_DARK = '#6a5a3e';
+const MORTAR = '#4a3e2a';
+/** Brick courses on every face. */
+function courses(p: FacePainter): void {
+  const [w, h, d] = p.size;
+  for (const face of ['front', 'back', 'left', 'right'] as const) {
+    const fw = face === 'front' || face === 'back' ? w : d;
+    for (let y = 2; y < h; y += 3) p.px(face, 0, y, MORTAR, Math.max(1, Math.ceil(fw)), 1);
+    for (let y = 0; y < h; y += 3) for (let x = ((y / 3) % 2) * 2 + 1; x < fw; x += 4) p.px(face, x, y, MORTAR, 1, 2);
+  }
+  p.speckle('all', BRICK_DARK, 0.12);
+}
+
+/** Crystal joints: small glowing cubes at the construct's seams, brighter as it charges. */
+function joints(m: BoxModel, list: [part: string, key: string, at: [number, number, number], s: number][], color: number, glow: number): void {
+  for (const [part, key, at, sz] of list) {
+    const j = flare(m, part, key, [sz, sz, sz], at, color);
+    if (!j) continue;
+    j.visible = true;
+    (j.material as THREE.MeshBasicMaterial).opacity = 0.35 + glow * 0.6;
+    j.scale.setScalar(0.8 + glow * 0.5);
+  }
+}
+
+V.guardian_sentinel = {
+  parts: () => [
+    { name: 'rightLeg', pivot: [-2.5, 14, 0], from: [-2.5, -14, -2.5], size: [5, 14, 5], colors: { all: BRICK, bottom: MORTAR }, paint: courses },
+    { name: 'leftLeg', pivot: [2.5, 14, 0], from: [-2.5, -14, -2.5], size: [5, 14, 5], colors: { all: BRICK, bottom: MORTAR }, paint: courses },
+    { name: 'body', pivot: [0, 14, 0], from: [-6, 0, -3.5], size: [12, 14, 7], colors: { all: BRICK, top: BRICK_DARK }, paint: (p) => {
+      courses(p);
+      // A chiselled plate on the chest
+      p.px('front', 3, 3, BRICK_DARK, 6, 6);
+      p.px('front', 5, 5, '#3a3048', 2, 2);
+    } },
+    { name: 'head', parent: 'body', pivot: [0, 14, 0], from: [-3.5, 0, -3.5], size: [7, 8, 7], colors: { all: BRICK, top: BRICK_DARK }, paint: (p) => {
+      courses(p);
+      // One slit where eyes would be
+      p.px('front', 1, 3, '#1a1424', 5, 1);
+    } },
+    { name: 'rightArm', parent: 'body', pivot: [-8, 13, 0], from: [-2.5, -15, -2.5], size: [5, 16, 5], colors: { all: BRICK, bottom: BRICK_DARK }, paint: courses },
+    { name: 'leftArm', parent: 'body', pivot: [8, 13, 0], from: [-2.5, -15, -2.5], size: [5, 16, 5], colors: { all: BRICK, bottom: BRICK_DARK }, paint: courses },
+  ],
+  anim: (m, e, alpha, time) => {
+    animateHumanoid(m, e, alpha);
+    const tele = e.meta.tele;
+    const ra = m.part('rightArm');
+    const la = m.part('leftArm');
+    const body = m.part('body');
+    if (body) body.rotation.x = 0.05;
+    const pulse = 0.5 + Math.sin(time * 0.6) * 0.5;
+    if (tele === 'punch') {
+      // The arm draws back and glows
+      if (ra) ra.rotation.set(-2.3, 0, 0.15);
+      if (body) body.rotation.y = 0.35;
+    } else if (tele === 'bolt') {
+      if (ra) ra.rotation.x = -1.4;
+      if (la) la.rotation.x = -1.4;
+    } else if (e.swingTime > 0) {
+      const t = e.swingTime / 6;
+      if (ra) ra.rotation.x = -1.6 * t;
+      if (body) body.rotation.y = 0;
+    } else if (body) body.rotation.y = 0;
+    const base = 0x7ae0ff;
+    joints(m, [
+      ['body', 'jShoulderR', [-7, 13, 0], 2.4],
+      ['body', 'jShoulderL', [7, 13, 0], 2.4],
+      ['body', 'jWaist', [0, 0.5, 0], 2.2],
+      ['rightLeg', 'jKneeR', [0, -7, -2.6], 1.8],
+      ['leftLeg', 'jKneeL', [0, -7, -2.6], 1.8],
+      ['rightArm', 'jElbowR', [0, -7, -2.6], 1.8],
+      ['leftArm', 'jElbowL', [0, -7, -2.6], 1.8],
+    ], base, tele ? 0.7 + pulse * 0.3 : 0.25 + pulse * 0.15);
+    // The charging arm, and the eye slit before a bolt
+    const fist = flare(m, 'rightArm', 'fist', [5.6, 4, 5.6], [0, -13, 0], 0xb8f4ff);
+    if (fist) {
+      fist.visible = tele === 'punch';
+      (fist.material as THREE.MeshBasicMaterial).opacity = 0.4 + pulse * 0.5;
+    }
+    const eye = flare(m, 'head', 'eye', [5.4, 1.2, 0.4], [0, 4.4, 3.7], 0x9af0ff);
+    if (eye) {
+      eye.visible = true;
+      eye.scale.set(1, tele === 'bolt' ? 1.6 + pulse : 1, 1);
+      (eye.material as THREE.MeshBasicMaterial).color.setHex(tele === 'bolt' ? 0xffffff : 0x5ac0e0);
+    }
+  },
+  nameY: 2.7,
+};
+
+V.guardian_bulwark = {
+  parts: () => [
+    { name: 'rightLeg', pivot: [-5, 12, 0], from: [-4, -12, -4], size: [8, 12, 8], colors: { all: BRICK, bottom: MORTAR }, paint: courses },
+    { name: 'leftLeg', pivot: [5, 12, 0], from: [-4, -12, -4], size: [8, 12, 8], colors: { all: BRICK, bottom: MORTAR }, paint: courses },
+    { name: 'body', pivot: [0, 12, 0], from: [-11, 0, -6], size: [22, 20, 12], colors: { all: BRICK, top: BRICK_DARK }, paint: (p) => {
+      courses(p);
+      p.px('front', 7, 5, BRICK_DARK, 8, 8);
+      p.px('front', 9, 7, '#2a2040', 4, 4);
+    } },
+    { name: 'head', parent: 'body', pivot: [0, 20, -1], from: [-4, 0, -4], size: [8, 6, 8], colors: { all: BRICK_DARK }, paint: (p) => {
+      courses(p);
+      p.px('front', 1, 2, '#1a1424', 6, 1);
+    } },
+    { name: 'rightArm', parent: 'body', pivot: [-14, 18, 0], from: [-4, -24, -4.5], size: [8, 26, 9], colors: { all: BRICK, bottom: MORTAR }, paint: courses },
+    { name: 'leftArm', parent: 'body', pivot: [14, 18, 0], from: [-4, -24, -4.5], size: [8, 26, 9], colors: { all: BRICK, bottom: MORTAR }, paint: courses },
+  ],
+  anim: (m, e, alpha, time) => {
+    const awake = e.meta.awake === true;
+    const tele = e.meta.tele;
+    const w = walkPhase(e, alpha);
+    const sw = Math.sin(w * 0.45) * 0.35 * Math.min(1, e.limbSpeed * 1.5);
+    const rl = m.part('rightLeg');
+    const ll = m.part('leftLeg');
+    const ra = m.part('rightArm');
+    const la = m.part('leftArm');
+    const body = m.part('body');
+    if (rl) rl.rotation.x = sw;
+    if (ll) ll.rotation.x = -sw;
+    lookHead(m, e);
+    if (!awake) {
+      // Dormant: hunched, fists on the ground
+      m.root.position.y = -0.25;
+      if (body) body.rotation.x = 0.35;
+      if (ra) ra.rotation.set(-0.35, 0, 0);
+      if (la) la.rotation.set(-0.35, 0, 0);
+    } else {
+      m.root.position.y = 0;
+      if (body) body.rotation.x = 0.08;
+      if (ra) ra.rotation.set(-sw * 0.5, 0, 0.05);
+      if (la) la.rotation.set(sw * 0.5, 0, -0.05);
+      if (tele === 'pound') {
+        // Both fists high, ready to bring them down
+        if (ra) ra.rotation.set(-2.9, 0, 0.2);
+        if (la) la.rotation.set(-2.9, 0, -0.2);
+        if (body) body.rotation.x = -0.25;
+      } else if (e.swingTime > 0) {
+        const t = e.swingTime / 6;
+        if (ra) ra.rotation.x = -2.9 * t;
+        if (la) la.rotation.x = -2.9 * t;
+      }
+    }
+    const pulse = 0.5 + Math.sin(time * 0.4) * 0.5;
+    joints(m, [
+      ['body', 'jShoulderR', [-12, 18, 0], 3.2],
+      ['body', 'jShoulderL', [12, 18, 0], 3.2],
+      ['rightLeg', 'jKneeR', [0, -6, -4.2], 2.4],
+      ['leftLeg', 'jKneeL', [0, -6, -4.2], 2.4],
+      ['rightArm', 'jElbowR', [0, -12, -4.6], 2.6],
+      ['leftArm', 'jElbowL', [0, -12, -4.6], 2.6],
+    ], 0xc8a0ff, !awake ? 0.05 : tele === 'pound' ? 0.8 + pulse * 0.2 : 0.3 + pulse * 0.2);
+    const heart = flare(m, 'body', 'heart', [3.6, 3.6, 0.6], [0, 9, 6.2], 0xd8b8ff);
+    if (heart) {
+      heart.visible = awake;
+      heart.scale.setScalar(0.8 + pulse * 0.3);
+    }
+    // The shield: a pane of crystal standing before it while it lasts
+    const sh = flare(m, 'body', 'shield', [28, 30, 1], [0, 8, 9], 0xb8e8ff);
+    if (sh) {
+      sh.visible = e.meta.shield === true;
+      (sh.material as THREE.MeshBasicMaterial).opacity = 0.32 + pulse * 0.18;
+    }
+  },
+  nameY: 3.1,
+};
+
 // ---------------------------------------------------------------- registration
 function makeVisual(def: MobVisualDef, e: ClientEntity, ctx: VisualContext): EntityVisual {
   const variant = def.variant ? def.variant(e) : e.type;

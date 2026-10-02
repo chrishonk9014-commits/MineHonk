@@ -63,6 +63,10 @@ export class PlayerData {
     // (V6 phase 2 renamed the Expanded End's biomes: a phase 1 save lists them under their old ids)
     if (Array.isArray(raw.endBiomes)) for (const b of raw.endBiomes) if (typeof b === 'string' && b.length < 64) p.visitedEndBiomes.add(PHASE1_BIOME_IDS[b] ?? b);
     if (Array.isArray(raw.endKills)) for (const k of raw.endKills) if (typeof k === 'string' && k.length < 64) p.expansionKills.add(k);
+    for (const [key, set] of [['endFound', p.endFound], ['endTitles', p.endTitles], ['endLore', p.endLore], ['endArtifacts', p.endArtifacts]] as const) {
+      const arr = (raw as Record<string, unknown>)[key];
+      if (Array.isArray(arr)) for (const k of arr) if (typeof k === 'string' && k.length < 96) set.add(k);
+    }
     if (typeof raw.wardenWarning === 'number' && raw.wardenWarning >= 0 && raw.wardenWarning <= 4) p.wardenWarning = Math.floor(raw.wardenWarning);
     const ld = raw.lastDeath as Record<string, unknown> | undefined;
     if (ld && DIMS.includes(ld.dim as DimensionId) && [ld.x, ld.y, ld.z].every((v) => typeof v === 'number' && Number.isFinite(v))) p.lastDeath = { dim: ld.dim as DimensionId, x: ld.x as number, y: ld.y as number, z: ld.z as number };
@@ -104,6 +108,10 @@ export class PlayerData {
       caveBiomes: p.visitedCaveBiomes.size ? [...p.visitedCaveBiomes] : undefined,
       endBiomes: p.visitedEndBiomes.size ? [...p.visitedEndBiomes] : undefined,
       endKills: p.expansionKills.size ? [...p.expansionKills] : undefined,
+      endFound: p.endFound.size ? [...p.endFound] : undefined,
+      endTitles: p.endTitles.size ? [...p.endTitles] : undefined,
+      endLore: p.endLore.size ? [...p.endLore] : undefined,
+      endArtifacts: p.endArtifacts.size ? [...p.endArtifacts] : undefined,
       endings: p.endings.size ? [...p.endings] : undefined,
       pendingEnding: p.pendingEnding ?? undefined,
       endEntry: p.endEntry ?? undefined,

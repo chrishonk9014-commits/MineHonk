@@ -72,7 +72,7 @@ export class EndMobsSystem {
     return n > 1 ? TELEGRAPH_TICKS_CROWD : TELEGRAPH_TICKS;
   }
 
-  private fx(dim: Dimension, x: number, y: number, z: number, msg: Record<string, unknown>): number {
+  fx(dim: Dimension, x: number, y: number, z: number, msg: Record<string, unknown>): number {
     const id = this.nextFx++;
     this.server.broadcastNear(dim, x, y, z, 96, { t: 'fx', id, ...msg } as never);
     return id;

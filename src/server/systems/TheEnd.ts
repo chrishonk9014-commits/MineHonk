@@ -522,6 +522,8 @@ export class DragonFight {
     let best: ServerPlayer | null = null;
     let bd = Infinity;
     for (const p of players) {
+      // V6 phase 3: the Dragon's Nest lies deep under the island: it pays no heed to anyone down there
+      if (this.server.endStructures?.inNest(p)) continue;
       const dd = p.distanceSq(m.x, m.y, m.z);
       if (dd < bd && p.gamemode !== 'creative') {
         bd = dd;

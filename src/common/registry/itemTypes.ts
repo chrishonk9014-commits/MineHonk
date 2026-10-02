@@ -57,7 +57,11 @@ export type UseKind =
   | 'elytra'
   | 'firework'
   /** V6: opens the pack's nine slots. */
-  | 'void_pack';
+  | 'void_pack'
+  /** V6 phase 3: a compass needle towards the giant structure the map was drawn for. */
+  | 'ancient_map'
+  /** V6 phase 3: fires a slow crystal shard (with a cooldown). */
+  | 'shardstaff';
 
 export interface ItemDef {
   id: string;

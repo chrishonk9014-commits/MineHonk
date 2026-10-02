@@ -355,7 +355,7 @@ export class ExpansionTerrain {
    * neighbourhood so features crossing chunk borders come out whole.
    * Decisions read only proto terrain (deterministic in any load order).
    */
-  decorate(v: DecorView): void {
+  decorate(v: DecorView, covered?: (x: number, z: number, reach: number) => boolean): void {
     const tcx = v.bx >> 4;
     const tcz = v.bz >> 4;
     for (let dz = -1; dz <= 1; dz++)
@@ -363,7 +363,7 @@ export class ExpansionTerrain {
         const ocx = tcx + dx;
         const ocz = tcz + dz;
         if (!chunkInExpansion(ocx, ocz)) continue;
-        this.decorateFrom(v, ocx, ocz);
+        this.decorateFrom(v, ocx, ocz, covered);
       }
     this.arrivalSite(v);
   }
@@ -383,7 +383,8 @@ export class ExpansionTerrain {
     buildExpansionPortal((x, y, z, st) => v.set(x, y, z, st), L.portal.x, L.portal.y, L.portal.z, true);
   }
 
-  private decorateFrom(v: DecorView, ocx: number, ocz: number): void {
+  /** `covered`: columns a structure stands on (generator 8): no landscape feature grows there. */
+  private decorateFrom(v: DecorView, ocx: number, ocz: number, covered?: (x: number, z: number, reach: number) => boolean): void {
     const bx = ocx << 4;
     const bz = ocz << 4;
     const mid = this.regionAt(bx + 8, bz + 8);
@@ -403,6 +404,7 @@ export class ExpansionTerrain {
         if (x + reach < v.bx || x - reach >= v.bx + 16 || z + reach < v.bz || z - reach >= v.bz + 16) continue;
         if (!inExpansion(x, z) || Math.hypot(x - arr.x, z - arr.z) < ARRIVAL_ISLAND + 4) continue;
         if (this.regionAt(x, z).biome !== mid.biome) continue;
+        if (covered?.(x, z, reach)) continue;
         if (f.kind === 'hanging') {
           placeHanging(v, f, fr, x, z);
           continue;

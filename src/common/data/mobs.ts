@@ -62,7 +62,10 @@ export type Brain =
   | 'void_stalker'
   | 'chorus_beast'
   | 'end_crystal_mite'
-  | 'end_phantom';
+  | 'end_phantom'
+  // V6 phase 3: the Guardian Constructs (placed by their structures, never natural)
+  | 'guardian_sentinel'
+  | 'guardian_bulwark';
 
 export interface MobDef {
   id: string;
@@ -208,6 +211,9 @@ mob({ id: 'chorus_beast', name: 'Chorus Beast', category: 'monster', width: 2.4,
 mob({ id: 'end_crystal_mite', name: 'End Crystal Mite', category: 'monster', width: 0.4, height: 0.3, health: 6, speed: 0.14, damage: 2, followRange: 16, brain: 'end_crystal_mite', model: 'end_crystal_mite', egg: [0xe8d8f8, 0x8a5ad0], arthropod: true, maxSpawnLight: 15, xp: 3, idleInterval: 200, edgeGuard: true });
 /** Circles high over the outer Expanded End and dives on players, gliders too. */
 mob({ id: 'end_phantom', name: 'End Phantom', category: 'monster', width: 2, height: 0.8, health: 40, speed: 0.22, damage: 9, followRange: 64, brain: 'end_phantom', model: 'end_phantom', egg: [0x1a1a3a, 0xf0f4ff], flying: true, maxSpawnLight: 15, xp: 20, idleInterval: 220 });
+// V6 phase 3: the Guardian Constructs guard the Expanded End's structures (built, not born; never spawn naturally)
+mob({ id: 'guardian_sentinel', name: 'Guardian Construct: Sentinel', category: 'monster', width: 0.9, height: 2.4, eye: 2.1, health: 40, speed: 0.11, damage: 8, armor: 10, knockbackRes: 0.4, followRange: 24, brain: 'guardian_sentinel', model: 'guardian_sentinel', egg: [0x9a8a68, 0x7ae0ff], fireImmune: true, maxSpawnLight: 15, xp: 12, idleInterval: 220, edgeGuard: true });
+mob({ id: 'guardian_bulwark', name: 'Guardian Construct: Bulwark', category: 'monster', width: 1.6, height: 2.8, eye: 2.4, health: 120, speed: 0.07, damage: 14, armor: 14, knockbackRes: 1, followRange: 24, brain: 'guardian_bulwark', model: 'guardian_bulwark', egg: [0x6a5a48, 0xc8a0ff], fireImmune: true, maxSpawnLight: 15, xp: 40, idleInterval: 300, edgeGuard: true });
 mob({ id: 'ender_dragon', name: 'Ender Dragon', category: 'boss', width: 16, height: 8, health: 200, speed: 0.3, damage: 10, knockbackRes: 1, followRange: 150, brain: 'dragon', model: 'ender_dragon', egg: [0x1c1c1c, 0xe079fa], fireImmune: true, flying: true });
 
 export const MOB_DEFS: readonly MobDef[] = M;

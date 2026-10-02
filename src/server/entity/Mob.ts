@@ -18,6 +18,7 @@ import type { Goal } from '../ai/goals';
 import type { ServerPlayer } from '../player/ServerPlayer';
 import type { Dimension } from '../world/Dimension';
 import { collisionShape } from '../../common/physics/shapes';
+import { isConstruct } from '../../common/endExpansion/structures';
 import { isExpansionMob } from '../../common/endExpansion/mobs';
 
 export type Target = LivingEntity | ServerPlayer;
@@ -493,6 +494,8 @@ export class Mob extends LivingEntity {
       amount = this.dim.server.errorBoss?.scaleDamage(this, amount, info) ?? amount;
       if (amount <= 0) return 0;
     }
+    // V6 phase 3: a Bulwark behind its shield takes half (and any hit wakes it)
+    if (isConstruct(this.type)) amount = this.dim.server.constructs?.scaleDamage(this, amount, info) ?? amount;
     // Herobrine: can't be hurt between moments of his fights, and never dies the first time
     if (this.type === 'herobrine') {
       amount = this.dim.server.herobrine?.scaleDamage(this, amount, info) ?? amount;
@@ -509,7 +512,8 @@ export class Mob extends LivingEntity {
       this.invulnerableTicks = 20;
     }
     const bypass = src === 'fall' || src === 'drown' || src === 'void' || src === 'suffocate' || src === 'fire' || src === 'magic' || src === 'kill' || src === 'starve';
-    if (!bypass && this.armor > 0) amount *= 1 - Math.min(20, Math.max(this.armor / 5, this.armor - amount / 2)) / 25;
+    const armor = Math.max(0, this.armor - (info.armorPierce ?? 0));
+    if (!bypass && armor > 0) amount *= 1 - Math.min(20, Math.max(armor / 5, armor - amount / 2)) / 25;
     if (amount <= 0) return 0;
     const server = this.dim.server;
     this.hurtTime = 10;
@@ -567,7 +571,7 @@ export class Mob extends LivingEntity {
     if (this.owner) m.tame = true;
     if (this.fuse >= 0) m.fuse = this.fuse;
     if (this.angryAt || this.target) m.angry = true;
-    for (const k of ['tele', 'slip', 'stun', 'color', 'sheared', 'size', 'profession', 'variant', 'charged', 'carried', 'phase', 'open', 'saddle', 'leashPos', 'puff', 'dancing', 'playDead', 'rolling', 'eating', 'trusting', 'tongue', 'emerge', 'dig', 'angerLevel', 'sonic', 'listen', 'sniff', 'voidbound', 'errorPhase', 'errorAnim', 'clone', 'malware', 'hbAnim', 'hbKind', 'apparition']) if (this.data[k] !== undefined) m[k] = this.data[k];
+    for (const k of ['tele', 'slip', 'stun', 'shield', 'awake', 'color', 'sheared', 'size', 'profession', 'variant', 'charged', 'carried', 'phase', 'open', 'saddle', 'leashPos', 'puff', 'dancing', 'playDead', 'rolling', 'eating', 'trusting', 'tongue', 'emerge', 'dig', 'angerLevel', 'sonic', 'listen', 'sniff', 'voidbound', 'errorPhase', 'errorAnim', 'clone', 'malware', 'hbAnim', 'hbKind', 'apparition']) if (this.data[k] !== undefined) m[k] = this.data[k];
     if (this.data.glowTicks) m.glowing = true;
     if (this.data.leash && this.metaHolder) m.leash = this.metaHolder;
     if (this.rider) m.rider = this.rider.id;

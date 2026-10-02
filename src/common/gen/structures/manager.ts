@@ -21,6 +21,8 @@ export interface Box {
 export interface Piece {
   box: Box;
   build(v: DecorView): void;
+  /** V6: what the piece is (procedurally assembled structures; tests compare layouts). */
+  kind?: string;
 }
 
 export interface Start {
@@ -157,6 +159,8 @@ export class StructureManager {
      * a start of a type listed before it, so structures never grow into each other.
      */
     private readonly avoidOverlap = false,
+    /** V6: blocks kept between overlapping-checked starts (3 unless given). */
+    private readonly overlapPad = 3,
   ) {}
 
   /** The chunk a type's start would occupy in a region. */
@@ -192,7 +196,7 @@ export class StructureManager {
   /** Whether a start overlaps any start of a type listed before its own. */
   private overlapsEarlier(t: StructureType, s: Start): boolean {
     const idx = this.types.indexOf(t);
-    const pad = 3;
+    const pad = this.overlapPad;
     const b = s.bounds;
     for (let i = 0; i < idx; i++) {
       const o = this.types[i]!;
@@ -274,7 +278,7 @@ export class StructureManager {
    * each ring so a caller can spread the work over several ticks. Stops once
    * no unvisited ring can hold anything closer than the best start found.
    */
-  *nearestSteps(typeId: string, x: number, z: number, maxRegions = 24): Generator<void, Start | null> {
+  *nearestSteps(typeId: string, x: number, z: number, maxRegions = 24, accept?: (s: Start) => boolean): Generator<void, Start | null> {
     const t = this.types.find((tt) => tt.id === typeId);
     if (!t) return null;
     if (t.fixed) return this.nearest(typeId, x, z);
@@ -287,7 +291,7 @@ export class StructureManager {
         for (let rz = rcz - ring; rz <= rcz + ring; rz++) {
           if (Math.max(Math.abs(rx - rcx), Math.abs(rz - rcz)) !== ring) continue;
           const s = this.startAt(t, rx, rz);
-          if (!s) continue;
+          if (!s || (accept && !accept(s))) continue;
           const d = (s.x - x) ** 2 + (s.z - z) ** 2;
           if (d < bestD) {
             bestD = d;

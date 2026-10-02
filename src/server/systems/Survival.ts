@@ -59,6 +59,8 @@ export interface DamageInfo {
   disableShield?: number;
   /** Heavy blows go through a raised shield (it still softens and absorbs part of the hit). */
   pierceShield?: boolean;
+  /** V6 phase 3: armor points the blow ignores (the Ancient Blade). */
+  armorPierce?: number;
 }
 
 /** Sources a raised shield can stop when facing them. */
@@ -149,7 +151,7 @@ export class Survival {
       p.hurtCooldown = 20;
     }
     if (!BYPASS_ARMOR.has(src)) {
-      const armor = p.armorCache;
+      const armor = Math.max(0, p.armorCache - (info.armorPierce ?? 0));
       const tough = this.toughness(p);
       const reduced = Math.min(20, Math.max(armor / 5, armor - amount / (2 + tough / 4)));
       amount *= 1 - reduced / 25;

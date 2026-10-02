@@ -21,7 +21,10 @@ import { StructureManager } from './structures/manager';
 import { END_CITY } from './structures/end';
 import { ProtoCache, cloneChunk, addGenEntities, LATEST_GENERATOR, type DimensionGenerator, type GeneratorOptions, type SpawnPoint } from './pipeline';
 import { ExpansionTerrain } from './endExpansion';
-import { APPROACH_FADE_END, APPROACH_FADE_START, EXPANSION_GENERATOR, EXPANSION_INNER, EXPANSION_OUTER, chunkInExpansion, inExpansion } from '../endExpansion/region';
+import { APPROACH_FADE_END, APPROACH_FADE_START, EXPANSION_GENERATOR, EXPANSION_INNER, EXPANSION_OUTER, EXPANSION_STRUCTURES_GENERATOR, chunkInExpansion, inExpansion } from '../endExpansion/region';
+import { expansionStructureTypes } from './structures/expanded';
+import { EXPANSION_STRUCTURE_IDS, GIANT_IDS, GIANT_TYPE } from '../endExpansion/structures';
+import type { Start } from './structures/manager';
 
 /** Distance from the centre where the outer islands begin. */
 export const OUTER_ISLANDS = 1000;
@@ -289,7 +292,14 @@ export class EndGenerator implements DimensionGenerator {
   readonly dimension = 'end' as const;
   readonly terrain: EndTerrain;
   readonly structures: StructureManager;
+  /**
+   * V6 phase 3: the Expanded End's structures (the End City 2.0 variants and
+   * the giant structures), in generator 8 worlds only. Null in older worlds.
+   */
+  readonly expansionStructures: StructureManager | null;
   private readonly protos: ProtoCache;
+  /** Columns covered by expansion structure pieces, per chunk (landscape features keep out of them). */
+  private readonly covered = new Map<string, number[]>();
 
   constructor(
     readonly seed: number,
@@ -311,6 +321,55 @@ export class EndGenerator implements DimensionGenerator {
       },
       () => opts.structures !== false,
     );
+    const version = opts.version ?? LATEST_GENERATOR;
+    this.expansionStructures =
+      version >= EXPANSION_STRUCTURES_GENERATOR
+        ? new StructureManager(
+            seed,
+            expansionStructureTypes(this.terrain.expansion),
+            {
+              seed,
+              groundY: (x, z) => this.terrain.expansion.topColumn(x, z)?.top ?? -1,
+              isWater: () => false,
+              biome: (x, z) => biomeOf(this.terrain.biomeAt(x, z)),
+              estimateHeight: (x, z) => this.terrain.expansion.topColumn(x, z)?.top ?? -1,
+              estimateBiome: (x, z) => biomeOf(this.terrain.biomeAt(x, z)),
+            },
+            () => opts.structures !== false,
+            true,
+            16,
+          )
+        : null;
+  }
+
+  /** Whether an expansion structure's piece covers a column (features keep out). Pure: plans read only the seed. */
+  private coveredBy(x: number, z: number, reach = 0): boolean {
+    const m = this.expansionStructures;
+    if (!m) return false;
+    const key = `${x >> 4},${z >> 4}`;
+    let boxes = this.covered.get(key);
+    if (!boxes) {
+      boxes = [];
+      for (const s of m.startsFor(x >> 4, z >> 4)) for (const p of s.pieces) boxes.push(p.box.x0 - 2, p.box.z0 - 2, p.box.x1 + 2, p.box.z1 + 2);
+      if (this.covered.size > 256) this.covered.clear();
+      this.covered.set(key, boxes);
+    }
+    for (let i = 0; i < boxes.length; i += 4) if (x + reach >= boxes[i]! && z + reach >= boxes[i + 1]! && x - reach <= boxes[i + 2]! && z - reach <= boxes[i + 3]!) return true;
+    // A feature reaching across into the next chunk's structure
+    if (reach > 0 && ((x + reach) >> 4 !== x >> 4 || (x - reach) >> 4 !== x >> 4 || (z + reach) >> 4 !== z >> 4 || (z - reach) >> 4 !== z >> 4)) {
+      for (const [dx, dz] of [
+        [reach, 0],
+        [-reach, 0],
+        [0, reach],
+        [0, -reach],
+        [reach, reach],
+        [-reach, -reach],
+        [reach, -reach],
+        [-reach, reach],
+      ] as const)
+        if ((x + dx) >> 4 !== x >> 4 || (z + dz) >> 4 !== z >> 4) if (this.coveredBy(x + dx, z + dz, 0)) return true;
+    }
+    return false;
   }
 
   generate(cx: number, cz: number): Chunk {
@@ -320,11 +379,17 @@ export class EndGenerator implements DimensionGenerator {
     mainIsland(v, this.seed, this.terrain, c);
     const starts = this.structures.build(v);
     voidCrystals(v, this.seed, cx, cz);
-    // V6: the Expanded End's landscape and the arrival site
-    if (nearExpansion(cx, cz)) this.terrain.expansion.decorate(v);
+    // V6: the Expanded End's landscape and the arrival site; phase 3: its structures
+    let expansionStarts: Start[] = [];
+    if (nearExpansion(cx, cz)) {
+      const ex = this.expansionStructures;
+      this.terrain.expansion.decorate(v, ex ? (x, z, reach) => this.coveredBy(x, z, reach) : undefined);
+      if (ex) expansionStarts = ex.build(v);
+    }
     c.recount();
     c.recomputeHeightmap();
     for (const s of starts) addGenEntities(c, s);
+    for (const s of expansionStarts) addGenEntities(c, s);
     return c;
   }
 
@@ -337,17 +402,36 @@ export class EndGenerator implements DimensionGenerator {
   }
 
   structureAt(x: number, y: number, z: number): string | null {
-    return this.structures.structureAt(x, y, z);
+    return this.structures.structureAt(x, y, z) ?? this.expansionStructures?.structureAt(x, y, z) ?? null;
   }
 
   structureTypes(): string[] {
-    return [...this.structures.typeIds(), 'end_fountain'];
+    return [...this.structures.typeIds(), 'end_fountain', ...(this.expansionStructures ? EXPANSION_STRUCTURE_IDS : [])];
   }
 
   *locateSteps(type: string, x: number, z: number): Generator<void, { x: number; y: number; z: number } | null> {
     if (type === 'end_fountain') return { x: 0, y: exitPortalY(this.terrain) + 1, z: 0 };
+    if (EXPANSION_STRUCTURE_IDS.includes(type)) {
+      const s = yield* this.expansionSteps(type, x, z);
+      return s ? { x: s.x, y: s.y, z: s.z } : null;
+    }
     const s = yield* this.structures.nearestSteps(type, x, z);
     return s ? { x: s.x, y: s.y, z: s.z } : null;
+  }
+
+  /** Nearest Expanded End structure of a kind (variant or giant), searched a region ring at a time. */
+  *expansionSteps(type: string, x: number, z: number): Generator<void, Start | null> {
+    const m = this.expansionStructures;
+    if (!m) return null;
+    if (GIANT_IDS.includes(type)) return yield* m.nearestSteps(GIANT_TYPE, x, z, 8, (s) => s.type === type);
+    return yield* m.nearestSteps(type, x, z, 24);
+  }
+
+  /** The expansion structure starts whose bounds hold a column (players finding them, the Admin Panel). */
+  expansionStartsAt(x: number, z: number): Start[] {
+    const m = this.expansionStructures;
+    if (!m || !inExpansion(x, z)) return [];
+    return m.startsFor(x >> 4, z >> 4).filter((s) => x >= s.bounds.x0 && x <= s.bounds.x1 && z >= s.bounds.z0 && z <= s.bounds.z1);
   }
 
   locate(type: string, x: number, z: number): { x: number; y: number; z: number } | null {

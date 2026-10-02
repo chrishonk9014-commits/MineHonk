@@ -456,7 +456,23 @@ export class AdminService {
         return herobrineAdmin(this.server.herobrine, { moveTo: (pl, dim, x, y, z) => this.moveTo(pl, dim, x, y, z), give: (pl, id, n) => this.giveMarked(pl, id, n), safeSpot: (dim, x, y, z) => this.safeSpot(dim, x, y, z, false) }, p, a.op);
       case 'v6':
         if (!this.server.endExpansion) return { ok: false, text: 'The End Expansion is not running.' };
-        return expansionAdmin(this.server.endExpansion, { queueTeleport: (pl, x, y, z, label, surface) => this.queueTeleport(pl, req, 'end', x, y, z, label, surface), give: (pl, id, n) => void this.give(pl, id, n) }, p, a.op, a.biome, a.set);
+        return expansionAdmin(
+          this.server.endExpansion,
+          {
+            queueTeleport: (pl, x, y, z, label, surface) => this.queueTeleport(pl, req, 'end', x, y, z, label, surface),
+            give: (pl, id, n) => void this.give(pl, id, n),
+            giveStack: (pl, st) => {
+              const rest = pl.inventory.add(markAdmin(st));
+              if (rest) this.server.interaction.dropStack(pl, rest);
+              this.server.interaction.syncInventory(pl);
+            },
+          },
+          p,
+          a.op,
+          a.biome,
+          a.set,
+          a.structure,
+        );
       case 'v5':
         if (!this.server.engineering) return { ok: false, text: 'Engineering is not running.' };
         return engineeringAdmin(this.server.engineering, { mark: (dim, x, y, z) => this.setBlockMark(dim, x, y, z, true), give: (pl, id, n) => this.giveMarked(pl, id, n) }, p, a.op);

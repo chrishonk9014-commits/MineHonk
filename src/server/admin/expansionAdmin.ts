@@ -12,17 +12,22 @@ import { EXPANSION_BIOMES, expansionBiomeIndex } from '../../common/endExpansion
 import { inExpansion } from '../../common/endExpansion/region';
 import type { EndExpansionSystem } from '../systems/EndExpansion';
 import { expansionGiveSets } from '../../common/endExpansion/resources';
+import { EXPANSION_STRUCTURE_IDS, GIANT_IDS, expansionStructureName } from '../../common/endExpansion/structures';
+import { LORE, NEST_LORE } from '../../common/endExpansion/lore';
+import { stackOf, type ItemStack } from '../../common/game/itemstack';
 
 export interface ExpansionAdminHelpers {
   /** Teleports (as a cheat) once the destination has loaded; the result follows as a second reply. */
   queueTeleport(p: ServerPlayer, x: number, y: number, z: number, label: string, surface: boolean): void;
   /** Gives cheat-marked items (they never count for advancements). */
   give(p: ServerPlayer, id: string, count: number): void;
+  /** Gives one cheat-marked stack as it is (a lore book with its fragment). */
+  giveStack(p: ServerPlayer, stack: ItemStack): void;
 }
 
 type Result = { ok: boolean; text: string; data?: unknown } | null;
 
-export function expansionAdmin(sys: EndExpansionSystem, h: ExpansionAdminHelpers, p: ServerPlayer, op: V6Op, biome?: string, set?: string): Result {
+export function expansionAdmin(sys: EndExpansionSystem, h: ExpansionAdminHelpers, p: ServerPlayer, op: V6Op, biome?: string, set?: string, structure?: string): Result {
   const s = sys.server;
   const gen = s.dim('end').generator as EndGenerator;
   const ex = gen.terrain.expansion;
@@ -88,6 +93,79 @@ export function expansionAdmin(sys: EndExpansionSystem, h: ExpansionAdminHelpers
     case 'mob_spawning_off':
       if (s.endMobs) s.endMobs.spawning = op === 'mob_spawning_on';
       return ok(op === 'mob_spawning_on' ? 'Expanded End mobs spawn naturally again.' : 'Expanded End mobs no longer spawn naturally.');
+    // Phase 3: the structures, the ancient civilization and the Dragon's Nest
+    case 'locate_structures': {
+      const es = s.endStructures;
+      if (!es) return { ok: false, text: 'The structures are not running.' };
+      const a = ex.arrival();
+      const from = p.dim.id === 'end' && inExpansion(p.x, p.z) ? { x: Math.floor(p.x), z: Math.floor(p.z) } : { x: a.x, z: a.z };
+      const found = EXPANSION_STRUCTURE_IDS.map((id) => {
+        const it = gen.expansionSteps(id, from.x, from.z);
+        let r = it.next();
+        while (!r.done) r = it.next();
+        const st = r.value;
+        return { id, name: expansionStructureName(id), giant: GIANT_IDS.includes(id), at: st ? { x: st.x, y: st.y, z: st.z, distance: Math.round(Math.hypot(st.x - from.x, st.z - from.z)) } : null };
+      });
+      const plan = es.nestPlan();
+      return {
+        ok: true,
+        text: gen.expansionStructures ? 'Nearest of each structure (from you in the Expanded End, otherwise from the arrival platform).' : 'This world was made before the Expanded End had structures (only newly made worlds have them). The Dragon\'s Nest is in every world.',
+        data: { ...sys.status(p), located: found, nest: { ...((es.status().nest as object) ?? {}), x: plan.floor[0], y: plan.floor[1], z: plan.floor[2] } },
+      };
+    }
+    case 'tp_structure': {
+      if (!structure) return { ok: false, text: 'Unknown structure.' };
+      const a = ex.arrival();
+      const from = p.dim.id === 'end' && inExpansion(p.x, p.z) ? { x: Math.floor(p.x), z: Math.floor(p.z) } : { x: a.x, z: a.z };
+      const it = gen.expansionSteps(structure, from.x, from.z);
+      let r = it.next();
+      while (!r.done) r = it.next();
+      const st = r.value;
+      if (!st) return { ok: false, text: gen.expansionStructures ? `No ${expansionStructureName(structure)} found nearby.` : 'This world has no Expanded End structures (it was made before them).' };
+      h.queueTeleport(p, st.x, st.y + 1, st.z, expansionStructureName(structure), false);
+      return pending(`Found the ${expansionStructureName(structure)} at ${st.x}, ${st.z}. Preparing a landing...`);
+    }
+    case 'generate_here': {
+      if (!structure || !s.endStructures) return { ok: false, text: 'Unknown structure.' };
+      const st = s.endStructures.generateAt(p, structure);
+      if (!st) return { ok: false, text: 'Could not plan that structure here.' };
+      const chunks = new Set(st.pieces.flatMap((pc) => [`${pc.box.x0 >> 4},${pc.box.z0 >> 4}`, `${pc.box.x1 >> 4},${pc.box.z1 >> 4}`])).size;
+      return ok(`Building the ${expansionStructureName(structure)} here, a chunk at a time (about ${chunks}+ chunks). It is a cheat: its Constructs and loot count for nothing.`);
+    }
+    case 'build_nest': {
+      const es = s.endStructures;
+      if (!es) return { ok: false, text: 'The structures are not running.' };
+      if (es.nest?.built) return { ok: false, text: "The Dragon's Nest is already built." };
+      es.forceNest();
+      return ok("The Dragon's Nest is being carved under the main island, a chunk at a time, as its chunks load.");
+    }
+    case 'tp_nest': {
+      const es = s.endStructures;
+      if (!es) return { ok: false, text: 'The structures are not running.' };
+      const plan = es.nestPlan();
+      const built = !!es.nest?.built;
+      const [x, y, z] = built ? plan.floor : plan.entrance;
+      h.queueTeleport(p, x, y, z, built ? "Dragon's Nest" : "Dragon's Nest entrance (not carved yet)", !built);
+      return pending(built ? "Preparing a landing in the Dragon's Nest..." : "The Nest isn't carved yet: going to where its entrance will be...");
+    }
+    case 'reset_loot': {
+      const es = s.endStructures;
+      if (!es) return { ok: false, text: 'The structures are not running.' };
+      if (es.inNest(p) || (p.dim.id === 'end' && Math.hypot(p.x, p.z) < 120)) {
+        const n = es.resetLoot(p.dim, es.nestPlan());
+        return ok(n ? `Reset ${n} chest${n === 1 ? '' : 's'} in the Dragon's Nest (loaded chunks).` : "No Nest chests are loaded.");
+      }
+      const here = es.structuresAt(p.x, p.y, p.z)[0] ?? gen.expansionStartsAt(Math.floor(p.x), Math.floor(p.z))[0];
+      if (!here) return { ok: false, text: 'Stand in an Expanded End structure (or the Dragon\'s Nest) first.' };
+      const n = es.resetLoot(p.dim, here);
+      return ok(`Reset ${n} chest${n === 1 ? '' : 's'} of the ${expansionStructureName(here.type)} (loaded chunks): their loot rolls again when opened.`);
+    }
+    case 'give_lore': {
+      const pool = [...LORE, ...NEST_LORE];
+      const f = pool[Math.floor(Math.random() * pool.length)]!;
+      h.giveStack(p, { ...stackOf('book', 1), tag: { lore: f.id } });
+      return ok(`Gave a lore book (${f.id}; a cheat item: it never counts for advancements).`);
+    }
     case 'where': {
       const st = sys.status(p) as { here: { x: number; y: number; z: number; inExpansion: boolean; biome: string | null } };
       const here = st.here;

@@ -160,6 +160,8 @@ export type S2C =
   | { t: 'player_list'; players: { name: string; uuid: string; ping: number; mode: GameMode }[] }
   | { t: 'explosion'; x: number; y: number; z: number; power: number; kx: number; ky: number; kz: number }
   | { t: 'title'; text: string; sub?: string; ticks?: number }
+  /** V6 phase 3: an Ender Glyph Stone's glyphs (seeded by where it stands; nothing readable). */
+  | { t: 'glyphs'; seed: number; face: number }
   /** V4: the quest tracker (a structure's objective and progress), or null to hide it. */
   | { t: 'quest'; quest: QuestInfo | null }
   | { t: 'world_info'; world: WorldInfo }
@@ -240,6 +242,8 @@ export type FxKind =
   | 'warn_beam'
   /** V6: the arc a Chorus Beast's throw will follow (x..z to x1..z1, `strength` = flight ticks). */
   | 'warn_arc'
+  /** V6 phase 3: a Bulwark's ground pound: a ring of glowing cracks. */
+  | 'warn_cracks'
   | 'laser'
   | 'zone'
   | 'zone_end'

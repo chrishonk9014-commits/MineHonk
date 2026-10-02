@@ -9,6 +9,7 @@ import { engineeringBlockDefs } from '../engineering/catalog';
 import { digitalBlockDefs } from '../digital/blocks';
 import { expansionBlockDefs } from '../endExpansion/blocks';
 import { addExpansionResourceBlocks } from '../endExpansion/resources';
+import { addAncientBlocks } from '../endExpansion/ancient';
 
 const defs: BlockDef[] = [];
 const add = (d: BlockDef): BlockDef => {
@@ -1030,5 +1031,7 @@ for (const d of digitalBlockDefs()) add(d);
 for (const d of expansionBlockDefs()) add(d);
 // V6, phase 2: the Expanded End's stone, ores, crystal, chorus wood and astral blocks
 addExpansionResourceBlocks({ add, family, woodSet });
+// V6 - The End Expansion, phase 3: the ancient civilization's stone, machines, seals and the Dragon's Nest
+addAncientBlocks({ add, family, woodSet });
 
 export const BLOCK_DEFS: readonly BlockDef[] = defs;

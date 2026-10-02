@@ -371,3 +371,178 @@ export class PhantomGoal implements Goal {
     setTele(m, null);
   }
 }
+
+// ---------------------------------------------------------------------------
+// V6 phase 3: the Guardian Constructs (src/server/systems/Constructs.ts)
+// ---------------------------------------------------------------------------
+
+function cons(m: Mob): import('../systems/Constructs').ConstructsSystem {
+  return m.dim.server.constructs!;
+}
+
+/** A construct's target: whoever comes near its post (a Bulwark: into its room), never past its leash. */
+export class ConstructTargetGoal implements Goal {
+  flags: GoalFlag[] = ['target'];
+  canUse(m: Mob): boolean {
+    const t = cons(m).pickTarget(m);
+    if (!t) return false;
+    m.target = t;
+    m.metaDirty = true;
+    if (m.type === 'guardian_bulwark') cons(m).wake(m);
+    return true;
+  }
+  canContinue(m: Mob): boolean {
+    return !!m.target && cons(m).keepTarget(m, m.target);
+  }
+  stop(m: Mob): void {
+    m.target = null;
+    m.metaDirty = true;
+  }
+}
+
+/** The Sentinel walks its route; when someone comes, it punches up close and fires bolts from further off. */
+export class SentinelGoal implements Goal {
+  flags: GoalFlag[] = ['move', 'look'];
+  private windupEnd = 0;
+  private attack: 'punch' | 'bolt' | null = null;
+  private line: [number, number, number, number, number, number] | null = null;
+  private ready = 0;
+  private boltReady = 0;
+  private pause = 0;
+  private repath = 0;
+  canUse(): boolean {
+    return true;
+  }
+  canContinue(): boolean {
+    return true;
+  }
+  tick(m: Mob): void {
+    const c = cons(m);
+    const tick = now(m);
+    const t = m.target;
+    if (this.attack) {
+      m.stopNavigation();
+      if (t) m.lookAt = { x: t.x, y: t.y + 1.2, z: t.z };
+      if (tick < this.windupEnd) return;
+      if (this.attack === 'punch') c.punch(m, t);
+      else if (this.line) c.bolt(m, this.line);
+      this.attack = null;
+      this.line = null;
+      this.ready = tick + 16;
+      return;
+    }
+    if (t && isAlive(t)) {
+      m.lookAt = { x: t.x, y: t.y + 1.2, z: t.z };
+      const d2 = distSq(m, t);
+      if (tick >= this.ready && sys(m).inReach(m, t, 0.6)) {
+        this.attack = 'punch';
+        this.windupEnd = tick + c.warnPunch(m);
+        m.stopNavigation();
+        return;
+      }
+      if (tick >= this.ready && tick >= this.boltReady && d2 > 25 && d2 < 16 * 16 && canSee(m, t)) {
+        const w = c.warnBolt(m, t);
+        this.attack = 'bolt';
+        this.line = w.line;
+        this.windupEnd = tick + w.ticks;
+        this.boltReady = tick + w.ticks + 50;
+        m.stopNavigation();
+        return;
+      }
+      // Close in, but never past the leash
+      if (--this.repath <= 0 || !m.navigating) {
+        this.repath = 6;
+        if (c.fromHome(m, t.x, t.z) <= c.leash(m)) m.navigateTo(t.x, t.y, t.z, 1.2);
+        else m.stopNavigation();
+      }
+      return;
+    }
+    // Patrol: from point to point of its route, pausing at each
+    const route = (m.data.route as [number, number, number][] | undefined) ?? [c.home(m)];
+    if (!route.length) return;
+    let i = Number(m.data.routeIdx ?? 0) % route.length;
+    const p = route[i]!;
+    if (hdist(m, p[0] + 0.5, p[2] + 0.5) < 1.6) {
+      if (!this.pause) this.pause = tick + 30 + m.rng.int(30);
+      if (tick < this.pause) return;
+      this.pause = 0;
+      i = (i + 1) % route.length;
+      m.data.routeIdx = i;
+      return;
+    }
+    if (--this.repath <= 0 || !m.navigating) {
+      this.repath = 20;
+      const q = route[i]!;
+      m.navigateTo(q[0] + 0.5, q[1], q[2] + 0.5, 0.8);
+    }
+  }
+  stop(m: Mob): void {
+    this.attack = null;
+    this.line = null;
+    delete m.data.tele;
+    m.metaDirty = true;
+    m.stopNavigation();
+  }
+}
+
+/** The Bulwark: dormant at its post until woken; then it pounds the ground and raises its shield. */
+export class BulwarkGoal implements Goal {
+  flags: GoalFlag[] = ['move', 'look'];
+  private windupEnd = 0;
+  private ready = 0;
+  private shieldReady = 0;
+  private repath = 0;
+  canUse(): boolean {
+    return true;
+  }
+  canContinue(): boolean {
+    return true;
+  }
+  tick(m: Mob): void {
+    const c = cons(m);
+    const tick = now(m);
+    const t = m.target;
+    if (this.windupEnd) {
+      m.stopNavigation();
+      if (tick < this.windupEnd) return;
+      this.windupEnd = 0;
+      c.pound(m);
+      this.ready = tick + 50;
+      return;
+    }
+    if (!m.data.awake || !t || !isAlive(t)) {
+      // Back to its post and still again
+      const h = c.home(m);
+      if (c.fromHome(m) > 1.2) {
+        if (--this.repath <= 0 || !m.navigating) {
+          this.repath = 20;
+          m.navigateTo(h[0] + 0.5, h[1], h[2] + 0.5, 0.9);
+        }
+      } else m.stopNavigation();
+      return;
+    }
+    m.lookAt = { x: t.x, y: t.y + 1, z: t.z };
+    // The shield now and then (more often when hurt)
+    if (tick >= this.shieldReady && !c.shielded(m) && (m.health < m.maxHealth * 0.6 || m.rng.chance(0.08))) {
+      c.shield(m);
+      this.shieldReady = tick + 140 + m.rng.int(80);
+    }
+    const reach = 4.2 + t.body.width / 2;
+    if (tick >= this.ready && hdist(m, t.x, t.z) <= reach && Math.abs(t.y - m.y) < 2.5) {
+      this.windupEnd = tick + c.warnPound(m);
+      m.stopNavigation();
+      return;
+    }
+    if (--this.repath <= 0 || !m.navigating) {
+      this.repath = 8;
+      if (c.fromHome(m, t.x, t.z) <= c.leash(m)) m.navigateTo(t.x, t.y, t.z, 1);
+      else m.stopNavigation();
+    }
+  }
+  stop(m: Mob): void {
+    this.windupEnd = 0;
+    delete m.data.tele;
+    m.metaDirty = true;
+    m.stopNavigation();
+  }
+}

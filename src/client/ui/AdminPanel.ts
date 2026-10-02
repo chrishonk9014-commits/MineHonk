@@ -669,12 +669,15 @@ export function adminScreen(host: AdminHost): Screen {
             biomes: { id: string; name: string; visited: boolean }[];
             mobs?: { spawning: boolean; kinds: { id: string; name: string }[]; counts: Record<string, Record<string, number>> };
             sets?: { id: string; name: string; items: string[] }[];
+            structures?: Structs;
+            located?: { id: string; name: string; giant: boolean; at: { x: number; y: number; z: number; distance: number } | null }[];
           }
         | undefined;
       if (!st?.arrival) return;
       clear(state);
       showMobs(st);
       showSets(st.sets);
+      showStructures(st.structures, st.located);
       const pt = st.portal;
       const rows: [string, string][] = [
         ['Expansion Portal', pt ? `${pt.active ? 'open' : 'dormant'}${pt.cheat ? ' (opened by a cheat)' : ''}${pt.built ? ` at ${pt.x}, ${pt.y}, ${pt.z}` : ', not built yet'}` : 'not built yet (the End has not been visited)'],
@@ -718,6 +721,34 @@ export function adminScreen(host: AdminHost): Screen {
           chips(btn(`All of ${g.name}`, () => void send({ a: 'v6', op: 'give_set', set: g.id }), 'btn chip'), ...g.items.map((id) => btn(itemName(id), () => void send({ a: 'give', item: id, count: 1 }), 'btn chip'))),
         );
     };
+    // Phase 3: the structures (generator 8 worlds), the Guardian Constructs and the Dragon's Nest
+    type Structs = { kinds: { id: string; name: string; giant: boolean }[]; constructs: { id: string; name: string }[]; enabled?: boolean; nest?: { due: boolean; built: boolean; carved: number; chunks: number }; building?: number };
+    const structBox = el('div', {});
+    const locBox = el('div', { class: 'admin-stats' });
+    const nestLine = el('div', { class: 'muted small' });
+    let structsShown = false;
+    const sop = (o: V6Op, structure: string): void => void send({ a: 'v6', op: o, structure }).then((r) => showState(r.data));
+    const showStructures = (s: Structs | undefined, located?: { id: string; name: string; giant: boolean; at: { x: number; y: number; z: number; distance: number } | null }[]): void => {
+      if (!s) return;
+      const n = s.nest;
+      nestLine.textContent = n ? (n.built ? "The Dragon's Nest is built." : n.due ? `The Dragon's Nest is being carved (${n.carved} of ${n.chunks} chunks).` : "The Dragon's Nest comes after the dragon's first defeat.") : '';
+      if (!s.enabled) nestLine.textContent += ' This world was made before the Expanded End had structures: only new worlds have them (the Nest is in every world).';
+      if (located) {
+        clear(locBox);
+        for (const l of located)
+          locBox.append(el('div', { class: 'row' }, el('span', { class: 'muted' }, l.name), el('span', {}, l.at ? `${l.at.x}, ${l.at.z} (${l.at.distance} blocks)` : 'none found'), ...(l.at ? [btn('Teleport', () => sop('tp_structure', l.id), 'btn chip')] : [])));
+      }
+      if (structsShown) return;
+      structsShown = true;
+      structBox.append(
+        el('div', { class: 'muted small' }, 'Teleport to the nearest:'),
+        chips(...s.kinds.map((k) => btn(k.name, () => sop('tp_structure', k.id), 'btn chip'))),
+        el('div', { class: 'muted small' }, 'Generate one here (built a chunk at a time; its Constructs are cheat mobs):'),
+        chips(...s.kinds.map((k) => btn(k.name, () => sop('generate_here', k.id), 'btn chip'))),
+        el('div', { class: 'muted small' }, 'Guardian Constructs (cheat mobs: defeating them never counts):'),
+        chips(...s.constructs.map((c) => btn(`Spawn ${c.name.replace('Guardian Construct: ', '')}`, () => void send({ a: 'spawn', mob: c.id, count: 1 }), 'btn chip'))),
+      );
+    };
     op('status');
     return el(
       'div',
@@ -731,7 +762,9 @@ export function adminScreen(host: AdminHost): Screen {
         section('The Ender Dragon', el('div', { class: 'muted small' }, 'In the End: ends the fight at once, so the portal can be tested. Nothing it drops counts.'), chips(btn('Defeat the Ender Dragon', () => op('defeat_dragon'), 'btn chip'))),
         section('Biomes', chips(...EXPANSION_BIOMES.map((b) => btn(b.name, () => op('tp_biome', b.id), 'btn chip')))),
         section('Mobs', el('div', { class: 'muted small' }, 'Spawned in front of you, as cheat mobs: defeating them never counts.'), mobBox, chips(btn('Remove expansion mobs nearby', () => op('kill_mobs'), 'btn chip'), btn('Natural spawning on', () => op('mob_spawning_on'), 'btn chip'), btn('Natural spawning off', () => op('mob_spawning_off'), 'btn chip')), spawning),
-        section('Resources', el('div', { class: 'muted small' }, 'Cheat-marked items: they never count for advancements.'), setBox),
+        section('Resources', el('div', { class: 'muted small' }, 'Cheat-marked items: they never count for advancements.'), setBox, chips(btn('A random lore book', () => op('give_lore'), 'btn chip'))),
+        section('Structures', structBox, chips(btn('Locate every structure', () => op('locate_structures'), 'btn chip'), btn('Reset the loot here', () => op('reset_loot'), 'btn chip')), locBox),
+        section("The Dragon's Nest", nestLine, chips(btn("Build the Dragon's Nest", () => op('build_nest'), 'btn chip'), btn("Teleport to the Dragon's Nest", () => op('tp_nest'), 'btn chip'))),
       ),
       el('div', { class: 'admin-col' }, section('Status', state, chips(btn('Refresh', () => op('status'), 'btn chip'), btn('Where am I?', () => op('where'), 'btn chip'))), section('Mobs by biome (loaded areas)', counts)),
     );

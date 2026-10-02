@@ -16,6 +16,7 @@
  *   dragon's defeat, travel through it is a cheat (nothing it leads to counts).
  */
 import { EXPANSION_MOBS } from '../../common/endExpansion/mobs';
+import { CONSTRUCTS, EXPANSION_STRUCTURE_IDS, GIANT_IDS, expansionStructureName } from '../../common/endExpansion/structures';
 import { expansionGiveSets } from '../../common/endExpansion/resources';
 import { mobDef } from '../../common/data/mobs';
 import type { GameServer } from '../GameServer';
@@ -297,6 +298,12 @@ export class EndExpansionSystem {
         counts: this.server.endMobs?.countsByBiome(this.end) ?? {},
       },
       sets: expansionGiveSets().map((g) => ({ id: g.id, name: g.name, items: g.items.map(([id]) => id) })),
+      // Phase 3: the structures (generator 8 worlds), the Guardian Constructs and the Dragon's Nest
+      structures: {
+        kinds: EXPANSION_STRUCTURE_IDS.map((id) => ({ id, name: expansionStructureName(id), giant: GIANT_IDS.includes(id) })),
+        constructs: CONSTRUCTS.map((id) => ({ id, name: mobDef(id)?.name ?? id })),
+        ...(this.server.endStructures?.status() ?? {}),
+      },
     };
   }
 }

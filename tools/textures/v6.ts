@@ -12,6 +12,7 @@
 import { Tex, type RGB, hex, mix, shade } from './canvas';
 import { bevel, blotchy, bricks, frame, oreSpots, tiles, voronoi, wool } from './patterns';
 import type { PainterRegistry } from './registry';
+import { GLYPHS } from '../../src/common/endExpansion/glyphs';
 
 const SLATE: RGB[] = [hex(0x1c1828), hex(0x241f34), hex(0x2b2540), hex(0x342d4c)];
 const CHANNEL_DARK = hex(0x120f1c);
@@ -402,4 +403,206 @@ export function registerV6Items(r: PainterRegistry, paint: (t: Tex, mask: string
   });
   r.add('raw_endling', (t) => paint(t, 'meat', hex(0xd8a8c8)));
   r.add('cooked_endling', (t) => paint(t, 'meat', hex(0xa86a58)));
+}
+
+// ---------------------------------------------------------------------------
+// Phase 3: the ancient civilization's stone, machines, seals, the Dragon's
+// Nest and the End Palace's own blocks; artifacts, weapons and the map
+// ---------------------------------------------------------------------------
+const ANCIENT: RGB[] = [hex(0x7a6a4c), hex(0x8a7a5a), hex(0x9a8a68), hex(0xa89876)];
+const ANCIENT_MORTAR = hex(0x4a3e2a);
+const GLYPH_STONE: RGB[] = [hex(0x2c2638), hex(0x342c42), hex(0x3c344c), hex(0x443a56)];
+
+/** One glyph of the made-up script on a stone face. */
+function glyph(t: Tex, face: number, ink: RGB, glow: RGB): void {
+  const g = GLYPHS[face % GLYPHS.length]!;
+  for (let y = 0; y < 8; y++)
+    for (let x = 0; x < 8; x++) {
+      const ch = g[y]![x];
+      if (ch === '#') {
+        t.set(4 + x, 4 + y, ink);
+        // a little depth: the cut's lower edge is darker
+        if (g[y + 1]?.[x] !== '#' && y < 7) t.set(4 + x, 5 + y, shade(ink, 0.55));
+      } else if (ch === 'o') t.set(4 + x, 4 + y, glow);
+    }
+}
+
+export function registerV6Phase3Blocks(r: PainterRegistry): void {
+  r.add('ender_glyph_stone_top', (t) => {
+    blotchy(t, GLYPH_STONE, 1, 0.6);
+    frame(t, hex(0x1e1828));
+    frame(t, hex(0x4a3e5e), 2);
+  });
+  // The unsuffixed name is the item icon and particles (the block's sides take a face each)
+  for (const name of ['ender_glyph_stone', 'ender_glyph_stone_0', 'ender_glyph_stone_1', 'ender_glyph_stone_2', 'ender_glyph_stone_3', 'ender_glyph_stone_4', 'ender_glyph_stone_5']) {
+    const face = Number(name.slice(-1)) || 0;
+    r.add(name, (t) => {
+      blotchy(t, GLYPH_STONE, 1, 0.5);
+      frame(t, hex(0x1e1828));
+      glyph(t, face, hex(0x8a6ac8), hex(0xc8a8ff));
+    });
+  }
+  r.add('cracked_ancient_end_bricks', (t) => {
+    bricks(t, ANCIENT, ANCIENT_MORTAR, 8, 4, 4);
+    cracks(t, hex(0x3a3020), 4);
+  });
+  r.add('chiseled_ancient_end_bricks', (t) => {
+    blotchy(t, ANCIENT.slice(1), 1, 0.5);
+    frame(t, ANCIENT_MORTAR);
+    frame(t, hex(0x6a5a3e), 2);
+    for (const [x, y] of [[7, 5], [8, 5], [5, 7], [10, 7], [5, 8], [10, 8], [7, 10], [8, 10], [7, 7], [8, 8]] as const) t.set(x, y, hex(0x5a4a34));
+  });
+  r.add('ancient_ward_stone', (t) => {
+    blotchy(t, [hex(0x5a4c3a), hex(0x625442), hex(0x6a5c48)], 1, 0.6);
+    frame(t, hex(0x3a3024));
+    // A faint seal ring
+    for (let a = 0; a < 24; a++) t.set(Math.round(7.5 + Math.cos((a / 24) * Math.PI * 2) * 4.5), Math.round(7.5 + Math.sin((a / 24) * Math.PI * 2) * 4.5), hex(0x8a7ab0));
+  });
+  r.add('ancient_vault_door', (t) => {
+    blotchy(t, [hex(0x5a4c3a), hex(0x625442), hex(0x6a5c48)], 1, 0.5);
+    frame(t, hex(0x2a2218));
+    frame(t, hex(0x8a7a5a), 1);
+    t.rect(7, 1, 2, 14, hex(0x2a2218));
+    for (let a = 0; a < 28; a++) t.set(Math.round(7.5 + Math.cos((a / 28) * Math.PI * 2) * 5), Math.round(7.5 + Math.sin((a / 28) * Math.PI * 2) * 5), hex(0xb89ae0));
+    t.rect(7, 7, 2, 3, hex(0x120e18));
+  });
+  r.add('crystal_vault_door', (t) => {
+    variantStone(t, 'crystalline', 'bricks');
+    t.rect(3, 2, 10, 13, hex(0xd8c8f0));
+    frame(t, hex(0xa898b8), 2);
+    t.rect(7, 2, 2, 13, hex(0xa898b8));
+    for (const [x, y] of [[7, 6], [8, 6], [6, 7], [9, 7], [6, 8], [9, 8], [7, 9], [8, 9]] as const) t.set(x, y, hex(0xffffff));
+  });
+  r.add('dead_portal', (t) => {
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) t.set(x, y, mix(hex(0x241c30), hex(0x3a3048), t.rng.next() * 0.6), 150);
+    for (let i = 0; i < 5; i++) t.set(t.rng.int(16), t.rng.int(16), hex(0x5a4a70), 170);
+  });
+  r.add('ancient_conduit', (t) => {
+    t.fill(hex(0x4a4250));
+    for (let x = 0; x < 16; x++) {
+      t.set(x, 0, hex(0x2a2430));
+      t.set(x, 15, hex(0x2a2430));
+    }
+    for (let y = 0; y < 16; y++) {
+      t.set(3, y, hex(0x5a5262));
+      t.set(12, y, hex(0x34303c));
+    }
+    for (const y of [3, 4, 11, 12]) for (let x = 0; x < 16; x++) t.set(x, y, hex(0x8a7a5a));
+    for (let y = 5; y < 11; y++) for (let x = 6; x < 10; x++) t.set(x, y, hex(0x2a2238));
+  });
+  r.add('ancient_conduit_top', (t) => {
+    t.fill(hex(0x4a4250));
+    frame(t, hex(0x8a7a5a), 1);
+    t.rect(5, 5, 6, 6, hex(0x1a1424));
+    t.rect(6, 6, 4, 4, hex(0x2a2238));
+  });
+  const core = (t: Tex, lit: boolean): void => {
+    t.fill(hex(0x3a3444));
+    frame(t, hex(0x8a7a5a));
+    for (const i of [4, 8, 11]) for (let k = 1; k < 15; k++) {
+      t.set(i, k, hex(0x6a5e4a));
+      t.set(k, i, hex(0x6a5e4a));
+    }
+    t.rect(5, 5, 6, 6, lit ? hex(0xb88aff) : hex(0x2a2040));
+    t.rect(6, 6, 4, 4, lit ? hex(0xf0e0ff) : hex(0x3a2c58));
+    if (!lit) t.set(7, 7, hex(0x5a4a80));
+  };
+  r.add('ancient_core', (t) => core(t, false));
+  r.add('ancient_core_on', (t) => core(t, true));
+  const lens = (t: Tex, lit: boolean): void => {
+    for (let y = 0; y < 16; y++)
+      for (let x = 0; x < 16; x++) {
+        const d = Math.hypot(x - 7.5, y - 7.5);
+        t.set(x, y, d > 6.5 ? hex(0x8a7a5a) : lit ? mix(hex(0xd8f0ff), hex(0x7ab0ff), d / 7) : mix(hex(0x8aa0c0), hex(0x4a5a7a), d / 7), d > 6.5 ? 255 : 150);
+      }
+    t.set(5, 5, hex(0xffffff), 220);
+    t.set(6, 5, hex(0xffffff), 180);
+  };
+  r.add('ancient_lens', (t) => lens(t, false));
+  r.add('ancient_lens_on', (t) => lens(t, true));
+  r.add('old_crystal_growth', (t) => {
+    t.clear();
+    for (const [x, h, c] of [[4, 7, 0xa890c0], [7, 11, 0xc0a8d8], [10, 8, 0x9a84b0], [12, 5, 0xb8a0d0]] as const) {
+      for (let y = 15; y > 15 - h; y--) {
+        t.set(x, y, hex(c));
+        if (y > 15 - h + 2) t.set(x + 1, y, shade(hex(c), 0.8));
+      }
+      t.set(x, 15 - h + 1, hex(0xf0e8ff));
+    }
+  });
+  r.add('shell_fragments', (t) => {
+    t.clear();
+    for (const [x, y, w, h] of [[2, 3, 4, 3], [9, 2, 5, 3], [5, 9, 3, 4], [11, 9, 3, 3], [2, 12, 3, 2]] as const) {
+      t.rect(x, y, w, h, hex(0xd8d0b8));
+      t.set(x, y, hex(0xf0ead8));
+      t.set(x + w - 1, y + h - 1, hex(0xa89e84));
+    }
+  });
+  r.add('crystal_pillar', (t) => {
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) t.set(x, y, [hex(0xe4d8ee), hex(0xf0e8f8), hex(0xd8cce4)][Math.floor(x / 3) % 3]!);
+    for (let y = 0; y < 16; y++) {
+      t.set(0, y, hex(0xa898b8));
+      t.set(15, y, hex(0xa898b8));
+    }
+    for (let y = 0; y < 16; y += 5) t.set(7, y, hex(0xffffff));
+  });
+  r.add('crystal_pillar_top', (t) => {
+    t.fill(hex(0xe4d8ee));
+    frame(t, hex(0xa898b8));
+    frame(t, hex(0xf6f0fb), 3);
+    t.rect(7, 7, 2, 2, hex(0xffffff));
+  });
+  r.add('astral_mosaic', (t) => {
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) t.set(x, y, (Math.floor(x / 4) + Math.floor(y / 4)) % 2 ? hex(0x2c3a86) : hex(0x3e50ae));
+    for (let i = 0; i < 16; i++) {
+      t.set(i, i, hex(0xd8b850));
+      t.set(15 - i, i, hex(0xd8b850));
+    }
+    stars(t, 5);
+  });
+}
+
+type Pal = Record<string, RGB>;
+
+/** Phase 3 items: the six End Artifacts, the three ancient weapons and the Ancient Map. */
+export function registerV6Phase3Items(r: PainterRegistry, pm: (t: Tex, mask: string, pal: Pal) => void, mp: (base: RGB, outline?: number) => Pal): void {
+  r.add('glyph_tablet', (t) => {
+    pm(t, 'sheet', mp(hex(0x5a4c6a)));
+    for (const [x, y] of [[5, 5], [6, 5], [8, 6], [9, 6], [9, 7], [5, 8], [7, 9], [8, 9], [6, 11], [9, 11]] as const) if (t.alpha(x, y)) t.set(x, y, hex(0xc8a8ff));
+  });
+  r.add('cracked_ender_eye', (t) => {
+    pm(t, 'eye', { ...mp(hex(0x2a5a4a)), e: hex(0x0a1a1a), k: hex(0x4a9a7a) });
+    for (const [x, y] of [[6, 4], [7, 5], [7, 6], [8, 7], [8, 8], [9, 9]] as const) if (t.alpha(x, y)) t.set(x, y, hex(0x0a0a0a));
+  });
+  r.add('old_crystal_lens', (t) => {
+    pm(t, 'disc', mp(hex(0x8a7a5a)));
+    for (let y = 4; y < 12; y++) for (let x = 4; x < 12; x++) if (Math.hypot(x - 7.5, y - 7.5) < 3.2 && t.alpha(x, y)) t.set(x, y, mix(hex(0xd8ccf0), hex(0x8a7ab0), Math.hypot(x - 7.5, y - 7.5) / 3.5));
+  });
+  r.add('ancient_coin', (t) => {
+    pm(t, 'nugget', mp(hex(0xb8984a)));
+    for (const [x, y] of [[7, 7], [8, 8]] as const) if (t.alpha(x, y)) t.set(x, y, hex(0x6a5424));
+  });
+  r.add('ancient_key_shard', (t) => {
+    pm(t, 'fang', mp(hex(0x9a8a68)));
+    for (let y = 4; y < 12; y += 2) if (t.alpha(7, y)) t.set(7, y, hex(0xc8a8ff));
+  });
+  r.add('dragon_scale_fragment', (t) => {
+    pm(t, 'scale', mp(hex(0x4a2a5a)));
+    for (const [x, y] of [[6, 6], [9, 8], [7, 10]] as const) if (t.alpha(x, y)) t.set(x, y, hex(0xb07ad0));
+  });
+  r.add('ancient_blade', (t) => {
+    pm(t, 'sword', { ...mp(hex(0x9a8a68)), h: hex(0x4a3e5e), H: hex(0x2c2638), k: hex(0x1a1424) });
+    for (let i = 4; i < 12; i++) if (t.alpha(i + 1, 14 - i)) t.set(i + 1, 14 - i, hex(0x7ae0ff));
+  });
+  r.add('voidpiercer', (t) => {
+    pm(t, 'bow', { s: hex(0xc8a8ff) });
+    for (let x = 0; x < 16; x++) for (let y = 0; y < 16; y++) if (t.alpha(x, y) && t.get(x, y)[0] < 200) t.set(x, y, hex(0x3a2a5a));
+    for (let i = 4; i < 13; i++) t.set(i, 16 - i, hex(0x9a8a68));
+    t.set(12, 4, hex(0x7ae0ff));
+  });
+  r.add('shardstaff', (t) => {
+    pm(t, 'stick', { h: hex(0x4a3e5e), H: hex(0x2c2638), k: hex(0x1a1424) });
+    for (const [x, y, c] of [[11, 2, 0xf0e0ff], [12, 3, 0xc8a8ff], [11, 3, 0xd8c8f0], [12, 2, 0xffffff], [13, 3, 0xa890c0], [12, 4, 0xa890c0]] as const) t.set(x, y, hex(c));
+  });
+  r.add('ancient_map', (t) => pm(t, 'compass', { ...mp(hex(0x8a7a5a)), r: hex(0x7ae0ff), w: hex(0xd8c8a0) }));
 }

@@ -360,6 +360,16 @@ export function installBrain(m: Mob): void {
       m.addTargetGoal(1, new G.HurtByTargetGoal());
       m.addTargetGoal(2, new G.NearestTargetGoal(G.nearestPlayerTarget(48), false, 0.05));
       break;
+    // V6 phase 3: the Guardian Constructs (leashed to their posts; see Constructs.ts)
+    case 'guardian_sentinel':
+      m.addGoal(0, new G.FloatGoal());
+      m.addGoal(2, new E.SentinelGoal());
+      m.addTargetGoal(1, new E.ConstructTargetGoal());
+      break;
+    case 'guardian_bulwark':
+      m.addGoal(2, new E.BulwarkGoal());
+      m.addTargetGoal(1, new E.ConstructTargetGoal());
+      break;
     case 'dragon':
     case 'the_error':
     case 'herobrine':

@@ -61,6 +61,10 @@ export class GameServer {
   endExpansion: import('./systems/EndExpansion').EndExpansionSystem | null = null;
   /** V6 phase 2: the Expanded End's mobs. */
   endMobs: import('./systems/EndMobs').EndMobsSystem | null = null;
+  /** V6 phase 3: the Guardian Constructs. */
+  constructs: import('./systems/Constructs').ConstructsSystem | null = null;
+  /** V6 phase 3: the Expanded End's structures, the ancient civilization and the Dragon's Nest. */
+  endStructures: import('./systems/EndStructures').EndStructuresSystem | null = null;
   farlands: import('./systems/Farlands').FarlandsSystem | null = null;
   /** Fireworks, fishing, compasses, jukeboxes, beacons (installed by gameplay). */
   gadgets: import('./systems/Gadgets').Gadgets | null = null;

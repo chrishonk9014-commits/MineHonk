@@ -2,6 +2,7 @@
  * Application shell: menu screen stack, world management and the game
  * lifecycle (start integrated server, join, save & quit).
  */
+import { LorePanel, GlyphPanel } from './ui/LorePage';
 import { adminScreen } from './ui/AdminPanel';
 import { EngineeringBookPanel } from './ui/EngineeringBook';
 import { GrimoirePanel } from './ui/Grimoire';
@@ -489,6 +490,33 @@ export class App implements GameHost, S.ScreenHost {
       if (e.target === root) this.pop();
     });
     this.push({ root, onClose: () => panel.destroy() });
+  }
+
+  /** V6 phase 3: a lore book's page. */
+  openLore(id: string): void {
+    const game = this.game;
+    if (!game || this.screenOpen) return;
+    const root = el('div', { class: 'screen dim grimoire-screen' });
+    const panel = new LorePanel(id, { close: () => this.pop() });
+    root.append(panel.root);
+    root.addEventListener('mousedown', (e) => {
+      if (e.target === root) this.pop();
+    });
+    game.audio.play('book.page', NaN, NaN, NaN, 0.6, 1, 'ui');
+    this.push({ root });
+  }
+
+  /** V6 phase 3: an Ender Glyph Stone's glyphs (and nothing else). */
+  showGlyphs(seed: number, face: number): void {
+    const game = this.game;
+    if (!game || this.screenOpen) return;
+    const root = el('div', { class: 'screen dim glyph-screen' });
+    const panel = new GlyphPanel(seed, face, { close: () => this.pop() });
+    root.append(panel.root);
+    root.addEventListener('mousedown', (e) => {
+      if (e.target === root) this.pop();
+    });
+    this.push({ root });
   }
 
   /** V5.5: the Witch's Grimoire, from the item. */

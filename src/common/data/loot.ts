@@ -3,11 +3,22 @@
  * Structure tables are tuned so rare items stay rare.
  */
 import type { LootTable, LootEntry } from '../game/loot';
+import type { LoreSite } from '../endExpansion/lore';
 
 const e = (item: string, weight: number, count: LootEntry['count'] = 1, extra: Partial<LootEntry> = {}): LootEntry => ({ item, weight, count, ...extra });
 const none = (weight: number): LootEntry => ({ empty: true, weight });
 const ench = (item: string, weight: number, levels: [number, number] = [20, 39], treasure = true): LootEntry => ({ item, weight, functions: [{ fn: 'enchant_levels', levels, treasure }] });
 const book = (weight: number): LootEntry => ({ item: 'book', weight, functions: [{ fn: 'enchant_randomly', treasure: true }] });
+// V6 phase 3: lore books (by a site's weights, or a fixed fragment), Ancient Maps, End Artifacts and the ancient weapons
+const lore = (weight: number, site: LoreSite): LootEntry => ({ item: 'book', weight, functions: [{ fn: 'lore', site }] });
+const loreOf = (id: string): LootEntry => ({ item: 'book', functions: [{ fn: 'lore', id }] });
+const amap = (weight: number): LootEntry => ({ item: 'ancient_map', weight, functions: [{ fn: 'ancient_map' }] });
+const worn = (item: string, weight: number): LootEntry => ({ item, weight, functions: [{ fn: 'damage', min: 0.15, max: 0.6 }] });
+/** One roll that is usually nothing and sometimes an End Artifact (weights out of `of`). */
+const artifacts = (of: number, w: Partial<Record<string, number>>): LootEntry[] => {
+  const list = Object.entries(w).map(([id, n]) => e(id, n!));
+  return [none(of - list.reduce((a, b) => a + (b.weight ?? 0), 0)), ...list];
+};
 const mob = (item: string, min: number, max: number, extra: Partial<LootEntry> = {}): LootEntry => ({ item, count: [min, max], functions: [{ fn: 'looting', min: 0, max: 1 }, ...(extra.functions ?? [])], ...extra });
 
 const crop = (drop: string, seed: string, seedExtra = 3, extras: LootEntry[] = []): LootTable => ({
@@ -99,6 +110,9 @@ export const LOOT_TABLES: Record<string, LootTable> = {
   'mob/chorus_beast': { xp: 15, pools: [{ rolls: 1, entries: [{ item: 'chorus_fiber', count: [3, 6] }] }, { rolls: 1, entries: [{ item: 'chorus_fruit', count: [2, 4] }] }] },
   'mob/end_crystal_mite': { xp: 3, pools: [{ rolls: 1, entries: [mob('end_crystal_fragment', 0, 1)] }] },
   'mob/end_phantom': { xp: 20, pools: [{ rolls: 1, entries: [mob('end_phantom_membrane', 1, 1)] }, { rolls: 1, entries: [{ item: 'astral_dust', count: [0, 1] }] }] },
+  // V6 phase 3: the Guardian Constructs (built, not born: worked stone and crystal)
+  'mob/guardian_sentinel': { xp: 12, pools: [{ rolls: 1, entries: [mob('ancient_fragment', 1, 2)] }, { rolls: 1, entries: [mob('end_crystal_fragment', 1, 3)] }, { rolls: 1, conditions: [{ c: 'chance', chance: 0.05 }], entries: [e('ender_scrap', 1)] }] },
+  'mob/guardian_bulwark': { xp: 40, pools: [{ rolls: 1, entries: [mob('ancient_fragment', 2, 4)] }, { rolls: 1, entries: [mob('end_crystal_fragment', 2, 5)] }, { rolls: 1, conditions: [{ c: 'chance', chance: 0.15 }], entries: [e('ender_scrap', 1)] }] },
   'mob/silverfish': { xp: 5, pools: [] },
   'mob/pillager': { xp: 5, pools: [{ rolls: 1, entries: [mob('arrow', 0, 2)] }] },
   // Original mobs
@@ -337,6 +351,113 @@ export const LOOT_TABLES: Record<string, LootTable> = {
       { rolls: [2, 5], entries: [e('diamond', 5, [2, 7]), e('gold_ingot', 15, [2, 7]), e('emerald', 2, [2, 6]), ench('diamond_sword', 3), ench('diamond_chestplate', 3), e('void_shard', 4, [1, 3]), e('ender_pearl', 6, [1, 3])] },
     ],
   },
+  // --- V6 phase 3: the Expanded End's structures ------------------------------
+  // End City 2.0 variants (Ender Alloy gear is rare everywhere, Ender Scrap uncommon)
+  'chest/end_outpost': {
+    pools: [
+      { rolls: [3, 6], entries: [e('cooked_endling', 16, [2, 5]), e('arrow', 16, [4, 12]), e('void_shard', 10, [1, 3]), e('end_crystal_fragment', 12, [1, 4]), e('chorus_fruit', 8, [2, 5]), e('iron_ingot', 6, [1, 3]), e('ender_pearl', 4), e('spectral_arrow', 4, [2, 6]), lore(3, 'end_outpost')] },
+    ],
+  },
+  'chest/end_settlement': {
+    pools: [
+      { rolls: [3, 6], entries: [e('chorus_fiber', 14, [3, 8]), e('chorus_planks', 10, [4, 12]), e('chorus_cloth', 8, [2, 6]), e('chorus_rope', 6, [2, 6]), e('chorus_fruit', 10, [2, 6]), e('end_stone_bricks', 8, [4, 12]), e('polished_cracked_end_stone', 5, [4, 10]), e('ender_glyph_stone', 4, [1, 3]), e('book', 8, [1, 3]), lore(8, 'end_settlement'), e('cooked_endling', 8, [1, 3])] },
+    ],
+  },
+  'chest/end_ruins': {
+    pools: [
+      { rolls: [3, 6], entries: [e('ancient_fragment', 14, [1, 3]), e('cracked_ancient_end_bricks', 8, [2, 6]), e('ender_glyph_stone', 6, [1, 2]), lore(10, 'end_ruins'), worn('iron_sword', 5), worn('diamond_sword', 2), worn('iron_chestplate', 3), worn('crossbow', 3), worn('iron_pickaxe', 3), e('gold_ingot', 6, [1, 3]), e('void_shard', 6, [1, 2])] },
+      { rolls: 1, entries: artifacts(100, { glyph_tablet: 4, ancient_coin: 4, ancient_key_shard: 2, cracked_ender_eye: 1 }) },
+    ],
+  },
+  'chest/end_library': {
+    pools: [
+      { rolls: [4, 7], entries: [e('book', 14, [1, 4]), lore(18, 'end_library'), book(8), e('paper', 8, [2, 6]), amap(3), e('ender_glyph_stone', 4, [1, 2]), e('experience_bottle', 6, [1, 3]), e('ancient_fragment', 4, [1, 2]), e('bookshelf', 4, [1, 3])] },
+      { rolls: 1, entries: artifacts(100, { glyph_tablet: 5, old_crystal_lens: 2, ancient_key_shard: 2 }) },
+    ],
+  },
+  'chest/end_observatory': {
+    pools: [
+      { rolls: [3, 6], entries: [e('astral_dust', 14, [1, 3]), e('astral_shard', 3), lore(10, 'end_observatory'), amap(6), e('spyglass', 6), e('end_crystal_fragment', 8, [1, 3]), e('astral_glass', 6, [2, 6]), e('experience_bottle', 4, [1, 3])] },
+      { rolls: 1, entries: artifacts(100, { old_crystal_lens: 5 }) },
+    ],
+  },
+  'chest/end_shipyard': {
+    pools: [
+      { rolls: [3, 6], entries: [e('phantom_membrane', 10, [1, 3]), e('end_phantom_membrane', 4, [1, 2]), e('ender_scrap', 4), e('void_shard', 8, [1, 3]), e('chorus_rope', 10, [3, 8]), e('purpur_block', 10, [4, 12]), e('shulker_shell', 4), e('ender_pearl', 6, [1, 2]), e('firework_rocket', 6, [2, 6]), lore(4, 'end_shipyard')] },
+    ],
+  },
+  // The one Shipyard chest that holds Elytra (about 15% of Shipyards have it: see the Shipyard plan)
+  'chest/end_shipyard_elytra': { pools: [{ rolls: 1, entries: [e('elytra', 1)] }, { rolls: 1, entries: [{ table: 'chest/end_shipyard' }] }] },
+  'chest/end_metropolis': {
+    pools: [
+      { rolls: [4, 7], entries: [e('ender_scrap', 8, [1, 2]), e('astral_shard', 6, [1, 2]), e('diamond', 8, [1, 3]), e('emerald', 8, [2, 5]), e('gold_ingot', 10, [2, 6]), e('end_crystal_fragment', 8, [2, 5]), e('shulker_shell', 6), lore(8, 'end_metropolis'), ench('ender_alloy_sword', 1, [30, 39]), ench('ender_alloy_pickaxe', 1, [30, 39])] },
+    ],
+  },
+  'chest/end_metropolis_vault': {
+    pools: [
+      { rolls: [5, 8], entries: [e('ender_scrap', 14, [1, 3]), e('astral_shard', 10, [1, 3]), e('netherite_ingot', 3), e('diamond', 10, [2, 5]), e('ancient_fragment', 8, [1, 3]), e('emerald', 8, [3, 8]), ench('ender_alloy_sword', 2, [30, 39]), ench('ender_alloy_helmet', 2, [30, 39]), ench('ender_alloy_chestplate', 2, [30, 39]), ench('ender_alloy_leggings', 2, [30, 39]), ench('ender_alloy_boots', 2, [30, 39]), lore(4, 'end_metropolis')] },
+      { rolls: 1, entries: artifacts(100, { ancient_coin: 8, ancient_key_shard: 4 }) },
+    ],
+  },
+  'chest/end_palace': {
+    pools: [
+      { rolls: [4, 7], entries: [e('crystal_glass', 10, [4, 12]), e('crystal_lamp', 8, [1, 4]), e('end_crystal_fragment', 12, [3, 8]), e('astral_shard', 8, [1, 3]), e('crystal_pillar', 6, [2, 6]), e('astral_mosaic', 6, [4, 12]), e('end_crystal', 3), e('gold_block', 3), lore(6, 'end_palace')] },
+      { rolls: 1, entries: artifacts(100, { ancient_coin: 6, old_crystal_lens: 3, ancient_key_shard: 2 }) },
+    ],
+  },
+  // The giant structures
+  'chest/end_colossus': {
+    pools: [
+      { rolls: [3, 5], entries: [e('ancient_fragment', 14, [2, 5]), e('ender_glyph_stone', 6, [1, 3]), e('chiseled_ancient_end_bricks', 6, [2, 6]), lore(8, 'end_colossus'), e('void_shard', 6, [1, 3]), e('experience_bottle', 4, [1, 3])] },
+      { rolls: 1, entries: artifacts(100, { glyph_tablet: 6, ancient_coin: 6, ancient_key_shard: 4, cracked_ender_eye: 3 }) },
+    ],
+  },
+  // The weapon cache in the Colossus' head: one ancient weapon, always
+  'chest/end_colossus_cache': {
+    pools: [
+      { rolls: 1, entries: [e('ancient_blade', 1), e('voidpiercer', 1), e('shardstaff', 1)] },
+      { rolls: [2, 4], entries: [e('ancient_fragment', 10, [2, 4]), e('arrow', 8, [8, 16]), e('ender_scrap', 2), lore(4, 'end_colossus')] },
+    ],
+  },
+  'chest/crystal_cathedral': {
+    pools: [
+      { rolls: [4, 8], entries: [e('end_crystal_fragment', 20, [4, 12]), e('end_crystal_cluster', 8, [1, 4]), e('crystal_glass', 8, [4, 10]), e('crystal_lamp', 6, [1, 3]), e('astral_dust', 4, [1, 2]), e('end_crystal', 3), lore(6, 'crystal_cathedral')] },
+      { rolls: 1, entries: artifacts(100, { old_crystal_lens: 6, glyph_tablet: 2 }) },
+    ],
+  },
+  'chest/void_observatory': {
+    pools: [
+      { rolls: [4, 7], entries: [e('astral_shard', 10, [1, 3]), e('astral_dust', 12, [2, 5]), amap(8), lore(12, 'void_observatory'), e('spyglass', 4), e('ancient_fragment', 6, [1, 3]), e('astral_glass', 4, [2, 6])] },
+      { rolls: 1, entries: artifacts(100, { old_crystal_lens: 6, cracked_ender_eye: 3 }) },
+    ],
+  },
+  'chest/end_fortress': {
+    pools: [
+      { rolls: [3, 6], entries: [e('cooked_endling', 10, [2, 5]), e('arrow', 12, [6, 16]), e('iron_ingot', 10, [2, 5]), e('void_shard', 8, [1, 3]), e('ancient_fragment', 8, [1, 3]), e('shield', 4), lore(6, 'end_fortress')] },
+    ],
+  },
+  'chest/end_fortress_armory': {
+    pools: [
+      { rolls: [4, 7], entries: [e('ender_scrap', 6), e('netherite_scrap', 4), e('ancient_fragment', 10, [1, 3]), e('arrow', 12, [8, 20]), e('spectral_arrow', 6, [4, 10]), e('shield', 6), ench('diamond_sword', 4), ench('diamond_chestplate', 3), ench('ender_alloy_helmet', 1, [30, 39]), e('ancient_blade', 2), e('voidpiercer', 2), e('shardstaff', 2), lore(3, 'end_fortress')] },
+    ],
+  },
+  'chest/fallen_city': {
+    pools: [
+      { rolls: [4, 8], entries: [lore(18, 'fallen_city'), e('ancient_fragment', 14, [2, 5]), e('ender_glyph_stone', 8, [1, 3]), e('book', 8, [1, 3]), e('purpur_block', 8, [4, 12]), worn('diamond_sword', 2), worn('iron_chestplate', 3), amap(4), e('gold_ingot', 6, [1, 4]), e('ancient_blade', 1), e('voidpiercer', 1), e('shardstaff', 1)] },
+      { rolls: 1, entries: artifacts(100, { glyph_tablet: 8, ancient_coin: 8, ancient_key_shard: 5, cracked_ender_eye: 5, old_crystal_lens: 3 }) },
+    ],
+  },
+  // The Dragon's Nest: rolled once per world (each chest once, shared by everyone)
+  'chest/dragon_nest': {
+    pools: [
+      { rolls: [2, 4], entries: [e('dragon_scale_fragment', 10), e('ancient_fragment', 12, [2, 5]), e('end_crystal_fragment', 6, [2, 4]), e('ender_glyph_stone', 3, [1, 2])] },
+      { rolls: 1, conditions: [{ c: 'chance', chance: 0.06 }], entries: [e('ancient_blade', 1), e('voidpiercer', 1), e('shardstaff', 1)] },
+    ],
+  },
+  'chest/dragon_nest_a': { pools: [{ rolls: 1, entries: [{ table: 'chest/dragon_nest' }] }, { rolls: 1, entries: [{ item: 'ancient_map', functions: [{ fn: 'ancient_map' }] }] }, { rolls: 1, entries: [e('dragon_scale_fragment', 1)] }, { rolls: 1, entries: [loreOf('nest_many')] }, { rolls: 1, entries: [loreOf('nest_sealed')] }] },
+  'chest/dragon_nest_b': { pools: [{ rolls: 1, entries: [{ table: 'chest/dragon_nest' }] }, { rolls: 1, entries: [loreOf('nest_counted')] }] },
+  'chest/dragon_nest_c': { pools: [{ rolls: 1, entries: [{ table: 'chest/dragon_nest' }] }, { rolls: 1, entries: [loreOf('nest_visit')] }, { rolls: 1, entries: [loreOf('nest_first_fire')] }] },
+  'chest/dragon_nest_d': { pools: [{ rolls: 1, entries: [{ table: 'chest/dragon_nest' }] }] },
   'chest/mansion': {
     pools: [{ rolls: [1, 3], entries: [e('lead', 20), e('golden_apple', 15), e('enchanted_golden_apple', 2), e('music_disc_meadow', 15), e('name_tag', 20), e('chainmail_chestplate', 10), e('diamond_hoe', 15), book(10), e('totem_of_undying', 3)] }, { rolls: [1, 4], entries: [e('iron_ingot', 10, [1, 4]), e('gold_ingot', 5, [1, 4]), e('bread', 20), e('wheat', 20, [1, 4]), e('bucket', 10), e('redstone', 15, [1, 4]), e('coal', 15, [1, 4])] }],
   },

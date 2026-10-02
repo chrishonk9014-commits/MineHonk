@@ -500,7 +500,8 @@ describe('V6 phase 2 Admin Panel', () => {
     tick(server, 2);
     for (const id of ['kill_end_phantom', 'chorus_beast', 'expansion_hunter', 'void_slip']) expect(player.achievements.has(id)).toBe(false);
     expect(player.expansionKills.size).toBe(0);
-    // Every set: cheat items, none of which count when picked up, crafted or worn
+    // Every set: cheat items, none of which count when picked up, crafted or worn (after the panel's flood control refills)
+    tick(server, 40);
     for (const g of expansionGiveSets()) expect(admin({ a: 'v6', op: 'give_set', set: g.id }).ok).toBe(true);
     for (let i = 0; i < player.inventory.size; i++) {
       const s = player.inventory.get(i);

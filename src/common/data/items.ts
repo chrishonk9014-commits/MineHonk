@@ -8,6 +8,7 @@ import type { ToolType } from '../registry/blockTypes';
 import { COLORS } from './blocks';
 import { engineeringItemDefs } from '../engineering/catalog';
 import { expansionItemDefs } from '../endExpansion/resources';
+import { ancientItemDefs } from '../endExpansion/ancient';
 
 const defs: ItemDef[] = [];
 const add = (d: ItemDef): ItemDef => {
@@ -366,5 +367,8 @@ add({ id: 'witch_grimoire', name: "Witch's Grimoire", maxStack: 1, use: 'grimoir
 
 // V6 - The End Expansion, phase 2: the Expanded End's materials, food and the Void Pack
 for (const d of expansionItemDefs()) add(d);
+
+// V6 - The End Expansion, phase 3: End Artifacts, the ancient weapons and the Ancient Map
+for (const d of ancientItemDefs()) add(d);
 
 export const ITEM_DEFS: readonly ItemDef[] = defs;

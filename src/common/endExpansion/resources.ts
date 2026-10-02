@@ -137,5 +137,25 @@ export function expansionGiveSets(): GiveSet[] {
     { id: 'ender_alloy_tools', name: 'Ender Alloy tools', items: gear(['sword', 'pickaxe', 'axe', 'shovel', 'hoe']) },
     { id: 'ender_alloy_armor', name: 'Ender Alloy armor', items: gear(['helmet', 'chestplate', 'leggings', 'boots']) },
     { id: 'end_food', name: 'Food and membranes', items: [['raw_endling', 16], ['cooked_endling', 16], ['end_phantom_membrane', 16]] },
+    // Phase 3: the ancient civilization (an Ancient Map is tied to the nearest giant structure when given)
+    { id: 'artifacts', name: 'End Artifacts', items: [['glyph_tablet', 1], ['cracked_ender_eye', 1], ['old_crystal_lens', 1], ['ancient_coin', 1], ['ancient_key_shard', 1], ['dragon_scale_fragment', 1]] },
+    { id: 'ancient_weapons', name: 'Ancient weapons', items: [['ancient_blade', 1], ['voidpiercer', 1], ['shardstaff', 1], ['arrow', 64]] },
+    { id: 'ancient_map', name: 'Ancient Map', items: [['ancient_map', 1]] },
+    {
+      id: 'ancient_blocks',
+      name: 'Ancient blocks',
+      items: [
+        ['ender_glyph_stone', 64],
+        ['cracked_ancient_end_bricks', 64],
+        ['chiseled_ancient_end_bricks', 64],
+        ['ancient_conduit', 16],
+        ['ancient_core', 4],
+        ['ancient_lens', 16],
+        ['old_crystal_growth', 16],
+        ['shell_fragments', 16],
+        ['crystal_pillar', 64],
+        ['astral_mosaic', 64],
+      ],
+    },
   ];
 }

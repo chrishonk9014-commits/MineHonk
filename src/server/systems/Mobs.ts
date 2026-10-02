@@ -9,6 +9,8 @@ import { Mob, isPlayer, isAlive, type Target } from '../entity/Mob';
 import { ItemEntity } from '../entity/ItemEntity';
 import { LivingEntity, type HurtInfo } from '../entity/Living';
 import type { Entity } from '../entity/Entity';
+import { ANCIENT_BLADE_PIERCE, VOIDPIERCER_STRAIGHT } from '../../common/endExpansion/ancient';
+import { isConstruct } from '../../common/endExpansion/structures';
 import { Projectile, PrimedTnt, type ProjectileKind, type ProjectileHit } from '../entity/Projectile';
 import { EndCrystal } from '../entity/EndEntities';
 import type { ServerPlayer } from '../player/ServerPlayer';
@@ -292,6 +294,7 @@ export class MobSystem {
       installBrain(m);
       // V6: an Expanded End mob forgets attacks it was in the middle of (a void slip resumes its return)
       if (isExpansionMob(m.type)) this.server.endMobs?.onRestore(m);
+      if (isConstruct(m.type)) this.server.constructs?.onRestore(m);
       return m;
     }
     if (d.kind === 'projectile') {
@@ -372,6 +375,11 @@ export class MobSystem {
       case 'end_crystal_mite':
       case 'end_phantom':
         s.endMobs?.mobTick(m);
+        break;
+      // V6 phase 3: the Guardian Constructs
+      case 'guardian_sentinel':
+      case 'guardian_bulwark':
+        s.constructs?.mobTick(m);
         break;
       default:
         this.animalTick(m);
@@ -814,7 +822,7 @@ export class MobSystem {
   damage(t: Entity, amount: number, info: HurtInfo & { kbx?: number; kbz?: number; knockback?: number }): number {
     if (isPlayer(t)) {
       if (info.attacker && isPlayer(info.attacker) && !this.server.level.pvp && !this.server.templeTrials?.pvpBetween(info.attacker, t)) return 0;
-      return this.server.interaction.survival.damage(t, amount, { source: info.source as never, attacker: info.attacker, kbx: info.kbx, kbz: info.kbz, knockback: info.knockback, disableShield: info.disableShield, pierceShield: info.pierceShield });
+      return this.server.interaction.survival.damage(t, amount, { source: info.source as never, attacker: info.attacker, kbx: info.kbx, kbz: info.kbz, knockback: info.knockback, disableShield: info.disableShield, pierceShield: info.pierceShield, armorPierce: info.armorPierce });
     }
     if (t instanceof LivingEntity) return t.hurt(amount, info);
     return 0;
@@ -1370,6 +1378,7 @@ export class MobSystem {
       s.interaction.onMobKilled?.(killer, m);
     }
     if (isExpansionMob(m.type)) s.endMobs?.onDeath(m, killer);
+    if (isConstruct(m.type)) s.constructs?.onDeath(m, killer);
     // Villager deaths are announced to nearby players (like named pets)
     if (m.customName || m.owner) s.broadcastChat(`${m.customName ?? m.def.name} died`, 'death');
   }
@@ -1430,7 +1439,9 @@ export class MobSystem {
     const kbLevel = enchantLevel(held, 'knockback') + (sprintKb ? 1 : 0);
     const dl = lookDir(p.yaw, 0);
     const axe = it?.tool?.type === 'axe';
-    const dealt = this.damage(target, Math.max(0, dmg), { source: 'player', attacker: p, kbx: dl[0], kbz: dl[2], knockback: 0.4 + kbLevel * 0.5, disableShield: axe && f > 0.9 ? 100 : undefined });
+    // V6 phase 3: the Ancient Blade cuts through part of the armor
+    const pierce = held && items[held.id]!.id === 'ancient_blade' ? ANCIENT_BLADE_PIERCE : undefined;
+    const dealt = this.damage(target, Math.max(0, dmg), { source: 'player', attacker: p, kbx: dl[0], kbz: dl[2], knockback: 0.4 + kbLevel * 0.5, disableShield: axe && f > 0.9 ? 100 : undefined, armorPierce: pierce });
     if (dealt <= 0 && !(target instanceof PrimedTnt)) {
       s.playSound(p.dim, 'attack.weak', target.x, target.y + 1, target.z, 0.6, 1);
       return;
@@ -1745,7 +1756,7 @@ export class MobSystem {
       this.throwTrident(p, stack, ticks, slot);
       return;
     }
-    if (def.id !== 'bow' && def.id !== 'crossbow') return;
+    if (def.id !== 'bow' && def.def.use !== 'crossbow') return;
     let f = ticks / 20;
     f = (f * f + f * 2) / 3;
     if (f < 0.1) return;
@@ -1773,6 +1784,8 @@ export class MobSystem {
     pr.damage = 2 + (enchantLevel(stack, 'power') ? 0.5 * enchantLevel(stack, 'power') + 0.5 : 0);
     pr.knockback = enchantLevel(stack, 'punch');
     pr.fire = enchantLevel(stack, 'flame') > 0;
+    // V6 phase 3: a Voidpiercer's bolt flies straight (no gravity, no drag) for its first 32 blocks
+    if (def.id === 'voidpiercer') pr.straight = VOIDPIERCER_STRAIGHT;
     pr.pickup = !creative && !(infinity && !spectral);
     if (spectral) {
       pr.data = { spectral: true };

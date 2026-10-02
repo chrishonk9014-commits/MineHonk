@@ -1,4 +1,5 @@
 /** Item slot rendering and tooltips. */
+import { loreBookName } from '../../common/endExpansion/lore';
 import { el } from './dom';
 import type { ItemIcons } from '../render/ItemIcons';
 import type { Slot } from '../../common/game/itemstack';
@@ -55,6 +56,8 @@ export function itemDisplayName(stack: Slot): string {
   if (stack.tag?.name) return stack.tag.name;
   const it = items[stack.id];
   if (it?.id === 'compass' && stack.tag?.data?.lodestone) return 'Lodestone Compass';
+  // V6 phase 3: a lore book is called by what it holds
+  if (it?.id === 'book' && stack.tag?.lore) return loreBookName(stack.tag.lore) ?? it.def.name;
   if (stack.tag?.potion && (it?.id === 'potion' || it?.id === 'splash_potion')) {
     const p = POTION_BY_ID.get(stack.tag.potion);
     if (p) return (it.id === 'splash_potion' ? 'Splash ' : '') + p.name;
@@ -122,6 +125,7 @@ export function showTooltip(stack: Slot, x: number, y: number, advanced = false)
     else if (it.id !== 'corrupted_flash_drive') tooltipEl.append(el('div', { class: 'dim' }, 'Empty'));
   }
   if (it.id === 'witch_grimoire') tooltipEl.append(el('div', { class: 'dim italic' }, 'Two doors, one bottle.'));
+  if (it.id === 'book' && stack.tag?.lore) tooltipEl.append(el('div', { class: 'dim' }, 'Right-click to read'));
   if (it.id === 'corrupted_eye') {
     tooltipEl.append(el('div', { class: 'dim italic' }, 'It remembers the End breaking.'));
     tooltipEl.append(el('div', { class: 'dim' }, 'Throw: shows the way to a glitched portal'));

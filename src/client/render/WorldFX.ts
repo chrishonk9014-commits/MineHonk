@@ -116,6 +116,56 @@ export class WorldFX {
     });
   }
 
+  /**
+   * V6 phase 3: a ring of glowing cracks spreading through the ground from a
+   * Bulwark: jagged lines from the centre out to the edge, brightening until
+   * the pound lands, inside a pulsing ring.
+   */
+  warnCracks(id: number | undefined, x: number, y: number, z: number, r: number, seconds: number, now: number, color = 0xc8a0ff): void {
+    const g = new THREE.Group();
+    const ringGeo = new THREE.RingGeometry(Math.max(0.1, r - 0.3), r, 48, 1);
+    ringGeo.rotateX(-Math.PI / 2);
+    const ringMat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.7, depthWrite: false, side: THREE.DoubleSide, fog: false });
+    g.add(new THREE.Mesh(ringGeo, ringMat));
+    // Cracks: zig-zag lines radiating out, a different pattern each time
+    const pts: number[] = [];
+    const n = 9;
+    let seed = (Math.floor(x * 7 + z * 13) >>> 0) || 1;
+    const rnd = (): number => ((seed = (seed * 1103515245 + 12345) >>> 0) / 4294967296);
+    for (let i = 0; i < n; i++) {
+      let a = (i / n) * Math.PI * 2 + rnd() * 0.4;
+      let px = 0;
+      let pz = 0;
+      for (let k = 0; k < 5; k++) {
+        a += (rnd() - 0.5) * 0.7;
+        const len = (r / 5) * (0.8 + rnd() * 0.4);
+        const nx = px + Math.cos(a) * len;
+        const nz = pz + Math.sin(a) * len;
+        pts.push(px, 0, pz, nx, 0, nz);
+        px = nx;
+        pz = nz;
+      }
+    }
+    const lineGeo = new THREE.BufferGeometry();
+    lineGeo.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
+    const lineMat = new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.2, depthWrite: false, fog: false });
+    const lines = new THREE.LineSegments(lineGeo, lineMat);
+    g.add(lines);
+    g.position.set(x, y + 0.07, z);
+    this.add(id, {
+      obj: g,
+      born: now,
+      life: seconds,
+      kind: 'warn',
+      update: (age) => {
+        const f = Math.min(1, age / Math.max(0.1, seconds));
+        ringMat.opacity = 0.5 + 0.4 * Math.abs(Math.sin(age * 7));
+        lineMat.opacity = 0.25 + 0.75 * f;
+        lines.scale.setScalar(0.35 + 0.65 * f);
+      },
+    });
+  }
+
   /** A lingering danger zone (`color`: the Error's magenta; V5.5 malware green, Herobrine's static white). */
   zone(id: number | undefined, x: number, y: number, z: number, r: number, seconds: number, now: number, color = 0xe020c8): void {
     const geo = new THREE.PlaneGeometry(r * 2, r * 2);

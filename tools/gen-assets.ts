@@ -21,7 +21,7 @@ import { registerItems, paintMask, matPal } from './textures/items';
 import { registerV4Blocks, registerV4Items } from './textures/v4';
 import { registerV5Blocks, registerV5Items } from './textures/v5';
 import { registerV55Blocks, registerV55Items } from './textures/v55';
-import { registerV6Blocks, registerV6Phase2Blocks, registerV6Items } from './textures/v6';
+import { registerV6Blocks, registerV6Phase2Blocks, registerV6Phase3Blocks, registerV6Items, registerV6Phase3Items } from './textures/v6';
 import { BLOCK_DEFS } from '../src/common/data/blocks';
 import { buildFont } from './gen-font';
 
@@ -111,6 +111,7 @@ registerV5Blocks(blockReg);
 registerV55Blocks(blockReg);
 registerV6Blocks(blockReg);
 registerV6Phase2Blocks(blockReg);
+registerV6Phase3Blocks(blockReg);
 
 const referenced = new Set<string>();
 for (const d of BLOCK_DEFS) for (const v of Object.values(d.tex)) if (v) referenced.add(v);
@@ -133,6 +134,7 @@ registerV4Items(itemReg);
 registerV5Items(itemReg);
 registerV55Items(itemReg);
 registerV6Items(itemReg, (t, mask, base, outline) => paintMask(t, mask as never, matPal(base, outline)));
+registerV6Phase3Items(itemReg, (t, mask, pal) => paintMask(t, mask as never, pal as never), matPal);
 const items = pack('items', itemReg, [...itemReg.painters.keys()]);
 fs.writeFileSync(path.join(OUT, 'items.png'), PNG.sync.write(items.png));
 fs.writeFileSync(path.join(OUT, 'items.json'), JSON.stringify({ tile: 16, columns: 32, width: items.png.width, height: items.png.height, textures: items.map }));

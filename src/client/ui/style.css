@@ -2831,3 +2831,20 @@ body {
 .boss-herobrine .shadow { letter-spacing: 0.15em; color: #ffffff; text-shadow: 0 0 4px #000, 1px 0 #3af0ff; }
 .boss-herobrine .bar { background: #050505; border-color: #000; }
 .boss-herobrine .bar > div { background: linear-gradient(#ffffff, #b8c4c8); box-shadow: 0 0 6px rgba(255, 255, 255, 0.6); }
+/* V6 phase 3: lore books (one page) and Ender Glyph Stone (glyphs only) */
+.lore-book { padding: calc(var(--s) * 6); }
+.lore-page { border-radius: calc(var(--s) * 2); min-height: calc(var(--s) * 120); align-items: flex-start; }
+.lore-page.lore-inscription { background: radial-gradient(ellipse at 30% 20%, #8a8070 0%, #6e6658 60%, #57503f 100%); color: #1e1a14; font-style: normal; align-items: center; }
+.lore-page.lore-star_chart { background: radial-gradient(ellipse at 30% 20%, #2a3460 0%, #1a2048 60%, #10143a 100%); color: #d8e4ff; }
+.lore-page.lore-translation .grim-line { font-family: 'Courier New', monospace; font-style: normal; }
+.lore-carved { font-family: 'Times New Roman', serif; font-size: calc(var(--s) * 8.5); letter-spacing: calc(var(--s) * 1.2); text-shadow: 0 var(--s) 0 rgba(255, 255, 255, 0.25); }
+.screen.glyph-screen { display: flex; align-items: center; justify-content: center; }
+.glyph-stone {
+  position: relative;
+  padding: calc(var(--s) * 6);
+  background: #1e1828;
+  border: var(--s) solid #0c0810;
+  border-radius: calc(var(--s) * 2);
+  box-shadow: 0 0 0 calc(var(--s) * 2) #3a3048, 0 calc(var(--s) * 6) calc(var(--s) * 18) rgba(0, 0, 0, 0.7);
+}
+.glyph-tablet { display: block; width: calc(var(--s) * 256); image-rendering: pixelated; }

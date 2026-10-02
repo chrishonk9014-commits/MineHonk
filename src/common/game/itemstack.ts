@@ -14,6 +14,8 @@ export interface ItemTag {
   color?: number;
   /** Written/extra free-form data (e.g. compass target). */
   data?: Record<string, unknown>;
+  /** V6 phase 3: the lore fragment a lore book holds (see endExpansion/lore.ts). */
+  lore?: string;
   /** Created by cheats (Admin Panel or commands): never counts towards advancements. */
   admin?: boolean;
 }

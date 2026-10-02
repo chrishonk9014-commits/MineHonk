@@ -56,6 +56,9 @@ export interface GameHost {
   openEngineeringBook(entry?: string): void;
   /** V5.5: the Witch's Grimoire. */
   openGrimoire(): void;
+  /** V6 phase 3: a lore book's page; an Ender Glyph Stone's glyphs. */
+  openLore(id: string): void;
+  showGlyphs(seed: number, face: number): void;
   readonly screenOpen: boolean;
 }
 
@@ -677,6 +680,10 @@ export class Game {
       case 'title':
         this.hud.showTitle(m.text, m.sub, m.ticks);
         break;
+      case 'glyphs':
+        this.input.unlock();
+        this.host.showGlyphs(m.seed, m.face);
+        break;
       case 'quest':
         this.hud.setQuest(m.quest);
         break;
@@ -1032,6 +1039,11 @@ export class Game {
         if (lode) return { kind: 'needle', target: st.tag?.data?.dim === this.dimension ? [lode[0]! + 0.5, lode[2]! + 0.5] : null, colors: { face: '#d8d8d8', rim: '#6a6a6a', tip: '#c02020' } };
         return { kind: 'needle', target: this.dimension === 'overworld' ? [this.worldSpawn[0] + 0.5, this.worldSpawn[2] + 0.5] : null, colors: { face: '#d8d8d8', rim: '#8a8a8a', tip: '#d02020' } };
       }
+      // V6 phase 3: an Ancient Map points at the giant structure it was drawn for
+      if (id === 'ancient_map') {
+        const tgt = st.tag?.data?.target as number[] | undefined;
+        return { kind: 'needle', target: tgt && st.tag?.data?.dim === this.dimension ? [tgt[0]! + 0.5, tgt[2]! + 0.5] : null, colors: { face: '#d8c8a0', rim: '#8a7a5a', tip: '#3ab0d0' } };
+      }
       if (id === 'recovery_compass') {
         const d = this.deathPos;
         return { kind: 'needle', target: d && d.dim === this.dimension ? [d.x + 0.5, d.z + 0.5] : null, colors: { face: '#0e2a30', rim: '#1f4a52', tip: '#3ae0d0' } };
@@ -1213,6 +1225,9 @@ export class Game {
         break;
       case 'warn_circle':
         wf.warnCircle(m.id, m.x ?? 0, m.y ?? 0, m.z ?? 0, m.r ?? 2, secs, now, m.color);
+        break;
+      case 'warn_cracks':
+        wf.warnCracks(m.id, m.x ?? 0, m.y ?? 0, m.z ?? 0, m.r ?? 5, secs, now, m.color);
         break;
       case 'warn_arc':
         wf.warnArc(m.id, new THREE.Vector3(m.x ?? 0, m.y ?? 0, m.z ?? 0), new THREE.Vector3(m.x1 ?? 0, m.y1 ?? 0, m.z1 ?? 0), Math.max(1, Math.round(m.strength ?? 20)), secs, now, m.color ?? 0xe8a8ff);
@@ -1594,6 +1609,12 @@ export class Game {
     if (def.use === 'engineering_book') {
       this.input.unlock();
       this.host.openEngineeringBook();
+      return;
+    }
+    // V6 phase 3: a lore book opens on its page (nothing for the server to do)
+    if (items[held.id]!.id === 'book' && typeof held.tag?.lore === 'string') {
+      this.input.unlock();
+      this.host.openLore(held.tag.lore);
       return;
     }
     if (def.use === 'grimoire') {

@@ -236,6 +236,9 @@ registerVisual('rift_bolt', fireball(0.5, '#d13fff', '#3a0a5a'));
 registerVisual('shulker_bullet', fireball(0.35, '#f0e8f8', '#8a5a9a'));
 // V6: a Chorus Beast's thrown chorus
 registerVisual('chorus_glob', fireball(0.55, '#e8a8ff', '#8a5a9a'));
+// V6 phase 3: a Sentinel's crystal bolt and a Shardstaff's shard
+registerVisual('crystal_bolt', fireball(0.35, '#d8f8ff', '#3ab0d0'));
+registerVisual('crystal_shard', fireball(0.3, '#f4e8ff', '#9a7ad0'));
 // V5.5: the dragon's malware: a tumbling clump of green and black data
 registerVisual('malware', () =>
   spriteVisual(

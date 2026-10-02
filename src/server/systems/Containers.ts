@@ -245,6 +245,8 @@ export class Containers {
     if (!be || typeof be.loot !== 'string') return;
     const rng = new Random(Number(be.lootSeed ?? 0) >>> 0);
     const stacks = rollLoot(be.loot, { rng, difficulty: this.server.level.difficulty });
+    // V6 phase 3: Ancient Maps are tied to the giant structure nearest the chest
+    this.server.endStructures?.markMaps(dim, x, z, stacks);
     // Loot first opened under a cheat (e.g. after a cheat teleport) is cheat-made
     if (cheat || this.server.admin.blockMarked(dim, x, y, z)) for (const st of stacks) markAdmin(st);
     // Spread stacks over random slots, splitting some stacks like a hand-packed chest

@@ -8,7 +8,9 @@
 import type { GameServer } from '../GameServer';
 import type { ServerPlayer } from '../player/ServerPlayer';
 import { Inventory, ARMOR_START, OFFHAND } from '../player/Inventory';
-import { type ItemStack, type Slot, canStack, cloneStack, maxStack, isEmpty, sameItem, toSaved, fromSaved, type SavedStack, itemIdOf, isAdminStack, markAdmin } from '../../common/game/itemstack';
+import { type ItemStack, type Slot, canStack, cloneStack, maxStack, isEmpty, sameItem, toSaved, fromSaved, type SavedStack, itemIdOf, isAdminStack, markAdmin, maxDurability } from '../../common/game/itemstack';
+import { elytraSmith, elytraUpgrades, ELYTRA } from '../../common/endExpansion/elytra';
+import { LOCKED_RECIPES } from '../../common/endExpansion/transport';
 import { items, itemById } from '../../common/registry/items';
 import type { C2S, WindowKind } from '../../common/net/protocol';
 import { matchCrafting, craftingRemainder, smeltingFor, fuelTicks, stonecutterOptions, smithingResult, engRecipes, type CompiledRecipe } from '../../common/game/crafting';
@@ -132,7 +134,10 @@ export class Containers {
     const result: { stack: Slot } = { stack: null };
     w.craftGrid = grid;
     const refresh = (): void => {
-      const r = matchCrafting(grid.slots, gw, gw, list);
+      let r = matchCrafting(grid.slots, gw, gw, list);
+      // V6 phase 4: a recipe learned from a blueprint (the Void Skiff) needs learning first
+      const lock = r ? LOCKED_RECIPES[items[r.result]!.id] : undefined;
+      if (r && lock && !p.recipes.has(items[r.result]!.id) && p.gamemode !== 'creative') r = null;
       // Anything crafted from cheat items (or in a cheat context) is cheat-made
       const cheat = !!r && (grid.slots.some((s) => isAdminStack(s)) || this.server.admin.inContext(p));
       result.stack = r ? { id: r.result, count: r.count, ...(cheat ? { tag: { admin: true } } : {}) } : null;
@@ -439,10 +444,13 @@ export class Containers {
     const w = new Window(this.newId(), 'smithing', 'Upgrade Gear', 3);
     const inv = new Inventory(2);
     const out: { stack: Slot } = { stack: null };
+    // V6 phase 4: an Elytra takes upgrade modules (and shears take the newest off)
+    let wings: ReturnType<typeof elytraSmith> = null;
     const refresh = (): void => {
       const base = inv.get(0);
-      const r = smithingResult(base, inv.get(1));
-      out.stack = r !== null && base ? { ...cloneStack(base), id: r, count: 1 } : null;
+      wings = elytraSmith(base, inv.get(1), itemIdOf);
+      const r = wings ? null : smithingResult(base, inv.get(1));
+      out.stack = wings ? cloneStack(wings.result) : r !== null && base ? { ...cloneStack(base), id: r, count: 1 } : null;
       if (out.stack && (isAdminStack(inv.get(1)) || this.server.admin.inContext(p))) out.stack = markAdmin(out.stack);
     };
     w.refresh = refresh;
@@ -458,9 +466,18 @@ export class Containers {
       onTake: (pl, taken) => {
         inv.set(0, null);
         const a = inv.get(1);
-        if (a) inv.set(1, a.count > 1 ? { ...a, count: a.count - 1 } : null);
+        const w = wings;
+        // Shears only wear a little taking a module off; anything else is used up
+        if (a && w?.kind === 'remove') {
+          const dmg = (a.damage ?? 0) + 1;
+          inv.set(1, dmg >= maxDurability(a) ? null : { ...a, damage: dmg });
+        } else if (a) inv.set(1, a.count > 1 ? { ...a, count: a.count - 1 } : null);
         this.server.playSound(dim, 'smithing', x + 0.5, y + 0.5, z + 0.5, 1, 1);
         this.server.interaction.onCrafted(pl, taken);
+        if (w?.kind === 'add' && !isAdminStack(taken) && !this.server.admin.inContext(pl)) {
+          this.server.interaction.grant(pl, 'elytra_upgrade');
+          if (elytraUpgrades(taken).length >= ELYTRA.slots) this.server.interaction.grant(pl, 'elytra_full');
+        }
         refresh();
       },
     });

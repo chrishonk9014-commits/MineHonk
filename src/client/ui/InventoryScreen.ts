@@ -61,7 +61,7 @@ export class InventoryScreen {
   private bookKind = '';
   private engBook: EngineeringBookPanel | null = null;
   private computer: ComputerPanel | null = null;
-  private machine: { energy?: HTMLElement; energyText?: HTMLElement; fluid?: HTMLElement; fluidText?: HTMLElement; status?: HTMLElement; info?: HTMLElement; buttons?: HTMLElement; infoSig?: string; buttonSig?: string } = {};
+  private machine: { energy?: HTMLElement; energyText?: HTMLElement; fluid?: HTMLElement; fluidText?: HTMLElement; status?: HTMLElement; info?: HTMLElement; buttons?: HTMLElement; infoSig?: string; buttonSig?: string; field?: HTMLInputElement; choices?: HTMLElement; choiceSig?: string } = {};
 
   constructor(
     win: WindowState,
@@ -642,7 +642,34 @@ export class InventoryScreen {
     this.machine.status = el('div', { class: 'eng-status' });
     this.machine.info = el('div', { class: 'eng-info' });
     this.machine.buttons = el('div', { class: 'eng-buttons' });
-    gui.append(this.machine.status, this.machine.info, this.machine.buttons, this.invSection(this.win.size));
+    // V6 phase 4: a name to type (a Teleportation Node) and a list to pick from (its destinations)
+    const extra: HTMLElement[] = [];
+    if (p.field) {
+      const f = p.field;
+      const input = el('input', { class: 'field eng-field', maxlength: String(f.max), placeholder: f.placeholder, value: f.value }) as HTMLInputElement;
+      input.disabled = !f.editable;
+      const commit = (): void => {
+        const v = input.value.trim().slice(0, f.max);
+        if (v && v !== this.mp.field?.value) this.send({ t: 'eng_cfg', window: this.win.id, key: f.key, value: v });
+      };
+      input.addEventListener('keydown', (e) => {
+        e.stopPropagation();
+        if (e.key === 'Enter') {
+          commit();
+          input.blur();
+        }
+      });
+      input.addEventListener('keyup', (e) => e.stopPropagation());
+      input.addEventListener('mousedown', (e) => e.stopPropagation());
+      input.addEventListener('blur', commit);
+      this.machine.field = input;
+      extra.push(el('div', { class: 'eng-field-row' }, el('div', { class: 'eng-label' }, 'Name'), input));
+    }
+    if (p.choices) {
+      this.machine.choices = el('div', { class: 'eng-choices' });
+      extra.push(el('div', { class: 'eng-group' }, el('div', { class: 'eng-label' }, p.choicesLabel ?? 'Choose'), this.machine.choices));
+    }
+    gui.append(this.machine.status, this.machine.info, ...extra, this.machine.buttons, this.invSection(this.win.size));
     this.updateMachine();
   }
 
@@ -673,6 +700,22 @@ export class InventoryScreen {
       m.infoSig = infoSig;
       clear(m.info);
       for (const line of p.info ?? []) m.info.append(el('div', {}, line));
+    }
+    if (m.field && p.field && document.activeElement !== m.field && m.field.value !== p.field.value) m.field.value = p.field.value;
+    const choiceSig = JSON.stringify(p.choices ?? []);
+    if (m.choices && choiceSig !== m.choiceSig) {
+      m.choiceSig = choiceSig;
+      clear(m.choices);
+      if (!p.choices?.length) m.choices.append(el('div', { class: 'muted' }, 'Nowhere to go yet: build another node.'));
+      for (const c of p.choices ?? []) {
+        const row = el('button', { class: 'btn eng-choice' + (c.ok ? '' : ' off') }, el('span', { class: 'eng-choice-name' }, c.label), el('span', { class: 'eng-choice-detail' }, c.detail)) as HTMLButtonElement;
+        row.disabled = !c.ok;
+        row.addEventListener('mousedown', (e) => {
+          e.stopPropagation();
+          if (c.ok) this.send({ t: 'eng_cfg', window: this.win.id, key: c.key, value: 1 });
+        });
+        m.choices.append(row);
+      }
     }
     const buttonSig = JSON.stringify(p.buttons ?? []);
     if (m.buttons && buttonSig !== m.buttonSig) {

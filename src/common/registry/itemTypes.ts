@@ -61,7 +61,13 @@ export type UseKind =
   /** V6 phase 3: a compass needle towards the giant structure the map was drawn for. */
   | 'ancient_map'
   /** V6 phase 3: fires a slow crystal shard (with a cooldown). */
-  | 'shardstaff';
+  | 'shardstaff'
+  /** V6 phase 4: places a minecart on a rail, or a Void Skiff. */
+  | 'vehicle'
+  /** V6 phase 4: teaches a recipe (the Void Skiff blueprint). */
+  | 'blueprint'
+  /** V6 phase 4: stills the Guardian Constructs around. */
+  | 'silent_bell';
 
 export interface ItemDef {
   id: string;

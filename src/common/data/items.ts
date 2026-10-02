@@ -3,6 +3,9 @@
  * from block definitions by the item registry; this file lists everything
  * else plus overrides.
  */
+import { transportItemDefs } from '../endExpansion/transport';
+import { elytraItemDefs } from '../endExpansion/elytra';
+import { questItemDefs } from '../endExpansion/quests';
 import type { ItemDef } from '../registry/itemTypes';
 import type { ToolType } from '../registry/blockTypes';
 import { COLORS } from './blocks';
@@ -370,5 +373,10 @@ for (const d of expansionItemDefs()) add(d);
 
 // V6 - The End Expansion, phase 3: End Artifacts, the ancient weapons and the Ancient Map
 for (const d of ancientItemDefs()) add(d);
+
+// V6 - The End Expansion, phase 4: vehicles, the Skiff's blueprint, Elytra upgrade modules, the Ancient Key and the Silent Bell
+for (const d of transportItemDefs()) add(d);
+for (const d of elytraItemDefs()) add(d);
+for (const d of questItemDefs()) add(d);
 
 export const ITEM_DEFS: readonly ItemDef[] = defs;

@@ -322,24 +322,39 @@ export class EndGenerator implements DimensionGenerator {
       () => opts.structures !== false,
     );
     const version = opts.version ?? LATEST_GENERATOR;
-    this.expansionStructures =
-      version >= EXPANSION_STRUCTURES_GENERATOR
-        ? new StructureManager(
-            seed,
-            expansionStructureTypes(this.terrain.expansion),
-            {
-              seed,
-              groundY: (x, z) => this.terrain.expansion.topColumn(x, z)?.top ?? -1,
-              isWater: () => false,
-              biome: (x, z) => biomeOf(this.terrain.biomeAt(x, z)),
-              estimateHeight: (x, z) => this.terrain.expansion.topColumn(x, z)?.top ?? -1,
-              estimateBiome: (x, z) => biomeOf(this.terrain.biomeAt(x, z)),
-            },
-            () => opts.structures !== false,
-            true,
-            16,
-          )
-        : null;
+    this.structuresOn = opts.structures !== false;
+    this.expansionStructures = version >= EXPANSION_STRUCTURES_GENERATOR ? this.newExpansionManager() : null;
+  }
+
+  private readonly structuresOn: boolean;
+  private census: StructureManager | null = null;
+
+  private newExpansionManager(): StructureManager {
+    return new StructureManager(
+      this.seed,
+      expansionStructureTypes(this.terrain.expansion),
+      {
+        seed: this.seed,
+        groundY: (x, z) => this.terrain.expansion.topColumn(x, z)?.top ?? -1,
+        isWater: () => false,
+        biome: (x, z) => biomeOf(this.terrain.biomeAt(x, z)),
+        estimateHeight: (x, z) => this.terrain.expansion.topColumn(x, z)?.top ?? -1,
+        estimateBiome: (x, z) => biomeOf(this.terrain.biomeAt(x, z)),
+      },
+      () => this.structuresOn,
+      true,
+      16,
+    );
+  }
+
+  /**
+   * V6 phase 4: a second manager over the same structures (the same seed, so
+   * the same starts) for surveys over wide areas, such as the broken
+   * portals' census, so they never churn the chunk generator's cache.
+   */
+  censusManager(): StructureManager | null {
+    if (!this.expansionStructures) return null;
+    return (this.census ??= this.newExpansionManager());
   }
 
   /** Whether an expansion structure's piece covers a column (features keep out). Pure: plans read only the seed. */

@@ -48,7 +48,7 @@ import {
   type Palette,
   type Rect,
 } from './kit';
-import { DIRS, DXZ, FRONT_OF, OPPOSITE, Plan, ROT_TOWARD, rectBox, runBuilder, runFrame, sideOut, type Anchor, type Dir, type Site } from './plan';
+import { DIRS, DXZ, FRONT_OF, OPPOSITE, Plan, ROT_TOWARD, boxIn, frameOf, rectBox, runBuilder, runFrame, sideOut, worldOf, type Anchor, type Dir, type Site } from './plan';
 
 /** A variant's plan: null when the place doesn't suit it (unless forced). */
 export type VariantPlan = (site: Site, a: Anchor, rng: Random, seed: number) => Start | null;
@@ -255,6 +255,7 @@ export const planSettlement: VariantPlan = (site, a, rng, seed) => {
   });
   let houses = 0;
   let gardens = 0;
+  const houseSpots: P3[] = [];
   const dirs = rng.shuffle([...DIRS]);
   const routes: P3[] = [];
   for (const d of dirs) {
@@ -297,6 +298,7 @@ export const planSettlement: VariantPlan = (site, a, rng, seed) => {
         const hseed = pl.sub(houses, 0x4005);
         const loot = houses % 2 === 0 ? 'chest/end_settlement' : null;
         pl.add(`house:${roof}:${w}x${dd}x${hh}`, rectBox(hr, yt - 14, yt + hh + 8, 2), (v) => house(new Builder(v, hr.x0, yt, hr.z0, rot, w, dd), p, hseed, w, dd, hh, roof, wall, loot));
+        houseSpots.push([(hr.x0 + hr.x1) >> 1, yt + 1, (hr.z0 + hr.z1) >> 1]);
         houses++;
       }
     }
@@ -319,6 +321,8 @@ export const planSettlement: VariantPlan = (site, a, rng, seed) => {
   const n = 3 + rng.int(4);
   for (let i = 0; i < n; i++) pl.mob('endling', [a.x + rng.int(5) - 2, y, a.z + rng.int(5) - 2]);
   void routes;
+  // The Silent City, where no Fallen City lies near: the sealed hall would stand on the plaza (its floor), the shards in the houses
+  pl.quest.silent = { hall: [a.x, y - 1, a.z], spots: houseSpots };
   return pl.start(a.x, y, a.z);
 };
 
@@ -402,6 +406,7 @@ export const planRuins: VariantPlan = (site, a, rng, seed) => {
       const loot = chests > 0 && kind !== 'glyphs' && kind !== 'bridge' ? 'chest/end_ruins' : null;
       if (loot) chests--;
       pl.add(`ruin:${kind}:${w}x${d}`, rectBox(fr, yy - 14, yy + h + 10, 2), (v) => ruinFragment(new RuinBuilder(v, fr.x0, yy, fr.z0, rot, w, d, fseed, 0.1, collapse, 4), p, fseed, kind, w, d, h, loot));
+      if (kind === 'portal') pl.portal(frameOf(fr.x0, yy, fr.z0, rot, w, d), [half(w) - 2, 1, 1]);
       return;
     }
   });
@@ -456,6 +461,13 @@ export const planLibrary: VariantPlan = (site, a, rng, seed) => {
   const top = floors * fh;
   pl.occupy(r);
   const bseed = pl.sub(0x11b);
+  {
+    // The sealed archive (the Ancient Key opens it)
+    const B = frameOf(r.x0, y, r.z0, rot, w, d);
+    const fy = archiveFloor * fh;
+    const backZ = d - 8;
+    pl.seal('archive', [worldOf(B, half(w), fy + 1, backZ), worldOf(B, half(w), fy + 2, backZ)], boxIn(B, 2, fy + 1, backZ + 1, w - 3, fy + fh - 2, d - 2));
+  }
   pl.add(`library:${w}x${d}x${floors}:${kinds.join('-')}:${roof}`, rectBox(r, y - 16, y + top + Math.max(w, d) / 2 + 4, 2), (v) => {
     const b = new Builder(v, r.x0, y, r.z0, rot, w, d);
     footing(b, 0, 0, w - 1, d - 1, S(p.accent), 14);
@@ -649,6 +661,12 @@ export const planObservatory: VariantPlan = (site, a, rng, seed) => {
     chest(b, -Math.round(Rd / 2), 1, 1, 'east', 'chest/end_observatory', dseed);
     b.set(0, Rd - 1, 0, lamp(p, true));
   });
+  {
+    // The Lost Observatory: the telescope's lens, the core at its foot, and the gaps a repair closes in its tube
+    const D = frameOf(cx, domeY, cz, 0, 1, 1);
+    const X = Math.round(Rd / 2);
+    pl.quest.lens = { lens: worldOf(D, X, 8, -4), core: worldOf(D, X, 2, 0), mend: [worldOf(D, X, 5, 0), worldOf(D, X, 6, -1), worldOf(D, X, 7, -2), worldOf(D, X, 8, -3)] };
+  }
   // Buttress fins and balconies
   const fins = rng.int(5);
   const fdirs = rng.shuffle([...DIRS]).slice(0, fins);
@@ -854,7 +872,7 @@ export const planShipyard: VariantPlan = (site, a, rng, seed) => {
     pl.occupy(hf.rect);
     const masts = 1 + rng.int(2);
     const sail = rng.pick(['black_wool', 'purple_wool', 'magenta_wool', 'white_wool']);
-    const loot = finished ? (elytra && !elytraPlaced ? 'chest/end_shipyard_elytra' : 'chest/end_shipyard') : null;
+    const loot = finished ? (elytra && !elytraPlaced ? 'chest/end_shipyard_elytra' : 'chest/end_shipyard_ship') : null;
     if (loot === 'chest/end_shipyard_elytra') elytraPlaced = true;
     const hseed = pl.sub(i, 0x5419);
     pl.add(`${finished ? 'ship' : 'frame'}:${len}x${w}:${masts}`, rectBox(hf.rect, y - 4, y + 12, 1), (v) => hull(runBuilder(v, hf, y), p, hseed, len, w, finished, masts, sail, loot));
@@ -1198,6 +1216,12 @@ export const planPalace: VariantPlan = (site, a, rng, seed) => {
   pl.bulwark(L(half(W), 1, zHall + half(Le)), local(0, 0, zHall, W - 1, 9, zCourt));
   pl.bulwark(L(courts === 2 ? half(W) : half(W) + 3, 1, zCourt + half(Lc)), local(0, 0, zCourt, W - 1, 9, zThrone));
   pl.bulwark(L(half(W), 1, zVault - 6), local(0, 0, zThrone, W - 1, Ht, zVault));
+  // The Crystal Vault: its door, the room behind it, four pedestals on the dais, and where its Bulwark wakes
+  {
+    const B = frameOf(r.x0, y, r.z0, rot, W, D);
+    pl.seal('vault', [L(half(W), 1, zVault), L(half(W), 2, zVault)], boxIn(B, 2, 1, zVault + 1, W - 3, 5, D - 3));
+    pl.quest.vault = { pedestals: [L(half(W) - 3, 2, zVault - 1), L(half(W) + 3, 2, zVault - 1), L(half(W) - 3, 2, zVault - 3), L(half(W) + 3, 2, zVault - 3)], bulwark: L(half(W), 1, zVault + 3) };
+  }
   return pl.start(a.x, y, a.z);
 };
 

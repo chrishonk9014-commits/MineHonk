@@ -15,6 +15,7 @@ import { expansionGiveSets } from '../../common/endExpansion/resources';
 import { EXPANSION_STRUCTURE_IDS, GIANT_IDS, expansionStructureName } from '../../common/endExpansion/structures';
 import { LORE, NEST_LORE } from '../../common/endExpansion/lore';
 import { stackOf, type ItemStack } from '../../common/game/itemstack';
+import { END_QUESTS, type EndQuestId } from '../../common/endExpansion/quests';
 
 export interface ExpansionAdminHelpers {
   /** Teleports (as a cheat) once the destination has loaded; the result follows as a second reply. */
@@ -27,7 +28,7 @@ export interface ExpansionAdminHelpers {
 
 type Result = { ok: boolean; text: string; data?: unknown } | null;
 
-export function expansionAdmin(sys: EndExpansionSystem, h: ExpansionAdminHelpers, p: ServerPlayer, op: V6Op, biome?: string, set?: string, structure?: string): Result {
+export function expansionAdmin(sys: EndExpansionSystem, h: ExpansionAdminHelpers, p: ServerPlayer, op: V6Op, biome?: string, set?: string, structure?: string, quest?: string): Result {
   const s = sys.server;
   const gen = s.dim('end').generator as EndGenerator;
   const ex = gen.terrain.expansion;
@@ -165,6 +166,44 @@ export function expansionAdmin(sys: EndExpansionSystem, h: ExpansionAdminHelpers
       const f = pool[Math.floor(Math.random() * pool.length)]!;
       h.giveStack(p, { ...stackOf('book', 1), tag: { lore: f.id } });
       return ok(`Gave a lore book (${f.id}; a cheat item: it never counts for advancements).`);
+    }
+    // Phase 4: the End quests and the testing tools (every one a cheat: nothing here awards anything)
+    case 'quest_start':
+    case 'quest_complete':
+    case 'quest_reset':
+    case 'quest_tp': {
+      const eq = s.endQuests;
+      const q = END_QUESTS.find((x) => x.id === quest)?.id as EndQuestId | undefined;
+      if (!eq || !q) return { ok: false, text: 'Unknown quest.' };
+      const withQuests = (text: string): Result => ({ ok: true, text, data: { ...sys.status(p), quests: eq.status() } });
+      if (op === 'quest_reset') return withQuests(eq.adminReset(q));
+      if (p.dim.id !== 'end' && q !== 'dragons_history' && op !== 'quest_tp') return { ok: false, text: 'Go to the End first (the quests\' sites are searched from where you are).' };
+      if (op === 'quest_start') return withQuests(eq.adminStart(p, q));
+      if (op === 'quest_complete') return withQuests(eq.adminComplete(p, q));
+      const site = eq.nearestSite(p.dim.id === 'end' ? p : ({ ...p, x: ex.arrival().x, z: ex.arrival().z } as ServerPlayer), q);
+      if (!site) return { ok: false, text: `No ${END_QUESTS.find((x) => x.id === q)!.title} site found.` };
+      h.queueTeleport(p, site.at[0] + 0.5, site.at[1], site.at[2] + 0.5, END_QUESTS.find((x) => x.id === q)!.title, false);
+      return { ok: true, text: `Going to the nearest start of ${END_QUESTS.find((x) => x.id === q)!.title}...`, data: { ...sys.status(p), pending: true } };
+    }
+    case 'fill_eu': {
+      const eng = s.engineering;
+      const hit = s.endQuests?.lookedAt(p);
+      const n = hit && eng ? eng.node(p.dim, hit[0], hit[1], hit[2]) : null;
+      const be = n?.be();
+      if (!n || !be || !n.c.energy) return { ok: false, text: 'Look at a machine with an energy buffer.' };
+      be.energy = eng!.capacityOf(n);
+      be.cheat = 1;
+      n.dirty = true;
+      n.sleep = 0;
+      return ok(`Filled the ${n.c.name}'s buffer (${Math.floor(be.energy).toLocaleString('en-US')} EU; cheat-marked: what it does never counts for advancements).`);
+    }
+    case 'force_gate': {
+      if (!s.endQuests) return { ok: false, text: 'The quests are not running.' };
+      return ok(s.endQuests.forceGate(p));
+    }
+    case 'open_sanctum': {
+      if (!s.endQuests) return { ok: false, text: 'The quests are not running.' };
+      return ok(s.endQuests.openSanctum());
     }
     case 'where': {
       const st = sys.status(p) as { here: { x: number; y: number; z: number; inExpansion: boolean; biome: string | null } };

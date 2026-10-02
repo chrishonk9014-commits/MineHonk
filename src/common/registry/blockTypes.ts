@@ -86,6 +86,8 @@ export type ModelKind =
   | 'layer'
   | 'bars'
   | 'mushroom_block'
+  // V6 phase 4: rails (flat or sloping, no collision)
+  | 'rail'
   | 'custom';
 
 export interface TexSpec {

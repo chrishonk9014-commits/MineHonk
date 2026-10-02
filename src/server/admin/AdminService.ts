@@ -472,6 +472,7 @@ export class AdminService {
           a.biome,
           a.set,
           a.structure,
+          a.quest,
         );
       case 'v5':
         if (!this.server.engineering) return { ok: false, text: 'Engineering is not running.' };

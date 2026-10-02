@@ -21,7 +21,7 @@ import type { DecorView } from '../../decorate/view';
 import { Builder, type Rotation } from '../builder';
 import { boxOf, type Box, type Start } from '../manager';
 import { RuinBuilder, battlements, brokenPortal, chance, chest, doorway, dome, footing, footprint, glyphWall, lamp, organ, platform, rectOf, soft, st, storey, telescope, tower, walkway, type P3, type Palette, type Rect } from './kit';
-import { DIRS, DXZ, FRONT_OF, Plan, rectBox, runBuilder, runFrame, type Anchor, type Site } from './plan';
+import { DIRS, DXZ, FRONT_OF, Plan, boxIn, frameOf, rectBox, runBuilder, runFrame, worldOf, type Anchor, type Site } from './plan';
 
 export type GiantPlan = (site: Site, a: Anchor, rng: Random, seed: number) => Start | null;
 
@@ -376,6 +376,8 @@ export const planCathedral: GiantPlan = (site, a, rng, seed) => {
     organ(b, half(W) - 5, 1, Ln + apse - 2, 11, oseed);
     chest(b, half(W) + 6, 1, Ln + 1, 'north', 'chest/crystal_cathedral', oseed);
   });
+  // The organ's console cores can be restored (one, for the whole cathedral)
+  for (let i = 1; i < 10; i += 2) pl.core(worldOf(fb(null as unknown as DecorView), half(W) - 5 + i, 1, Ln + apse - 4));
   // Side chapels with mite nests
   const chapels = 3 + rng.int(3);
   const step = Math.floor((zt - half(Wt) - 6) / chapels);
@@ -493,6 +495,13 @@ export const planVoidObservatory: GiantPlan = (site, a, rng, seed) => {
     }
     b.set(0, Rd - 1, 0, S('astral_lantern'));
   });
+  {
+    // The Lost Observatory: the giant lens (its middle block is the one repaired) over a straight run of conduits from the core
+    const disc: [number, number, number][] = [];
+    for (let z = -3; z <= 3; z++) for (let x = -3; x <= 3; x++) if (Math.hypot(x, z) <= 3.2 && (x || z)) disc.push([cx + x, y + Rd - 3, cz + z]);
+    pl.quest.lens = { lens: [cx, y + Rd - 3, cz], core: [cx, y, cz], mend: [], disc };
+    pl.core([cx, y, cz]);
+  }
   // The ring of telescope towers, each with a bridge to the dome
   const n = 5 + rng.int(3);
   const base = rng.next() * Math.PI * 2;
@@ -534,6 +543,7 @@ export const planVoidObservatory: GiantPlan = (site, a, rng, seed) => {
       const dz = Math.round(-Math.sin(ang) * tr);
       for (let k = 1; k <= 3; k++) b.set(dx, k, dz, 0);
     });
+    pl.core([tx + 1, ty + th + 2, tz + 1]);
     // The bridge from the tower's door across the hole to the dome
     const ax = tx - Math.cos(ang) * (tr + 0.5);
     const az = tz - Math.sin(ang) * (tr + 0.5);
@@ -710,6 +720,13 @@ export const planFortress: GiantPlan = (site, a, rng, seed) => {
     battlements(b, p, kx0, floorsK * fhK + 1, kz0, kx0 + K - 1, kz0 + K - 1);
     for (let i = 2; i < K - 2; i += 4) b.set(kx0 + i, floorsK * fhK + 2, kz0 + 1, lamp(p));
   });
+  {
+    // The sealed inner keep (the Ancient Key opens it; a dormant core waits inside)
+    const B = fb(null as unknown as DecorView);
+    const c0 = half(K) - 5;
+    pl.seal('keep', [worldOf(B, kx0 + half(K), 1, kz0 + c0 + 2), worldOf(B, kx0 + half(K), 2, kz0 + c0 + 2)], boxIn(B, kx0 + c0 + 1, 1, kz0 + c0 + 3, kx0 + c0 + 9, fhK - 2, kz0 + c0 + 11));
+    pl.core(worldOf(B, kx0 + half(K), 1, kz0 + c0 + 7));
+  }
   // Barracks in the courtyard
   const barracks = 1 + rng.int(3);
   for (let i = 0; i < barracks; i++) {
@@ -767,6 +784,7 @@ export const planFallenCity: GiantPlan = (site, a, rng, seed) => {
   const p = pl.pal;
   const groundAt = (x: number, z: number): number | null => (a.force ? y - 1 : site.ground(x, z));
   // Towers, tilted, sunk and broken
+  const spots: [number, number, number][] = [];
   const target = 22 + rng.int(15);
   let towers = 0;
   let chests = 8 + rng.int(7);
@@ -810,6 +828,8 @@ export const planFallenCity: GiantPlan = (site, a, rng, seed) => {
       const tz = Math.sin(la) * lean;
       const H = floors * fh;
       const collapse = Math.floor(H * (0.3 + rng.next() * 0.45));
+      // The Silent City hides its key shards on the sunk bottom floors
+      if (spots.length < 16) spots.push([cx, by + 1, cz]);
       const reach = Math.ceil(H * lean) + 2;
       pl.add(`tower:${w}x${floors}:${Math.round(lean * 100)}`, rectBox(tr, by - 8, by + collapse + 10, reach + 2), (v) => {
         const b = new LeaningBuilder(v, tr.x0, by, tr.z0, w, tx, tz, tseed, 0.18, collapse);
@@ -888,8 +908,10 @@ export const planFallenCity: GiantPlan = (site, a, rng, seed) => {
       for (let xx = 0; xx < 7; xx++) for (let zz = 0; zz < 3; zz++) b.set(xx, 0, zz, S('ancient_end_bricks'));
       brokenPortal(b, ps, 1, 1, 1, 3, 4, 0.35);
     });
+    pl.portal(frameOf(fr.x0, g, fr.z0, rot, 7, 3), [1, 1, 1]);
   }
-  // A last platform at the heart, and Void Stalkers among the stones
+  // A last platform at the heart (the Silent City's sealed hall will stand on it), and Void Stalkers among the stones
+  pl.quest.silent = { hall: [a.x, y, a.z], spots };
   pl.add('heart', rectBox(rectOf(a.x - 4, a.z - 4, a.x + 4, a.z + 4), y - 6, y + 4, 0), (v) => platform(new Builder(v, a.x - 4, y, a.z - 4, 0, 9, 9), p, seed, 4));
   const stalkers = 4 + rng.int(5);
   for (let i = 0; i < stalkers; i++) {

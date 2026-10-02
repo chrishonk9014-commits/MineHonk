@@ -51,7 +51,11 @@ export type C2S =
   /** V5: the Engineering Book fills the open Engineering Crafting Table's grid with a recipe. */
   | { t: 'eng_fill'; recipe: number; all: boolean }
   /** V5.5: a command from a computer's screen (open program, copy a file, press a button...). */
-  | { t: 'pc_cmd'; window: number; cmd: string; arg?: string | number };
+  | { t: 'pc_cmd'; window: number; cmd: string; arg?: string | number }
+  /** V6 phase 4: the Void Skiff pilot's controls (forward, sideways: -1..1; up/down: -1, 0, 1). */
+  | { t: 'pilot'; f: number; s: number; v: number }
+  /** V6 phase 4: an Elytra upgrade's move (Burst, Ender Blink); Hover is the move packet's sneak while gliding. */
+  | { t: 'elytra'; a: 'burst' | 'blink' };
 
 export type ClickMode = 'pickup' | 'quick' | 'swap' | 'drop' | 'drag_start' | 'drag_add' | 'drag_end' | 'collect' | 'clone';
 
@@ -148,7 +152,7 @@ export type S2C =
    * Positions are world coordinates; `id` ties a marker to its later updates.
    */
   | { t: 'fx'; kind: FxKind; strength?: number; ticks?: number; text?: string; x?: number; y?: number; z?: number; r?: number; x1?: number; y1?: number; z1?: number; id?: number; color?: number }
-  | { t: 'teleport'; x: number; y: number; z: number; yaw?: number; pitch?: number; seq: number }
+  | { t: 'teleport'; x: number; y: number; z: number; yaw?: number; pitch?: number; seq: number; keep?: boolean }
   | { t: 'dig_progress'; x: number; y: number; z: number; stage: number; by: number }
   | { t: 'gamemode'; mode: GameMode; abilities: AbilitiesMsg }
   | { t: 'abilities'; abilities: AbilitiesMsg }
@@ -176,7 +180,15 @@ export type S2C =
   /** A firework rocket pushes the gliding player for `ticks`. */
   | { t: 'boost'; ticks: number }
   /** Started (id) or stopped (null) riding; `control`: the client steers the mount. */
-  | { t: 'mount'; id: number | null; control?: boolean; seat?: number; width?: number; height?: number; speed?: number; jump?: number; x?: number; y?: number; z?: number; yaw?: number }
+  | { t: 'mount'; id: number | null; control?: boolean; seat?: number; width?: number; height?: number; speed?: number; jump?: number; x?: number; y?: number; z?: number; yaw?: number; kind?: 'minecart' | 'skiff'; pilot?: boolean }
+  /** V6 phase 4: recipes this player has learned from blueprints. */
+  | { t: 'recipes'; unlocked: string[] }
+  /**
+   * V6 phase 4: the worn Elytra's upgrades and their meters: hover ticks
+   * left, burst charges (and ticks to the next), ticks until Ender Blink and
+   * Void Recovery are ready. Absent fields: that upgrade isn't fitted.
+   */
+  | { t: 'elytra'; upgrades: string[]; hover?: number; charges?: number; chargeIn?: number; blinkIn?: number; recoverIn?: number }
   /** The server corrected the steered mount's position. */
   | { t: 'vehicle_pos'; x: number; y: number; z: number }
   /** A jukebox starts (track) or stops (null) playing. */
@@ -194,8 +206,8 @@ export interface QuestInfo {
   stages?: number;
   /** Enemies or objectives left in this stage. */
   remaining?: number;
-  /** Glitched quests get the corrupted look. */
-  style?: 'normal' | 'glitch';
+  /** Glitched quests get the corrupted look; V6 End quests the ancient one. */
+  style?: 'normal' | 'glitch' | 'end';
 }
 
 export interface AbilitiesMsg {

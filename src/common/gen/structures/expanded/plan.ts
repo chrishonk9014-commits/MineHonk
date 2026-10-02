@@ -14,6 +14,7 @@ import type { DecorView } from '../../decorate/view';
 import { Builder, type Rotation } from '../builder';
 import { boxOf, unionBoxes, type Box, type Start } from '../manager';
 import { paletteFor, piece, rectsOverlap, type Entities, type KindPiece, type P3, type Palette, type Rect } from './kit';
+import type { EndQuestSpec, PortalSite, SealSpec } from '../../../endExpansion/quests';
 
 /** World directions (the side of a footprint, or the way a bridge runs). */
 export type Dir = 'N' | 'E' | 'S' | 'W';
@@ -106,6 +107,8 @@ export class Plan {
   readonly entities: Entities = [];
   readonly rects: Rect[] = [];
   readonly pal: Palette;
+  /** V6 phase 4: where the structure's quest parts are (recorded as it is planned; never uses the rng). */
+  readonly quest: EndQuestSpec = { kind: 'end' };
 
   constructor(
     readonly type: string,
@@ -154,10 +157,46 @@ export class Plan {
     this.entities.push({ type, x: at[0] + 0.5, y: at[1], z: at[2] + 0.5, ...(data ? { data } : {}) });
   }
 
+  // ------------------------------------------------------------------ phase 4: quest parts
+
+  /** A broken portal laid out by `brokenPortal(b, ..., x0, y0, z, w, h)` in a builder frame. */
+  portal(b: Builder, at: [number, number, number], w = 3, h = 4): void {
+    const site: PortalSite = { b: [b.ox, b.oy, b.oz, b.rot, b.sx, b.sz], at, w, h };
+    (this.quest.portals ??= []).push(site);
+  }
+
+  /** A dormant Ancient Core that can be restored (giant structures). */
+  core(at: P3): void {
+    (this.quest.cores ??= []).push(at);
+  }
+
+  seal(kind: SealSpec['kind'], door: P3[], room: Box): void {
+    (this.quest.seals ??= []).push({ kind, door, room });
+  }
+
   start(x: number, y: number, z: number): Start | null {
     if (!this.pieces.length) return null;
-    return { type: this.type, x, y, z, pieces: this.pieces, bounds: unionBoxes(this.pieces.map((p) => p.box)), entities: this.entities.length ? this.entities : undefined };
+    const q = this.quest;
+    const quest = q.lens || q.portals || q.cores || q.seals || q.vault || q.silent ? q : undefined;
+    return { type: this.type, x, y, z, pieces: this.pieces, bounds: unionBoxes(this.pieces.map((p) => p.box)), entities: this.entities.length ? this.entities : undefined, ...(quest ? { quest } : {}) };
   }
+}
+
+/** A builder frame with no view (to work out world positions while planning). */
+export function frameOf(ox: number, oy: number, oz: number, rot: Rotation, sx: number, sz: number): Builder {
+  return new Builder(null as unknown as DecorView, ox, oy, oz, rot, sx, sz);
+}
+
+/** World position of a frame's local position. */
+export function worldOf(b: Builder, lx: number, ly: number, lz: number): P3 {
+  return [b.wx(lx, lz), b.oy + ly, b.wz(lx, lz)];
+}
+
+/** World box of a frame's local box (inclusive corners). */
+export function boxIn(b: Builder, x0: number, y0: number, z0: number, x1: number, y1: number, z1: number): Box {
+  const a = worldOf(b, x0, y0, z0);
+  const c = worldOf(b, x1, y1, z1);
+  return boxOf(a[0], a[1], a[2], c[0], c[1], c[2]);
 }
 
 /** The box of a footprint rectangle from y0 to y1 (inclusive), grown by `pad` sideways. */

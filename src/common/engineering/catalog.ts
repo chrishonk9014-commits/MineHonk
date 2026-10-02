@@ -41,7 +41,9 @@ export type EngKind =
   | 'computer'
   | 'peripheral'
   | 'data_cable'
-  | 'server';
+  | 'server'
+  // V6 phase 4: End transport (bridge projectors, teleportation nodes, Ender Rails)
+  | 'transport';
 
 export interface SlotLayout {
   input?: number;
@@ -83,6 +85,10 @@ export interface ComponentDef {
   guide: string;
   /** V5.5 peripherals: what a computer next to it gains. */
   peripheral?: 'keyboard' | 'mouse' | 'speaker' | 'led';
+  /** V6: the block is registered elsewhere (an older block that joins a network). */
+  existing?: boolean;
+  /** V6: never crafted (restored or placed by a quest). */
+  uncraftable?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -194,8 +200,51 @@ comp({ id: 'led_light', name: 'LED', kind: 'peripheral', tier: 1, nets: [], peri
 comp({ id: 'network_cable', name: 'Network Cable', kind: 'data_cable', tier: 2, nets: ['data'], desc: 'Joins computers and server racks with network cards into a network: share files and programs between them.', guide: 'computers' });
 comp({ id: 'server_rack', name: 'Server Rack', kind: 'server', tier: 3, nets: ['energy', 'data'], energy: { capacity: 2000, maxIn: 32, use: 2 }, slots: { input: 4 }, desc: 'Holds four hard drives as network storage: every computer on its network can read and write them.', guide: 'computers' });
 
-export const COMPONENTS: readonly ComponentDef[] = C;
-export const COMPONENT_BY_ID: ReadonlyMap<string, ComponentDef> = new Map(C.map((c) => [c.id, c]));
+// ---------------------------------------------------------------------------
+// V6 - The End Expansion, phase 4: End engineering. End Power is EU made by
+// End generators, carried by the same cables. These blocks are appended to
+// the block registry after the expansion's phase 3 blocks (endEngineeringBlockDefs),
+// so no earlier block number moves.
+// ---------------------------------------------------------------------------
+const E: ComponentDef[] = [];
+const endComp = (d: ComponentDef): ComponentDef => (E.push(d), d);
+
+/** Crystal Generator: EU/t while burning, and ticks one End Crystal Fragment burns for. */
+export const CRYSTAL_GEN = { gen: 128, burn: 400 } as const;
+/** Void Collector: EU/t, and the open void it needs under it (air all the way down). */
+export const VOID_COLLECTOR = { gen: 24, air: 32 } as const;
+/** Restored Ancient Core: EU/t, forever. */
+export const ANCIENT_CORE_GEN = 512;
+/** Crystal Grower: ticks per cluster (about five minutes). */
+export const CRYSTAL_GROWER_TIME = 6000;
+
+endComp({ id: 'crystal_generator', name: 'Crystal Generator', kind: 'generator', tier: 3, nets: ['energy'], energy: { capacity: 51200, maxOut: 512, gen: CRYSTAL_GEN.gen }, slots: { fuel: 1 }, signal: true, desc: 'Burns End Crystal Fragments: 128 EU/t for 20 seconds each.', guide: 'end_engineering' });
+endComp({ id: 'void_collector', name: 'Void Collector', kind: 'generator', tier: 3, nets: ['energy'], energy: { capacity: 4800, maxOut: 128, gen: VOID_COLLECTOR.gen }, signal: true, desc: 'Draws 24 EU/t from the void, without fuel. It only works over open void: nothing but air under it, all the way down, at least 32 blocks of it.', guide: 'end_engineering' });
+endComp({ id: 'restored_ancient_core', name: 'Restored Ancient Core', kind: 'generator', tier: 4, nets: ['energy'], energy: { capacity: 102400, maxOut: 1024, gen: ANCIENT_CORE_GEN }, signal: true, uncraftable: true, desc: 'A dormant Ancient Core brought back with Ancient Fragments and an Astral Shard: 512 EU/t, and it never runs out. It can\'t be made, only restored where it was found (about one in each giant structure). Silk Touch picks a restored one up.', guide: 'end_engineering' });
+endComp({ id: 'void_cell', name: 'Void Cell', kind: 'battery', tier: 4, nets: ['energy'], energy: { capacity: 2000000, maxIn: 4096, maxOut: 4096 }, desc: 'Stores 2,000,000 EU in the void (4,096 EU/t in or out). Keeps its charge when broken.', guide: 'end_engineering' });
+endComp({ id: 'end_processor', name: 'End Processor', kind: 'machine', tier: 3, nets: ['energy', 'item'], energy: { capacity: 64 * 400, maxIn: 64 * 8, use: 64 }, slots: { input: 1, output: 2, upgrades: 4 }, machine: 'end_processor', time: 100, signal: true, desc: 'Processes the End\'s resources: more Ender Scrap from Ender Ore, shards from Void Crystal Ore, fragments from crystal clusters, Ancient Fragments from old stone, fiber from chorus.', guide: 'end_engineering' });
+endComp({ id: 'crystal_grower', name: 'Crystal Grower', kind: 'machine', tier: 3, nets: ['energy'], energy: { capacity: 32 * 400, maxIn: 32 * 8, use: 32 }, slots: { upgrades: 4 }, machine: 'grower', time: CRYSTAL_GROWER_TIME, signal: true, desc: 'Slowly grows an End Crystal Cluster on Crystalline End Stone beside it (about one every five minutes), so crystal grows back.', guide: 'end_engineering' });
+endComp({ id: 'teleport_node', name: 'Teleportation Node', kind: 'transport', tier: 4, nets: ['energy'], energy: { capacity: 250000, maxIn: 2048 }, machine: 'node', desc: 'Name it, then pick another node to go to. It links to every node in the End (and those within 2,000 blocks of the Overworld\'s spawn), never across dimensions. Each trip costs 1,000 EU plus 10 EU a block from this node\'s buffer, after 2 seconds standing on it.', guide: 'end_transport' });
+endComp({ id: 'ender_bridge_projector', name: 'Ender Bridge Projector', kind: 'transport', tier: 3, nets: ['energy'], energy: { capacity: 8000, maxIn: 512 }, machine: 'bridge', signal: true, desc: 'Projects a solid, walkable bridge of Ender Light up to 64 blocks the way it faces, stopping at the first solid block. It uses 16 EU/t for every 16 blocks of bridge. Without power or its signal, the bridge flickers and fades over 3 seconds.', guide: 'end_transport' });
+endComp({ id: 'ender_rail', name: 'Ender Rail', kind: 'transport', tier: 3, nets: ['energy'], energy: { capacity: 400, maxIn: 64, use: 1 }, machine: 'rail', desc: 'A rail that, powered (with a signal, or 1 EU/t from a cable), drives minecarts at twice a powered rail\'s speed. It can lie on Ender Light, carrying a line over the void.', guide: 'end_transport' });
+// Quest machines (placed by a repair, never crafted)
+endComp({ id: 'restored_ancient_lens', name: 'Restored Ancient Lens', kind: 'machine', tier: 4, nets: ['energy'], energy: { capacity: 256 * 600, maxIn: 1024, use: 256 }, machine: 'lens', uncraftable: true, desc: 'An observatory\'s Ancient Lens, repaired. Powered at 256 EU/t for 30 seconds it wakes; then look through the telescope.', guide: 'end_engineering' });
+endComp({ id: 'crystal_pedestal', name: 'Crystal Pedestal', kind: 'machine', tier: 4, nets: ['energy'], energy: { capacity: 64 * 200, maxIn: 512, use: 64 }, machine: 'pedestal', uncraftable: true, desc: 'One of the four pedestals before an End Palace\'s crystal vault. Each holds an End Crystal and must be powered from a Crystal Generator.', guide: 'end_engineering' });
+// The Ancient Conduits of the old machines carry power again (blocks of phase 3)
+endComp({ id: 'ancient_conduit', name: 'Ancient Conduit', kind: 'cable', tier: 2, nets: ['energy'], cableCap: 512, existing: true, uncraftable: true, desc: 'The old machines\' conduits carry power again, up to 512 EU/t: cable an observatory\'s telescope at its foot and the power climbs the tube.', guide: 'end_engineering' });
+endComp({ id: 'ancient_core', name: 'Ancient Core (dormant)', kind: 'cable', tier: 2, nets: ['energy'], cableCap: 512, existing: true, uncraftable: true, desc: 'A dormant core passes power along like a conduit. In a giant structure one core can be restored (8 Ancient Fragments and an Astral Shard) into a Restored Ancient Core.', guide: 'end_engineering' });
+
+/** End engineering components (phase 4). */
+export const END_COMPONENTS: readonly ComponentDef[] = E;
+/**
+ * Every component a player builds (made at the Engineering Crafting Table).
+ * The End's restored machines (the Restored Ancient Core, the Restored
+ * Ancient Lens, the Crystal Vault's pedestals) and the ancient conduits and
+ * cores that carry power are found, never made: they are in END_COMPONENTS
+ * and COMPONENT_BY_ID but not here.
+ */
+export const COMPONENTS: readonly ComponentDef[] = [...C, ...E.filter((c) => !c.uncraftable)];
+export const COMPONENT_BY_ID: ReadonlyMap<string, ComponentDef> = new Map([...C, ...E].map((c) => [c.id, c]));
 
 /** Machines whose block faces the player who placed them (generators, machines, sensors...). */
 const FACED = new Set<EngKind>(['generator', 'machine', 'multiblock', 'hopper', 'extractor', 'sorter', 'pump', 'outlet', 'monitor', 'control_panel', 'conveyor', 'computer', 'peripheral', 'server']);
@@ -213,8 +262,19 @@ const ARMS: PropDefs = { north: BOOL, south: BOOL, west: BOOL, east: BOOL, up: B
 
 export const GATE_MODES = ['and', 'or', 'xor', 'nand', 'nor', 'not'] as const;
 
-/** Block definitions for every engineering block (appended to the block registry). */
+/** Block definitions for every V5 engineering block (appended to the block registry). */
 export function engineeringBlockDefs(): BlockDef[] {
+  return blockDefsFor(C);
+}
+
+/** V6 phase 4: the End engineering blocks (appended after the expansion's phase 3 blocks). */
+export function endEngineeringBlockDefs(): BlockDef[] {
+  return blockDefsFor(E.filter((c) => !c.existing));
+}
+
+const RAIL_STRAIGHT = ['north_south', 'east_west', 'ascending_north', 'ascending_south', 'ascending_east', 'ascending_west'] as const;
+
+function blockDefsFor(list: readonly ComponentDef[]): BlockDef[] {
   const out: BlockDef[] = [];
   const metal = (c: ComponentDef, o: Partial<BlockDef>): void => {
     out.push({
@@ -234,8 +294,26 @@ export function engineeringBlockDefs(): BlockDef[] {
       ...o,
     } as BlockDef);
   };
-  for (const c of C) {
+  for (const c of list) {
     const faced = FACED.has(c.kind);
+    if (c.kind === 'transport') {
+      if (c.id === 'teleport_node') metal(c, { props: { status: STATUS }, tex: { all: 'teleport_node_side', top: 'teleport_node_top', top_on: 'teleport_node_top_on', top_err: 'teleport_node_top_err', bottom: 'machine_bottom' }, light: 4 });
+      else if (c.id === 'ender_bridge_projector') metal(c, { props: { facing: FACING4, status: STATUS }, tex: { all: 'ender_bridge_projector_side', top: 'ender_bridge_projector_top', bottom: 'machine_bottom', front: 'ender_bridge_projector_front', front_on: 'ender_bridge_projector_front_on', front_err: 'ender_bridge_projector_front_err' }, light: 0 });
+      else if (c.id === 'ender_rail') metal(c, { hardness: 0.7, harvestLevel: 0, requiresTool: false, model: 'rail', layer: 'cutout', opacity: 0, collide: false, props: { shape: RAIL_STRAIGHT, powered: BOOL }, tex: { all: 'ender_rail', on: 'ender_rail_on' }, place: 'needs_solid_below', light: 0, interact: undefined, tags: ['rails'] });
+      continue;
+    }
+    if (c.id === 'restored_ancient_core') {
+      metal(c, { hardness: 30, resistance: 1200, harvestLevel: 3, props: { facing: FACING4, status: STATUS }, tex: { all: 'restored_ancient_core_side', top: 'restored_ancient_core_top', bottom: 'restored_ancient_core_top', front: 'restored_ancient_core_front', front_on: 'restored_ancient_core_front_on', front_err: 'restored_ancient_core_front_err' }, light: 9, drops: { item: 'none', silkTouch: true }, creative: 'hidden' });
+      continue;
+    }
+    if (c.id === 'restored_ancient_lens') {
+      metal(c, { hardness: -1, resistance: 3600000, props: { status: STATUS }, tex: { all: 'restored_ancient_lens', all_on: 'restored_ancient_lens_on' }, layer: 'translucent', opacity: 0, light: 6, drops: 'none', creative: 'hidden', item: false });
+      continue;
+    }
+    if (c.id === 'crystal_pedestal') {
+      metal(c, { hardness: -1, resistance: 3600000, model: 'custom', layer: 'cutout', opacity: 0, props: { crystal: BOOL, lit: BOOL }, tex: { all: 'crystal_pedestal', top: 'crystal_pedestal_top', on: 'crystal_pedestal_on' }, light: 7, drops: 'none', creative: 'hidden', item: false });
+      continue;
+    }
     switch (c.kind) {
       case 'station':
         out.push({ id: c.id, name: c.name, hardness: 2.5, sound: 'wood', model: 'cube', tex: { top: 'engineering_table_top', side: 'engineering_table_side', front: 'engineering_table_front', bottom: 'oak_planks' }, tool: 'axe', interact: 'engineering_table', creative: 'engineering' } as BlockDef);
@@ -524,6 +602,20 @@ shaped('led_light', 4, ['L', 'O', 'e'], with_(k('L', 'O'), { e: 'electronic_comp
 shaped('network_cable', 8, ['www', 'CnC', 'www'], with_(k('w', 'C'), { n: 'connector' }));
 shaped('server_rack', 1, ['PnP', 'hKh', 'PnP'], with_(k('P', 'K'), { n: 'connector', h: 'hard_drive' }));
 
+// V6 phase 4 - End engineering (made from the End's resources)
+{
+  const E = { F: 'end_crystal_fragment', V: 'void_shard', Y: 'ender_alloy_ingot', U: 'insulated_cable', D: 'dark_end_stone', G: 'crystal_glass', B: 'battery', c: 'crusher', Q: 'crystalline_end_stone', R: 'chorus_rope', A: 'advanced_circuit', P: 'steel_plate', X: 'control_circuit', a: 'astral_shard', e: 'ender_pearl', n: 'chorus_planks' };
+  const e = (...letters: string[]): Record<string, string> => Object.fromEntries(letters.map((l) => [l, E[l as keyof typeof E]]));
+  shaped('crystal_generator', 1, ['FYF', 'UXU', 'FYF'], e('F', 'Y', 'U', 'X'));
+  shaped('void_collector', 1, ['GGG', 'VDV', 'DDD'], e('G', 'V', 'D'));
+  shaped('void_cell', 1, ['VYV', 'YBY', 'VYV'], e('V', 'Y', 'B'));
+  shaped('end_processor', 1, ['YFY', 'FcF', 'YXY'], e('Y', 'F', 'c', 'X'));
+  shaped('crystal_grower', 1, ['FGF', 'QXQ', 'QQQ'], e('F', 'G', 'Q', 'X'));
+  shaped('teleport_node', 1, ['aea', 'YAY', 'PPP'], e('a', 'e', 'Y', 'A', 'P'));
+  shaped('ender_bridge_projector', 1, ['RFR', 'YXY', 'RFR'], e('R', 'F', 'Y', 'X'));
+  shaped('ender_rail', 16, ['Y Y', 'YFY', 'Y Y'], e('Y', 'F'));
+}
+
 /** Extra recipe tag used by engineering recipes. */
 export const ENG_TAGS: Record<string, (colors: readonly string[]) => string[]> = {
   wool_any: (colors) => colors.map((c) => `${c}_wool`),
@@ -538,6 +630,8 @@ export interface MachineRecipe {
   inCount?: number;
   output: string;
   count: number;
+  /** V6: a count from `count` to `countMax` (inclusive) each time. */
+  countMax?: number;
   /** A bonus output now and then. */
   bonus?: { item: string; chance: number };
 }
@@ -590,6 +684,14 @@ export const MACHINE_RECIPES: Record<string, MachineRecipe[]> = {
   ],
   /** Smelting only an electric furnace does (the rest comes from the furnace recipes). */
   electric_furnace: [{ input: 'steel_blend', output: 'steel_ingot', count: 1 }],
+  /** V6 phase 4: the End Processor (smelting Ender Ore still gives one scrap). */
+  end_processor: [
+    { input: 'ender_ore', output: 'ender_scrap', count: 2 },
+    { input: 'void_crystal_ore', output: 'void_shard', count: 4, countMax: 6 },
+    { input: 'end_crystal_cluster', output: 'end_crystal_fragment', count: 5 },
+    { input: 'ancient_end_fragment', output: 'ancient_fragment', count: 3, bonus: { item: 'ancient_key_shard', chance: 0.04 } },
+    { input: 'chorus_stalk', output: 'chorus_fiber', count: 4 },
+  ],
 };
 
 /** Materials the recycler gives back (half of what went in, rounded down, at least one). */

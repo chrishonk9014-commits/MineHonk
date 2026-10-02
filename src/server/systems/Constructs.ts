@@ -251,6 +251,27 @@ export class ConstructsSystem {
   /** Every tick: the leash, the shield's end, the Bulwark going dormant. */
   mobTick(m: Mob): void {
     if (m.dead) return;
+    // V6 phase 4: the Silent Bell holds it still (no thinking, no moving, no attack wound up)
+    const silenced = Number(m.data.silenced ?? 0);
+    if (silenced) {
+      if (silenced > this.now) {
+        m.noAi = true;
+        m.target = null;
+        m.stopNavigation();
+        m.body.vx = m.body.vz = 0;
+        if (m.data.tele) this.setTele(m, null);
+        if (!m.data.stun) {
+          m.data.stun = true;
+          m.metaDirty = true;
+        }
+        if (this.now % 10 === 0) this.server.particles(m.dim, 'end_rod', m.x, m.y + m.def.height, m.z, 2, 0.3);
+        return;
+      }
+      delete m.data.silenced;
+      delete m.data.stun;
+      m.noAi = false;
+      m.metaDirty = true;
+    }
     const h = this.home(m);
     // Never far from its post: drop whoever it was after and walk back
     if (this.fromHome(m) > this.leash(m)) {

@@ -1,4 +1,5 @@
 /** Server-side player entity + connection session state. */
+import { elytraUpgrades } from '../../common/endExpansion/elytra';
 import { items } from '../../common/registry/items';
 import { newAdminState, type AdminPlayerState } from '../admin/adminState';
 import { Entity } from '../entity/Entity';
@@ -140,6 +141,14 @@ export class ServerPlayer extends Entity {
   /** V6 phase 3: lore fragments and End Artifacts this player has held. */
   endLore = new Set<string>();
   endArtifacts = new Set<string>();
+  /** V6 phase 4: recipes learned from blueprints (the Void Skiff). */
+  readonly recipes = new Set<string>();
+  /** V6 phase 4: one-off End rewards this player has had (e.g. the Crystal Vault's Ender Blink). */
+  readonly endRewards = new Set<string>();
+  /** V6 phase 4: the End quest this player is following (its record key), shown in the quest tracker. */
+  endQuest: string | null = null;
+  /** V6 phase 4: ticks until the Elytra's Void Recovery works again (saved with the player). */
+  recoverCooldown = 0;
   /** Endings this player has reached (V3). */
   endings = new Set<string>();
   /** An ending card waiting to be shown (after walking out through the End portal). */
@@ -230,7 +239,12 @@ export class ServerPlayer extends Entity {
     if (this.gliding) m.glide = true;
     if (this.vehicle) m.riding = this.vehicle.id;
     const chest = this.inventory.get(38);
-    if (chest && chest.id === ELYTRA()) m.elytra = true;
+    if (chest && chest.id === ELYTRA()) {
+      m.elytra = true;
+      // V6 phase 4: what each upgrade adds to how the wings look
+      const ups = elytraUpgrades(chest);
+      if (ups.length) m.wings = ups;
+    }
     // V6: worn armor, head to feet, by material (drawn on the player model)
     const worn = [39, 38, 37, 36].map((i) => {
       const a = items[this.inventory.get(i)?.id ?? -1]?.def.armor;

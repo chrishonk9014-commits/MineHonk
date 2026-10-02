@@ -82,4 +82,19 @@ export function addExpansionRecipes(r: RecipeKit): void {
   r.shaped('void_leather', 1, ['HH', 'HH'], { H: 'void_stalker_hide' });
   r.shaped('void_pack', 1, [' S ', 'L L', ' L '], { S: 'string', L: 'void_leather' });
   r.smelt('raw_endling', 'cooked_endling', 0.35, 'food');
+
+  // Phase 4 - rails and minecarts (the Ender Rail is engineering: the Engineering Crafting Table makes it)
+  r.shaped('rail', 16, ['I I', 'ISI', 'I I'], { I: 'iron_ingot', S: 'stick' });
+  r.shaped('powered_rail', 6, ['G G', 'GSG', 'GRG'], { G: 'gold_ingot', S: 'stick', R: 'redstone' });
+  r.shaped('minecart', 1, ['I I', 'III'], { I: 'iron_ingot' });
+  // The Void Skiff (learned from its blueprint, found in the Shipyards' ships)
+  r.shaped('void_skiff', 1, ['VCV', 'PYP', 'PPP'], { V: 'void_shard', C: 'chorus_cloth', P: 'chorus_planks', Y: 'ender_alloy_ingot' });
+  // Elytra upgrade modules (applied at the smithing table)
+  r.shapeless('reinforced_module', 1, 'end_phantom_membrane', 'end_phantom_membrane', 'ender_alloy_ingot');
+  r.shapeless('thrust_module', 1, 'astral_shard', 'end_phantom_membrane', 'void_shard', 'void_shard');
+  r.shapeless('hover_module', 1, 'end_crystal_fragment', 'end_crystal_fragment', 'end_crystal_fragment', 'end_crystal_fragment', 'end_phantom_membrane');
+  r.shapeless('burst_module', 1, 'void_shard', 'void_shard', 'void_shard', 'void_shard', 'astral_dust', 'astral_dust', 'astral_dust', 'astral_dust', 'end_phantom_membrane');
+  for (const m of ['reinforced_module', 'thrust_module', 'hover_module', 'burst_module', 'sanctum_dragon_scale', 'ender_blink_module']) r.smith('elytra', m, 'elytra');
+  // The Silent City: four Ancient Key Shards make the Ancient Key
+  r.shapeless('ancient_key', 1, 'ancient_key_shard', 'ancient_key_shard', 'ancient_key_shard', 'ancient_key_shard');
 }

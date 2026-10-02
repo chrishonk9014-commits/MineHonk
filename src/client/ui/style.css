@@ -2068,6 +2068,34 @@ body {
 .quest-pips .pip.done {
   background: #e8c020;
 }
+/* V6 phase 4: the End quests (ancient brass and violet) */
+.quest-end {
+  border-left-color: #b89ae0;
+  background: linear-gradient(90deg, rgba(26, 18, 36, 0.7), rgba(10, 6, 16, 0.45));
+}
+.quest-end .quest-title {
+  color: #e0c890;
+  letter-spacing: 0.08em;
+}
+.quest-end .quest-pips .pip.done {
+  background: #b89ae0;
+}
+/* V6 phase 4: Elytra upgrade meters, just over the hotbar's right end */
+.wings-meters {
+  position: absolute;
+  left: 50%;
+  bottom: calc(var(--s) * 50);
+  transform: translateX(calc(var(--s) * 30));
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: calc(var(--s) * 1);
+  font-size: calc(var(--s) * 6);
+  line-height: calc(var(--s) * 7);
+  color: #d8f0ff;
+  text-shadow: var(--s) var(--s) 0 rgba(0, 0, 0, 0.7);
+  pointer-events: none;
+}
 .quest-glitch {
   border-left-color: #b050ff;
   background: repeating-linear-gradient(0deg, rgba(10, 0, 20, 0.6) 0 3px, rgba(30, 0, 50, 0.55) 3px 4px);
@@ -2848,3 +2876,34 @@ body {
   box-shadow: 0 0 0 calc(var(--s) * 2) #3a3048, 0 calc(var(--s) * 6) calc(var(--s) * 18) rgba(0, 0, 0, 0.7);
 }
 .glyph-tablet { display: block; width: calc(var(--s) * 256); image-rendering: pixelated; }
+
+/* V6 phase 4: a Teleportation Node's name and destinations */
+.eng-field-row {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--s) * 3);
+  margin: calc(var(--s) * 2) 0;
+}
+.eng-field {
+  flex: 1;
+  min-width: 0;
+}
+.eng-choices {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--s) * 1);
+  max-height: calc(var(--s) * 70);
+  overflow-y: auto;
+}
+.eng-choice {
+  display: flex;
+  justify-content: space-between;
+  gap: calc(var(--s) * 4);
+  text-align: left;
+}
+.eng-choice.off {
+  opacity: 0.55;
+}
+.eng-choice-detail {
+  color: #a8b8c8;
+}

@@ -2,7 +2,8 @@
  * The local player: client-side movement prediction using the shared physics.
  * The server validates every position; teleports correct any divergence.
  */
-import { newBody, stepMovement, stepGlide, type Body, updateEnvironment, bodyObstructed } from '../../common/physics/movement';
+import { newBody, stepMovement, stepGlide, moveBody, type Body, updateEnvironment, bodyObstructed } from '../../common/physics/movement';
+import { ELYTRA, glideFactors, type ElytraUpgrade } from '../../common/endExpansion/elytra';
 import type { ClientWorld } from '../world/ClientWorld';
 import type { AbilitiesMsg, C2S } from '../../common/net/protocol';
 import type { GameMode } from '../../common/game/gamemode';
@@ -38,6 +39,13 @@ export class LocalPlayer {
   gliding = false;
   /** Ticks of firework rocket boost left. */
   boostTicks = 0;
+  /** V6 phase 4: the worn Elytra's upgrades (from the chest slot), and Hover's meter (the server's, counted down here too). */
+  wingUps: () => readonly ElytraUpgrade[] = () => [];
+  hoverLeft: number = ELYTRA.hoverTicks;
+  hovering = false;
+  /** Asks the server for an upgrade's move (Burst on a double-tapped jump while gliding). */
+  onElytra: (a: 'burst' | 'blink') => void = () => {};
+  private lastGlideJump = -100;
   /** Whether the equipped chest item is an Elytra that still flies (set by the game). */
   canGlide: () => boolean = () => false;
   /** Sneaking speed factor (Silent Stride on the leggings raises it). */
@@ -48,9 +56,9 @@ export class LocalPlayer {
    * The mob being ridden. With `control` this client simulates the mount's
    * body and steers it; otherwise the player sits wherever the server moves it.
    */
-  vehicle: { id: number; control: boolean; seat: number; speed: number; jump: number; body: Body; yaw: number } | null = null;
-  /** Position of the ridden (uncontrolled) mount's entity, from the game. */
-  vehiclePos: () => [number, number, number] | null = () => null;
+  vehicle: { id: number; control: boolean; seat: number; speed: number; jump: number; body: Body; yaw: number; kind?: 'minecart' | 'skiff'; pilot?: boolean } | null = null;
+  /** Position (and yaw) of the ridden (uncontrolled) mount's entity, from the game. */
+  vehiclePos: () => [number, number, number, number?] | null = () => null;
 
   constructor(private readonly world: ClientWorld) {}
 
@@ -121,10 +129,33 @@ export class LocalPlayer {
       this.boostTicks = 0;
     }
     let res: ReturnType<typeof stepMovement> | null = null;
+    if (this.body.onGround) this.hoverLeft = ELYTRA.hoverTicks;
+    this.hovering = false;
     if (this.gliding) {
       updateEnvironment(this.world, this.body, this.eyeHeight);
-      stepGlide(this.world, this.body, this.yaw, this.pitch, this.boostTicks > 0);
-      if (this.boostTicks > 0) this.boostTicks--;
+      const ups = this.wingUps();
+      // Burst: a double-tapped jump while gliding
+      if (input.jumpPressed && ups.includes('burst')) {
+        if (this.tickNo - this.lastGlideJump < 7) {
+          this.onElytra('burst');
+          this.lastGlideJump = -100;
+        } else this.lastGlideJump = this.tickNo;
+      }
+      if (input.sneak && ups.includes('hover') && this.hoverLeft > 0) {
+        // Hover: hang in the air while sneak is held (the meter runs down)
+        this.hovering = true;
+        this.hoverLeft--;
+        const b = this.body;
+        b.vx *= 0.7;
+        b.vz *= 0.7;
+        b.vy = 0;
+        moveBody(this.world, b, b.vx, 0, b.vz);
+        b.fallDistance = 0;
+        if (this.boostTicks > 0) this.boostTicks--;
+      } else {
+        stepGlide(this.world, this.body, this.yaw, this.pitch, this.boostTicks > 0, glideFactors(ups));
+        if (this.boostTicks > 0) this.boostTicks--;
+      }
     } else {
       res = stepMovement(
         this.world,
@@ -168,9 +199,12 @@ export class LocalPlayer {
     } else {
       const pos = this.vehiclePos();
       if (pos) {
-        this.body.x = pos[0];
+        // A Void Skiff's passenger sits behind its pilot
+        const back = v.kind === 'skiff' && !v.pilot ? 0.6 : 0;
+        const yaw = pos[3] ?? 0;
+        this.body.x = pos[0] + Math.sin(yaw) * back;
         this.body.y = pos[1] + v.seat;
-        this.body.z = pos[2];
+        this.body.z = pos[2] + Math.cos(yaw) * back;
       }
     }
     this.body.vx = this.body.vy = this.body.vz = 0;

@@ -1,8 +1,9 @@
 /** Item slot rendering and tooltips. */
 import { loreBookName } from '../../common/endExpansion/lore';
+import { upgradeLines } from '../../common/endExpansion/elytra';
 import { el } from './dom';
 import type { ItemIcons } from '../render/ItemIcons';
-import type { Slot } from '../../common/game/itemstack';
+import { type Slot, maxDurability } from '../../common/game/itemstack';
 import { items, itemById } from '../../common/registry/items';
 import { romanNumeral } from '../../common/data/enchantments';
 import { enchantName } from '../../common/game/enchanting';
@@ -29,7 +30,7 @@ export function iconEl(stack: Slot, showCount = true): HTMLElement | null {
   const frag = document.createDocumentFragment() as unknown as HTMLElement;
   const wrap = el('div', { style: { position: 'absolute', inset: '0' } }, icon);
   if (showCount && stack.count > 1) wrap.append(el('div', { class: 'count' }, String(stack.count)));
-  const dur = it.def.durability;
+  const dur = maxDurability(stack);
   if (dur && stack.damage && stack.damage > 0) {
     const f = 1 - stack.damage / dur;
     const bar = el('div', { style: { width: `${Math.max(1, Math.round(f * 13))}/13` } });
@@ -106,8 +107,10 @@ export function showTooltip(stack: Slot, x: number, y: number, advanced = false)
     tooltipEl.append(el('div', { class: 'dim' }, ''), el('div', { class: 'dim' }, 'When in Main Hand:'), el('div', { class: 'blue' }, ` ${d.weapon.damage} Attack Damage`), el('div', { class: 'blue' }, ` ${d.weapon.speed} Attack Speed`));
   }
   if (d.armor) tooltipEl.append(el('div', { class: 'blue' }, `+${d.armor.defense} Armor`), ...(d.armor.toughness ? [el('div', { class: 'blue' }, `+${d.armor.toughness} Armor Toughness`)] : []));
-  if (d.durability && (stack.damage ?? 0) > 0) tooltipEl.append(el('div', { class: 'dim' }, `Durability: ${d.durability - (stack.damage ?? 0)} / ${d.durability}`));
+  if (d.durability && (stack.damage ?? 0) > 0) tooltipEl.append(el('div', { class: 'dim' }, `Durability: ${maxDurability(stack) - (stack.damage ?? 0)} / ${maxDurability(stack)}`));
   if (d.tooltip) tooltipEl.append(el('div', { class: 'dim italic' }, d.tooltip));
+  // V6 phase 4: an Elytra's upgrades (and its free slots)
+  if (it.id === 'elytra') for (const line of upgradeLines(stack)) tooltipEl.append(el('div', { class: line.startsWith('  ') ? 'blue' : 'dim' }, line));
   // Packed contents (a shulker box, a V6 Void Pack): the first five stacks, then a count of the rest
   if ((it.id === 'shulker_box' || it.id === 'void_pack') && Array.isArray(stack.tag?.data?.items)) {
     const packed = (stack.tag!.data!.items as ({ id?: unknown; count?: unknown } | null)[]).filter((e) => e && typeof e.id === 'string');

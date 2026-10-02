@@ -10,7 +10,7 @@ import { Survival, type DamageInfo } from './Survival';
 import { Containers, type Window } from './Containers';
 import { Weather } from './Weather';
 import type { C2S } from '../../common/net/protocol';
-import { type ItemStack, type Slot, cloneStack, itemIdOf, stackOf, isAdminStack, markAdmin } from '../../common/game/itemstack';
+import { type ItemStack, type Slot, cloneStack, itemIdOf, stackOf, isAdminStack, markAdmin, maxDurability } from '../../common/game/itemstack';
 import { items, itemById } from '../../common/registry/items';
 import { blocks, STATE_BLOCK, getProp, withProp, S, stateOf, STATE_FLUID, STATE_SOLID, STATE_REPLACEABLE, blockHasTag } from '../../common/registry/blocks';
 import { computePlacement, canSurvive, chestPartnerUpdate } from '../../common/game/placement';
@@ -159,6 +159,8 @@ export class Interaction {
     if (!(p.sneaking && stack)) {
       if (this.useBlock(p, x, y, z, state)) {
         p.send({ t: 'use_result', seq: m.seq, ok: true });
+        // A client holding a block may have guessed it would be placed (the block had no use it knew of)
+        if (stack && items[stack.id]!.def.block) this.resend(p, x, y, z, face);
         this.server.sculk?.vibrate(dim, x + 0.5, y + 0.5, z + 0.5, p, 'block_use');
         return;
       }
@@ -718,7 +720,7 @@ export class Interaction {
     const c = p.inventory.get(ARMOR_START + 2);
     if (!c) return false;
     const it = items[c.id];
-    return it?.id === 'elytra' && (c.damage ?? 0) < (it.def.durability ?? 1) - 1;
+    return it?.id === 'elytra' && (c.damage ?? 0) < maxDurability(c) - 1;
   }
 
   /** Ends any item use in progress (shield knocked aside, dismounting...). */
@@ -823,7 +825,7 @@ export class Interaction {
     if (!isSurvivalLike(p.gamemode)) return;
     const s = p.inventory.get(slot);
     if (!s) return;
-    const dur = items[s.id]?.def.durability;
+    const dur = maxDurability(s);
     if (!dur) return;
     const unb = enchantLevel(s, 'unbreaking');
     let dmg = 0;

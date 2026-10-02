@@ -8,6 +8,7 @@ import type { DimensionId } from '../data/biomes';
 import { GAME_MODES, DIFFICULTIES, type GameMode, type Difficulty } from './gamemode';
 import { EXPANSION_BIOME_IDS } from '../endExpansion/biomes';
 import { expansionGiveSets } from '../endExpansion/resources';
+import { END_QUEST_IDS } from '../endExpansion/quests';
 
 export const ADMIN_DIMENSIONS: DimensionId[] = ['overworld', 'nether', 'end', 'farlands', 'computer'];
 
@@ -120,6 +121,14 @@ export const V6_OPS = [
   'tp_nest',
   'reset_loot',
   'give_lore',
+  // Phase 4: the End quests (start, complete, reset, go to the nearest start) and testing tools
+  'quest_start',
+  'quest_complete',
+  'quest_reset',
+  'quest_tp',
+  'fill_eu',
+  'force_gate',
+  'open_sanctum',
 ] as const;
 export type V6Op = (typeof V6_OPS)[number];
 
@@ -165,7 +174,7 @@ export type AdminAction =
   /** V5.5: the Herobrine story (all cheats: never advancements). */
   | { a: 'v55'; op: V55Op }
   /** V6: the End Expansion (tp_biome names one of the Expanded End's biomes). */
-  | { a: 'v6'; op: V6Op; biome?: string; set?: string; structure?: string };
+  | { a: 'v6'; op: V6Op; biome?: string; set?: string; structure?: string; quest?: string };
 
 export type AdminActionName = AdminAction['a'];
 
@@ -191,6 +200,7 @@ export function validateAdmin(raw: unknown): AdminAction | null {
       if (m.op === 'tp_biome') return typeof m.biome === 'string' && EXPANSION_BIOME_IDS.includes(m.biome) ? { a: 'v6', op: 'tp_biome', biome: m.biome } : null;
       if (m.op === 'give_set') return typeof m.set === 'string' && expansionGiveSets().some((g) => g.id === m.set) ? { a: 'v6', op: 'give_set', set: m.set } : null;
       if (m.op === 'tp_structure' || m.op === 'generate_here') return typeof m.structure === 'string' && EXPANSION_STRUCTURE_IDS.includes(m.structure) ? { a: 'v6', op: m.op, structure: m.structure } : null;
+      if (m.op === 'quest_start' || m.op === 'quest_complete' || m.op === 'quest_reset' || m.op === 'quest_tp') return typeof m.quest === 'string' && (END_QUEST_IDS as readonly string[]).includes(m.quest) ? { a: 'v6', op: m.op, quest: m.quest } : null;
       return { a: 'v6', op: m.op as V6Op };
     case 'v4':
       if (!V4_OPS.includes(m.op as V4Op)) return null;

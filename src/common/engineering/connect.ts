@@ -36,7 +36,8 @@ export function conduitBit(state: number): number {
   if (v !== undefined) return v;
   const c = COMPONENT_BY_ID.get(blocks[num]!.def.id);
   v = 0;
-  if (c?.kind === 'cable') v = BIT.energy;
+  // (V6: the Ancient Conduit carries energy but keeps its own shape)
+  if (c?.kind === 'cable' && !c.existing) v = BIT.energy;
   else if (c?.kind === 'item_pipe' || c?.kind === 'item_filter') v = BIT.item;
   else if (c?.kind === 'fluid_pipe' || c?.kind === 'valve' || c?.kind === 'fluid_filter') v = BIT.fluid;
   else if (c?.kind === 'data_cable') v = BIT.data;

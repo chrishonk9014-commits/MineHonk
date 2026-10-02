@@ -10,6 +10,7 @@ import { sprites } from './sprites';
 import type { Slot, ItemStack } from '../../common/game/itemstack';
 import { items, itemById } from '../../common/registry/items';
 import { recipeBook, entryState, countItems, itemName, filterBook, BOOK_CATEGORIES, STATION_NAMES, type BookEntry, type BookCategory, type EntryState } from '../../common/game/recipeBook';
+import { LOCKED_RECIPES } from '../../common/endExpansion/transport';
 
 type Filter = BookCategory | 'all';
 
@@ -24,6 +25,18 @@ export function setRecipeBookOpen(v: boolean): void {
 }
 
 const STATUS_TEXT: Record<EntryState['status'], string> = { ready: 'Can craft', station: 'Needs', missing: 'Missing items' };
+
+/** V6 phase 4: recipes this player has learned from blueprints (the server tells us). */
+let unlocked = new Set<string>();
+export function setUnlockedRecipes(ids: Iterable<string>): void {
+  unlocked = new Set(ids);
+}
+/** A recipe learned from a blueprint that this player hasn't learned (its blueprint's item id), else null. */
+function lockOf(e: BookEntry): string | null {
+  const id = items[e.result.id]?.id ?? '';
+  const bp = LOCKED_RECIPES[id];
+  return bp && !unlocked.has(id) ? bp : null;
+}
 
 export class RecipeBookPanel {
   readonly root = el('div', { class: 'recipe-book gui-panel' });
@@ -90,7 +103,8 @@ export class RecipeBookPanel {
     this.counts = counts;
     const first = this.states.size === 0;
     for (const e of this.entries) {
-      const s = entryState(e, counts, this.windowKind);
+      let s = entryState(e, counts, this.windowKind);
+      if (lockOf(e) && s.status !== 'missing') s = { ...s, status: 'missing' };
       const old = this.states.get(e.id);
       this.states.set(e.id, s);
       if (!first && old?.status !== s.status) {
@@ -158,7 +172,7 @@ export class RecipeBookPanel {
     row.classList.remove('ready', 'station', 'missing');
     row.classList.add(status);
     const sub = row.querySelector('.rb-sub')!;
-    sub.textContent = status === 'station' ? `${STATUS_TEXT.station} ${this.stationLabel(e)}` : status === 'ready' ? `${STATUS_TEXT.ready} - ${this.stationLabel(e)}` : this.stationLabel(e);
+    sub.textContent = lockOf(e) ? 'Not learned yet: needs its blueprint' : status === 'station' ? `${STATUS_TEXT.station} ${this.stationLabel(e)}` : status === 'ready' ? `${STATUS_TEXT.ready} - ${this.stationLabel(e)}` : this.stationLabel(e);
   }
 
   // ------------------------------------------------------------------ detail
@@ -224,6 +238,8 @@ export class RecipeBookPanel {
     if (e.shapeless) flags.push('Shapeless: any arrangement works');
     if (e.station === 'crafting' && !e.fits2x2) flags.push('Needs a Crafting Table (3x3)');
     if (e.xp) flags.push(`${e.xp} XP per item`);
+    const lock = lockOf(e);
+    if (lock) flags.push(`Learned from the ${itemName({ id: itemById.get(lock)!.num, count: 1 })} (use it once to learn the recipe)`);
     const status = el('div', { class: 'rb-status ' + s.status }, s.status === 'ready' ? 'You can craft this now.' : s.status === 'station' ? `You have the ingredients. Use a ${this.stationLabel(e)}.` : 'Missing ingredients:');
     const reqs = el('div', { class: 'rb-reqs' });
     for (const r of e.requirements) {

@@ -13,6 +13,7 @@ import { ENCHANTMENTS } from '../../common/data/enchantments';
 import { MOB_DEFS } from '../../common/data/mobs';
 import { structureName, TIME_PRESETS, ADMIN_DIMENSIONS, type AdminAction, type AdminCatalog, type LocateResult, type V4Op, type V5Op, type V55Op, type V6Op } from '../../common/game/admin';
 import { EXPANSION_BIOMES } from '../../common/endExpansion/biomes';
+import { END_QUESTS } from '../../common/endExpansion/quests';
 import type { DimensionId } from '../../common/data/biomes';
 import { ENDINGS } from '../../common/data/endings';
 
@@ -749,6 +750,25 @@ export function adminScreen(host: AdminHost): Screen {
         chips(...s.constructs.map((c) => btn(`Spawn ${c.name.replace('Guardian Construct: ', '')}`, () => void send({ a: 'spawn', mob: c.id, count: 1 }), 'btn chip'))),
       );
     };
+    // Phase 4: the End quests (every op advancement-neutral) and the testing tools
+    const questLine = el('div', { class: 'admin-stats' });
+    const showQuests = (q: { silentCity?: { type: string; hall: number[]; built: number } | null; gates?: number; done?: string[]; sanctum?: { at: number[]; built: boolean } | null } | undefined): void => {
+      if (!q) return;
+      clear(questLine);
+      const rows: [string, string][] = [
+        ['Silent City', q.silentCity ? `${q.silentCity.type.replace(/_/g, ' ')} at ${q.silentCity.hall.join(', ')}` : 'not chosen yet (when a player first reaches the band)'],
+        ['Linked gateways', String(q.gates ?? 0)],
+        ['Sanctum', q.sanctum ? `${q.sanctum.at.join(', ')}${q.sanctum.built ? ' (built)' : ''}` : 'not opened'],
+        ['Completed sites', String(q.done?.length ?? 0)],
+      ];
+      for (const [k, v] of rows) questLine.append(el('div', { class: 'row' }, el('span', { class: 'muted' }, k), el('span', {}, v)));
+    };
+    const qop = (o: V6Op, quest: string): void => void send({ a: 'v6', op: o, quest }).then((r) => showQuests((r.data as { quests?: Parameters<typeof showQuests>[0] } | undefined)?.quests));
+    const questBox = el(
+      'div',
+      {},
+      ...END_QUESTS.map((q) => el('div', { class: 'row' }, el('span', { class: 'label' }, q.title), btn('Start', () => qop('quest_start', q.id), 'btn chip'), btn('Complete', () => qop('quest_complete', q.id), 'btn chip'), btn('Reset', () => qop('quest_reset', q.id), 'btn chip'), btn('Teleport', () => qop('quest_tp', q.id), 'btn chip'))),
+    );
     op('status');
     return el(
       'div',
@@ -757,6 +777,8 @@ export function adminScreen(host: AdminHost): Screen {
         'div',
         { class: 'admin-col' },
         el('div', { class: 'muted small' }, 'Everything here is a cheat: it never awards an advancement. A portal opened here before the Ender Dragon is defeated leads to a cheat visit.'),
+        section('End quests', el('div', { class: 'muted small' }, 'Start, complete (no advancements; any reward is cheat-made), reset, or go to the nearest start. Sites are searched from you in the End.'), questBox, questLine),
+        section('Engineering and transport tests', el('div', { class: 'muted small' }, 'Look at the block first.'), chips(btn('Fill the machine\'s EU', () => op('fill_eu'), 'btn chip'), btn('Force-repair this gateway and its pair', () => op('force_gate'), 'btn chip'), btn("Open the Dragon's History Sanctum", () => op('open_sanctum'), 'btn chip'))),
         section('Expansion Portal', chips(btn('Activate', () => op('activate'), 'btn chip'), btn('Deactivate', () => op('deactivate'), 'btn chip'), btn('Build the portal', () => op('build_portal'), 'btn chip'), btn('Teleport to the portal', () => op('tp_portal'), 'btn chip'))),
         section('The Expanded End', chips(btn('Teleport to the arrival platform', () => op('tp_arrival'), 'btn chip'))),
         section('The Ender Dragon', el('div', { class: 'muted small' }, 'In the End: ends the fight at once, so the portal can be tested. Nothing it drops counts.'), chips(btn('Defeat the Ender Dragon', () => op('defeat_dragon'), 'btn chip'))),

@@ -124,7 +124,18 @@ export const NEST_LORE: LoreFragment[] = [
   { id: 'nest_first_fire', topic: 'history', kind: 'inscription', lines: ['THE FIRST FIRE WAS LIT HERE', 'NOT ON THE PILLARS'] },
 ];
 
-export const LORE_BY_ID = new Map([...LORE, ...NEST_LORE].map((f) => [f.id, f]));
+/**
+ * Phase 4: fragments only a quest gives (found nowhere else): the Lost
+ * Observatory's star chart, the Broken Gateway's first repair, and the last
+ * fragment in the Dragon's History's Sanctum.
+ */
+export const QUEST_LORE: LoreFragment[] = [
+  { id: 'stars_circle', topic: 'history', kind: 'star_chart', lines: ['Every star we chart is the same distance from us.', 'Seen from the green world, they are not.', 'What stands at the middle of the circle?'] },
+  { id: 'gateways_stitches', topic: 'gateways', kind: 'torn_page', lines: ['The gateways were never meant for walking through.', 'The oldest map calls them stitches.', 'Stitches hold two edges together.'] },
+  { id: 'sanctum_seen', topic: 'dragon', kind: 'inscription', lines: ['THE FIRST FIRE WAS NOT LIT FOR WARMTH', 'IT WAS LIT TO BE SEEN', 'FROM PAST THE EDGE', 'IT WAS SEEN'] },
+];
+
+export const LORE_BY_ID = new Map([...LORE, ...NEST_LORE, ...QUEST_LORE].map((f) => [f.id, f]));
 
 /** How much each site leans towards each topic (0 = never). */
 const TOPIC_WEIGHTS: Record<Exclude<LoreSite, 'dragon_nest'>, Partial<Record<LoreTopic, number>>> = {
@@ -145,6 +156,7 @@ const TOPIC_WEIGHTS: Record<Exclude<LoreSite, 'dragon_nest'>, Partial<Record<Lor
 
 /** A fragment's placement weight at a site. */
 export function loreWeight(f: LoreFragment, site: LoreSite): number {
+  if (QUEST_LORE.includes(f)) return 0;
   if (site === 'dragon_nest') return NEST_LORE.includes(f) ? 1 : 0;
   if (NEST_LORE.includes(f)) return 0;
   if (f.only) return f.only.includes(site) ? 3 : 0;

@@ -23,6 +23,7 @@ import { FACE_DX, FACE_DZ } from '../../common/world/constants';
 import type { Inventory } from '../player/Inventory';
 import type { Engineering, EngNode } from './Engineering';
 import { rangesOf, type EngBE } from './state';
+import { END_STATUS_TEXT } from './end';
 
 const rng = new Random();
 
@@ -47,10 +48,11 @@ export const STATUS_TEXT: Record<string, string> = {
   no_recipe: 'Nothing it can make from that',
   no_target: 'Put the item to make in its target slot',
   scanning: 'Scanning',
+  ...END_STATUS_TEXT,
 };
 
-const visualOf = (status: string): 'idle' | 'working' | 'error' =>
-  status === 'working' || status === 'scanning' ? 'working' : status === 'no_power' || status === 'output_full' || status === 'incomplete' || status === 'no_tool' || status === 'no_water' || status === 'no_lava' || status === 'no_recipe' ? 'error' : 'idle';
+const ERROR_STATES = new Set(['no_power', 'output_full', 'incomplete', 'no_tool', 'no_water', 'no_lava', 'no_recipe', 'no_void', 'no_stone', 'no_crystal_power', 'blocked']);
+const visualOf = (status: string): 'idle' | 'working' | 'error' => (status === 'working' || status === 'scanning' || status === 'charging' ? 'working' : ERROR_STATES.has(status) ? 'error' : 'idle');
 
 type Lookup = Map<number, MachineRecipe>;
 
@@ -88,7 +90,8 @@ export class MachineLogic {
     if (!r && set === 'advanced_crusher') r = this.lookup('crusher').get(input.id);
     if (!r) return null;
     if (input.count < (r.inCount ?? 1)) return null;
-    return { inCount: r.inCount ?? 1, out: [{ id: itemById.get(r.output)!.num, count: r.count }], bonus: r.bonus };
+    const count = r.countMax ? r.count + rng.int(r.countMax - r.count + 1) : r.count;
+    return { inCount: r.inCount ?? 1, out: [{ id: itemById.get(r.output)!.num, count }], bonus: r.bonus };
   }
 
   isInput(c: ComponentDef, s: ItemStack): boolean {
@@ -323,6 +326,15 @@ export class MachineLogic {
           rate = gen;
           break;
         }
+        // V6 phase 4: the End generators
+        case 'crystal_generator':
+        case 'void_collector':
+        case 'restored_ancient_core': {
+          const r = this.eng.end.generate(n, be, N);
+          if (r === null) continue;
+          rate = r;
+          break;
+        }
         default:
           continue;
       }
@@ -355,6 +367,11 @@ export class MachineLogic {
         continue;
       }
       switch (n.c.machine) {
+        // V6 phase 4: End machines with their own logic (engineering/end.ts)
+        case 'grower':
+        case 'lens':
+        case 'pedestal':
+          break;
         case 'drill':
         case 'quarry':
           this.dig(n, be, N);

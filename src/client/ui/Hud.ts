@@ -16,6 +16,8 @@ export interface HudState {
   hardcore: boolean;
   spectator: boolean;
   mounted?: boolean;
+  /** V6 phase 4: the worn Elytra's upgrade meters (only the upgrades it has). */
+  wings?: { hover?: number; hoverMax?: number; charges?: number; chargeIn?: number; blinkIn?: number; recoverIn?: number; gliding: boolean; inEnd: boolean };
 }
 
 export class Hud {
@@ -44,6 +46,9 @@ export class Hud {
   private readonly cheatsEl = el('div', { class: 'cheats-indicator hidden' });
   /** V4: the quest tracker (structure objective and stage progress). */
   private readonly questEl = el('div', { class: 'quest-tracker hidden' });
+  /** V6 phase 4: Elytra upgrade meters over the hotbar. */
+  private readonly wingsEl = el('div', { class: 'wings-meters hidden' });
+  private lastWings = '';
   private itemNameTimer = 0;
   private lastSelectedName = '';
   private titleTimer = 0;
@@ -66,7 +71,7 @@ export class Hud {
     this.hotbarEl.append(this.selEl);
     this.xpbar.append(this.xpfill);
     this.bottom.append(this.hotbarEl, this.xpbar, this.xplevel, this.hearts, this.heartLabel, this.food, this.armor, this.air, this.itemName);
-    this.root.append(this.crosshair, this.bottom, this.bosses, this.title, this.debugLeft, this.debugRight, this.toastEl, this.subtitlesEl, this.cheatsEl, this.questEl);
+    this.root.append(this.crosshair, this.bottom, this.bosses, this.title, this.debugLeft, this.debugRight, this.toastEl, this.subtitlesEl, this.cheatsEl, this.questEl, this.wingsEl);
     this.toastEl.append(el('div', { class: 't1' }), el('div', { class: 't2' }));
     this.title.style.opacity = '0';
   }
@@ -83,8 +88,27 @@ export class Hud {
     if (rightAlign) row.style.flexDirection = 'row-reverse';
   }
 
+  /** Elytra upgrade meters: Hover's air, Burst's charges, Blink's and Void Recovery's cooldowns. */
+  private updateWings(w: HudState['wings']): void {
+    const secs = (t: number): string => `${Math.ceil(t / 20)}s`;
+    const parts: string[] = [];
+    if (w) {
+      if (w.hover !== undefined && (w.gliding || w.hover < (w.hoverMax ?? 60))) parts.push(`Hover ${'▮'.repeat(Math.ceil((w.hover / (w.hoverMax ?? 60)) * 6))}${'▯'.repeat(6 - Math.ceil((w.hover / (w.hoverMax ?? 60)) * 6))}`);
+      if (w.charges !== undefined && (w.gliding || w.charges < 3)) parts.push(`Burst ${'◆'.repeat(w.charges)}${'◇'.repeat(Math.max(0, 3 - w.charges))}${w.chargeIn ? ` ${secs(w.chargeIn)}` : ''}`);
+      if (w.blinkIn !== undefined && (w.gliding || w.blinkIn > 0)) parts.push(w.blinkIn > 0 ? `Blink ${secs(w.blinkIn)}` : 'Blink ready');
+      if (w.recoverIn !== undefined && (w.inEnd || w.recoverIn > 0)) parts.push(w.recoverIn > 0 ? `Void Recovery ${Math.floor(w.recoverIn / 1200)}:${String(Math.ceil((w.recoverIn % 1200) / 20)).padStart(2, '0')}` : 'Void Recovery ready');
+    }
+    const key = parts.join('|');
+    if (key === this.lastWings) return;
+    this.lastWings = key;
+    this.wingsEl.classList.toggle('hidden', !parts.length);
+    clear(this.wingsEl);
+    for (const t of parts) this.wingsEl.append(el('span', {}, t));
+  }
+
   update(s: HudState, tickTime: number): void {
     this.root.classList.toggle('hidden', !this.visible);
+    this.updateWings(s.spectator ? undefined : s.wings);
     const sp = sprites();
     const st = s.stats;
     // hotbar
@@ -259,6 +283,7 @@ export class Hud {
     clear(this.questEl);
     if (!q) return;
     this.questEl.classList.toggle('quest-glitch', q.style === 'glitch');
+    this.questEl.classList.toggle('quest-end', q.style === 'end');
     this.questEl.append(el('div', { class: 'quest-title' }, q.title));
     if (q.stages) {
       const pips = el('div', { class: 'quest-pips' });

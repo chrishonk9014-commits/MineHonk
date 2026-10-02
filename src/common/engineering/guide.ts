@@ -4,7 +4,7 @@
  * (components by their `guide`, plus materials and upgrades), so a new
  * component shows up in the book by itself.
  */
-import { COMPONENTS, COMPONENT_BY_ID, ENG_MATERIALS, UPGRADES, UPGRADE_INFO, MACHINE_RECIPES, DUST_SMELTING, ELECTRONICS, COMPUTER_PARTS, type ComponentDef } from './catalog';
+import { COMPONENTS, END_COMPONENTS, COMPONENT_BY_ID, ENG_MATERIALS, UPGRADES, UPGRADE_INFO, MACHINE_RECIPES, DUST_SMELTING, ELECTRONICS, COMPUTER_PARTS, type ComponentDef } from './catalog';
 
 export interface GuideChapter {
   id: string;
@@ -207,6 +207,36 @@ export const CHAPTERS: readonly GuideChapter[] = [
       'Build it with factory blocks: casing, steel, industrial glass, grates, stripes and lights.',
     ],
   },
+  // V6 phase 4: the Expanded End
+  {
+    id: 'end_engineering',
+    title: 'End Engineering',
+    icon: 'crystal_generator',
+    intro: 'End Power is EU like any other: the End\'s generators make it from End resources and it runs through the same cables, batteries and machines. The End\'s machines are few, and each needs something only the End has.',
+    steps: [
+      'Crystal Generator: burns End Crystal Fragments, 128 EU/t for 20 seconds each. Cable it like any generator; a signal can switch it off.',
+      'Void Collector: a slow, steady 24 EU/t from nothing at all, but only with open void beneath it (at least 32 blocks of air, all the way down). Build it out over the edge of an island.',
+      'Ancient Cores: the giant structures\' dormant cores carry power like cable. One core in each giant can be woken (8 Ancient Fragments and an Astral Shard) into a Restored Ancient Core: 512 EU/t that never runs out. Silk Touch moves it.',
+      'Void Cell: a battery for all of it, 2,000,000 EU at 4,096 EU/t in and out. It keeps its charge when broken, like any battery.',
+      'End Processor: does more with End resources than a furnace or crusher: 2 Ender Scrap from Ender Ore, 4-6 Void Shards from Void Crystal Ore, 5 fragments from a cluster, Ancient Fragments (now and then a key shard) from Ancient End Fragment, 4 fiber from a Chorus Stalk.',
+      'Crystal Grower: next to Crystalline End Stone with air above, it grows an End Crystal Cluster on it about every 5 minutes, so crystals never run out.',
+      'The ancient machines: an observatory\'s Ancient Lens wakes when mended (8 Ancient Fragments) and given 256 EU/t for 30 seconds through the conduits at its foot; a Crystal Vault\'s pedestals glow only on power from a working Crystal Generator.',
+    ],
+    tips: ['A Void Storm (later) makes Void Collectors work four times as hard.', 'None of the End\'s structures has a working machine: everything here is built, or woken, by a player.', 'Ancient Conduits carry up to 512 EU/t, like Insulated Cable.'],
+  },
+  {
+    id: 'end_transport',
+    title: 'End Transport',
+    icon: 'teleport_node',
+    intro: 'Getting across the End: bridges of light over the void, nodes that send you back to places you built, rails, and the Void Skiff. Elytra and rockets are still the fastest way to see somewhere new: none of this takes you anywhere you haven\'t been.',
+    steps: [
+      'Ender Bridge Projector: projects a walkable bridge of Ender Light the way it faces, up to 64 blocks, stopping at the first solid block. It draws 16 EU/t for every 16 blocks. Without power (or its signal) the bridge flickers, then fades over 3 seconds.',
+      'Teleportation Node: name it in its window, then stand on it and pick another node. A trip costs 1,000 EU + 10 EU a block from the node you leave, after 2 seconds standing still on it. Nodes work anywhere in the End, and within 2,000 blocks of the Overworld\'s spawn, but never between dimensions. Lock a node to keep it to yourself.',
+      'Ender Rail: a rail that, powered by a signal or by 1 EU/t through a cable, drives minecarts at twice a powered rail\'s top speed. It can be laid on Ender Light, so a bridge can carry a line over the void.',
+      'Ancient gateways: mend both ends of a broken portal pair (the Broken Gateway) and they stay open, both ways, for good.',
+    ],
+    tips: ['A node checks the far end before sending you: a blocked or missing node keeps you where you are (and your EU).', 'The Void Skiff is made at a normal crafting table once its blueprint, found in a Shipyard\'s finished ships, has taught it to you.'],
+  },
 ];
 
 export interface GuideEntry {
@@ -252,7 +282,7 @@ export function guideEntries(): GuideEntry[] {
   const madeBy = (id: string): string[] => {
     const r: string[] = [];
     for (const [machine, list] of Object.entries(MACHINE_RECIPES))
-      for (const m of list) if (m.output === id) r.push(`${COMPONENT_BY_ID.get(machine)?.name ?? title(machine)}: ${m.inCount ?? 1} ${title(m.input)} -> ${m.count}`);
+      for (const m of list) if (m.output === id) r.push(`${COMPONENT_BY_ID.get(machine)?.name ?? title(machine)}: ${m.inCount ?? 1} ${title(m.input)} -> ${m.count}${m.countMax ? `-${m.countMax}` : ''}`);
     for (const [dust, ingot] of DUST_SMELTING) if (ingot === id) r.push(`Any furnace: ${title(dust)}`);
     return r;
   };
@@ -267,7 +297,8 @@ export function guideEntries(): GuideEntry[] {
       for (const id of UPGRADES) out.push({ id, name: title(id), chapter: 'materials', desc: UPGRADE_INFO[id], stats: ['Goes in a machine\'s upgrade slots'], madeBy: [] });
       continue;
     }
-    for (const c of COMPONENTS) if (c.guide === ch.id) out.push({ id: c.id, name: c.name, chapter: ch.id, tier: c.tier, desc: c.desc, stats: statsOf(c), madeBy: madeBy(c.id) });
+    // (the End's found machines have entries too: they are restored, not made)
+    for (const c of [...COMPONENTS, ...END_COMPONENTS.filter((e) => e.uncraftable)]) if (c.guide === ch.id) out.push({ id: c.id, name: c.name, chapter: ch.id, tier: c.tier, desc: c.desc, stats: statsOf(c), madeBy: madeBy(c.id) });
   }
   cache = out;
   return out;

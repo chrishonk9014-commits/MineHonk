@@ -375,5 +375,8 @@ export function installBrain(m: Mob): void {
     case 'herobrine':
       // These fights are driven by their own controllers
       break;
+    case 'vehicle':
+      // Minecarts and Void Skiffs: the transport system drives them
+      break;
   }
 }

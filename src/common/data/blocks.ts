@@ -5,11 +5,13 @@
  * produces one 16x16 PNG per texture name and packs them into the atlas.
  */
 import type { BlockDef, SoundGroup, TintKind } from '../registry/blockTypes';
-import { engineeringBlockDefs } from '../engineering/catalog';
+import { engineeringBlockDefs, endEngineeringBlockDefs } from '../engineering/catalog';
 import { digitalBlockDefs } from '../digital/blocks';
 import { expansionBlockDefs } from '../endExpansion/blocks';
 import { addExpansionResourceBlocks } from '../endExpansion/resources';
 import { addAncientBlocks } from '../endExpansion/ancient';
+import { transportBlockDefs } from '../endExpansion/transport';
+import { questBlockDefs } from '../endExpansion/quests';
 
 const defs: BlockDef[] = [];
 const add = (d: BlockDef): BlockDef => {
@@ -1033,5 +1035,9 @@ for (const d of expansionBlockDefs()) add(d);
 addExpansionResourceBlocks({ add, family, woodSet });
 // V6 - The End Expansion, phase 3: the ancient civilization's stone, machines, seals and the Dragon's Nest
 addAncientBlocks({ add, family, woodSet });
+// V6 - The End Expansion, phase 4: End engineering, transport (Ender Light, ancient gateways, rails) and the quests' blocks
+for (const d of endEngineeringBlockDefs()) add(d);
+for (const d of transportBlockDefs()) add(d);
+for (const d of questBlockDefs()) add(d);
 
 export const BLOCK_DEFS: readonly BlockDef[] = defs;

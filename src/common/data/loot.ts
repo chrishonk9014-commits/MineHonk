@@ -383,11 +383,15 @@ export const LOOT_TABLES: Record<string, LootTable> = {
   },
   'chest/end_shipyard': {
     pools: [
+      // (Shipyards from before phase 4 have no ship chest of their own: their chests may hold the blueprint)
+      { rolls: 1, conditions: [{ c: 'chance', chance: 0.4 }], entries: [e('void_skiff_blueprint', 1)] },
       { rolls: [3, 6], entries: [e('phantom_membrane', 10, [1, 3]), e('end_phantom_membrane', 4, [1, 2]), e('ender_scrap', 4), e('void_shard', 8, [1, 3]), e('chorus_rope', 10, [3, 8]), e('purpur_block', 10, [4, 12]), e('shulker_shell', 4), e('ender_pearl', 6, [1, 2]), e('firework_rocket', 6, [2, 6]), lore(4, 'end_shipyard')] },
     ],
   },
   // The one Shipyard chest that holds Elytra (about 15% of Shipyards have it: see the Shipyard plan)
-  'chest/end_shipyard_elytra': { pools: [{ rolls: 1, entries: [e('elytra', 1)] }, { rolls: 1, entries: [{ table: 'chest/end_shipyard' }] }] },
+  'chest/end_shipyard_elytra': { pools: [{ rolls: 1, entries: [e('elytra', 1)] }, { rolls: 1, entries: [e('void_skiff_blueprint', 1)] }, { rolls: 1, entries: [{ table: 'chest/end_shipyard' }] }] },
+  // V6 phase 4: a finished ship's chest always holds the Void Skiff's blueprint
+  'chest/end_shipyard_ship': { pools: [{ rolls: 1, entries: [e('void_skiff_blueprint', 1)] }, { rolls: 1, entries: [{ table: 'chest/end_shipyard' }] }] },
   'chest/end_metropolis': {
     pools: [
       { rolls: [4, 7], entries: [e('ender_scrap', 8, [1, 2]), e('astral_shard', 6, [1, 2]), e('diamond', 8, [1, 3]), e('emerald', 8, [2, 5]), e('gold_ingot', 10, [2, 6]), e('end_crystal_fragment', 8, [2, 5]), e('shulker_shell', 6), lore(8, 'end_metropolis'), ench('ender_alloy_sword', 1, [30, 39]), ench('ender_alloy_pickaxe', 1, [30, 39])] },
@@ -445,6 +449,39 @@ export const LOOT_TABLES: Record<string, LootTable> = {
     pools: [
       { rolls: [4, 8], entries: [lore(18, 'fallen_city'), e('ancient_fragment', 14, [2, 5]), e('ender_glyph_stone', 8, [1, 3]), e('book', 8, [1, 3]), e('purpur_block', 8, [4, 12]), worn('diamond_sword', 2), worn('iron_chestplate', 3), amap(4), e('gold_ingot', 6, [1, 4]), e('ancient_blade', 1), e('voidpiercer', 1), e('shardstaff', 1)] },
       { rolls: 1, entries: artifacts(100, { glyph_tablet: 8, ancient_coin: 8, ancient_key_shard: 5, cracked_ender_eye: 5, old_crystal_lens: 3 }) },
+    ],
+  },
+  // V6 phase 4: what the quests open
+  'chest/end_palace_vault': {
+    pools: [
+      { rolls: [4, 6], entries: [e('astral_shard', 12, [2, 4]), e('end_crystal_fragment', 10, [4, 10]), e('crystal_lamp', 6, [2, 4]), e('astral_mosaic', 6, [8, 16]), e('diamond', 6, [2, 5]), e('end_crystal', 4, [1, 2])] },
+      { rolls: [1, 2], entries: [ench('ender_alloy_sword', 3, [30, 39]), ench('ender_alloy_helmet', 3, [30, 39]), ench('ender_alloy_chestplate', 3, [30, 39]), ench('ender_alloy_leggings', 3, [30, 39]), ench('ender_alloy_boots', 3, [30, 39]), ench('ender_alloy_pickaxe', 3, [30, 39])] },
+      { rolls: 1, entries: artifacts(100, { old_crystal_lens: 20, ancient_coin: 20 }) },
+    ],
+  },
+  'chest/end_fortress_keep': {
+    pools: [
+      { rolls: [3, 5], entries: [e('ender_scrap', 8, [1, 2]), e('netherite_scrap', 6), e('ancient_fragment', 12, [2, 5]), e('diamond', 6, [1, 3]), ench('diamond_sword', 4), ench('diamond_chestplate', 4), ench('ender_alloy_chestplate', 1, [30, 39]), lore(4, 'end_fortress')] },
+      { rolls: 1, entries: [e('ancient_blade', 1), e('voidpiercer', 1), e('shardstaff', 1), none(3)] },
+    ],
+  },
+  'chest/end_library_archive': {
+    pools: [
+      { rolls: [3, 5], entries: [lore(20, 'end_library'), book(8), amap(6), e('experience_bottle', 6, [2, 5]), e('ancient_fragment', 4, [1, 3])] },
+      { rolls: 1, entries: artifacts(100, { glyph_tablet: 30, ancient_key_shard: 10, old_crystal_lens: 10 }) },
+    ],
+  },
+  'chest/silent_hall': {
+    pools: [
+      { rolls: 1, entries: [e('silent_bell', 1)] },
+      { rolls: [2, 4], entries: [lore(10, 'fallen_city'), e('ancient_fragment', 10, [2, 5]), e('ancient_coin', 6, [1, 4]), e('ender_glyph_stone', 4, [2, 4])] },
+    ],
+  },
+  'chest/dragon_sanctum': {
+    pools: [
+      { rolls: 1, entries: [e('sanctum_dragon_scale', 1)] },
+      { rolls: 1, entries: [loreOf('sanctum_seen')] },
+      { rolls: [1, 3], entries: [e('dragon_scale_fragment', 6), e('ancient_fragment', 10, [2, 4]), e('end_crystal_fragment', 8, [3, 6])] },
     ],
   },
   // The Dragon's Nest: rolled once per world (each chest once, shared by everyone)

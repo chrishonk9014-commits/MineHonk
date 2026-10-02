@@ -65,6 +65,14 @@ export class GameServer {
   constructs: import('./systems/Constructs').ConstructsSystem | null = null;
   /** V6 phase 3: the Expanded End's structures, the ancient civilization and the Dragon's Nest. */
   endStructures: import('./systems/EndStructures').EndStructuresSystem | null = null;
+  /** V6 phase 4: Teleportation Nodes, Ancient Gateways, minecarts and the Void Skiff. */
+  endTransport: import('./systems/EndTransport').EndTransportSystem | null = null;
+  /** V6 phase 4: the five End quests. */
+  endQuests: import('./systems/EndQuests').EndQuestsSystem | null = null;
+  /** V6 phase 4: Elytra upgrades. */
+  elytra: import('./systems/ElytraUpgrades').ElytraUpgrades | null = null;
+  /** V6 phase 5 hook: the End's weather events (a Void Storm quadruples Void Collectors). */
+  endEvents?: { voidStormFactor(dim: Dimension, x: number, z: number): number };
   farlands: import('./systems/Farlands').FarlandsSystem | null = null;
   /** Fireworks, fishing, compasses, jukeboxes, beacons (installed by gameplay). */
   gadgets: import('./systems/Gadgets').Gadgets | null = null;
@@ -318,6 +326,7 @@ export class GameServer {
     });
     this.sendTime(p);
     p.send({ t: 'death_pos', pos: p.lastDeath });
+    if (p.recipes.size) p.send({ t: 'recipes', unlocked: [...p.recipes] });
     this.interaction.syncInventory(p);
     p.statsDirty = true;
     this.broadcastChat(`${p.name} joined the world`, 'join');
@@ -485,6 +494,12 @@ export class GameServer {
       case 'eng_fill':
         this.engineering?.windows.fill(p, m.recipe, m.all);
         break;
+      case 'pilot':
+        this.endTransport?.pilot(p, m.f, m.s, m.v);
+        break;
+      case 'elytra':
+        this.elytra?.action(p, m.a);
+        break;
       case 'pc_cmd':
         if (!this.engineering?.computers.handleCmd(p, m.window, m.cmd, m.arg)) this.herobrine?.terminalCmd(p, m.window, m.cmd);
         break;
@@ -511,6 +526,9 @@ export class GameServer {
     this.glitchedQuest?.onLeave(p);
     this.structureQuests?.onLeave(p);
     this.templeTrials?.onLeave(p);
+    this.endTransport?.onLeave(p);
+    this.endQuests?.onLeave(p);
+    this.elytra?.onLeave(p);
     this.mounts?.dismount(p, true);
     this.interaction.closeWindow(p, p.windowId, true);
     p.dim.removeEntity(p);
@@ -564,7 +582,8 @@ export class GameServer {
       if (!glide) p.glideSpeed = 0;
     }
     // Movement budget: generous limits (client runs the same physics).
-    const maxH = p.abilities.flying ? (p.gamemode === 'spectator' ? 4 : 2.2) : p.gliding ? (this.tickNo < p.boostUntil ? 3.4 : 2.6) : p.body.inWater ? 1.0 : 1.3;
+    // (V6 phase 4: Thrust wings glide faster; without it the factor is exactly 1)
+    const maxH = p.abilities.flying ? (p.gamemode === 'spectator' ? 4 : 2.2) : p.gliding ? (this.tickNo < p.boostUntil ? 3.4 : 2.6) * (this.elytra?.speedFactor(p) ?? 1) : p.body.inWater ? 1.0 : 1.3;
     const effSpeed = p.effects.get('speed');
     const limit = maxH * (1 + (effSpeed ? (effSpeed.amp + 1) * 0.3 : 0)) + (p.body.vy < -1 ? 0.5 : 0);
     const maxV = 5;
@@ -643,19 +662,20 @@ export class GameServer {
     return false;
   }
 
-  teleport(p: ServerPlayer, x: number, y: number, z: number, yaw?: number, pitch?: number): void {
+  /** Moves a player; `keep` (an Ender Blink) leaves their momentum and gliding alone. */
+  teleport(p: ServerPlayer, x: number, y: number, z: number, yaw?: number, pitch?: number, keep = false): void {
     p.setPos(x, y, z);
     p.lastValidX = x;
     p.lastValidY = y;
     p.lastValidZ = z;
-    p.body.vx = p.body.vy = p.body.vz = 0;
+    if (!keep) p.body.vx = p.body.vy = p.body.vz = 0;
     p.body.fallDistance = 0;
     if (yaw !== undefined) p.yaw = yaw;
     if (pitch !== undefined) p.pitch = pitch;
     p.teleportSeq = p.moveSeq + 1000000 + this.tickNo;
     p.awaitingTeleport = true;
     p.dim.updateBucket(p);
-    p.send({ t: 'teleport', x, y, z, yaw, pitch, seq: p.teleportSeq });
+    p.send({ t: 'teleport', x, y, z, yaw, pitch, seq: p.teleportSeq, ...(keep ? { keep: true } : {}) });
   }
 
   /** Finds a safe standing y at column x,z (loaded chunk required). */

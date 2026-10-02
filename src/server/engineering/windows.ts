@@ -60,7 +60,7 @@ export class EngWindows {
       const inv = ct.containerAt(n.dim, n.x, n.y, n.z, r.size, 'eng');
       const may = (i: number): ((s: ItemStack) => boolean) => {
         if (i >= r.output[0] && i < r.output[1]) return () => false;
-        if (i >= r.fuel[0] && i < r.fuel[1]) return (s) => fuelTicks(s) > 0;
+        if (i >= r.fuel[0] && i < r.fuel[1]) return c.id === 'crystal_generator' ? (s) => items[s.id]?.id === 'end_crystal_fragment' : (s) => fuelTicks(s) > 0;
         if (i >= r.tool[0] && i < r.tool[1]) return (s) => items[s.id]?.def.tool?.type === 'pickaxe';
         if (i >= r.upgrades[0] && i < r.upgrades[1]) return (s) => isUpgrade(items[s.id]?.id ?? '');
         if (c.kind === 'server') return (s) => items[s.id]?.id === 'hard_drive';
@@ -84,7 +84,7 @@ export class EngWindows {
     }
     // Filter / target slots
     for (let g = 0; g < (c.slots?.ghost ?? 0); g++) w.slots.push(this.ghostSlot(n, g));
-    w.props = this.props(n) as unknown as Record<string, unknown>;
+    w.props = this.props(n, p) as unknown as Record<string, unknown>;
     this.track(p, w, n);
   }
 
@@ -184,7 +184,7 @@ export class EngWindows {
 
   // ------------------------------------------------------------------ props
 
-  props(n: EngNode): MachineProps {
+  props(n: EngNode, viewer?: ServerPlayer): MachineProps {
     const be = n.be() ?? ({ type: 'eng', id: n.c.id } as EngBE);
     const c = n.c;
     const s = c.slots ?? {};
@@ -270,6 +270,8 @@ export class EngWindows {
     if (c.kind === 'tank') p.buttons.push({ key: 'drain', label: 'Empty the tank' });
     if (c.kind === 'monitor') p.buttons.push({ key: 'page', label: 'Page: ' + this.eng.control.pageName(be.cfg?.page ?? 0) });
     if (c.kind === 'control_panel') this.eng.control.panelInto(n, p);
+    // V6 phase 4: what End blocks add
+    this.eng.end.props(n, p, viewer);
     return p;
   }
 
@@ -281,7 +283,7 @@ export class EngWindows {
         this.open.delete(pl);
         continue;
       }
-      const props = this.props(o.node);
+      const props = this.props(o.node, pl);
       const json = JSON.stringify(props);
       if (json === o.sent) continue;
       o.sent = json;
@@ -309,6 +311,11 @@ export class EngWindows {
     if (this.eng.server.roleOf(p) === 'visitor') return;
     const be = n.be();
     if (!be) return;
+    // V6 phase 4: End blocks' own settings (a node's name, destinations and lock)
+    if (this.eng.end.cfg(p, n, key, value)) {
+      this.step();
+      return;
+    }
     const cfg = (be.cfg ??= {});
     const c = n.c;
     if (key === 'signal' && c.signal) cfg.signal = cfg.signal === 'ignore' || !cfg.signal ? 'on' : cfg.signal === 'on' ? 'off' : 'ignore';

@@ -2488,7 +2488,7 @@ V.guardian_sentinel = {
       ['leftLeg', 'jKneeL', [0, -7, -2.6], 1.8],
       ['rightArm', 'jElbowR', [0, -7, -2.6], 1.8],
       ['leftArm', 'jElbowL', [0, -7, -2.6], 1.8],
-    ], base, tele ? 0.7 + pulse * 0.3 : 0.25 + pulse * 0.15);
+    ], base, e.meta.stun === true ? 0 : tele ? 0.7 + pulse * 0.3 : 0.25 + pulse * 0.15);
     // The charging arm, and the eye slit before a bolt
     const fist = flare(m, 'rightArm', 'fist', [5.6, 4, 5.6], [0, -13, 0], 0xb8f4ff);
     if (fist) {
@@ -2564,7 +2564,7 @@ V.guardian_bulwark = {
       ['leftLeg', 'jKneeL', [0, -6, -4.2], 2.4],
       ['rightArm', 'jElbowR', [0, -12, -4.6], 2.6],
       ['leftArm', 'jElbowL', [0, -12, -4.6], 2.6],
-    ], 0xc8a0ff, !awake ? 0.05 : tele === 'pound' ? 0.8 + pulse * 0.2 : 0.3 + pulse * 0.2);
+    ], 0xc8a0ff, !awake || e.meta.stun === true ? 0.05 : tele === 'pound' ? 0.8 + pulse * 0.2 : 0.3 + pulse * 0.2);
     const heart = flare(m, 'body', 'heart', [3.6, 3.6, 0.6], [0, 9, 6.2], 0xd8b8ff);
     if (heart) {
       heart.visible = awake;
@@ -2578,6 +2578,66 @@ V.guardian_bulwark = {
     }
   },
   nameY: 3.1,
+};
+
+// ---------------------------------------------------------------------------
+// V6 phase 4: vehicles. A minecart, and the Void Skiff: a small flying boat
+// with a chorus-cloth sail and void crystals under its hull that glow while
+// it burns fuel.
+// ---------------------------------------------------------------------------
+V.minecart = {
+  parts: () => {
+    const steel = '#8a8e94';
+    const dark = '#4a4e54';
+    return [
+      { name: 'body', pivot: [0, 0, 0], from: [-7, 2, -9], size: [14, 1, 18], colors: { all: dark } },
+      { name: 'sideL', parent: 'body', pivot: [0, 0, 0], from: [-8, 2, -9], size: [1, 8, 18], colors: { all: steel, top: '#b0b4ba' } },
+      { name: 'sideR', parent: 'body', pivot: [0, 0, 0], from: [7, 2, -9], size: [1, 8, 18], colors: { all: steel, top: '#b0b4ba' } },
+      { name: 'front', parent: 'body', pivot: [0, 0, 0], from: [-7, 2, -10], size: [14, 8, 1], colors: { all: steel, top: '#b0b4ba' } },
+      { name: 'back', parent: 'body', pivot: [0, 0, 0], from: [-7, 2, 9], size: [14, 8, 1], colors: { all: steel, top: '#b0b4ba' } },
+      ...[[-6, -7], [6, -7], [-6, 7], [6, 7]].map(([x, z], i) => ({ name: `wheel${i}`, parent: 'body', pivot: [0, 0, 0] as [number, number, number], from: [x! - 1, 0, z! - 1] as [number, number, number], size: [2, 2, 2] as [number, number, number], colors: { all: '#2a2a2e' } })),
+    ];
+  },
+  anim: (m, e) => {
+    // A knocked cart shakes
+    m.root.rotation.z = e.hurtTime > 0 ? Math.sin(e.hurtTime * 1.6) * 0.15 : 0;
+  },
+  nameY: 1,
+};
+
+V.void_skiff = {
+  parts: () => {
+    const hull = '#6a4a7a';
+    const hullDark = '#4a3058';
+    const deck = '#8a6a9a';
+    const sail = '#d8c8e8';
+    return [
+      { name: 'hull', pivot: [0, 0, 0], from: [-9, 0, -16], size: [18, 4, 32], colors: { all: hull, bottom: hullDark, top: deck }, paint: (p) => p.speckle('top', '#7a5a8a', 0.2) },
+      { name: 'gunwaleL', parent: 'hull', pivot: [0, 0, 0], from: [-10, 4, -15], size: [2, 3, 30], colors: { all: hullDark, top: '#9a7aaa' } },
+      { name: 'gunwaleR', parent: 'hull', pivot: [0, 0, 0], from: [8, 4, -15], size: [2, 3, 30], colors: { all: hullDark, top: '#9a7aaa' } },
+      { name: 'prow', parent: 'hull', pivot: [0, 0, 0], from: [-6, 1, -20], size: [12, 5, 4], colors: { all: hull, top: deck } },
+      { name: 'stern', parent: 'hull', pivot: [0, 0, 0], from: [-8, 4, 14], size: [16, 3, 2], colors: { all: hullDark } },
+      { name: 'mast', parent: 'hull', pivot: [0, 4, -4], from: [-1, 0, -1], size: [2, 26, 2], colors: { all: '#4a3a2a' } },
+      { name: 'sail', parent: 'mast', pivot: [0, 6, 0], from: [-0.5, 0, 1], size: [1, 18, 14], colors: { all: sail, left: '#c0b0d8' } },
+    ];
+  },
+  anim: (m, e, _alpha, time) => {
+    const lit = e.meta.lit === true;
+    m.root.position.y = lit ? Math.sin(time * 0.12 + e.id) * 0.05 : 0;
+    m.root.rotation.z = Math.sin(time * 0.08 + e.id) * (lit ? 0.03 : 0.01) + (e.hurtTime > 0 ? Math.sin(e.hurtTime * 1.6) * 0.08 : 0);
+    const sail = m.part('sail');
+    if (sail) sail.rotation.y = Math.sin(time * 0.15 + e.id) * 0.12;
+    // Void crystals under the hull glow while it burns a shard
+    const pulse = 0.6 + Math.sin(time * 0.3) * 0.4;
+    for (const [key, x, z] of [['vcA', -5, -8], ['vcB', 5, -8], ['vcC', -5, 8], ['vcD', 5, 8]] as const) {
+      const c = flare(m, 'hull', key, [3, 2, 3], [x, -0.6, z], 0x8a6aff);
+      if (c) {
+        c.visible = true;
+        (c.material as THREE.MeshBasicMaterial).opacity = lit ? 0.55 + pulse * 0.4 : 0.15;
+      }
+    }
+  },
+  nameY: 1.6,
 };
 
 // ---------------------------------------------------------------- registration

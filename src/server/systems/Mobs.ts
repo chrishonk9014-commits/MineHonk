@@ -1322,6 +1322,8 @@ export class MobSystem {
     const s = this.server;
     const killer = info.attacker && isPlayer(info.attacker) ? info.attacker : m.dim.server.tickNo - m.lastHurtByPlayerTick < 100 && isPlayer(m.lastAttacker) ? (m.lastAttacker as ServerPlayer) : null;
     const byPlayer = !!killer || (info.attacker instanceof Mob && !!info.attacker.owner);
+    // V6 phase 4: a Crystal Vault's Bulwark falling clears its vault
+    if (m.data.vault) s.endQuests?.onMobDeath(m);
     if (m.def.category === 'boss' && this.onBossDeath?.(m, killer, info)) {
       if (killer) {
         killer.addStat('killed.' + m.type);

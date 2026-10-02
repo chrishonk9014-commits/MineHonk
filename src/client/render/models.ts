@@ -269,6 +269,13 @@ function cubeTextures(def: BlockDef, state: number): { tex: string[]; rot: numbe
     }
   }
   const status = getProp(state, 'status');
+  // V6 phase 4: a node's pad lights while it works; the restored lens glows once awake; Ender Light fades
+  if (def.id === 'teleport_node') tex[1] = status === 'working' ? def.tex.top_on! : status === 'error' ? def.tex.top_err! : def.tex.top!;
+  if (def.id === 'restored_ancient_lens' && status === 'working') tex = tex.map(() => def.tex.all_on!);
+  if (def.id === 'ender_light') {
+    const f = getProp(state, 'fade') ?? '0';
+    if (f !== '0') tex = tex.map(() => `ender_light_${f}`);
+  }
   // V5.5: a computer's screen
   if (def.frontBy && def.tex.front && facing) {
     const fi = { north: 2, south: 3, west: 4, east: 5 }[facing as 'north'];
@@ -551,6 +558,30 @@ function lanternModel(def: BlockDef, state: number): ModelQuad[] {
   return q;
 }
 
+/**
+ * V6 phase 4: rails lie flat a pixel above the floor, run up a slope to the
+ * block above, or (plain rails) turn a corner. Textures are authored running
+ * north-south; the corner one joins south and east.
+ */
+function railModel(def: BlockDef, state: number): ModelQuad[] {
+  const shape = getProp(state, 'shape') ?? 'north_south';
+  const powered = getProp(state, 'powered') === 'true';
+  const tex = powered && def.tex.on ? def.tex.on : def.tex.all!;
+  const y = 1 / 16;
+  const flat = (t: string): ModelQuad[] => element([0, 1, 0], [16, 1, 16], { up: { tex: t }, down: { tex: t } });
+  const corner: Record<string, number> = { south_east: 0, south_west: 90, north_west: 180, north_east: 270 };
+  if (shape in corner) return rotY(flat(def.tex.corner ?? tex), corner[shape]!);
+  const slope: Record<string, number> = { ascending_north: 0, ascending_east: 90, ascending_south: 180, ascending_west: 270 };
+  if (shape in slope) {
+    // High at the north edge, low at the south
+    const hi = 1 + y;
+    const up: ModelQuad = { pos: [[0, hi, 0], [0, y, 1], [1, y, 1], [1, hi, 0]], uv: [[0, 0], [0, 1], [1, 1], [1, 0]], tex, face: 1, cull: -1, tint: 'none' };
+    const down: ModelQuad = { pos: [[1, hi, 0], [1, y, 1], [0, y, 1], [0, hi, 0]], uv: [[1, 0], [1, 1], [0, 1], [0, 0]], tex, face: 0, cull: -1, tint: 'none' };
+    return rotY([up, down], slope[shape]!);
+  }
+  return shape === 'east_west' ? rotY(flat(tex), 90) : flat(tex);
+}
+
 function carpetLike(tex: string, h: number, tint: TintKind = 'none'): ModelQuad[] {
   return element([0, 0, 0], [16, h, 16], {
     up: { tex, cull: h === 16 ? 'up' : null, tint },
@@ -729,6 +760,21 @@ function custom(def: BlockDef, state: number): ModelQuad[] {
         );
       }
       return out;
+    }
+    case 'crystal_pedestal': {
+      // A pale column; an End Crystal stands on it once placed, and it all glows when lit
+      const lit = getProp(state, 'lit') === 'true';
+      const side = lit ? def.tex.on! : def.tex.all!;
+      const top = lit ? def.tex.on! : def.tex.top!;
+      const q = [...box([2, 0, 2], [14, 3, 14], { up: top, down: def.tex.all!, north: side, south: side, west: side, east: side }), ...box([4, 3, 4], [12, 11, 12], { up: top, down: top, north: side, south: side, west: side, east: side }), ...box([3, 11, 3], [13, 13, 13], { up: top, down: side, north: side, south: side, west: side, east: side })];
+      if (getProp(state, 'crystal') === 'true') q.push(...cross('end_crystal_cluster', 'none', 0.85, 0.2).map((c) => ({ ...c, pos: c.pos.map(([x, y, z]) => [x, 13 / 16 + y * 0.6, z] as V3) as [V3, V3, V3, V3] })));
+      return q;
+    }
+    case 'ancient_reliquary': {
+      // An old urn; opened, its lid is gone
+      const side = def.tex.all!;
+      const top = getProp(state, 'open') === 'true' ? def.tex.on! : def.tex.top!;
+      return [...box([3, 0, 3], [13, 10, 13], { up: top, down: top, north: side, south: side, west: side, east: side }), ...box([5, 10, 5], [11, 13, 11], { up: top, down: top, north: side, south: side, west: side, east: side })];
     }
     case 'cactus_flower':
       // A small bloom sitting on top of the cactus below
@@ -965,6 +1011,8 @@ function bakeState(state: number): BakedModel {
     }
     case 'custom':
       return quads(custom(def, state));
+    case 'rail':
+      return quads(railModel(def, state));
     case 'layer':
       return quads(carpetLike(def.tex.all!, 2));
   }

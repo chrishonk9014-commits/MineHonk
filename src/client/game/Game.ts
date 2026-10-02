@@ -12,7 +12,7 @@ import { LocalPlayer } from './LocalPlayer';
 import { BlockInteraction } from './BlockInteraction';
 import { ClientEntity } from './ClientEntity';
 import { WorldRenderer, type GameAssets, type FrameState } from '../render/WorldRenderer';
-import { Hud } from '../ui/Hud';
+import { Hud, type HudState } from '../ui/Hud';
 import { Chat } from '../ui/Chat';
 import { InventoryScreen, type WindowState } from '../ui/InventoryScreen';
 import { SignEditor, PlayerList } from '../ui/Overlays';
@@ -20,7 +20,9 @@ import type { Input } from '../input/Input';
 import type { Settings } from '../settings';
 import type { AudioEngine } from '../audio/Audio';
 import { MusicPlayer, discTitle } from '../audio/Audio';
-import type { Slot, ItemStack } from '../../common/game/itemstack';
+import { type Slot, type ItemStack, maxDurability } from '../../common/game/itemstack';
+import { elytraUpgrades, ELYTRA } from '../../common/endExpansion/elytra';
+import { setUnlockedRecipes } from '../ui/RecipeBook';
 import type { GameMode } from '../../common/game/gamemode';
 import type { DimensionId } from '../../common/data/biomes';
 import { items, itemById } from '../../common/registry/items';
@@ -98,6 +100,10 @@ export class Game {
   /** World spawn (compasses) and the last death (Recovery Compass). */
   private worldSpawn: [number, number, number] = [0, 64, 0];
   private deathPos: { dim: DimensionId; x: number; y: number; z: number } | null = null;
+  /** V6 phase 4: recipes learned from blueprints, and the Elytra's upgrade meters (as of `at`). */
+  unlockedRecipes = new Set<string>();
+  wings: { upgrades: string[]; hover?: number; charges?: number; chargeIn?: number; blinkIn?: number; recoverIn?: number; at: number } = { upgrades: [], at: 0 };
+  private lastPilot = '';
   readonly chat = new Chat();
   readonly entities = new Map<number, ClientEntity>();
   readonly root = el('div', { class: 'layer' });
@@ -198,11 +204,15 @@ export class Game {
     readonly host: GameHost,
   ) {
     this.player = new LocalPlayer(this.world);
+    setUnlockedRecipes([]);
     this.player.vehiclePos = () => {
       const v = this.player.vehicle;
       const e = v ? this.entities.get(v.id) : undefined;
-      return e ? [e.x, e.y, e.z] : null;
+      return e ? [e.x, e.y, e.z, e.yaw] : null;
     };
+    // V6 phase 4: the worn Elytra's upgrades, and their moves sent to the server
+    this.player.wingUps = () => elytraUpgrades(this.invSlots[HELMET + 1]);
+    this.player.onElytra = (a) => this.send({ t: 'elytra', a });
     // Elytra in the chest slot that isn't worn down to its last point
     this.player.sneakSpeed = () => {
       const legs = this.invSlots[HELMET + 2];
@@ -214,7 +224,7 @@ export class Game {
       const c = this.invSlots[HELMET + 1];
       if (!c) return false;
       const it = items[c.id];
-      return it?.id === 'elytra' && (c.damage ?? 0) < (it.def.durability ?? 1) - 1;
+      return it?.id === 'elytra' && (c.damage ?? 0) < maxDurability(c) - 1;
     };
     this.renderer = new WorldRenderer(canvas, this.world, assets, settings);
     this.interaction = new BlockInteraction(this.world, this.player, (m) => this.send(m), {
@@ -610,7 +620,15 @@ export class Game {
         this.onFx(m);
         break;
       case 'teleport':
-        this.player.setPos(m.x, m.y, m.z);
+        if (m.keep) {
+          // An Ender Blink: same speed, same glide, somewhere else
+          const b = this.player.body;
+          const [vx, vy, vz] = [b.vx, b.vy, b.vz];
+          this.player.setPos(m.x, m.y, m.z);
+          b.vx = vx;
+          b.vy = vy;
+          b.vz = vz;
+        } else this.player.setPos(m.x, m.y, m.z);
         if (m.yaw !== undefined) this.player.yaw = m.yaw;
         if (m.pitch !== undefined) this.player.pitch = m.pitch;
         this.player.seq = m.seq;
@@ -724,7 +742,8 @@ export class Game {
         } else {
           const body = newBody(m.x ?? 0, m.y ?? 0, m.z ?? 0, m.width ?? 1, m.height ?? 1);
           body.stepHeight = 1.1;
-          this.player.vehicle = { id: m.id, control: !!m.control, seat: m.seat ?? 0.7, speed: m.speed ?? 0.1, jump: m.jump ?? 0, body, yaw: m.yaw ?? 0 };
+          this.player.vehicle = { id: m.id, control: !!m.control, seat: m.seat ?? 0.7, speed: m.speed ?? 0.1, jump: m.jump ?? 0, body, yaw: m.yaw ?? 0, kind: m.kind, pilot: m.pilot };
+          if (m.kind === 'skiff' && m.pilot) this.hud.showTitle('', 'Space: rise · Ctrl: sink · Shift: get off', 80);
         }
         break;
       case 'vehicle_pos': {
@@ -740,6 +759,15 @@ export class Game {
       case 'death_pos':
         this.deathPos = m.pos;
         break;
+      case 'recipes':
+        this.unlockedRecipes = new Set(m.unlocked);
+        setUnlockedRecipes(m.unlocked);
+        break;
+      case 'elytra': {
+        this.wings = { ...m, at: this.tickNo };
+        if (m.hover !== undefined) this.player.hoverLeft = Math.min(this.player.hoverLeft, m.hover);
+        break;
+      }
       case 'boost':
         if (this.player.gliding) this.player.boostTicks = Math.max(this.player.boostTicks, m.ticks);
         break;
@@ -936,6 +964,15 @@ export class Game {
     const sneakPressed = sneak && !this.wasSneak;
     this.wasSneak = sneak;
     if (p.vehicle && sneakPressed) this.send({ t: 'dismount' });
+    // V6 phase 4: piloting a Void Skiff (jump rises, sprint sinks)
+    if (p.vehicle?.kind === 'skiff' && p.vehicle.pilot) {
+      const ctl = { f: Math.max(-1, Math.min(1, forward)), s: Math.max(-1, Math.min(1, strafe)), v: jump ? 1 : sprint ? -1 : 0 };
+      const key = `${ctl.f},${ctl.s},${ctl.v}`;
+      if (key !== this.lastPilot || this.tickNo % 20 === 0) {
+        this.lastPilot = key;
+        this.send({ t: 'pilot', ...ctl });
+      }
+    }
     if (p.vehicle) sneak = false;
     const move = p.tick({ forward, strafe, jump, sneak, sprint: sprint && !(this.survivalHud && this.stats.food <= 6), jumpPressed, forwardPressed });
     const v = p.vehicle;
@@ -1020,11 +1057,33 @@ export class Game {
         survival: this.survivalHud,
         hardcore: this.worldInfo?.hardcore ?? false,
         spectator: this.player.gamemode === 'spectator',
+        wings: this.wingsHud(),
       },
       this.tickNo,
     );
     this.navigator.update(this.instrument(), this.player.body.x, this.player.body.z, this.player.yaw, this.tickNo);
     this.checkLoading();
+  }
+
+  /** The Elytra's upgrade meters for the HUD (cooldowns counted down since the server's last word). */
+  private wingsHud(): HudState['wings'] {
+    const ups = this.player.wingUps();
+    if (!ups.length) return undefined;
+    const w = this.wings;
+    const dt = this.tickNo - w.at;
+    const left = (t?: number): number | undefined => (t === undefined ? undefined : Math.max(0, t - dt));
+    const out: NonNullable<HudState['wings']> = { gliding: this.player.gliding, inEnd: this.dimension === 'end' };
+    if (ups.includes('hover')) {
+      out.hover = this.player.hoverLeft;
+      out.hoverMax = ELYTRA.hoverTicks;
+    }
+    if (ups.includes('burst')) {
+      out.charges = (w.charges ?? 3) + (w.chargeIn !== undefined && dt >= w.chargeIn ? 1 : 0);
+      out.chargeIn = left(w.chargeIn);
+    }
+    if (ups.includes('ender_blink')) out.blinkIn = left(w.blinkIn) ?? 0;
+    if (ups.includes('void_recovery')) out.recoverIn = left(w.recoverIn) ?? 0;
+    return out;
   }
 
   /** The instrument for the held compass or clock (main hand first). */
@@ -1547,6 +1606,11 @@ export class Game {
   private use(): void {
     const p = this.player;
     if (p.gamemode === 'spectator') return;
+    // V6 phase 4: Ender Blink (an empty hand while gliding)
+    if (p.gliding && !this.held() && p.wingUps().includes('ender_blink')) {
+      this.send({ t: 'elytra', a: 'blink' });
+      return;
+    }
     const e = this.entityTarget;
     if (e) {
       this.send({ t: 'interact', id: e.id, hand: 0 });
@@ -1611,8 +1675,9 @@ export class Game {
       this.host.openEngineeringBook();
       return;
     }
-    // V6 phase 3: a lore book opens on its page (nothing for the server to do)
+    // V6 phase 3: a lore book opens on its page (phase 4: the server notes the reading, for The Dragon's History)
     if (items[held.id]!.id === 'book' && typeof held.tag?.lore === 'string') {
+      this.send({ t: 'use', hand: 0, action: 'start' });
       this.input.unlock();
       this.host.openLore(held.tag.lore);
       return;

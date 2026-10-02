@@ -65,7 +65,9 @@ export type Brain =
   | 'end_phantom'
   // V6 phase 3: the Guardian Constructs (placed by their structures, never natural)
   | 'guardian_sentinel'
-  | 'guardian_bulwark';
+  | 'guardian_bulwark'
+  // V6 phase 4: vehicles (no AI: the transport system drives them)
+  | 'vehicle';
 
 export interface MobDef {
   id: string;
@@ -106,7 +108,9 @@ export interface MobDef {
   idleInterval?: number;
   xp?: number;
   /** Rideable: rider feet height above the mob, who steers ('client': the rider; 'carrot': a Carrot on a Stick), and whether it must be tamed first. */
-  mount?: { seat: number; control: 'client' | 'carrot'; tame: boolean };
+  mount?: { seat: number; control: 'client' | 'carrot' | 'vehicle'; tame: boolean };
+  /** V6 phase 4: a vehicle (minecart, Void Skiff): no spawn egg, no AI, breaks into its item. */
+  vehicle?: 'minecart' | 'skiff';
   /** V6: treats void edges as walls (never walks off an island). */
   edgeGuard?: boolean;
 }
@@ -214,6 +218,9 @@ mob({ id: 'end_phantom', name: 'End Phantom', category: 'monster', width: 2, hei
 // V6 phase 3: the Guardian Constructs guard the Expanded End's structures (built, not born; never spawn naturally)
 mob({ id: 'guardian_sentinel', name: 'Guardian Construct: Sentinel', category: 'monster', width: 0.9, height: 2.4, eye: 2.1, health: 40, speed: 0.11, damage: 8, armor: 10, knockbackRes: 0.4, followRange: 24, brain: 'guardian_sentinel', model: 'guardian_sentinel', egg: [0x9a8a68, 0x7ae0ff], fireImmune: true, maxSpawnLight: 15, xp: 12, idleInterval: 220, edgeGuard: true });
 mob({ id: 'guardian_bulwark', name: 'Guardian Construct: Bulwark', category: 'monster', width: 1.6, height: 2.8, eye: 2.4, health: 120, speed: 0.07, damage: 14, armor: 14, knockbackRes: 1, followRange: 24, brain: 'guardian_bulwark', model: 'guardian_bulwark', egg: [0x6a5a48, 0xc8a0ff], fireImmune: true, maxSpawnLight: 15, xp: 40, idleInterval: 300, edgeGuard: true });
+// V6 phase 4: vehicles
+mob({ id: 'minecart', name: 'Minecart', category: 'ambient', width: 0.98, height: 0.7, health: 6, speed: 0, brain: 'vehicle', model: 'minecart', egg: [0x6a6a6a, 0x3a3a3a], vehicle: 'minecart', mount: { seat: 0.3, control: 'vehicle', tame: false }, idleInterval: 1000000 });
+mob({ id: 'void_skiff', name: 'Void Skiff', category: 'ambient', width: 1.6, height: 0.9, health: 20, speed: 0, brain: 'vehicle', model: 'void_skiff', egg: [0x3a2a4a, 0xb080ff], vehicle: 'skiff', fireImmune: true, flying: true, mount: { seat: 0.45, control: 'vehicle', tame: false }, idleInterval: 1000000 });
 mob({ id: 'ender_dragon', name: 'Ender Dragon', category: 'boss', width: 16, height: 8, health: 200, speed: 0.3, damage: 10, knockbackRes: 1, followRange: 150, brain: 'dragon', model: 'ender_dragon', egg: [0x1c1c1c, 0xe079fa], fireImmune: true, flying: true });
 
 export const MOB_DEFS: readonly MobDef[] = M;

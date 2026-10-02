@@ -119,6 +119,12 @@ export function validateC2S(raw: unknown): C2S | null {
       if (!isInt(m.window) || !isStr(m.cmd, 48)) return null;
       if (m.arg !== undefined && !(isStr(m.arg, 96) || (isNum(m.arg) && Number.isFinite(m.arg)))) return null;
       return { t: 'pc_cmd', window: m.window, cmd: m.cmd, ...(m.arg !== undefined ? { arg: m.arg as string | number } : {}) };
+    case 'pilot':
+      if (!inRange(m.f, -1, 1) || !inRange(m.s, -1, 1) || !inRange(m.v, -1, 1)) return null;
+      return { t: 'pilot', f: m.f, s: m.s, v: m.v };
+    case 'elytra':
+      if (m.a !== 'burst' && m.a !== 'blink') return null;
+      return { t: 'elytra', a: m.a };
     default:
       return null;
   }

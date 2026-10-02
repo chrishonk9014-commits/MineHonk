@@ -394,7 +394,7 @@ export function computePlacement(w: WorldReader, r: PlaceRequest): Placement[] |
         state = withProp(state, 'facing', face >= 2 ? FACE_NAMES[face ^ 1]! : 'down');
         break;
       }
-      if (def.id === 'conveyor' || def.id === 'express_conveyor' || def.id === 'logic_gate' || def.id === 'level_sensor' || def.id === 'item_sensor' || def.id === 'timer') {
+      if (def.id === 'conveyor' || def.id === 'express_conveyor' || def.id === 'ender_bridge_projector' || def.id === 'logic_gate' || def.id === 'level_sensor' || def.id === 'item_sensor' || def.id === 'timer') {
         // Runs away from the player
         state = withProp(state, 'facing', facing);
         break;
@@ -405,6 +405,11 @@ export function computePlacement(w: WorldReader, r: PlaceRequest): Placement[] |
       }
       if (def.id === 'fluid_outlet' && face >= 2) {
         state = withProp(state, 'facing', FACE_NAMES[face]!);
+        break;
+      }
+      if (def.model === 'rail') {
+        // Laid along the way the player faces, then joined to the rails around
+        state = withProp(state, 'shape', facing === 'north' || facing === 'south' ? 'north_south' : 'east_west');
         break;
       }
       if (def.id === 'bracket_fungus') {
@@ -518,6 +523,8 @@ export function connectState(w: WorldReader, x: number, y: number, z: number, st
     return state;
   }
   if (def.model === 'stairs') return stairShape(w, x, y, z, state);
+  // V6 phase 4: rails join the rails around them
+  if (def.model === 'rail') return railShape(w, x, y, z, state);
   if (def.id === 'redstone_wire' || def.id === 'signal_cable') return wireShape(w, x, y, z, state);
   // V5: cables and pipes connect to their network
   if (conduitBit(state)) return conduitShape(w, x, y, z, state);
@@ -572,3 +579,4 @@ export function stairShape(w: WorldReader, x: number, y: number, z: number, stat
 export { STATE_FLUID };
 import { wireShape } from './redstone';
 import { conduitBit, conduitShape } from '../engineering/connect';
+import { railShape } from './rails';

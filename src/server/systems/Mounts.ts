@@ -135,8 +135,12 @@ export class Mounts {
     const m = p.vehicle as Mob | null;
     if (!m) return;
     p.vehicle = null;
-    m.rider = null;
-    m.riderControl = false;
+    // V6 phase 4: a Void Skiff's passenger gets off without unseating its pilot
+    if (m.data.passenger === p.uuid) delete m.data.passenger;
+    else {
+      m.rider = null;
+      m.riderControl = false;
+    }
     m.metaDirty = true;
     p.metaDirty = true;
     p.send({ t: 'mount', id: null });
@@ -163,10 +167,14 @@ export class Mounts {
 
   private seat(p: ServerPlayer, m: Mob): void {
     const y = m.y + (m.def.mount?.seat ?? m.def.height * 0.75);
-    p.setPos(m.x, y, m.z);
-    p.lastValidX = m.x;
+    // A skiff's passenger sits behind the pilot
+    const back = m.data.passenger === p.uuid ? lookDir(m.yaw, 0) : null;
+    const x = back ? m.x - back[0] * 0.6 : m.x;
+    const z = back ? m.z - back[2] * 0.6 : m.z;
+    p.setPos(x, y, z);
+    p.lastValidX = x;
     p.lastValidY = y;
-    p.lastValidZ = m.z;
+    p.lastValidZ = z;
     p.body.vx = p.body.vy = p.body.vz = 0;
     p.body.fallDistance = 0;
     p.dim.updateBucket(p);

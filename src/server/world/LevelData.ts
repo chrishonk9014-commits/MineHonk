@@ -187,16 +187,22 @@ export interface WorldQuests {
   bunker: Record<string, QuestRecord>;
   /** Temple trials (generator 5) by '<type>:<x>,<y>,<z>'. */
   temple: Record<string, QuestRecord>;
+  /**
+   * V6 phase 4: the End quests, by site ('obs:<lens>', 'gate:<portal>',
+   * 'vault:<pedestal>', 'silent', 'dragon', 'core:<structure>', 'seal:<door>',
+   * and 'rewards' for the once-a-world rewards already given).
+   */
+  end: Record<string, QuestRecord>;
 }
 
 export function newWorldQuests(): WorldQuests {
-  return { glitch: {}, bunker: {}, temple: {} };
+  return { glitch: {}, bunker: {}, temple: {}, end: {} };
 }
 
 function sanitizeQuests(raw: unknown): WorldQuests {
   const out = newWorldQuests();
   if (!raw || typeof raw !== 'object') return out;
-  for (const kind of ['glitch', 'bunker', 'temple'] as const) {
+  for (const kind of ['glitch', 'bunker', 'temple', 'end'] as const) {
     const m = (raw as Record<string, unknown>)[kind];
     if (!m || typeof m !== 'object') continue;
     for (const [k, v] of Object.entries(m as Record<string, unknown>).slice(0, 4096)) {

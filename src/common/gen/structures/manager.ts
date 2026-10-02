@@ -5,6 +5,7 @@
  * once into pieces with world bounding boxes; every chunk intersecting a
  * piece builds the part of it that lies inside the chunk.
  */
+import type { EndQuestSpec } from '../../endExpansion/quests';
 import { Random, hashInts } from '../../math/rng';
 import type { DecorView } from '../decorate/view';
 import type { Biome } from '../../registry/biomes';
@@ -50,7 +51,9 @@ export type QuestSpec =
    * Generator 5 bunkers also say where the keycard waits (the guard post's chest up top).
    */
   | { kind: 'bunker'; reader: Pos; doors: Pos[]; generators: Pos[]; blast: Pos[]; vault: Pos; area: Box; cache?: Pos; hatch?: Pos; style?: string }
-  | TempleQuest;
+  | TempleQuest
+  /** V6 phase 4: the Expanded End's quests (see endExpansion/quests.ts). */
+  | EndQuestSpec;
 
 /** One trial of a temple, done in its own chamber. */
 export type TempleMission =
@@ -191,6 +194,18 @@ export class StructureManager {
     this.order.push(key);
     if (this.order.length > 512) this.starts.delete(this.order.shift()!);
     return s;
+  }
+
+  /** A type's start in one region (null: none there). V6 phase 4's gateway census walks regions with it. */
+  regionStart(typeId: string, rx: number, rz: number): Start | null {
+    const t = this.types.find((tt) => tt.id === typeId);
+    return t && !t.fixed ? this.startAt(t, rx, rz) : null;
+  }
+
+  /** A type's spacing in chunks (0 for an unknown or fixed type). */
+  spacingOf(typeId: string): number {
+    const t = this.types.find((tt) => tt.id === typeId);
+    return t && !t.fixed ? t.spacing : 0;
   }
 
   /** Whether a start overlaps any start of a type listed before its own. */

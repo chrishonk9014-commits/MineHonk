@@ -36,6 +36,7 @@ import { EngWindows } from './windows';
 import { ControlRoom } from './control';
 import { SignalParts } from './signals';
 import { Computers } from './computer/Computers';
+import { EndEngineering } from './end';
 import type { ItemEntity } from '../entity/ItemEntity';
 
 export const ENG_STEP = 4;
@@ -67,6 +68,8 @@ export class Engineering {
   readonly control: ControlRoom;
   readonly signals: SignalParts;
   readonly computers: Computers;
+  /** V6 phase 4: End engineering (generators, grower, bridges, rails, quest machines). */
+  readonly end: EndEngineering;
   /** Time spent in the last step (ms), for the Admin Panel. */
   lastStepMs = 0;
 
@@ -79,6 +82,7 @@ export class Engineering {
     this.control = new ControlRoom(this);
     this.signals = new SignalParts(this);
     this.computers = new Computers(this);
+    this.end = new EndEngineering(this);
     // Chunks loaded before the system was installed (spawn chunks)
     for (const dim of server.dims.values()) for (const c of dim.chunks.values()) this.onChunkLoaded(dim, c);
   }
@@ -123,6 +127,7 @@ export class Engineering {
     n.removed = true;
     this.nodes.delete(key);
     this.windows.closeAt(dim, x, y, z);
+    this.end.onRemoved(n);
     if (n.c.kind === 'computer') {
       this.computers.closeAt(n);
       this.server.herobrine?.onComputerGone(n);
@@ -167,6 +172,8 @@ export class Engineering {
       return;
     }
     if (oldC && oldC !== newC) this.removeNode(dim, x, y, z);
+    // V6 phase 4: a Teleportation Node that is gone leaves the node index
+    if (oldC?.id === 'teleport_node' && newC !== oldC) this.server.endTransport?.nodeGone(dim, x, y, z);
     if (newC && newC !== oldC && blocks[STATE_BLOCK[state]!]!.def.entity === 'eng') {
       // Placed by a player (onPlaced sets it up) or by anything else: make sure it has its state
       let be = dim.getBlockEntity(x, y, z) as EngBE | undefined;
@@ -194,6 +201,7 @@ export class Engineering {
     if (isAdminStack(stack) || this.server.admin.inContext(p)) be.cheat = 1;
     dim.setBlockEntity(x, y, z, be);
     this.addNode(dim, x, y, z, c);
+    if (c.id === 'teleport_node') this.server.endTransport?.onNodePlaced(p, dim, x, y, z, !!be.cheat);
     this.machines.refreshVisual(this.node(dim, x, y, z)!);
     if (c.kind === 'tank') this.fluids.updateTankVisual(dim, x, y, z, be);
   }
@@ -351,6 +359,7 @@ export class Engineering {
     this.machines.generate(nodes, ENG_STEP);
     this.energy.step(ENG_STEP, nodes, (n) => this.capacityOf(n));
     this.machines.work(nodes, ENG_STEP);
+    this.end.work(nodes, ENG_STEP);
     this.transport.step(nodes, ENG_STEP);
     this.fluids.step(nodes, ENG_STEP);
     this.signals.step(nodes);

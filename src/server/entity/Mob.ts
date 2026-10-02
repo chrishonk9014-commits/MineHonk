@@ -505,6 +505,8 @@ export class Mob extends LivingEntity {
     }
     // V6 phase 3: a Bulwark behind its shield takes half (and any hit wakes it)
     if (isConstruct(this.type)) amount = this.dim.server.constructs?.scaleDamage(this, amount, info) ?? amount;
+    // V6 phase 4: vehicles break into their item (no death, no loot)
+    if (this.def.vehicle) return this.dim.server.endTransport?.vehicleHurt(this, amount, info) ?? 0;
     // Herobrine: can't be hurt between moments of his fights, and never dies the first time
     if (this.type === 'herobrine') {
       amount = this.dim.server.herobrine?.scaleDamage(this, amount, info) ?? amount;
@@ -580,7 +582,7 @@ export class Mob extends LivingEntity {
     if (this.owner) m.tame = true;
     if (this.fuse >= 0) m.fuse = this.fuse;
     if (this.angryAt || this.target) m.angry = true;
-    for (const k of ['tele', 'slip', 'stun', 'shield', 'awake', 'color', 'sheared', 'size', 'profession', 'variant', 'charged', 'carried', 'phase', 'open', 'saddle', 'leashPos', 'puff', 'dancing', 'playDead', 'rolling', 'eating', 'trusting', 'tongue', 'emerge', 'dig', 'angerLevel', 'sonic', 'listen', 'sniff', 'voidbound', 'errorPhase', 'errorAnim', 'clone', 'malware', 'hbAnim', 'hbKind', 'apparition']) if (this.data[k] !== undefined) m[k] = this.data[k];
+    for (const k of ['tele', 'slip', 'stun', 'shield', 'awake', 'color', 'sheared', 'size', 'profession', 'variant', 'charged', 'carried', 'phase', 'open', 'saddle', 'leashPos', 'puff', 'dancing', 'playDead', 'rolling', 'eating', 'trusting', 'tongue', 'emerge', 'dig', 'angerLevel', 'sonic', 'listen', 'sniff', 'voidbound', 'errorPhase', 'errorAnim', 'clone', 'malware', 'hbAnim', 'hbKind', 'apparition', 'lit']) if (this.data[k] !== undefined) m[k] = this.data[k];
     if (this.data.glowTicks) m.glowing = true;
     if (this.data.leash && this.metaHolder) m.leash = this.metaHolder;
     if (this.rider) m.rider = this.rider.id;

@@ -166,6 +166,12 @@ export class EndQuestsSystem {
     return r;
   }
 
+  /** A record to read (a blank one, not saved, when there is none yet: looking never creates records). */
+  private peek(key: string): QuestRecord {
+    const r = this.server.level.quests.end[key];
+    return r ? { ...r, flags: r.flags ?? [] } : { stage: 0, done: false, rewarded: [], flags: [] };
+  }
+
   private flag(r: QuestRecord, f: string): void {
     if (!r.flags!.includes(f) && r.flags!.length < 64) r.flags!.push(f);
   }
@@ -1242,7 +1248,7 @@ export class EndQuestsSystem {
 
   /** Stepping into the Nest's mended ring (to the Sanctum) or the Sanctum's way back (to the Nest). */
   private dragonExit(p: ServerPlayer, x: number, y: number, z: number): P3 | null {
-    const r = this.rec('dragon');
+    const r = this.peek('dragon');
     if (!this.has(r, 'repaired')) return null;
     const st = this.sanctumState(true)!;
     const ring = this.ring();
@@ -1273,7 +1279,7 @@ export class EndQuestsSystem {
   /** What the tracker shows for a quest record key (null: nothing to show). */
   private infoFor(key: string, p: ServerPlayer): QuestInfo | null {
     if (key.startsWith('obs:')) {
-      const r = this.rec(key);
+      const r = this.peek(key);
       if (r.done) return this.info('lost_observatory', 'The telescope works. It shows something new each day.', 4);
       if (r.stage < 1) return this.info('lost_observatory', 'Find the observatory\'s dormant Ancient Lens.', 0);
       if (r.stage < 2) return this.info('lost_observatory', `Repair the lens: ${QUEST.lensFragments} Ancient Fragments (${Math.min(this.count(p, 'ancient_fragment'), QUEST.lensFragments)}/${QUEST.lensFragments}).`, 1);
@@ -1287,7 +1293,7 @@ export class EndQuestsSystem {
     if (key.startsWith('gate:')) {
       const k = key.slice(5);
       const st = this.gates[k];
-      const r = this.rec(key);
+      const r = this.peek(key);
       if (!st) return this.info('broken_gateway', 'Inspect the broken portal.', 0);
       if (st.used) return this.info('broken_gateway', 'The gateway is open, both ways.', 5);
       if (st.linked) return this.info('broken_gateway', 'Step through.', 4);
@@ -1307,7 +1313,7 @@ export class EndQuestsSystem {
     if (key === 'silent') {
       const h = this.host;
       if (!h) return null;
-      const r = this.rec('silent');
+      const r = this.peek('silent');
       if (r.done) return this.info('silent_city', 'The bell is yours. The city is quieter still.', 4);
       if (!this.has(r, 'found')) return this.info('silent_city', 'Find the city\'s sealed hall.', 0);
       const opened = h.rel.filter((_, j) => this.has(r, `rel:${j}`)).length;
@@ -1318,7 +1324,7 @@ export class EndQuestsSystem {
       return this.info('silent_city', `Collect the Ancient Key Shards hidden in the city (${Math.max(opened, Math.min(QUEST.shards, this.count(p, 'ancient_key_shard')))}/${QUEST.shards}).`, 1);
     }
     if (key.startsWith('vault:')) {
-      const r = this.rec(key);
+      const r = this.peek(key);
       if (r.done) return this.info('crystal_vault', 'The vault is cleared.', 4);
       if (this.has(r, 'open')) return this.info('crystal_vault', 'Survive the vault\'s Bulwark.', 3);
       if (r.stage < 1) return this.info('crystal_vault', 'Inspect the vault door.', 0);
@@ -1330,7 +1336,7 @@ export class EndQuestsSystem {
       return this.info('crystal_vault', l ? `The crystals light up (${l.n}/${QUEST.pedestals}).` : 'Power the pedestals from a working Crystal Generator.', 2);
     }
     if (key === 'dragon') {
-      const r = this.rec('dragon');
+      const r = this.peek('dragon');
       if (r.done) return this.info('dragons_history', 'You have stood in the Sanctum.', 5);
       const d = this.dragonStep(r, p);
       switch (d.step) {
@@ -1360,9 +1366,8 @@ export class EndQuestsSystem {
       const q = this.questOf(s)!;
       if (q.lens) {
         const key = `obs:${k3(q.lens.lens)}`;
-        const r = this.rec(key);
-        if (r.stage < 1 && Math.hypot(p.x - q.lens.lens[0], p.y - q.lens.lens[1], p.z - q.lens.lens[2]) <= 6) {
-          r.stage = 1;
+        if (this.peek(key).stage < 1 && Math.hypot(p.x - q.lens.lens[0], p.y - q.lens.lens[1], p.z - q.lens.lens[2]) <= 6) {
+          this.rec(key).stage = 1;
           this.follow(p, key);
         }
         return key;
@@ -1506,16 +1511,16 @@ export class EndQuestsSystem {
   }
 
   /** Admin: follow (start) a quest at its nearest site. */
-  adminStart(p: ServerPlayer, q: EndQuestId): string {
+  adminStart(p: ServerPlayer, q: EndQuestId): { ok: boolean; text: string } {
     const site = this.nearestSite(p, q);
-    if (!site) return `No ${QUEST_TITLE[q]} site in this world.`;
+    if (!site) return { ok: false, text: `No ${QUEST_TITLE[q]} site in this world.` };
     const r = this.rec(site.key);
     r.stage = Math.max(r.stage, q === 'silent_city' || q === 'dragons_history' ? 0 : 1);
     if (q === 'silent_city') this.flag(r, 'found');
     if (q === 'dragons_history') this.flag(r, 'started');
     if (q === 'broken_gateway') this.gateOf(site.key.slice(5), this.siteOfGate(site.key)!);
     this.follow(p, site.key);
-    return `Started ${QUEST_TITLE[q]} (${site.at.join(', ')}).`;
+    return { ok: true, text: `Started ${QUEST_TITLE[q]} (${site.at.join(', ')}).` };
   }
 
   private siteOfGate(key: string): PortalSite | null {
@@ -1530,9 +1535,9 @@ export class EndQuestsSystem {
   }
 
   /** Admin: complete the quest the player follows (or its nearest site): no advancements, cheat-made rewards. */
-  adminComplete(p: ServerPlayer, q: EndQuestId): string {
+  adminComplete(p: ServerPlayer, q: EndQuestId): { ok: boolean; text: string } {
     const site = p.endQuest && this.questIdOf(p.endQuest) === q ? { key: p.endQuest } : this.nearestSite(p, q);
-    if (!site) return `No ${QUEST_TITLE[q]} site in this world.`;
+    if (!site) return { ok: false, text: `No ${QUEST_TITLE[q]} site in this world.` };
     const r = this.rec(site.key);
     this.flag(r, 'cheat');
     const dim = this.end;
@@ -1590,7 +1595,7 @@ export class EndQuestsSystem {
     // Everyone is marked as rewarded: a cheat completion awards nothing, now or later
     for (const pl of this.present(p.dim, at, 64)) if (!r.rewarded.includes(pl.uuid)) r.rewarded.push(pl.uuid);
     this.follow(p, site.key);
-    return `Completed ${QUEST_TITLE[q]} (cheat: no advancements; rewards are cheat-made).`;
+    return { ok: true, text: `Completed ${QUEST_TITLE[q]} (cheat: no advancements; rewards are cheat-made).` };
   }
 
   private questIdOf(key: string): EndQuestId | null {
@@ -1658,7 +1663,7 @@ export class EndQuestsSystem {
   }
 
   /** Admin: mends a broken portal and its pair and links them (cheat). The far end opens when its chunk loads. */
-  forceGate(p: ServerPlayer, key?: string): string {
+  forceGate(p: ServerPlayer, key?: string): { ok: boolean; text: string } {
     let site: PortalSite | null = null;
     if (key) site = this.siteOfGate(`gate:${key}`);
     else {
@@ -1669,9 +1674,9 @@ export class EndQuestsSystem {
         site = pt.site;
       }
     }
-    if (!key || !site) return 'Look at a broken portal.';
+    if (!key || !site) return { ok: false, text: 'Look at a broken portal.' };
     const pair = this.pairOf(key, site);
-    if (!pair) return 'That portal has no pair.';
+    if (!pair) return { ok: false, text: 'That portal has no pair.' };
     const dim = this.end;
     for (const k of [key, pair]) {
       const st = this.gates[k]!;
@@ -1681,18 +1686,18 @@ export class EndQuestsSystem {
     }
     this.link(key, pair, dim, portalCells(site).base);
     const b = portalCells(this.gates[pair]!.site).base;
-    return `Linked the gateway with its pair at ${b.join(', ')}.`;
+    return { ok: true, text: `Linked the gateway with its pair at ${b.join(', ')}.` };
   }
 
   /** Admin: the Nest's ring mended (cheat), so the Sanctum opens. */
-  openSanctum(): string {
+  openSanctum(): { ok: boolean; text: string } {
     const ring = this.ring();
-    if (!ring) return 'The Dragon\'s Nest hasn\'t been carved in this world yet.';
+    if (!ring) return { ok: false, text: 'The Dragon\'s Nest hasn\'t been carved in this world yet.' };
     const r = this.rec('dragon');
     this.flag(r, 'cheat');
     if (!this.has(r, 'repaired')) this.mendRing(this.end, ring);
     const st = this.sanctumState(true)!;
-    return `The Nest's ring is open; the Sanctum is at ${st.at.join(', ')}.`;
+    return { ok: true, text: `The Nest's ring is open; the Sanctum is at ${st.at.join(', ')}.` };
   }
 
   status(): Record<string, unknown> {

@@ -175,8 +175,8 @@ export function expansionAdmin(sys: EndExpansionSystem, h: ExpansionAdminHelpers
       const eq = s.endQuests;
       const q = END_QUESTS.find((x) => x.id === quest)?.id as EndQuestId | undefined;
       if (!eq || !q) return { ok: false, text: 'Unknown quest.' };
-      const withQuests = (text: string): Result => ({ ok: true, text, data: { ...sys.status(p), quests: eq.status() } });
-      if (op === 'quest_reset') return withQuests(eq.adminReset(q));
+      const withQuests = (r: { ok: boolean; text: string }): Result => ({ ...r, data: { ...sys.status(p), quests: eq.status() } });
+      if (op === 'quest_reset') return withQuests({ ok: true, text: eq.adminReset(q) });
       if (p.dim.id !== 'end' && q !== 'dragons_history' && op !== 'quest_tp') return { ok: false, text: 'Go to the End first (the quests\' sites are searched from where you are).' };
       if (op === 'quest_start') return withQuests(eq.adminStart(p, q));
       if (op === 'quest_complete') return withQuests(eq.adminComplete(p, q));
@@ -199,11 +199,11 @@ export function expansionAdmin(sys: EndExpansionSystem, h: ExpansionAdminHelpers
     }
     case 'force_gate': {
       if (!s.endQuests) return { ok: false, text: 'The quests are not running.' };
-      return ok(s.endQuests.forceGate(p));
+      return { ...s.endQuests.forceGate(p), data: sys.status(p) };
     }
     case 'open_sanctum': {
       if (!s.endQuests) return { ok: false, text: 'The quests are not running.' };
-      return ok(s.endQuests.openSanctum());
+      return { ...s.endQuests.openSanctum(), data: sys.status(p) };
     }
     case 'where': {
       const st = sys.status(p) as { here: { x: number; y: number; z: number; inExpansion: boolean; biome: string | null } };

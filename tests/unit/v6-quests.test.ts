@@ -643,3 +643,320 @@ describe("THE DRAGON'S HISTORY", () => {
     expect(Math.hypot(p.x - ring[0], p.z - ring[2])).toBeLessThan(8);
   }, 900000);
 });
+
+// ---------------------------------------------------------------------------
+// Saves, old worlds and the Admin Panel
+// ---------------------------------------------------------------------------
+
+/** Turns a player to look at the middle of a block. */
+function lookAt(w: World, p: ServerPlayer, at: P3): void {
+  const [ex, ey, ez] = w.server.eyePos(p);
+  const dx = at[0] + 0.5 - ex;
+  const dy = at[1] + 0.5 - ey;
+  const dz = at[2] + 0.5 - ez;
+  p.yaw = Math.atan2(-dx, -dz);
+  p.pitch = -Math.asin(dy / Math.hypot(dx, dy, dz));
+}
+
+/** An admin request as the panel sends it; its (last) answer. */
+function adminOf(w: World, i = 0): (action: Record<string, unknown>) => { ok: boolean; text: string; data?: Record<string, unknown> } {
+  let req = 5000;
+  return (action) => {
+    const r = req++;
+    w.server.handle(w.conns[i]!, { t: 'admin', req: r, action });
+    tick(w.server, 2);
+    return (w.conns[i]!.received.filter((m) => m.t === 'admin_result' && (m as { req: number }).req === r).pop() ?? {}) as never;
+  };
+}
+
+const END_QUEST_ADVANCEMENTS = ['quest_lost_observatory', 'quest_broken_gateway', 'quest_silent_city', 'quest_crystal_vault', 'quest_dragons_history', 'all_end_quests', 'repair_gateway_pair', 'teleport_own_nodes', 'fill_void_cell', 'elytra_upgrade', 'elytra_full', 'restore_ancient_core'];
+
+describe('saves, old worlds and the Admin Panel', () => {
+  it('quest states, gateways, the Silent City, nodes, machines and Elytra data survive a save; the quests carry on after it', async () => {
+    const storage = new MemoryStorage();
+    const w = await inBand('v6-structures', 1, {}, storage);
+    const [p] = w.players as [ServerPlayer];
+    p.abilities.invulnerable = true;
+    const eq = w.server.endQuests!;
+    const end = w.server.dim('end');
+    await settle(w.server, 400, () => !!eq.host);
+    // A gateway half mended
+    const { a, aSite } = portalWithPair(w);
+    const A = portalCells(aSite);
+    await goTo(w, [A.base[0] + A.normal[0] * 2, A.base[1], A.base[2] + A.normal[1] * 2]);
+    const cellA = A.sheet.find((c) => blockId(end.getState(...c)) === 'dead_portal') ?? A.frame.find((c) => blockId(end.getState(...c)) !== 'air')!;
+    hold(p, null);
+    useOn(w, 0, cellA);
+    hold(p, stackOf('ancient_end_bricks', 12));
+    p.inventory.set(1, stackOf('end_crystal', 1));
+    useOn(w, 0, cellA);
+    expect(eq.gates[a]?.repaired).toBe(true);
+    // An observatory found (the lens still cracked)
+    const site = eq.nearestSite(p, 'lost_observatory')!;
+    const lens = site.key.slice(4).split(',').map(Number) as P3;
+    await goTo(w, site.at);
+    hold(p, null);
+    useOn(w, 0, lens);
+    expect(eq.rec(site.key).stage).toBe(1);
+    expect(p.endQuest).toBe(site.key);
+    // Machines, with what's in them and how they're set (out of the way, not joined up)
+    const [mx, my, mz] = [Math.floor(p.x) + 3, Math.floor(p.y) + 6, Math.floor(p.z)];
+    const machines: [string, P3][] = [
+      ['void_cell', [mx, my, mz]],
+      ['crystal_generator', [mx + 2, my, mz]],
+      ['end_processor', [mx + 4, my, mz]],
+      ['crystal_grower', [mx + 6, my, mz]],
+      ['ender_bridge_projector', [mx + 8, my, mz]],
+      ['teleport_node', [mx + 10, my, mz]],
+    ];
+    for (const [id, at] of machines) {
+      end.setBlock(...at, S(id));
+      w.server.engineering!.onPlaced(p, end, ...at, stackOf(id, 1));
+      const b = end.getBlockEntity(...at) as EngBE;
+      b.cfg = { ...(b.cfg ?? {}), signal: 'on' };
+    }
+    (end.getBlockEntity(...machines[0]![1]) as EngBE).energy = 1_234_567;
+    const { portAt } = await import('../../src/server/engineering/ports');
+    expect(portAt(w.server, end, ...machines[1]![1], 1)!.insert(stackOf('end_crystal_fragment', 5))).toBe(5);
+    expect(portAt(w.server, end, ...machines[2]![1], 1)!.insert(stackOf('ender_ore', 3))).toBe(3);
+    tick(w.server, 20);
+    // The wings, and what the player has earned
+    const { withUpgrade, elytraUpgrades } = await import('../../src/common/endExpansion/elytra');
+    p.inventory.set(38, { ...withUpgrade(withUpgrade(stackOf('elytra', 1), 'reinforced'), 'void_recovery'), damage: 123 });
+    p.recoverCooldown = 4000;
+    p.recipes.add('void_skiff');
+    p.endRewards.add('vault_blink');
+    tick(w.server, 5);
+    await w.server.stop();
+    const saved = {
+      quests: JSON.parse(JSON.stringify(w.server.level.quests.end)),
+      flags: JSON.parse(JSON.stringify({ g: (w.server.level.flags as Record<string, unknown>).endGates, s: (w.server.level.flags as Record<string, unknown>).silentCity, n: (w.server.level.flags as Record<string, unknown>).endNodes })),
+      bes: machines.map(([, at]) => JSON.parse(JSON.stringify(end.getBlockEntity(...at)))),
+      cooldown: p.recoverCooldown,
+    };
+    expect(Object.keys(saved.flags.n).length).toBe(1);
+    expect(saved.flags.s).toBeTruthy();
+
+    // Back again
+    const s2 = await GameServer.open(storage, null, { log: () => {}, genBudgetMs: 1000, chunksPerTick: 400 });
+    installGameplay(s2);
+    s2.level.rules.doMobSpawning = false;
+    const j = await join(s2, 'P0');
+    const w2: World = { server: s2, storage, players: [j.player], conns: [j.conn] };
+    const p2 = j.player;
+    p2.abilities.invulnerable = true;
+    expect(p2.dim.id).toBe('end');
+    await goTo(w2, site.at);
+    const end2 = s2.dim('end');
+    expect(s2.level.quests.end).toEqual(saved.quests);
+    const f2 = s2.level.flags as Record<string, unknown>;
+    expect(JSON.parse(JSON.stringify({ g: f2.endGates, s: f2.silentCity, n: f2.endNodes }))).toEqual(saved.flags);
+    expect(s2.endQuests!.gates[a]?.repaired).toBe(true);
+    expect(s2.endQuests!.host).toBeTruthy();
+    machines.forEach(([id, at], i) => {
+      const b = end2.getBlockEntity(...at) as EngBE;
+      expect(b?.id, id).toBe(id);
+      expect(b.energy ?? 0, id).toBe(saved.bes[i].energy ?? 0);
+      expect(b.items ?? null, id).toEqual(saved.bes[i].items ?? null);
+      expect(b.cfg?.signal, id).toBe('on');
+      expect(b.by, id).toBe(p2.uuid);
+    });
+    expect((end2.getBlockEntity(...machines[0]![1]) as EngBE).energy).toBe(1_234_567);
+    expect(s2.endTransport!.nodeList().map(([k]) => k)).toEqual([`end|${machines[5]![1].join(',')}`]);
+    const wings = p2.inventory.get(38)!;
+    expect(elytraUpgrades(wings)).toEqual(['reinforced', 'void_recovery']);
+    expect(wings.damage).toBe(123);
+    expect(p2.recoverCooldown).toBeGreaterThan(saved.cooldown - 400);
+    expect(p2.recipes.has('void_skiff')).toBe(true);
+    expect(p2.endRewards.has('vault_blink')).toBe(true);
+    expect(p2.endQuest).toBe(site.key);
+    // The gateway's mended frame is still there
+    for (const f of A.frame) if (end2.isLoaded(f[0], f[2])) expect(blockId(end2.getState(...f))).toMatch(/ancient_end_bricks/);
+    // The observatory carries on where it was left
+    tick(s2, 25);
+    expect(tracker(j.conn)).toMatch(/Repair the lens/);
+    hold(p2, stackOf('ancient_fragment', 8));
+    useOn(w2, 0, lens);
+    expect(blockId(end2.getState(...lens))).toBe('restored_ancient_lens');
+    tick(s2, 25);
+    expect(tracker(j.conn)).toMatch(/Power the telescope/);
+  }, 900000);
+
+  it('phase 1 and 2 worlds load and run with no End quest sites (no structures there); a phase 3 save, without End quest data, gets its structures\' quests', async () => {
+    const { makeServerAt } = await import('../helpers/testServer');
+    for (const version of [6, 7]) {
+      const { server } = await makeServerAt(version, { seed: 'v6-p4-old-' + version });
+      const j = await join(server, 'Old');
+      const g = server.dim('end').generator as EndGenerator;
+      const a = g.terrain.expansion.arrival();
+      server.changeDimension(j.player, 'end', a.x + 0.5, a.floor, a.z - 0.5);
+      const w: World = { server, storage: new MemoryStorage(), players: [j.player], conns: [j.conn] };
+      await goTo(w, [a.x, a.floor, a.z]);
+      tick(server, 100);
+      const eq = server.endQuests!;
+      for (const q of ['lost_observatory', 'broken_gateway', 'crystal_vault'] as const) expect(eq.nearestSite(j.player, q), `${version} ${q}`).toBeNull();
+      expect(eq.censusNow().size).toBe(0);
+      expect(eq.adminStart(j.player, 'lost_observatory').ok).toBe(false);
+      expect(Object.keys(server.level.quests.end)).toEqual([]);
+    }
+    // A phase 3 save: no `end` among its quests, players without the new fields
+    const storage = new MemoryStorage();
+    const first = await makeServer({ seed: 'v6-structures' }, storage);
+    await join(first.server, 'P0');
+    await first.server.stop();
+    const lvl = storage.level as { quests: Record<string, unknown>; flags: Record<string, unknown> };
+    delete lvl.quests.end;
+    for (const k of ['endGates', 'silentCity', 'endNodes', 'dragonSanctum', 'endGenerated']) delete lvl.flags[k];
+    for (const [, d] of storage.players) for (const k of ['recipes', 'endRewards', 'recoverCooldown', 'endQuest']) delete (d as Record<string, unknown>)[k];
+    const w = await inBand('v6-structures', 1, {}, storage);
+    expect(w.server.level.quests.end).toEqual({});
+    const [p] = w.players as [ServerPlayer];
+    expect(p.recipes.size + p.endRewards.size + p.recoverCooldown).toBe(0);
+    expect(p.endQuest).toBeNull();
+    const eq = w.server.endQuests!;
+    const site = eq.nearestSite(p, 'lost_observatory')!;
+    expect(site).toBeTruthy();
+    const lens = site.key.slice(4).split(',').map(Number) as P3;
+    await goTo(w, site.at);
+    hold(p, null);
+    useOn(w, 0, lens);
+    expect(eq.rec(site.key).stage).toBe(1);
+    expect(portalWithPair(w).a).toBeTruthy();
+    await settle(w.server, 400, () => !!eq.host);
+    expect(eq.host).toBeTruthy();
+  }, 900000);
+
+  it('every Admin Panel op works and awards nothing', async () => {
+    const { validateAdmin } = await import('../../src/common/game/admin');
+    const { END_QUEST_IDS } = await import('../../src/common/endExpansion/quests');
+    for (const op of ['quest_start', 'quest_complete', 'quest_reset', 'quest_tp']) {
+      for (const quest of END_QUEST_IDS) expect(validateAdmin({ a: 'v6', op, quest })).toEqual({ a: 'v6', op, quest });
+      expect(validateAdmin({ a: 'v6', op, quest: 'nope' })).toBeNull();
+      expect(validateAdmin({ a: 'v6', op })).toBeNull();
+    }
+    for (const op of ['fill_eu', 'force_gate', 'open_sanctum']) expect(validateAdmin({ a: 'v6', op })).toEqual({ a: 'v6', op });
+    // (a seed with every kind of quest site, an End Palace's vault among them)
+    const w = await inBand('v6-e2e', 1, { cheats: true });
+    const [p] = w.players as [ServerPlayer];
+    p.abilities.invulnerable = true;
+    const admin = adminOf(w);
+    const eq = w.server.endQuests!;
+    const end = w.server.dim('end');
+    const nothingEarned = (): void => {
+      for (const id of END_QUEST_ADVANCEMENTS) expect(p.achievements.has(id), id).toBe(false);
+      expect(p.endRewards.size).toBe(0);
+      for (const s of stacks(p)) expect(isAdminStack(s), itemIdOf(s)).toBe(true);
+    };
+    // The give sets
+    for (const set of ['end_machines', 'elytra_modules', 'quest_items']) {
+      tick(w.server, 40);
+      expect(admin({ a: 'v6', op: 'give_set', set }).ok, set).toBe(true);
+    }
+    expect(stacks(p).some((s) => itemIdOf(s) === 'thrust_module')).toBe(true);
+    // A cheat module on an Elytra: it works, but earns nothing
+    const ct = w.server.interaction.containers;
+    ct.openSmithing(p, end, Math.floor(p.x), Math.floor(p.y), Math.floor(p.z));
+    const win = ct.windowFor(p)!;
+    win.slots[0]!.set(stackOf('elytra', 1));
+    win.slots[1]!.set({ ...stackOf('thrust_module', 1), tag: { admin: true } });
+    win.refresh?.();
+    const up = win.slots[2]!.get() as ItemStack;
+    expect(up).toBeTruthy();
+    win.slots[2]!.onTake?.(p, up);
+    expect(isAdminStack(up)).toBe(true);
+    w.server.interaction.closeWindow(p, win.id, true);
+    nothingEarned();
+    // Each quest: teleport to its nearest site, start it, complete it, reset it
+    for (const q of END_QUEST_IDS) {
+      if (q === 'dragons_history') continue;
+      const tp = admin({ a: 'v6', op: 'quest_tp', quest: q });
+      expect(tp.ok, q + ' ' + tp.text).toBe(true);
+      await settle(w.server, 1500, () => w.conns[0]!.received.some((m) => m.t === 'admin_result' && (m as { data?: { teleported?: boolean } }).data?.teleported && (m as unknown as { req: number }).req >= 5000) && end.isLoaded(p.x + 32, p.z + 32) && end.isLoaded(p.x - 32, p.z - 32));
+      w.conns[0]!.received.length = 0;
+      const site = eq.nearestSite(p, q)!;
+      expect(site, q).toBeTruthy();
+      expect(Math.hypot(site.at[0] - p.x, site.at[2] - p.z), q).toBeLessThan(48);
+      const st = admin({ a: 'v6', op: 'quest_start', quest: q });
+      expect(st.ok, q + ' ' + st.text).toBe(true);
+      expect(p.endQuest, q).toBeTruthy();
+      const key = p.endQuest!;
+      expect(eq.rec(key).done).toBe(false);
+      const done = admin({ a: 'v6', op: 'quest_complete', quest: q });
+      expect(done.ok, q + ' ' + done.text).toBe(true);
+      expect(eq.rec(key).done, q).toBe(true);
+      expect(eq.rec(key).flags, q).toContain('cheat');
+      tick(w.server, 40);
+      nothingEarned();
+      expect(admin({ a: 'v6', op: 'quest_reset', quest: q }).ok).toBe(true);
+      expect(w.server.level.quests.end[key], q).toBeUndefined();
+      if (q === 'lost_observatory') expect(blockId(end.getState(...(key.slice(4).split(',').map(Number) as P3)))).toBe('ancient_lens');
+    }
+    // Fill EU: the machine looked at, full, marked a cheat (a full Void Cell earns nothing)
+    lookAt(w, p, [Math.floor(p.x), Math.floor(p.y) + 40, Math.floor(p.z)]);
+    expect(admin({ a: 'v6', op: 'fill_eu' }).ok).toBe(false);
+    // (in front of the eyes, or whatever is in the way there)
+    let cellAt: P3 = [Math.floor(p.x) + 2, Math.floor(p.y) + 3, Math.floor(p.z)];
+    lookAt(w, p, cellAt);
+    cellAt = eq.lookedAt(p) ?? cellAt;
+    end.setBlock(...cellAt, S('void_cell'));
+    lookAt(w, p, cellAt);
+    expect(eq.lookedAt(p)).toEqual(cellAt);
+    expect(admin({ a: 'v6', op: 'fill_eu' }).ok).toBe(true);
+    const cell = end.getBlockEntity(...cellAt) as EngBE;
+    expect(cell.energy).toBe(2_000_000);
+    expect(cell.cheat).toBe(1);
+    tick(w.server, 40);
+    // Cheat-made nodes: a trip between them earns nothing
+    const nodeAt: P3 = [cellAt[0] + 4, cellAt[1] - 3, cellAt[2]];
+    for (const at of [nodeAt, [nodeAt[0] + 6, nodeAt[1], nodeAt[2]] as P3]) {
+      end.setBlock(...at, S('teleport_node'));
+      w.server.engineering!.onPlaced(p, end, ...at, { ...stackOf('teleport_node', 1), tag: { admin: true } });
+      (end.getBlockEntity(...at) as EngBE).energy = 200000;
+    }
+    expect(w.server.endTransport!.nodeList().every(([, r]) => r.cheat)).toBe(true);
+    nothingEarned();
+    // Force a gateway: look at a broken portal; then through it (nothing earned)
+    lookAt(w, p, [Math.floor(p.x), Math.floor(p.y) + 40, Math.floor(p.z)]);
+    expect(admin({ a: 'v6', op: 'force_gate' }).ok).toBe(false);
+    const { a, b, aSite, bSite } = portalWithPair(w);
+    const A = portalCells(aSite);
+    const B = portalCells(bSite);
+    await goTo(w, [A.base[0] + A.normal[0] * 3, A.base[1], A.base[2] + A.normal[1] * 3]);
+    const sheet = A.sheet.find((c) => blockId(end.getState(...c)) === 'dead_portal') ?? A.sheet[0]!;
+    lookAt(w, p, sheet);
+    const fg = admin({ a: 'v6', op: 'force_gate' });
+    expect(fg.ok, fg.text).toBe(true);
+    expect(eq.gates[a]?.linked && eq.gates[b]?.linked).toBe(true);
+    for (const c of A.sheet) expect(blockId(end.getState(...c))).toBe('ancient_gateway');
+    w.server.teleport(p, A.base[0] + 0.5, A.base[1], A.base[2] + 0.5);
+    await settle(w.server, 1500, () => Math.hypot(p.x - B.base[0], p.z - B.base[2]) < 8);
+    expect(Math.hypot(p.x - B.base[0], p.z - B.base[2])).toBeLessThan(8);
+    tick(w.server, 40);
+    nothingEarned();
+    // Open the Sanctum: not before the Nest is carved; then a cheat way in
+    expect(admin({ a: 'v6', op: 'open_sanctum' }).ok).toBe(false);
+    const es = w.server.endStructures!;
+    es.forceNest();
+    const plan = es.nestPlan();
+    await goTo(w, plan.floor, 64);
+    await settle(w.server, 1500, () => !!es.nest?.built);
+    const os = admin({ a: 'v6', op: 'open_sanctum' });
+    expect(os.ok, os.text).toBe(true);
+    expect(eq.rec('dragon').flags).toContain('cheat');
+    const ring = plan.portal;
+    w.server.teleport(p, ring[0] + 0.5, ring[1] - 1, ring[2] + 0.5);
+    const sanct = (): { at: P3; built: boolean } | null => (w.server.level.flags as { dragonSanctum?: { at: P3; built: boolean } }).dragonSanctum ?? null;
+    await settle(w.server, 1500, () => !!sanct()?.built && Math.hypot(p.x - sanct()!.at[0], p.z - sanct()!.at[2]) < 8);
+    expect(sanct()?.built).toBe(true);
+    tick(w.server, 40);
+    // The Dragon's History through the panel, too
+    for (const op of ['quest_start', 'quest_complete']) expect(admin({ a: 'v6', op, quest: 'dragons_history' }).ok, op).toBe(true);
+    expect(eq.rec('dragon').done).toBe(true);
+    tick(w.server, 40);
+    nothingEarned();
+    expect(admin({ a: 'v6', op: 'quest_reset', quest: 'dragons_history' }).ok).toBe(true);
+    // The status shows the quests
+    const status = admin({ a: 'v6', op: 'quest_reset', quest: 'silent_city' }).data as { quests?: { on: boolean } };
+    expect(status.quests?.on).toBe(true);
+  }, 1500000);
+});

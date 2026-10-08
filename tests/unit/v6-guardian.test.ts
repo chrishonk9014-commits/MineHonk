@@ -154,17 +154,25 @@ describe('the fight', () => {
     }
     expect(exposed).toBe(true);
     expect(g.scaleDamage(m, 10, { source: 'player', attacker: p! })).toBeCloseTo(10 * GUARDIAN.exposedFactor);
-    tick(server, GUARDIAN.windowTicks + 2);
+    // (kept alive throughout: with nobody left in the arena the fight stands still)
+    const step = (n: number): void => {
+      for (let i = 0; i < n; i++) {
+        p!.health = 20;
+        tick(server, 1);
+      }
+    };
+    step(GUARDIAN.windowTicks + 2);
     expect(f.state).toBe('fight');
     expect(g.scaleDamage(m, 10, { source: 'player', attacker: p! })).toBeCloseTo(10);
     // Phase 2's pylons: half damage until they are broken
     m.health = m.maxHealth * 0.6;
-    for (let i = 0; i < 60 && !f.pylons.length; i++) tick(server, 1);
+    for (let i = 0; i < 60 && !f.pylons.length; i++) step(1);
     expect(f.pylons.length).toBe(4);
-    for (let i = 0; i < 50 && f.state !== 'fight'; i++) tick(server, 1);
+    for (let i = 0; i < 50 && f.state !== 'fight'; i++) step(1);
+    expect(f.state).toBe('fight');
     expect(g.scaleDamage(m, 10, { source: 'player', attacker: p! })).toBeCloseTo(10 * GUARDIAN.shieldFactor);
     for (const pm of f.pylons) pm.hurt(1000, { source: 'player', attacker: p! });
-    tick(server, 2);
+    step(2);
     expect(g.scaleDamage(m, 10, { source: 'player', attacker: p! })).toBeCloseTo(10);
   }, 180000);
 

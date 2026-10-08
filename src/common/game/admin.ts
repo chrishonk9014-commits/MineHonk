@@ -198,6 +198,68 @@ export type AdminAction =
 
 export type AdminActionName = AdminAction['a'];
 
+/**
+ * What an admin action did, in a few words for the chat announcement
+ * ("[Admin] Name used: give diamond ×64"); null for lookups that change nothing.
+ */
+export function describeAdmin(a: AdminAction): string | null {
+  const who = (t?: string): string => (t ? ` on ${t}` : '');
+  switch (a.a) {
+    case 'catalog':
+    case 'perf':
+    case 'locate_structure':
+    case 'locate_biome':
+    case 'set_cheats':
+      return null;
+    case 'give':
+      return `give ${a.item.replace(/_/g, ' ')} ×${a.count}${a.target ? ` to ${a.target}` : ''}`;
+    case 'spawn':
+      return `spawn ${a.mob.replace(/_/g, ' ')} ×${a.count}`;
+    case 'tp_structure':
+      return `teleport to a ${a.structure.replace(/_/g, ' ')}`;
+    case 'tp_biome':
+      return `teleport to a ${a.biome.replace(/_/g, ' ')}`;
+    case 'tp_player':
+      return `teleport to ${a.target}`;
+    case 'bring_player':
+      return `bring ${a.target}`;
+    case 'gamemode':
+      return `game mode ${a.mode}${who(a.target)}`;
+    case 'time':
+      return `time ${a.value}`;
+    case 'weather':
+      return `weather ${a.kind}`;
+    case 'difficulty':
+      return `difficulty ${a.value}`;
+    case 'pvp':
+      return `PvP ${a.on ? 'on' : 'off'}`;
+    case 'clear_mobs':
+      return `clear mobs (radius ${a.radius})`;
+    case 'heal':
+      return `heal${who(a.target)}`;
+    case 'health':
+      return `health ${a.value}${who(a.target)}`;
+    case 'hunger':
+      return `hunger ${a.value}${who(a.target)}`;
+    case 'xp':
+      return `${a.mode} ${a.levels} XP levels${who(a.target)}`;
+    case 'clear_inventory':
+      return `clear inventory${who(a.target)}`;
+    case 'flight':
+      return `flight ${a.on ? 'on' : 'off'}${who(a.target)}`;
+    case 'regen_chunk':
+      return 'regenerate a chunk';
+    case 'reload_chunks':
+      return 'reload chunks';
+    default: {
+      const op = (a as { op?: string }).op ?? '';
+      // Lookups and status checks change nothing
+      if (/^(status|locate|list|where|count)/.test(op)) return null;
+      return `${a.a} ${op.replace(/_/g, ' ')}`.trim();
+    }
+  }
+}
+
 const isInt = (v: unknown): v is number => Number.isInteger(v);
 const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 const id = (v: unknown, max = 64): v is string => typeof v === 'string' && v.length > 0 && v.length <= max && /^[a-z0-9_:]+$/.test(v);

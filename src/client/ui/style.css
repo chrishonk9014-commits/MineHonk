@@ -2907,3 +2907,50 @@ body {
 .eng-choice-detail {
   color: #a8b8c8;
 }
+
+/* ------------------------------------------------------------ playing online (cloud hub) */
+.badge {
+  display: inline-block;
+  margin-left: calc(var(--s) * 4);
+  padding: 0 calc(var(--s) * 3);
+  font-size: calc(var(--s) * 7);
+  border: var(--s) solid #000;
+  background: #555;
+  color: #fff;
+  vertical-align: middle;
+}
+.badge.cheats {
+  background: #8a2a2a;
+  color: #ffe0a0;
+}
+.warn-text {
+  color: #ffd060;
+}
+.online-tab {
+  min-height: calc(var(--s) * 120);
+}
+.invite-toast {
+  position: fixed;
+  left: 50%;
+  top: calc(var(--s) * 6);
+  transform: translateX(-50%);
+  z-index: 60;
+  pointer-events: auto;
+  width: calc(var(--s) * 200);
+  padding: calc(var(--s) * 6);
+  background: #212121;
+  border: var(--s) solid #000;
+  box-shadow: inset var(--s) var(--s) 0 #555, inset calc(var(--s) * -1) calc(var(--s) * -1) 0 #111;
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--s) * 4);
+  align-items: center;
+  text-align: center;
+}
+.invite-toast .t1 {
+  color: #ffff80;
+}
+.invite-toast.notice {
+  top: auto;
+  bottom: calc(var(--s) * 40);
+}

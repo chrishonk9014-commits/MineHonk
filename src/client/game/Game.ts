@@ -133,7 +133,7 @@ export class Game {
   thunder = 0;
   dayCycle = true;
   dimension: DimensionId = 'overworld';
-  players: { name: string; uuid: string; ping: number; mode: GameMode }[] = [];
+  players: { name: string; uuid: string; ping: number; mode: GameMode; role?: import('../../common/net/multiplayer').WorldRole }[] = [];
   private readonly otherDigs = new Map<number, { x: number; y: number; z: number; stage: number }>();
   private readonly blockEntities = new Map<string, Record<string, unknown>>();
 

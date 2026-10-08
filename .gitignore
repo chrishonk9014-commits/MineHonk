@@ -8,6 +8,7 @@ server-data/
 .DS_Store
 tests/e2e/out/
 dist-bench*/
+dist-online/
 tests/perf/out/
 
 # Local Cloudflare hub state (wrangler dev)

@@ -20,7 +20,7 @@ import type { ServerPlayer } from '../player/ServerPlayer';
 import type { Dimension } from '../world/Dimension';
 import type { Entity } from '../entity/Entity';
 import { Mob } from '../entity/Mob';
-import { validateAdmin, xpForLevel, structureName, ADMIN_DIMENSIONS, type AdminAction, type AdminCatalog, type LocateResult, type V4Op } from '../../common/game/admin';
+import { validateAdmin, describeAdmin, xpForLevel, structureName, ADMIN_DIMENSIONS, type AdminAction, type AdminCatalog, type LocateResult, type V4Op } from '../../common/game/admin';
 import { GlitchedQuestSystem } from '../systems/GlitchedQuest';
 import { StructureQuests } from '../systems/StructureQuests';
 import { TempleTrials } from '../systems/TempleTrials';
@@ -287,6 +287,9 @@ export class AdminService {
     try {
       const out = this.run(() => this.execute(p, req, action));
       if (out) reply(out.ok, out.text, out.data);
+      // Everyone else in the world sees what cheats were used
+      const what = describeAdmin(action);
+      if (what && out?.ok !== false) this.server.announceAdmin(p, what);
       if (action.a !== 'catalog' && action.a !== 'perf' && !action.a.startsWith('locate')) this.server.log(`[admin] ${p.name}: ${JSON.stringify(action)}`);
     } catch (e) {
       reply(false, `Failed: ${(e as Error).message}`);

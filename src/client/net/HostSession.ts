@@ -77,6 +77,8 @@ export class HostSession {
   readonly stats = { bytesSent: 0, since: performance.now(), rtc: 0, relay: 0 };
   onChange: () => void = () => {};
   onError: (message: string) => void = () => {};
+  /** The browser held the server back (a hidden tab). */
+  onThrottled: (ms: number) => void = () => {};
 
   private constructor(
     readonly api: HubApi,
@@ -98,7 +100,7 @@ export class HostSession {
     const [key, ice] = await Promise.all([api.hubKey(), api.iceServers().catch(() => [] as RTCIceServer[])]);
     const s = new HostSession(api, lobby, conn, details, opts, ice);
     s.ticketKey = await importVerifyKey(key);
-    conn.host({ hubWorldId: details.id, hubKey: key, maxPlayers: opts.maxPlayers, hostUuid: opts.hostUuid });
+    conn.host({ hubWorldId: details.id, hubKey: key, maxPlayers: opts.maxPlayers, hostUuid: opts.hostUuid, hostName: api.account?.name ?? 'Host' });
     s.announce();
     s.openRelay();
     return s;
@@ -167,6 +169,9 @@ export class HostSession {
         break;
       case 'level_settings':
         this.levelSettings(m.settings);
+        break;
+      case 'throttled':
+        this.onThrottled(m.ms);
         break;
     }
   }

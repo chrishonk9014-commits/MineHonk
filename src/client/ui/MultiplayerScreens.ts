@@ -65,7 +65,7 @@ export function serverScreen(host: ScreenHost, current: string, actions: { conne
 // ---------------------------------------------------------------------------
 // Sign in / create account
 // ---------------------------------------------------------------------------
-export function signInScreen(host: ScreenHost, api: HubApi, done: () => void): Screen {
+export function signInScreen(host: ScreenHost, api: HubApi, done: () => void, opts: { cloud?: boolean } = {}): Screen {
   const { root, body } = titled('MineHonk Account');
   let creating = false;
   const name = field('Player name', { max: 16 });
@@ -83,7 +83,13 @@ export function signInScreen(host: ScreenHost, api: HubApi, done: () => void): S
     tabCreate.classList.toggle('active', c);
     pw2.classList.toggle('hidden', !c);
     go.textContent = c ? 'Create Account' : 'Log In';
-    help.textContent = c ? 'Names are 3-16 letters, numbers or _. Use a password you do not use anywhere else (8+ characters).' : 'Your password is only sent to this server.';
+    help.textContent = opts.cloud
+      ? c
+        ? 'Names are 3-16 letters, numbers or _. Passwords need 8+ characters. There is no email: remember your password, because it cannot be reset.'
+        : 'Your password never leaves this device: it is scrambled here first.'
+      : c
+        ? 'Names are 3-16 letters, numbers or _. Use a password you do not use anywhere else (8+ characters).'
+        : 'Your password is only sent to this server.';
     setStatus(s, '');
   };
   const submit = async (): Promise<void> => {
@@ -93,6 +99,7 @@ export function signInScreen(host: ScreenHost, api: HubApi, done: () => void): S
       if (err) return setStatus(s, err, true);
     } else if (!n || !pw.value) return setStatus(s, 'Enter your name and password', true);
     const ok = await busy([go, tabLogin, tabCreate], s, () => (creating ? api.register(n, pw.value) : api.login(n, pw.value)));
+    if (ok && creating && opts.cloud) setStatus(s, 'Account created. Remember your password: it cannot be reset.');
     if (ok) {
       pw.value = '';
       pw2.value = '';

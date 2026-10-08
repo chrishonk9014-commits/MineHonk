@@ -162,7 +162,7 @@ export type S2C =
   | { t: 'death'; message: string; hardcore: boolean; score: number }
   | { t: 'respawned' }
   | { t: 'achievement'; id: string; title: string }
-  | { t: 'player_list'; players: { name: string; uuid: string; ping: number; mode: GameMode }[] }
+  | { t: 'player_list'; players: { name: string; uuid: string; ping: number; mode: GameMode; role?: WorldRole }[] }
   | { t: 'explosion'; x: number; y: number; z: number; power: number; kx: number; ky: number; kz: number }
   | { t: 'title'; text: string; sub?: string; ticks?: number }
   /** V6 phase 3: an Ender Glyph Stone's glyphs (seeded by where it stands; nothing readable). */

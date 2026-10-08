@@ -729,8 +729,18 @@ export class GameServer {
     for (const o of this.players.values()) o.send({ t: 'chat', text, kind });
   }
 
+  /**
+   * Multiplayer transparency: a cheat (Admin Panel or command) is announced
+   * to everyone else in the world, unless the owner turned it off.
+   */
+  announceAdmin(p: ServerPlayer, what: string): void {
+    if (this.level.announceAdmin === false || this.players.size < 2) return;
+    const text = `[Admin] ${p.name} used: ${what}`;
+    for (const o of this.players.values()) if (o !== p) o.send({ t: 'chat', text, kind: 'system' });
+  }
+
   sendPlayerList(): void {
-    const list = [...this.players.values()].map((p) => ({ name: p.name, uuid: p.uuid, ping: p.ping, mode: p.gamemode }));
+    const list = [...this.players.values()].map((p) => ({ name: p.name, uuid: p.uuid, ping: p.ping, mode: p.gamemode, role: this.roleOf(p) }));
     for (const o of this.players.values()) o.send({ t: 'player_list', players: list });
   }
 

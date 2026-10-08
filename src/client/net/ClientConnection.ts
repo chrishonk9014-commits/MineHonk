@@ -25,12 +25,17 @@ export class WorkerConnection implements ClientConnection {
   private stopped: Promise<void> | null = null;
   private stopResolve: (() => void) | null = null;
   private saveResolve: (() => void) | null = null;
+  /** The world's settings as the integrated server started with them. */
+  level: { hosting?: { hubId: string; maxPlayers: number }; name?: string; mode?: string; cheats?: boolean; pvp?: boolean; visibility?: string; defaultRole?: string } | null = null;
 
   constructor(worldId: string, create: NewWorldOptions | null, identity: Identity, hello: C2S & { t: 'hello' }) {
     this.worker = new Worker(new URL('../../worker/serverWorker.ts', import.meta.url), { type: 'module' });
     this.worker.onmessage = (ev) => {
-      const m = ev.data as { type: string; msg?: S2C; text?: string; message?: string; stack?: string };
+      const m = ev.data as { type: string; msg?: S2C; text?: string; message?: string; stack?: string; level?: WorkerConnection['level'] };
       switch (m.type) {
+        case 'started':
+          this.level = m.level ?? null;
+          break;
         case 's2c':
           this.onMessage(m.msg!);
           break;

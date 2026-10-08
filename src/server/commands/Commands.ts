@@ -16,7 +16,7 @@ import { chunkIndex } from '../../common/world/constants';
 import { blocks, STATE_BLOCK, stateToString } from '../../common/registry/blocks';
 import type { GameRules } from '../world/LevelData';
 
-type Level = 'any' | 'op' | 'cheat';
+type Level = 'any' | 'op' | 'cheat' | 'owner';
 interface Cmd {
   name: string;
   aliases?: string[];
@@ -385,25 +385,28 @@ export class Commands {
     this.register({
       name: 'op',
       usage: '/op <player>',
-      level: 'op',
+      // Only the owner makes operators (as through the hub)
+      level: 'owner',
       run: (p, a) => {
         const t = findPlayer(a[0], p);
         if (!t) return 'Player not found';
         if (!s.level.operators.includes(t.uuid)) s.level.operators.push(t.uuid);
         t.send({ t: 'world_info', world: s.worldInfo(t) });
+        s.sendPlayerList();
         return `${t.name} is now an operator`;
       },
     });
     this.register({
       name: 'deop',
       usage: '/deop <player>',
-      level: 'op',
+      level: 'owner',
       run: (p, a) => {
         const t = findPlayer(a[0], p);
         if (!t) return 'Player not found';
         if (t.uuid === s.level.owner) return 'The owner cannot be de-opped';
         s.level.operators = s.level.operators.filter((u) => u !== t.uuid);
         t.send({ t: 'world_info', world: s.worldInfo(t) });
+        s.sendPlayerList();
         return `${t.name} is no longer an operator`;
       },
     });
@@ -632,6 +635,7 @@ export class Commands {
   private allowed(p: ServerPlayer, level: Level): boolean {
     if (level === 'any') return true;
     if (level === 'op') return this.server.isOperator(p);
+    if (level === 'owner') return this.server.roleOf(p) === 'owner';
     return this.server.isOperator(p) && this.server.level.cheats;
   }
 
@@ -651,6 +655,7 @@ export class Commands {
       // Cheat commands run as admin actions: nothing they cause counts for advancements
       const out = cmd.level === 'cheat' ? this.server.admin.run(() => cmd.run(p, parts)) : cmd.run(p, parts);
       if (out) for (const line of out.split('\n')) p.send({ t: 'chat', text: line, kind: 'system' });
+      if (cmd.level === 'cheat') this.server.announceAdmin(p, `/${line.trim()}`);
     } catch (e) {
       p.send({ t: 'chat', text: `Command failed: ${(e as Error).message}`, kind: 'error' });
     }

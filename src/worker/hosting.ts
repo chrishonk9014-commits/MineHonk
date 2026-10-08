@@ -25,13 +25,17 @@ export interface HostConfig {
   maxPlayers: number;
   /** The host's own (local) player uuid. */
   hostUuid: string;
+  /** The host's account name (what other players see). */
+  hostName: string;
 }
 
 export type HostOut =
   | { type: 'remote_send'; cid: number; pieces: Uint8Array[] }
   | { type: 'remote_kick'; cid: number; reason: string }
   | { type: 'players'; count: number }
-  | { type: 'level_settings'; settings: LevelSettings };
+  | { type: 'level_settings'; settings: LevelSettings }
+  /** The browser slowed the server down (a background tab): the host should keep the tab open. */
+  | { type: 'throttled'; ms: number };
 
 /** What the hosting panel changes (only these fields). */
 export interface HostOptionsPatch {
@@ -155,7 +159,20 @@ export class BrowserHost {
     s.paused = false;
     s.onPlayerJoined = () => this.post({ type: 'players', count: s.players.size });
     s.onPlayerLeft = () => this.post({ type: 'players', count: s.players.size });
-    this.timer = setInterval(() => this.syncSettings(), 3000);
+    // Other players know the host by their account name
+    for (const p of s.players.values())
+      if (p.uuid === config.hostUuid && p.name !== config.hostName) {
+        (p as { name: string }).name = config.hostName;
+        s.sendPlayerList();
+      }
+    let last = Date.now();
+    this.timer = setInterval(() => {
+      const now = Date.now();
+      // Ticks every second; a much longer gap means the browser is holding the server back
+      if (now - last > 3000) this.post({ type: 'throttled', ms: now - last });
+      last = now;
+      this.syncSettings();
+    }, 1000);
     this.syncSettings(true);
   }
 

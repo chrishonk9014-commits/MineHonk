@@ -548,7 +548,7 @@ function accessibilityScreen(host: ScreenHost, inGame: boolean): Screen {
 // ---------------------------------------------------------------------------
 export function pauseScreen(
   host: ScreenHost,
-  actions: { resume: () => void; options: () => void; achievements: () => void; stats: () => void; quit: () => void; invite?: () => void; admin?: () => void; cheats?: { on: boolean; toggle: () => void } },
+  actions: { resume: () => void; options: () => void; achievements: () => void; stats: () => void; quit: () => void; invite?: () => void; admin?: () => void; cheats?: { on: boolean; toggle: () => void }; online?: { label: string; open: () => void } },
   local: boolean,
 ): Screen {
   const { root, body } = titled('Game Menu', 'screen dim center');
@@ -568,6 +568,8 @@ export function pauseScreen(
       ),
     );
   }
+  // Browser hosting: "Open to Multiplayer" in single player, the hosting panel while online
+  if (actions.online) body.append(button(actions.online.label, wrapClick(host, actions.online.open)));
   body.append(button(local ? 'Save and Quit to Title' : 'Disconnect', wrapClick(host, actions.quit)));
   return { root };
 }

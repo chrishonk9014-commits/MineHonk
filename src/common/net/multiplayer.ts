@@ -63,12 +63,18 @@ export interface FriendInfo {
   online: boolean;
   /** World the friend is playing in, if they share it with friends. */
   world?: string;
+  /** Cloud hub: that world's id, when you may join it now. */
+  worldId?: string;
+  /** Cloud hub: cheats are on in that world. */
+  cheats?: boolean;
 }
 
 export interface FriendsResponse {
   friends: FriendInfo[];
   incoming: AccountInfo[];
   outgoing: AccountInfo[];
+  /** Players you have blocked. */
+  blocked?: AccountInfo[];
 }
 
 export interface WorldSummary {
@@ -82,6 +88,12 @@ export interface WorldSummary {
   maxPlayers: number;
   /** The caller's role in this world. */
   role: WorldRole | null;
+  /** Cheats (and the Admin Panel for the owner and operators) are on. */
+  cheats?: boolean;
+  /** Cloud hub: the host is online now. */
+  online?: boolean;
+  /** Cloud hub: the host's game version. */
+  version?: string;
 }
 
 export interface WorldDetails extends WorldSummary {
@@ -90,6 +102,8 @@ export interface WorldDetails extends WorldSummary {
   pvp: boolean;
   defaultRole: 'builder' | 'visitor';
   members?: { uuid: string; name: string; role: WorldRole }[];
+  /** Only for owners and operators: admin actions are announced in chat. */
+  announceAdmin?: boolean;
 }
 
 export interface ApiError {

@@ -78,6 +78,10 @@ export interface LevelData {
   muted: Record<string, number>;
   /** Player reports for operators (most recent last). */
   reports: { from: string; target: string; reason: string; at: number }[];
+  /** Multiplayer: admin actions are announced in chat to the other players (absent: on). */
+  announceAdmin?: boolean;
+  /** Hosted from the browser through the cloud hub: the world's hub id and hosting settings. */
+  hosting?: HostingSettings;
   /** Cheat bookkeeping (blocks placed by cheats, cheat-set time/weather). */
   admin?: { sky?: boolean; blocks?: Record<string, Record<string, number[]>>; chunks?: Record<string, number[]> };
   /** Endgame state: endings, the Corrupted Eye, the Farlands and its boss. */
@@ -295,6 +299,21 @@ export interface NewWorldOptions {
   rules?: Partial<GameRules>;
 }
 
+/** A browser-hosted world's link to the cloud hub (single player ignores it). */
+export interface HostingSettings {
+  /** The world's id in the hub's registry. */
+  hubId: string;
+  maxPlayers: number;
+}
+
+function sanitizeHosting(v: unknown): HostingSettings | null {
+  if (!v || typeof v !== 'object') return null;
+  const h = v as Partial<HostingSettings>;
+  if (typeof h.hubId !== 'string' || !/^[0-9a-f]{16}$/.test(h.hubId)) return null;
+  const max = typeof h.maxPlayers === 'number' && Number.isFinite(h.maxPlayers) ? Math.max(2, Math.min(16, Math.floor(h.maxPlayers))) : 8;
+  return { hubId: h.hubId, maxPlayers: max };
+}
+
 export function createLevelData(o: NewWorldOptions): LevelData {
   const hardcore = o.mode === 'hardcore';
   return {
@@ -382,6 +401,9 @@ export function sanitizeLevelData(raw: unknown, fallbackId: string): LevelData |
   out.defaultRole = r.defaultRole === 'visitor' ? 'visitor' : 'builder';
   out.muted = {};
   if (r.muted && typeof r.muted === 'object') for (const [k, v] of Object.entries(r.muted)) if (typeof v === 'number' && Number.isFinite(v)) out.muted[k] = v;
+  if (typeof r.announceAdmin === 'boolean') out.announceAdmin = r.announceAdmin;
+  const hosting = sanitizeHosting(r.hosting);
+  if (hosting) out.hosting = hosting;
   out.reports = Array.isArray(r.reports) ? r.reports.filter((q) => q && typeof q.from === 'string' && typeof q.target === 'string' && typeof q.reason === 'string').slice(-200) : [];
   out.portals = Array.isArray(r.portals)
     ? r.portals.filter((q): q is PortalRecord => !!q && typeof q === 'object' && ['overworld', 'nether', 'end', 'farlands', 'computer'].includes(q.dim) && (q.kind === 'nether' || q.kind === 'far') && [q.x, q.y, q.z].every((n) => Number.isInteger(n)) && (q.axis === 'x' || q.axis === 'z')).slice(0, 1024)

@@ -279,8 +279,9 @@ Alloy. **Phase 3** builds it up: new End Cities, the remains of an older
 civilization, five giant structures, their Guardian Constructs, and the
 Dragon's Nest under the main island. **Phase 4** brings it to life: End
 machines on the Engineering Update's networks, new ways across the void, five
-quests in the ancient structures and Elytra upgrades. Phase 5 brings Void
-Storms, the Dragon's expansion and the Citadel's boss. Design notes:
+quests in the ancient structures and Elytra upgrades. **Phase 5** finishes it:
+Void Storms and the End Eclipse, new moves for the Ender Dragon, the Void
+Citadel and the End Guardian at its bottom. Design notes:
 [docs/END_EXPANSION.md](docs/END_EXPANSION.md).
 
 - **The Expansion Portal** stands on the main End island, apart from the exit
@@ -415,12 +416,80 @@ Storms, the Dragon's expansion and the Citadel's boss. Design notes:
 - **Elytra upgrades** (phase 4): three module slots at the smithing table:
   Reinforced, Thrust, Hover, Burst, Void Recovery and Ender Blink. An Elytra
   without them flies exactly as before.
-- **Forty advancements** in the End tab:
+- **Void Storms** (phase 5): every 2–4 in-game days a storm sweeps the
+  Expanded End for 3–5 minutes, a minute after its warning banner.
+  - Violet fog, void motes and its own sound.
+  - Void Debris falls onto rings marked ahead of it (6 damage); it never
+    breaks a block.
+  - Low-gravity pockets, marked first, where you jump higher and fall slower.
+  - Stalkers and Chorus Beasts grow bolder; crystals grow brighter and
+    Crystal Generators and Void Collectors make more.
+  - **Storm Remnants**: small floating ruins with a chest. They fade with a
+    warning when the storm ends, and set anyone on them down safely.
+- **The End Eclipse** (phase 5): about one night in sixty, with no warning.
+  - The sky goes near black round a dark disc ringed with light; stars show
+    through the fog and block light grows brighter and paler.
+  - **Eclipse Shards** grow on the islands and dissolve at dawn.
+  - **Eclipse Monoliths** rise with a cache and lore found nowhere else.
+  - Pale, outlined Void Stalkers and more End Phantoms, with better loot.
+  - A beam of light rises from the Void Citadel, seen from anywhere in the
+    Expanded End.
+- **The Ender Dragon's new moves** (phase 5), added to the fight, which
+  otherwise stays exactly as it was (200 health, crystals, perching, the exit
+  portal, every ending and secret). Each is named on a banner and shown at
+  least 24 ticks before it lands (32 with others near):
+  - the **Void Breath Wave** along a path drawn on the ground;
+  - the **Wing Gust** as it perches, which pushes but never off the island;
+  - the **Roar**, which turns the Endermen (no damage);
+  - the **Pillar Weave** through the pillars, on its way to perch;
+  - the **Strafing Dive** along its shadow line;
+  - **Crystal Fury**: a charge line from a crystal 10 s after one breaks;
+  - the **Edge Strike**: a marked crater on the island's edge that crumbles
+    and is put back after the fight;
+  - the **Dragon Storm** sky below a quarter of its health.
+
+  A tuning simulation keeps the damage it deals per minute no higher than
+  before and the number of perches no lower (95 against 86).
+- **The Void Citadel** (phase 5): one per world, deep in the Void Wastes, a
+  six-floor tower hanging into the void.
+  - Find it with three **Citadel Star Chart Pieces** (in the giant
+    structures' vaults and the Sanctum), which make the **Void Citadel Map**;
+    or with the Lost Observatory's telescope, or the beam, during an eclipse.
+  - Each floor has a **Citadel Anchor** (a respawn point), a library and a
+    vault, and a sealed door that opens for everyone when its objective is
+    done: a **Combat** hall with rifts, a **Glyph Lock**, a **Crystal
+    Sequence** to repeat, **Parkour** round the outside over open void, and
+    an **Engineering** puzzle wired with your own cables and logic gates.
+  - Each floor's music and sound bed is its own.
+- **The End Guardian** (phase 5), at the Citadel's bottom: 1,000 health (more
+  for each extra player), three phases, every attack named and shown first:
+  - **Awakening**: the Crystal Lance, Ground Fracture and Construct Call;
+  - **Void Shift**: Void Orbs, a Gravity Well and the Crystal Shield's
+    pylons;
+  - **Core Exposed**: faster, with the Collapse of the outer ring and the
+    Final Lance (jump or duck).
+
+  It kneels with its core bare after every fourth attack. The arena's lower
+  floor catches every fall. It resets if abandoned, and re-forms after seven
+  days, woken with four Eclipse Shards. Its loot:
+  - the **Guardian Core** (an Elytra's fourth upgrade slot);
+  - the **Guardian's Lance**, a long-reach weapon that fires a short beam;
+  - the **Eclipse Veil**, an Elytra module that hides you from every mob for
+    five seconds;
+  - its head.
+
+  Its fall is a victory title, not an ending.
+- **Title screen**: four V6 scenes: the Expanded End, the Crystal Fields, the
+  Void Citadel and the End Eclipse. The edition reads "V6 - The End
+  Expansion".
+- **Fifty-four advancements** in the End tab:
   - reaching the Expanded End and visiting all seven biomes;
   - ten for its mobs and resources (phase 2);
   - thirteen for its structures, lore, giants, the Nest and the Bulwark
     (phase 3);
-  - fifteen for its machines, travel, quests and Elytra upgrades (phase 4).
+  - fifteen for its machines, travel, quests and Elytra upgrades (phase 4);
+  - fourteen for storms, the eclipse, the Citadel's floors, the Guardian and
+    the fourth Elytra slot (phase 5).
 - **Admin Panel**: an End Expansion tab to:
   - switch, build and reach the portal;
   - teleport to the arrival platform or any biome, and show where you are;
@@ -433,12 +502,22 @@ Storms, the Dragon's expansion and the Citadel's boss. Design notes:
   - build the Dragon's Nest and reset a structure's loot;
   - start, complete, reset or reach any End quest, fill a machine's EU,
     force-repair a gateway pair, open the Sanctum and build an End test
-    line.
+    line;
+  - start or stop a Void Storm or an End Eclipse;
+  - teleport to the Citadel, any floor or the arena, solve a floor or reset
+    them all;
+  - spawn the End Guardian, skip a phase, force its defeat or reset it;
+  - respawn the Ender Dragon and try each of its new moves;
+  - give the rare End loot (Guardian Core, Lance, Eclipse Veil, shards, Star
+    Chart Pieces, the head).
 
   As always, nothing done there counts towards advancements.
 - **Old worlds**: phase 3 structures appear only in worlds created from now
   on, in newly explored chunks. Older worlds load unchanged, and still get the
-  Nest. Phase 3 worlds get every phase 4 quest in their structures.
+  Nest. Phase 3 worlds get every phase 4 quest in their structures. Phase
+  1–4 worlds get the Citadel where nothing has generated yet, and storms and
+  eclipses. Worlds older than V6 have no Expanded End, so no events and no
+  Citadel.
 
 ### Recipe Book
 

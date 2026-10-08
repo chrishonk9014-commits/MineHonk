@@ -20,7 +20,14 @@
  * Generator charging a Void Cell, an End Processor, a Crystal Grower), its
  * Ender Bridge reaching out, a Teleportation Node's window, a Void Skiff
  * fuelled, boarded and flown, a repaired ancient gateway, the quest tracker,
- * and an upgraded Elytra's tooltip. Screenshots go to tests/e2e/out/v6-*.png.
+ * and an upgraded Elytra's tooltip.
+ *
+ * Phase 5: a Void Storm (its warning, its sky, a Storm Remnant), the End
+ * Eclipse (its sky, a monolith), the Void Citadel (its title, the tower from
+ * outside, a Glyph Lock floor, the parkour route), each of the End
+ * Guardian's phases and its victory title, each of the Dragon's new moves,
+ * and V6's four title screen scenes with their edition text. Screenshots go
+ * to tests/e2e/out/v6-*.png.
  */
 import { spawn, execFileSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -910,6 +917,284 @@ if (rig) {
   await page.keyboard.press('Escape');
   await cmd('/gamemode creative');
 }
+
+// ---------------------------------------------------------------- phase 5
+await cmd('/gamemode creative');
+const bannerText = () => page.evaluate(() => [...document.querySelectorAll('.hack-warn-text')].map((e) => e.textContent).join(' | '));
+const bodyText = () => page.locator('body').innerText();
+const look5 = () => page.evaluate(() => ({ ...window.minehonk.game.endEvents.look }));
+
+// A Void Storm over the Astral End: the warning, the violet murk, debris marked where it will land
+{
+  const r = await adminTp('tp_biome', { biome: 'astral_end' });
+  check('to the Astral End for the storm', r.ok);
+  await waitChunks();
+  await fly();
+  await page.evaluate(() => (window.minehonk.game.player.body.y += 6));
+  const s = await admin('storm_start');
+  check('a Void Storm called from the Admin Panel', s.ok);
+  await page.waitForTimeout(1200);
+  check('its warning banner', /VOID STORM APPROACHING/.test(await bannerText()));
+  await page.waitForTimeout(12000);
+  const l = await look5();
+  check(`the storm's sky (storm ${l.storm.toFixed(2)})`, l.storm > 0.5);
+  await look(0.6, 0.25);
+  await page.waitForTimeout(1500);
+  await page.screenshot({ path: `${OUT}/v6-storm.png` });
+  // A Storm Remnant rises near the player
+  let rem = [];
+  for (let i = 0; i < 20 && !rem.length; i++) {
+    await page.waitForTimeout(1500);
+    rem = await page.evaluate(() => {
+      const g = window.minehonk.game;
+      const w = g.world;
+      const b = g.player.body;
+      const want = new Set(['remnant_stone', 'remnant_bricks'].map((id) => window.minehonkRegistry.blockById.get(id).num));
+      const blockOf = (st) => window.minehonkRegistry.blockOfState(st);
+      const out = [];
+      for (let x = Math.floor(b.x - 40); x <= b.x + 40; x++)
+        for (let z = Math.floor(b.z - 40); z <= b.z + 40; z++)
+          for (let y = Math.floor(b.y - 10); y <= b.y + 30; y++) {
+            const st = w.getState(x, y, z);
+            if (st && want.has(blockOf(st))) out.push([x, y, z]);
+          }
+      return out;
+    });
+  }
+  check(`a Storm Remnant near the player (${rem.length} blocks)`, rem.length > 0);
+  if (rem.length) {
+    const c = rem.reduce((a, q) => [a[0] + q[0] / rem.length, a[1] + q[1] / rem.length, a[2] + q[2] / rem.length], [0, 0, 0]);
+    const cam = { x: c[0] + 9, y: c[1] + 5, z: c[2] + 9 };
+    await moveTo(cam.x, cam.y, cam.z);
+    await aimAt(c[0], c[1], c[2]);
+    await page.waitForTimeout(2000);
+    await pin(cam.x, cam.y, cam.z);
+    await aimAt(c[0], c[1], c[2]);
+    await page.screenshot({ path: `${OUT}/v6-storm-remnant.png` });
+  }
+  check('the storm stops', (await admin('storm_stop')).ok);
+}
+
+// The End Eclipse: the dark disc ringed with light, stars through the fog, a monolith
+{
+  const e = await admin('eclipse_start');
+  check('an End Eclipse called from the Admin Panel', e.ok);
+  await page.waitForTimeout(12000);
+  const l = await look5();
+  check(`the eclipse's sky (eclipse ${l.eclipse.toFixed(2)})`, l.eclipse > 0.7);
+  // Up towards the disc (high in the north-east)
+  await look(Math.atan2(-0.35, 0.52), -0.75);
+  await page.waitForTimeout(1500);
+  await page.screenshot({ path: `${OUT}/v6-eclipse-sky.png` });
+  let mono = [];
+  for (let i = 0; i < 10 && !mono.length; i++) {
+    await page.waitForTimeout(1500);
+    mono = await page.evaluate(() => {
+      const g = window.minehonk.game;
+      const w = g.world;
+      const b = g.player.body;
+      const want = window.minehonkRegistry.blockById.get('monolith_obsidian').num;
+      const out = [];
+      for (let x = Math.floor(b.x - 40); x <= b.x + 40; x++)
+        for (let z = Math.floor(b.z - 40); z <= b.z + 40; z++)
+          for (let y = Math.floor(b.y - 30); y <= b.y + 30; y++) {
+            const st = w.getState(x, y, z);
+            if (st && window.minehonkRegistry.blockOfState(st) === want) out.push([x, y, z]);
+          }
+      return out;
+    });
+  }
+  check(`Eclipse Monoliths near the player (${mono.length} blocks)`, mono.length > 0);
+  if (mono.length) {
+    const m0 = mono[0];
+    const col = mono.filter((q) => Math.abs(q[0] - m0[0]) <= 2 && Math.abs(q[2] - m0[2]) <= 2);
+    const c = col.reduce((a, q) => [a[0] + q[0] / col.length, a[1] + q[1] / col.length, a[2] + q[2] / col.length], [0, 0, 0]);
+    const cam = { x: c[0] + 8, y: c[1] + 2, z: c[2] + 8 };
+    await moveTo(cam.x, cam.y, cam.z);
+    await aimAt(c[0], c[1] + 1, c[2]);
+    await page.waitForTimeout(2000);
+    await pin(cam.x, cam.y, cam.z);
+    await aimAt(c[0], c[1] + 1, c[2]);
+    await page.screenshot({ path: `${OUT}/v6-eclipse-monolith.png` });
+  }
+  check('the eclipse ends', (await admin('eclipse_stop')).ok);
+}
+
+// The Void Citadel: found (a title), from outside, a puzzle floor and the parkour shaft
+let cit = null;
+{
+  const r = await adminTp('citadel_tp', { spot: 'entrance' });
+  check('to the Void Citadel', r.ok);
+  await waitChunks();
+  await page.waitForTimeout(3000);
+  check('its title', /THE VOID CITADEL/.test(await bodyText()));
+  cit = (await admin('status')).data?.citadel ?? null;
+  check('the Citadel has a site', !!cit?.site);
+  if (cit?.site) {
+    const [cx, cz] = cit.site;
+    // From out in the void, a little below its island: the tower hanging down
+    const cam = { x: cx + 48, y: 92, z: cz + 30 };
+    await moveTo(cam.x, cam.y, cam.z);
+    await aimAt(cx, 80, cz);
+    await page.waitForTimeout(5000);
+    await pin(cam.x, cam.y, cam.z);
+    await aimAt(cx, 80, cz);
+    await page.waitForTimeout(1000);
+    await page.screenshot({ path: `${OUT}/v6-citadel-exterior.png` });
+    const floors = cit.floors ?? [];
+    const glyph = floors.findIndex((f) => f.kind === 'glyph');
+    const park = floors.findIndex((f) => f.kind === 'parkour');
+    check('a Glyph Lock floor and a parkour floor', glyph >= 0 && park >= 0);
+    if (glyph >= 0) {
+      const g = await adminTp('citadel_tp', { spot: String(glyph + 1) });
+      check('to the Glyph Lock floor', g.ok);
+      await waitChunks();
+      await page.waitForTimeout(2000);
+      const murals = await page.evaluate(() => {
+        const g = window.minehonk.game;
+        const w = g.world;
+        const b = g.player.body;
+        const want = window.minehonkRegistry.blockById.get('citadel_glyph').num;
+        const out = [];
+        for (let x = Math.floor(b.x - 40); x <= b.x + 40; x++)
+          for (let z = Math.floor(b.z - 40); z <= b.z + 40; z++)
+            for (let y = Math.floor(b.y - 4); y <= b.y + 10; y++) {
+              const st = w.getState(x, y, z);
+              if (st && window.minehonkRegistry.blockOfState(st) === want) out.push([x, y, z]);
+            }
+        return out;
+      });
+      check(`the mural is there (${murals.length} glyphs)`, murals.length >= 3);
+      if (murals.length) {
+        const c = murals.reduce((a, q) => [a[0] + q[0] / murals.length, a[1] + q[1] / murals.length, a[2] + q[2] / murals.length], [0, 0, 0]);
+        const inward = [cx - c[0], cz - c[2]];
+        const d = Math.hypot(...inward) || 1;
+        const cam = { x: c[0] + (inward[0] / d) * 12, y: c[1] + 1, z: c[2] + (inward[1] / d) * 12 };
+        await pin(cam.x, cam.y, cam.z);
+        await aimAt(c[0], c[1], c[2]);
+        await page.waitForTimeout(1500);
+        await page.screenshot({ path: `${OUT}/v6-citadel-glyph.png` });
+      }
+    }
+    if (park >= 0) {
+      const g = await adminTp('citadel_tp', { spot: String(park + 1) });
+      check('to the parkour floor', g.ok);
+      await waitChunks();
+      await page.waitForTimeout(2000);
+      const lights = await page.evaluate(() => {
+        const g = window.minehonk.game;
+        const w = g.world;
+        const b = g.player.body;
+        const want = window.minehonkRegistry.blockById.get('ender_light').num;
+        const tiles = window.minehonkRegistry.blockById.get('citadel_tiles').num;
+        const out = [];
+        for (let x = Math.floor(b.x - 40); x <= b.x + 40; x++)
+          for (let z = Math.floor(b.z - 40); z <= b.z + 40; z++)
+            for (let y = Math.floor(b.y - 4); y <= b.y + 4; y++) {
+              const st = w.getState(x, y, z);
+              const id = st ? window.minehonkRegistry.blockOfState(st) : -1;
+              if (id === want || (id === tiles && (Math.abs(x - g.player.body.x) > 18 || Math.abs(z - g.player.body.z) > 18))) out.push([x, y, z]);
+            }
+        return out;
+      });
+      check(`the route over the void (${lights.length} blocks)`, lights.length > 10);
+      // Outside the tower's west face, looking down the route
+      const fy = Math.floor(await page.evaluate(() => window.minehonk.game.player.body.y));
+      const cam = { x: cx - 32, y: fy + 6, z: cz - 6 };
+      await moveTo(cam.x, cam.y, cam.z);
+      await aimAt(cx - 21, fy - 1, cz + 4);
+      await page.waitForTimeout(2500);
+      await pin(cam.x, cam.y, cam.z);
+      await aimAt(cx - 21, fy - 1, cz + 4);
+      await page.screenshot({ path: `${OUT}/v6-citadel-parkour.png` });
+    }
+  }
+}
+
+// The End Guardian: each phase, then its fall (a victory title, never an ending card)
+{
+  const r = await adminTp('citadel_tp', { spot: 'arena' });
+  check('to the arena', r.ok);
+  await waitChunks();
+  await page.waitForTimeout(2000);
+  const sp = await admin('guardian_spawn');
+  check('the Guardian wakes (Admin Panel)', sp.ok);
+  await page.waitForTimeout(4000);
+  const shotGuardian = async (name) => {
+    const gp = await page.evaluate(() => {
+      const e = [...window.minehonk.game.entities.values()].find((x) => x.type === 'end_guardian');
+      return e ? [e.x, e.y, e.z] : null;
+    });
+    if (!gp) return false;
+    const cam = { x: gp[0] + 9, y: gp[1] + 4, z: gp[2] + 9 };
+    await pin(cam.x, cam.y, cam.z);
+    await aimAt(gp[0], gp[1] + 3, gp[2]);
+    await page.waitForTimeout(800);
+    await page.screenshot({ path: `${OUT}/${name}.png` });
+    return true;
+  };
+  check('phase 1 (AWAKENING) on screen', await shotGuardian('v6-guardian-phase1'));
+  check('to phase 2', (await admin('guardian_phase')).ok);
+  await page.waitForTimeout(3500);
+  check('phase 2 (VOID SHIFT): its pylons up', await page.evaluate(() => [...window.minehonk.game.entities.values()].filter((x) => x.type === 'guardian_pylon').length === 4));
+  await shotGuardian('v6-guardian-phase2');
+  check('to phase 3', (await admin('guardian_phase')).ok);
+  await page.waitForTimeout(3500);
+  await shotGuardian('v6-guardian-phase3');
+  check('its defeat (forced: nothing counts)', (await admin('guardian_defeat')).ok);
+  await page.waitForTimeout(1500);
+  check('the victory title', /THE END GUARDIAN HAS FALLEN/.test(await bodyText()));
+  await page.screenshot({ path: `${OUT}/v6-guardian-victory.png` });
+  check('no ending card', (await page.locator('.ending-card:not(.hidden)').count()) === 0);
+  await page.waitForTimeout(4000);
+  await admin('guardian_reset');
+}
+
+// The Dragon's new moves, one at a time (a respawned, cheat-made dragon)
+{
+  const r = await adminTp('tp_portal');
+  check('back to the main island', r.ok);
+  await waitChunks();
+  await cmd('/gamemode survival');
+  await page.evaluate(() => window.minehonk.game.adminRequest({ a: 'flight', on: true }));
+  await fly();
+  const rs = await admin('dragon_respawn');
+  check('the Dragon respawned (Admin Panel)', rs.ok);
+  await page.waitForFunction(() => [...window.minehonk.game.entities.values()].some((e) => e.type === 'ender_dragon'), null, { timeout: 60000 }).catch(() => {});
+  const dragonAt = () => page.evaluate(() => {
+    const e = [...window.minehonk.game.entities.values()].find((x) => x.type === 'ender_dragon');
+    return e ? { x: e.x, y: e.y, z: e.z, phase: e.meta?.phase ?? null } : null;
+  });
+  const camAt = async () => {
+    await page.evaluate(() => window.minehonk.game.adminRequest({ a: 'heal' }));
+    const d = await dragonAt();
+    if (!d) return;
+    await aimAt(d.x, d.y + 2, d.z);
+  };
+  for (const t of ['breath_wave', 'strafing_dive', 'edge_strike', 'pillar_weave', 'crystal_fury', 'dragon_storm', 'roar', 'wing_gust']) {
+    await page.evaluate(() => window.minehonk.game.adminRequest({ a: 'heal' }));
+    const res = await admin('dragon_test', { test: t });
+    check(`Dragon test: ${t} (${res.text})`, res.text.length > 0);
+    if (t === 'roar' || t === 'wing_gust') {
+      // These come when it lands on the portal
+      await page.waitForFunction(() => [...window.minehonk.game.entities.values()].some((e) => e.type === 'ender_dragon' && e.meta?.phase === 'perch'), null, { timeout: 40000 }).catch(() => {});
+      await page.waitForTimeout(t === 'roar' ? 400 : 900);
+    } else await page.waitForTimeout(t === 'dragon_storm' ? 4000 : 1300);
+    await camAt();
+    await page.waitForTimeout(200);
+    await page.screenshot({ path: `${OUT}/v6-dragon-${t.replace(/_/g, '-')}.png` });
+  }
+  await cmd('/gamemode creative');
+}
+
+// The title screen: V6's four scenes and its edition
+for (const scene of ['expanded_end', 'crystal_fields', 'void_citadel', 'end_eclipse']) {
+  await page.goto(`http://localhost:${PORT}/?title=${scene}`);
+  await page.getByText('Singleplayer').waitFor({ timeout: 30000 });
+  await page.waitForTimeout(scene === 'void_citadel' ? 16000 : 12000);
+  await page.screenshot({ path: `${OUT}/v6-title-${scene.replace(/_/g, '-')}.png` });
+}
+check('the edition: V6 - The End Expansion', ((await page.locator('.logo-edition').textContent()) ?? '').includes('V6 - The End Expansion'));
 
 check('no page errors', errors.length === 0);
 await browser.close();

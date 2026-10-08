@@ -143,7 +143,9 @@ export const V6_OPS = [
   'guardian_spawn',
   'guardian_defeat',
   'guardian_reset',
+  'guardian_phase',
   'give_rare',
+  'dragon_respawn',
   'dragon_test',
 ] as const;
 /** V6 phase 5: where the Admin Panel's Citadel teleport goes (the entrance, a floor 1-6, the arena). */

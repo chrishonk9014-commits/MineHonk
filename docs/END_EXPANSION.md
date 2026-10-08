@@ -1,6 +1,6 @@
 # Version 6 - The End Expansion
 
-Design notes for V6's first four phases:
+Design notes for V6's five phases:
 
 - **Phase 1, the portal and the world:** the Expansion Portal and the
   Expanded End's land and atmosphere.
@@ -16,7 +16,11 @@ Design notes for V6's first four phases:
   Void Skiff, five quests in the ancient structures, and Elytra modules (see
   [Phase 4](#phase-4-engineering-transport-quests-and-elytra-upgrades)).
 
-Phase 5 brings the Void Storms, the Dragon's expansion and the Citadel's boss.
+- **Phase 5, events, the Dragon, the Void Citadel and the End Guardian:**
+  Void Storms and the End Eclipse over the Expanded End, eight new moves for
+  the Ender Dragon, a six-floor tower hanging into the void, and the boss at
+  its bottom (see [Phase 5](#phase-5-events-the-dragon-the-void-citadel-and-the-end-guardian)).
+  V6 is complete: version 6.0.0.
 
 ## Where it is
 
@@ -939,6 +943,372 @@ In the End Expansion tab, all advancement-neutral:
   quest tracker (`v6-quest-tracker.png`), an Elytra upgraded at a smithing
   table (`v6-elytra-smithing.png`) and its tooltip (`v6-elytra-tooltip.png`).
 
+## Phase 5: events, the Dragon, the Void Citadel and the End Guardian
+
+Phase 5 finishes V6. It adds weather to the Expanded End (Void Storms and the End Eclipse), eight new moves for the Ender Dragon, the Void Citadel (a six-floor tower hanging into the void) and the End Guardian at its bottom. It also adds the music, title screen and advancements that close the version. Every new piece reuses an existing system:
+
+- Structures go through the structure manager and the generator.
+- Telegraphs and banners use the fx system (`warn_*`, `hack`).
+- The boss bar, quests, loot tables, engineering networks and Admin Panel are the existing ones.
+
+The rules it keeps:
+
+- **The classic End is unchanged.** Storms and eclipses only reach the Expanded End's ring; the main island, the outer islands and the Phase 1 regression hashes stay as they were. Worlds made before V6 (no Expanded End) have no events and no Citadel.
+- **The Dragon fight is added to, never replaced.** Some things stay exactly as they were:
+  - its 200 health, the crystals and pillars, the exit portal;
+  - when it perches (`perchDue` and the approach chance are untouched);
+  - its defeat (`dragonKilled`, `dragonKilledOnce`, `finish()`), respawning with four crystals;
+  - the V5.5 malware path (`herobrine.onDragonDefeated()`, `malware.onDragonGone()`);
+  - the V3 Voidbound secret (`completeSecret()`);
+  - and the Phase 1–3 hooks (the Expansion Portal, the Nest on its death).
+- **Every new attack is fair:**
+  - it is shown at least 24 ticks before it lands (32 with other players near);
+  - its name is on a warning banner (fx `hack`);
+  - it is resolved on the server where it lands;
+  - nothing hurts unseen, and nothing knocks anyone into the void without warning.
+- **Nothing permanent breaks.** Every block an event or a fight changes (craters, dropped arena tiles, remnants, monoliths, shards) is recorded in `level.flags`, put back afterwards, and saved until it is.
+- **No new ending.** The End Guardian's fall is a victory title; `endings.ts` never hears of it.
+
+### Void Storms
+
+- **Schedule:** every 2–4 in-game days (`STORM` in `src/common/endExpansion/events.ts`), never during an eclipse or with one due.
+- **Length:** 3–5 minutes.
+- **Warning:** a minute ahead. The sky dims, the void rumbles, and a **VOID STORM APPROACHING** banner shows. Then violet fog, void motes and the storm's own sound bed.
+- **Void Debris:** about every 2.5 s near each player in the band, a ring marks the impact 24 ticks (32) ahead while a stone falls onto it. It deals 6 damage within 1.6 blocks and then shatters: a falling block that never settles and never breaks anything.
+- **Cracks:** cosmetic crack decals flicker along island edges near the player (client-side).
+- **Low-gravity pockets** (radius 4, 20 s):
+  - marked 24 ticks first, then a swirl;
+  - inside, jumps go twice as high and falls are half as fast: the client's gravity is halved;
+  - never reversed, never a pull.
+- **Mobs:**
+  - Void Stalkers and Chorus Beasts follow 50% further;
+  - Chorus Beasts turn on anyone they can see;
+  - Endlings out in the open blink into cover.
+- **Crystals:**
+  - Crystal Clusters glow brighter;
+  - Crystal Generators make 50% more;
+  - the Void Collector makes 4× (the phase 4 hook).
+- **Storm Remnants:**
+  - 1–2 per storm, small floating ruins near players, each with a chest (`chest/storm_remnant`: Ancient Fragments, Void Shards, now and then an artifact);
+  - in the storm's last 30 seconds they flicker and a **THE REMNANT IS FADING** banner shows;
+  - when the storm ends they go. Anyone standing on one is set down on the nearest solid ground, and whatever its chest still held drops there.
+- **Advancements:** *Weathered* (be out in the band through a storm) and *Salvage* (open a remnant's chest).
+
+### The End Eclipse
+
+- **Schedule:** rolled each day, 2.5% a day and at least 20 days apart, so about one in sixty days all told. It starts at nightfall and lasts one night (about 7 minutes). There is no warning.
+- **The sight:**
+  - a one-time **THE END ECLIPSE** title with its own sting;
+  - the sky turns near black;
+  - a dark disc ringed with white-violet light hangs in the north-east;
+  - stars show through the fog;
+  - light motes drift, and island edges glow faintly;
+  - block light is brighter and paler, so astral blocks, ores and crystals stand out.
+- **Eclipse Shards:**
+  - grow on island surfaces near players (one every 8 s, up to ten around each);
+  - can be mined only while it lasts, and dissolve at dawn;
+  - are the altar's fuel, the Guardian's Lance's repair material, and loot.
+- **Eclipse Monoliths:**
+  - 2–3 near each player: obsidian and astral pillars, each with a cache (`chest/eclipse_monolith`: shards, astral loot and one fragment of a lore set found nowhere else);
+  - 30 seconds before dawn they flicker with a warning, then go by the same rules as remnants.
+- **Eclipsed mobs:**
+  - End Phantoms come more often, at most two per player's area;
+  - Void Stalkers come pale and outlined, take 25% less damage and have a second Void Slip in them;
+  - both drop extra loot and Eclipse Shards.
+- **The beam:** a pillar of light rises from the Void Citadel, seen on the horizon from anywhere in the band, and as a real beam up close.
+- **Advancements:** *Dark Disc* (see one) and *Grown in the Dark* (mine a shard).
+
+The state (`level.flags.endEvents`, `endEventBlocks`) is the server's; clients get `end_event` messages and ease their sky towards it.
+
+### The Dragon's new moves
+
+`src/server/systems/DragonAdditions.ts` with its numbers in `src/common/endExpansion/dragon.ts`. TheEnd.ts calls into it at a few points: after its moves each tick, when it picks an attack in its holding pattern, while perched, when a crystal breaks, and when the fight ends.
+
+| Move | When | Shown first | What lands |
+| --- | --- | --- | --- |
+| **Void Breath Wave** | in place of a strafe now and then | it stops, inhales for 30 ticks (violet glow in its throat) while a purple path is drawn on the ground | a 20-block line of breath along the path, fading over 4 s (Dragon's Breath can be bottled from it) |
+| **Wing Gust** | once a perch | it rears up for 28 ticks; a ring marks the 12 blocks round the portal | everyone in the ring pushed away from the portal, at most 6 blocks, and only as far as the island carries on 3 blocks beyond; a player who still overshoots towards the void is set back down where the gust meant |
+| **Roar** | about once a perch | | the screen shakes, a ring of light runs out, Endermen within 48 turn to the portal (no damage) |
+| **Pillar Weave** | as a perch comes due, now and then | its route through the pillars is drawn | it flies the route (its body hurts as before), then comes down to perch |
+| **Strafing Dive** | in place of a strafe now and then | its shadow line on the ground, 24 ticks before the pass | a shallow pass along the line; its claws deal 8 to whoever stays on it, and throw them sideways, never along the line |
+| **Crystal Fury** | 10 s after a crystal breaks | the other crystals flare; a 30-tick charge line from a crystal to anyone within 8 blocks of its pillar | 5 damage if they stayed on the line |
+| **Edge Strike** | rarely | a red ring over a spot on the island's outer edge for 40 ticks | 6 damage nearby (thrown inwards); a small crater of loose end stone that crumbles 3 s later |
+| **Dragon Storm** | below 25% health | | a dark sky and distant thunder over the island (cosmetic) until the fight ends |
+
+The Edge Strike never comes near:
+
+- the pillars (each pillar's radius + 7);
+- the exit portal (16 + 7);
+- the Expansion Portal;
+- the Nest's entrance;
+- any of the 20 ring gateways;
+- the arrival platform.
+
+Its blocks are recorded in `level.flags.dragonRestore`, put back when the fight ends or the dragon is put away, and saved until then.
+
+**Tuning.** `tests/unit/v6-dragon-sim.ts` runs the same fight twice, with the additions and without:
+
+- one player standing still (nothing dodged), so the damage is an upper bound;
+- every random stream seeded;
+- crystals broken at 1, 2, 3 and 4 minutes.
+
+Nine runs: three seeds × three spots (by the portal, mid-island, beside a pillar), 6 minutes each:
+
+| | Perches | Damage per minute (no dodging) |
+| --- | --- | --- |
+| Before (the V3 fight) | 86 | 266 |
+| After (with the additions) | 95 | 258 |
+
+So there are 10% more perches and 3% less damage per minute. The worst single run rose 5%, well within the 30% the plan allows.
+
+- **Why the damage doesn't rise:** the new attacks take the place of strafes and charges (20%, 18% and 7% of those picks). They also end in a perch when one is due.
+- **Why the perches don't fall:** a weave starts as a perch comes due instead of delaying it.
+
+In those runs, per 6 minutes:
+
+- 0–2 breath waves, 0–3 dives, 0–2 edge strikes and 1–4 weaves;
+- a gust on every perch, a roar on most;
+- about 16 fury shots for a player camping a pillar (4 crystals broken).
+
+A first-timer in diamond armor with a bow, who steps off a marked line, takes far less than these numbers. The `tests/unit/v6-dragon.test.ts` version of this check (3 seeds, mid-island) asserts no fewer perches and at most 30% more damage.
+
+### The Void Citadel
+
+**Placement** (`src/common/endExpansion/citadel.ts`, `src/server/systems/EndCitadel.ts`):
+
+- **One per world**, at the first site in a seed-ordered list of candidates:
+  - a golden-angle spiral through the deep band, 8,600–9,400 blocks out (the band's land ends at 9,600, so the plan's "9,000–12,000" became this);
+  - the site must be in the Void Wastes;
+  - and nothing else may stand there: the structure census is checked.
+- **Old worlds** skip any candidate whose 4 × 4-chunk footprint has a chunk already made (in storage or loaded), so the Citadel never overwrites anything.
+- **Saved and built:** the site is saved in `level.flags.citadel`. The plan is pure (`planCitadel(seed, site)`), and the generator builds it into each chunk as the chunk is made, like any structure.
+- **Pre-V6 worlds:** worlds without the Expanded End get no Citadel.
+
+**Three ways to find it:**
+
+- **Citadel Star Chart Pieces:**
+  - one in the first looting of each giant structure's vault (Colossus cache, Cathedral, Void Observatory, Fortress armory, Fallen City: five in a world);
+  - one in the Dragon's History's Sanctum chest;
+  - three make the **Void Citadel Map**, whose needle points at the entrance.
+- **The Lost Observatory's telescope** during an eclipse: the map, once each eclipse.
+- **The beam** during an eclipse.
+
+**The tower:**
+
+- **The top:** an island with an open entrance hall at its top. Below it hangs a 37-block-wide tower of unbreakable Citadel Stone (bricks, pillars, tiles, glass, lamps).
+- **The floors:** six of them, 13 blocks apart. Each has:
+  - a landing, with a **Citadel Anchor** (it sets the respawn point and never runs out), a small library (`chest/citadel_library`: the Citadel's own lore set) and a vault (`chest/citadel_vault`: enchanted Ender Alloy, Astral Shards, Eclipse Shards, now and then an ancient weapon or an artifact);
+  - a sealed 3 × 3 descent door that opens, for everyone and for good, when the floor's objective is done, onto a ladder shaft down to the next floor.
+- **The order:** each of the five kinds once plus one twice, shuffled by the seed. Difficulty grows with depth.
+
+| Floor | Objective | Deeper means |
+| --- | --- | --- |
+| **Combat** | clear the hall: its Sentinels (and a Bulwark deeper down) and every Void Stalker the two rifts let out, two at a time, each rift marked before one climbs out | more Sentinels, more Stalkers |
+| **Glyph Lock** | press the keys by the door in the order of the glyphs on the mural; a wrong key darkens them all and wakes a Sentinel | longer sequences (3–6 of 8 glyphs) |
+| **Crystal Sequence** | touch the Sequence Stone and watch the six pedestals light, then repeat it | 4–7 steps |
+| **Parkour** | out through the wall and round the outside over open void: stepping stones, pulsing Ender Light bridges (on 6 s, flickering 1.5 s, gone 2.5 s) and a moving platform that carries its rider; reach the far landing | 3-block gaps instead of 2 |
+| **Engineering** | a running core and a socket joined by broken Ancient Conduits; bridge them with your own cable, then wire the three levers (A, B, C) through your own logic gates so the socket's signal follows the rule on the wall (one of eight, by the seed). The socket tries all eight lever combinations, one at a time, and opens the door only if every one is right | (the rule) |
+
+Multiplayer:
+
+- doors open for everyone;
+- anyone's key, pedestal or lever counts;
+- Constructs have 50% more health for each extra player on the floor.
+
+Floors done, doors opened, rifts emptied and Star Charts given are saved in `level.flags.citadel`. Chests are looted once, as always. Falling off the parkour route is falling into the void.
+
+Discovery shows a one-time **THE VOID CITADEL** title with its sting and its sound bed. Each kind of floor has its own bed, the halls have an ancient one, and the server picks the bed (`ambience` messages). Advancements:
+
+- *The Void Citadel* (find it);
+- one for each kind of floor cleared;
+- *The Bottom of the Tower* (reach the arena).
+
+### The End Guardian
+
+**The arena.** It lies under the last floor:
+
+- a round platform of Guardian Floor (radius 15) over a lower floor eight blocks down, which catches every fall (with fall damage);
+- the lower floor's middle is glass over the void;
+- stairs climb back up on two sides.
+
+**The altar** wants four Eclipse Shards, one at a time. It comes charged the first time.
+
+**Stats:**
+
+- 1,000 health, +400 for each player beyond the first in the arena when it wakes;
+- armor 16;
+- never knocked back.
+
+Every attack is named on a banner and shown first (24 ticks, 32 with company), and resolved on the server.
+
+| Phase | Health | Attacks |
+| --- | --- | --- |
+| 1. **AWAKENING** | 100–66% | **CRYSTAL LANCE**: a 30-tick charge line from its chest through the target, then a beam along exactly that line (14). **GROUND FRACTURE**: a ring of cracks round the target for 32 ticks, then those tiles drop to the lower floor for 3 s. **CONSTRUCT CALL**: two Sentinels, each marked first, at most every 45 s. |
+| 2. **VOID SHIFT** | 66–33% | **VOID ORBS**: three slow homing orbs that can be shot or struck down (8). **GRAVITY WELL**: a low-gravity pocket like the storm's, marked 24 ticks first. **CRYSTAL SHIELD**: four pylons rise; it takes half damage until all are broken; they come back once. |
+| 3. **CORE EXPOSED** | 33–0% | Faster, and lances and fractures in pairs. **COLLAPSE**: the outer ring flashes for 40 ticks, then drops for 8 s. **FINAL LANCE**: a slow sweep all the way round at chest height (16) under a **JUMP OR DUCK** banner: in the air or sneaking, it passes over or under. |
+
+**Core windows:** after every fourth attack it kneels for 5 s with its core bare and takes half as much again.
+
+**Resets and respawning:**
+
+- If everyone dies or leaves (40 blocks), it resets after a minute: full health, the arena put back, the altar still charged.
+- A fight is never saved: a restart resets it and keeps the altar charged. Changed arena blocks are saved (`guardianRestore`) and put back.
+- Defeated, it re-forms after 7 in-game days, and each fight after the first wants four shards.
+
+**Loot** (each player who fought gets their own):
+
+| Item | Chance | What it is |
+| --- | --- | --- |
+| **Guardian Core** | certain on each player's first defeat of it (recorded per player), 25% after | at the smithing table it opens an Elytra's fourth upgrade slot (once) |
+| **The Guardian's Lance** | 33% | a sword-like weapon that reaches 2 blocks further; use it to fire a short Crystal Lance (12 blocks, 9 damage, stopped by blocks), 40-tick cooldown |
+| **Eclipse Veil** (Elytra module) | 20% | while gliding, sneak and use an empty hand: hard to see for 5 s, and every mob after you loses you (none can pick you out until it ends); 60 s to recharge |
+| **End Guardian Head** | every defeat | a decorative block |
+| `chest/end_guardian` | always | enchanted Ender Alloy, 3–6 Astral Shards, 2–4 Eclipse Shards, scrap and experience |
+
+Its fall shows **THE END GUARDIAN HAS FALLEN** with its own music. There is no ending card and nothing in `endings.ts`. Advancements:
+
+- *The End Guardian Has Fallen*;
+- *Jump or Duck* (without being struck by a Final Lance);
+- *Four Wings' Worth* (fill all four Elytra slots).
+
+### The whole progression
+
+1. Defeat the Ender Dragon (now with its new moves). The Expansion Portal on the main island opens.
+2. Cross to the Expanded End's arrival platform and explore its seven biomes, mobs and resources (Ender Alloy, astral and crystal materials).
+3. Find the structures. A giant structure's vault gives the first Star Chart Piece. The quests, End engineering and transport make the band home; the Dragon's History opens the Sanctum (another piece).
+4. Weather Void Storms for their remnants. Under an End Eclipse, gather Eclipse Shards and visit the monoliths; the telescope and the beam point the way too.
+5. Three pieces make the Void Citadel Map. Follow it, and work down the six floors.
+6. At the bottom, wake the End Guardian at the charged altar and defeat it.
+7. Its Core gives the Elytra a fourth slot, for the Eclipse Veil or anything else. Every seven days it can be fought again, for four Eclipse Shards.
+
+### Audio and visuals
+
+- **Sound** (`src/client/audio/synth.ts`):
+  - beds for the storm, the eclipse, the ancient halls, each kind of Citadel floor, the arena, and the Guardian's three phases (thicker and faster each phase);
+  - stings for the eclipse, the Citadel and the victory;
+  - the Dragon's roar, inhale, breath wave, gust and edge strike;
+  - every storm, Citadel and Guardian sound;
+  - mob voices for the Guardian (stone machinery, grander), its pylons and its orbs.
+  - The Phase 1 biome beds are unchanged and still play.
+- **Sky** (`Sky.ts`, `WorldRenderer.ts`, `EndEventsClient.ts`):
+  - the storm's violet murk and closer fog;
+  - the eclipse's near-black sky, its disc and corona, stars through the fog, and brighter block light;
+  - the Dragon's storm;
+  - the Citadel's beam, on the horizon and up close.
+- **Particles:** void motes in a storm, light motes and edge glints under the eclipse, and storm cracks.
+- **Models:** the End Guardian (Citadel Stone with gold trim, a crown of shards, a lance, a core that blazes when it kneels, a shell of light behind its shield), the Crystal Pylon and the Void Orb. The Dragon rears for the gust and glows violet in its throat for the breath. Eclipsed mobs have a pale outline; a veiled player is nearly invisible.
+- **Textures:** the events' blocks, every Citadel block (eight glyph faces, keys lit and dark, the pedestal, the core and socket fronts), the arena, and the phase's items.
+
+### Title screen
+
+The title screen's random scenes are now V6's four (`?title=` picks one):
+
+- `expanded_end` (the arrival island);
+- `crystal_fields`;
+- `void_citadel` (the tower from the side, hanging into the void);
+- `end_eclipse` (an island under the eclipse, with a monolith and shards).
+
+The V5.5 and older scenes remain by name. The edition reads **V6 - The End Expansion**, and `package.json` is 6.0.0.
+
+### Advancements (phase 5)
+
+All are on the End tab and awarded by the server. None counts in a cheat context (Admin Panel storms, eclipses, floors, Guardians and items):
+
+- *Weathered*, *Salvage*;
+- *Dark Disc*, *Grown in the Dark*;
+- *The Void Citadel*, *Hall Cleared*, *In the Right Order*, *Echo*, *Over Nothing*, *Rewired*, *The Bottom of the Tower*;
+- *The End Guardian Has Fallen*, *Jump or Duck*, *Four Wings' Worth*.
+
+### Admin Panel (phase 5)
+
+On the End Expansion tab:
+
+- **Events:** start or stop a Void Storm or an End Eclipse, with their state shown.
+- **The Void Citadel:** teleport to the entrance, any floor (1–6) or the arena; solve the floor you are on; reset all progress.
+- **The End Guardian:** spawn, next phase, force defeat (no loot, no advancement), reset.
+- **Rare End loot:** Guardian Core, the Lance, the Eclipse Veil, Eclipse Shards, Star Chart Pieces, the head (cheat-marked).
+- **The Dragon's new moves:** respawn the Dragon (cheat-made), then each move one at a time. The fight becomes a cheat, and its defeat awards nothing.
+
+### Saves and old worlds
+
+New state, all in `level.flags`:
+
+- `endEvents` and `endEventBlocks` (temporary blocks, each with what it replaced);
+- `citadel` (site, floors, rifts, charts);
+- `guardian` (charged, last defeat, defeats) and `guardianRestore`;
+- `dragonRestore`.
+
+Players gain `veiledUntil` (not saved) and the Guardian Core's first-defeat record in their End rewards. An Elytra's fourth slot is `tag.data.slots`.
+
+- **Phase 1–4 worlds** load and get the Citadel, at a site where nothing was generated yet. Their storms and eclipses start on the usual schedule.
+- **V5.5 and older worlds** load unchanged: no Expanded End, so no events and no Citadel.
+
+### Deviations and fixes along the way
+
+- **The Citadel's band** is 8,600–9,400 out, because the Expanded End's land ends at 9,600.
+- **Two extra Admin Panel tools:** "Next phase" for the Guardian, and "Respawn the Dragon" (so the Dragon's moves can be tried after its defeat). Both are cheats.
+- **Generated machines now run from the start:** a newly generated chunk's engineering blocks are registered at once (the Citadel's cores and sockets). Before, that happened only when a chunk was loaded from storage.
+- **Respawning at a Citadel Anchor** puts the player at the anchor, not on the island above it. The safe spot is searched from the anchor's height.
+- **A phase 4 test was flaky:** a roaming Void Stalker could kill the player during a gateway trip, which also happened on the phase 4 commit. The test now keeps the player healthy while it waits.
+
+### Tests (phase 5)
+
+- `tests/unit/v6-dragon.test.ts`:
+  - 200 health;
+  - every new move from the Admin Panel;
+  - the breath wave, dive, fury (32 ticks with company) and gust each shown before they land;
+  - the roar does no damage;
+  - edge-strike sites keep clear of every protected place, and the crater is saved, crumbles and is put back;
+  - the gust never pushes anyone off the island, nor towards a hole in it;
+  - the tuning check.
+- `tests/unit/end-v3.test.ts`, `endgame.test.ts`, `v55-herobrine.test.ts`: the classic fight (five perches or more), the Voidbound secret and the malware path, unchanged.
+- `tests/unit/v6-events.test.ts`:
+  - 1,200 days of schedule: storm gaps, lengths, eclipse gaps, and never both at once;
+  - only the band, never the classic End;
+  - debris marked ahead and never breaking a block;
+  - remnants fading with a warning and setting the player down safely;
+  - pockets;
+  - the eclipse's title, monoliths and shards dissolving at dawn;
+  - a storm surviving a save and reload.
+- `tests/unit/v6-citadel.test.ts`:
+  - one site per world, from the seed, in the Void Wastes;
+  - an old world skips a used footprint and never overwrites a chunk; pre-V6 worlds have none;
+  - built as planned, unbreakable, with a title once;
+  - every kind of floor solved (a wrong glyph wakes a Sentinel; the crystal show and repeat; combat with every rift marked; a search over the plan's route for parkour; engineering with real cable and a simulated circuit, a wrong one refused);
+  - doors only on the objective;
+  - anchors and the void;
+  - progress across a reload, and the reset;
+  - three players.
+- `tests/unit/v6-guardian.test.ts`:
+  - the arena's catching floor and stairs;
+  - health scaling;
+  - every phase's attacks named and shown 24 ticks before any hit;
+  - core windows at 1.5× and the shield at half;
+  - a fracture's tiles back;
+  - the reset when abandoned;
+  - re-forming after 7 days for 4 shards;
+  - the Core once per player, the head every time;
+  - the title and no ending;
+  - a forced defeat giving nothing;
+  - never saved mid-fight.
+- `tests/unit/v6-phase5.test.ts`:
+  - the fourth Elytra slot and its advancement;
+  - the Eclipse Veil;
+  - the Lance's beam, cooldown and reach;
+  - Star Chart Pieces and the map;
+  - the eclipse beam;
+  - every new loot table and lore set;
+  - the advancements;
+  - every Admin Panel tool, with nothing earned.
+- `tests/unit/v6-canon.test.ts`: one world from the Dragon to the Guardian's Core, the way a player goes.
+- `tests/e2e/v6.mjs` (phase 5 part):
+  - a Void Storm (`v6-storm.png`) and a remnant (`v6-storm-remnant.png`);
+  - the eclipse (`v6-eclipse-sky.png`) and a monolith (`v6-eclipse-monolith.png`);
+  - the Citadel's title, outside (`v6-citadel-exterior.png`), a Glyph Lock (`v6-citadel-glyph.png`) and the parkour route (`v6-citadel-parkour.png`);
+  - each Guardian phase (`v6-guardian-phase1..3.png`) and its victory (`v6-guardian-victory.png`, no ending card);
+  - each Dragon move (`v6-dragon-*.png`);
+  - the four title scenes (`v6-title-*.png`) and the edition text.
+
 ## Lore pool (review)
 
 Every fragment in `src/common/endExpansion/lore.ts`, word for word, for review and hand editing (a test keeps the two in step: change both). The rules:
@@ -954,7 +1324,7 @@ Every fragment in `src/common/endExpansion/lore.ts`, word for word, for review a
   - `history_long_dark` / `history_nobody_lived`;
   - `endermen_halls` / `endermen_carried`.
 
-Placement weights by site and topic: a fragment's weight at a site is its topic's weight there. A fragment marked "only in" has weight 3 at its own sites and 0 elsewhere. The Nest's five are only in the Nest. Each structure's loot table pulls fragments by these weights.
+Placement weights by site and topic: a fragment's weight at a site is its topic's weight there. A fragment marked "only in" has weight 3 at its own sites and 0 elsewhere. The Nest's five are only in the Nest. The Eclipse Monoliths hold only the eclipse's five, and the Void Citadel's libraries only its eight (phase 5); neither set turns up anywhere else. Each structure's loot table pulls fragments by these weights.
 
 | Site | The Ender Dragon | The ancient civilization | Endermen | End Cities | Why the End is broken apart | The End gateways | The End and the Overworld | The history of the End |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -1203,3 +1573,72 @@ Each is given by one quest, once per world, and never placed in loot.
   > IT WAS LIT TO BE SEEN\
   > FROM PAST THE EDGE\
   > IT WAS SEEN
+
+#### The End Eclipse (phase 5, found only in the Eclipse Monoliths)
+
+One in each monolith's cache, never placed anywhere else.
+
+- `eclipse_marks` (Star Chart, The history of the End)
+  > The dark one crosses the light once in a long while.\
+  > We marked every night it came.\
+  > The marks never repeat.
+
+- `eclipse_growth` (Loose Note, The ancient civilization)
+  > Things grow on the stone when it is dark above.\
+  > By morning they are gone.\
+  > We stopped trying to keep them.
+
+- `eclipse_light` (Log Entry, The history of the End)
+  > A light stood up out of the deep band last night.\
+  > Nobody had built anything there.\
+  > Nobody would go and look.
+
+- `eclipse_still` (Stone Rubbing, Endermen)
+  > THEY ALL STOOD STILL\
+  > AND LOOKED THE SAME WAY
+
+- `eclipse_ring` (Partial Translation, Why the End is broken apart)
+  > ...when the ring of light closes, the pieces...\
+  > ...[the rest is worn away]
+
+#### The Void Citadel (phase 5, found only in its libraries)
+
+In the libraries on the Citadel's floors, never placed anywhere else.
+
+- `citadel_downwards` (Torn Page, The ancient civilization)
+  > We built it downwards.\
+  > Every floor was a promise to go deeper.\
+  > Nobody remembers who asked for the bottom.
+
+- `citadel_doors` (Log Entry, The ancient civilization)
+  > The doors were never meant to keep anything out.\
+  > Each one asks a question.\
+  > Nobody wrote down the answers.
+
+- `citadel_waits` (Stone Rubbing, The history of the End)
+  > IT DOES NOT SLEEP\
+  > IT WAITS FOR THE DARK SKY\
+  > IT REMEMBERS THE SHAPE OF US
+
+- `citadel_first_word` (Partial Translation, The ancient civilization)
+  > ...the first word was carved before the first door...\
+  > ...its meaning [cracked through]...
+
+- `citadel_other_void` (Loose Note, Why the End is broken apart)
+  > The void under the tower is not the same void.\
+  > Drop a stone in and listen.\
+  > It does not land.
+
+- `citadel_tall_ones` (Log Entry, Endermen)
+  > The tall ones never came down here.\
+  > We thought it was fear.\
+  > It might have been respect.
+
+- `citadel_lamps` (Torn Page, End Cities)
+  > The lamps were lit once, from below.\
+  > They are still burning.\
+  > Nobody has been below since.
+
+- `citadel_chart_end` (Star Chart, The history of the End)
+  > The chart ends at the tower.\
+  > Past it, someone drew only a circle.

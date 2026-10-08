@@ -163,6 +163,22 @@ and build an **End test line** (a fuelled Crystal Generator charging a Void
 Cell, an End Processor, a Crystal Grower, two Teleportation Nodes and an
 Ender Bridge Projector), all cheat-marked.
 
+## The Void Citadel (V6 phase 5)
+
+The Citadel's engineering floor is built from the same components. The
+**Citadel Core** (an existing, uncraftable generator, 512 EU/t like a restored
+Ancient Core) feeds the **Citadel Socket** (an existing, uncraftable signal
+machine) through a run of broken Ancient Conduits; the player bridges the gaps
+with their own cable and builds the floor's logic from levers and gates. Using
+the socket has it try all eight lever combinations, one at a time, and open
+the floor's door only if its signal follows the rule on the wall every time.
+
+Both are generated, not placed, so their block entities (`type: 'eng'`) come
+with the structure, and a newly generated chunk now registers its engineering
+blocks at once (`onChunkGenerated` calls `engineering.onChunkLoaded`); before,
+only chunks loaded from storage did. Existing conduits join the network like
+any cable.
+
 ## Where things live
 
 - `src/common/engineering/`: `catalog.ts` (components, block and item

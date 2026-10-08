@@ -291,6 +291,14 @@ export function expansionAdmin(sys: EndExpansionSystem, h: ExpansionAdminHelpers
       return s.guardian ? ok(s.guardian.forceDefeat()) : { ok: false, text: 'The End Guardian is not running.' };
     case 'guardian_reset':
       return s.guardian ? ok(s.guardian.reset()) : { ok: false, text: 'The End Guardian is not running.' };
+    case 'guardian_phase':
+      return s.guardian ? ok(s.guardian.nextPhase()) : { ok: false, text: 'The End Guardian is not running.' };
+    case 'dragon_respawn': {
+      const f = s.theEnd?.fight;
+      if (!f) return { ok: false, text: 'The End is not running.' };
+      if (f.dragon && !f.dragon.dead) return { ok: false, text: 'The Ender Dragon is already here.' };
+      return f.adminRespawn() ? ok('The Ender Dragon is back, with its crystals (a cheat: its defeat counts for nothing).') : { ok: false, text: 'Go to the End\'s main island first (it must be loaded).' };
+    }
     case 'give_rare': {
       const g = RARE_END_LOOT.find((k) => k.id === set);
       if (!g) return { ok: false, text: 'Unknown item.' };

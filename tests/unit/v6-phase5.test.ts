@@ -5,6 +5,7 @@
  * and the Admin Panel's tools (every one of them advancement-neutral).
  */
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { makeServer, join, tick, type FakeConn } from '../helpers/testServer';
 import { endPad, settle, type Pad } from '../helpers/v6p4';
 import { stackOf, itemIdOf, isAdminStack, type ItemStack } from '../../src/common/game/itemstack';
@@ -171,6 +172,20 @@ describe('loot and lore', () => {
       expect(l.length).toBe(1);
       expect(citadel.has(l[0]!)).toBe(true);
       expect(rollLoot('chest/eclipse_monolith', { rng: new Random(i), difficulty: 'normal' }).some((s) => itemIdOf(s) === 'eclipse_shard')).toBe(true);
+    }
+  });
+
+  it('both new lore sets are in the docs\' lore pool, word for word', () => {
+    const docs = readFileSync('docs/END_EXPANSION.md', 'utf8');
+    const pool = docs.slice(docs.indexOf('## Lore pool (review)'));
+    for (const f of [...ECLIPSE_LORE, ...CITADEL_LORE]) {
+      expect(pool, f.id).toContain(`\`${f.id}\``);
+      expect(f.lines.length).toBeLessThanOrEqual(4);
+      for (const line of f.lines) {
+        expect(line.length, f.id).toBeLessThan(70);
+        expect(pool, `${f.id} missing from the docs`).toContain(line);
+      }
+      expect(f.lines.join(' ').toLowerCase()).not.toMatch(/herobrine|computer|farlands|error/);
     }
   });
 });

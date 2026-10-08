@@ -310,6 +310,19 @@ export class EndGuardianSystem {
     return 'The End Guardian falls (cheat: no advancements, no loot).';
   }
 
+  /** Admin Panel: on to its next phase now (the fight becomes a cheat: nothing it gives counts). */
+  nextPhase(): string {
+    const f = this.fight;
+    if (!f) return 'The Guardian is not awake.';
+    if (f.phase >= 3) return 'The Guardian is already in its last phase.';
+    f.cheat = true;
+    f.boss.admin = true;
+    f.boss.health = f.boss.maxHealth * (f.phase === 1 ? GUARDIAN.phase2 - 0.01 : GUARDIAN.phase3 - 0.01);
+    f.boss.metaDirty = true;
+    if (f.state === 'exposed' || f.state === 'rise') this.setState(f, 'fight');
+    return `The Guardian moves on to phase ${f.phase + 1} (a cheat: nothing it gives counts).`;
+  }
+
   // ------------------------------------------------------------------ tick
 
   tick(): void {

@@ -942,6 +942,27 @@ export class DragonFight {
     const onPortal = this.crystals().filter((c) => Math.abs(c.y - py) < 2 && Math.hypot(c.x, c.z) < 5 && Math.hypot(c.x, c.z) > 2);
     if (onPortal.length < 4) return;
     for (const c of onPortal) c.remove();
+    this.respawnNow();
+  }
+
+  /**
+   * V6 phase 5 (the Admin Panel's Dragon tests): the dragon back as if four
+   * crystals had been set on the portal; a cheat's dragon (its defeat counts
+   * for nothing). False when it is already here or the island isn't loaded.
+   */
+  adminRespawn(): boolean {
+    if (this.dragon || !this.dim.isLoaded(0, 0)) return false;
+    if (!this.flags.dragonKilled) {
+      this.flags.dragonAdmin = true;
+      return !!this.spawnDragon();
+    }
+    this.flags.dragonAdmin = true;
+    this.respawnNow();
+    return !!this.dragon;
+  }
+
+  private respawnNow(): void {
+    const py = this.portalY();
     this.flags.dragonKilled = false;
     delete this.flags.dragonHealth;
     buildExitPortal((x, y, z, s) => this.dim.setBlock(x, y, z, s), py, false);

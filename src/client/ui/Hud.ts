@@ -17,7 +17,7 @@ export interface HudState {
   spectator: boolean;
   mounted?: boolean;
   /** V6 phase 4: the worn Elytra's upgrade meters (only the upgrades it has). */
-  wings?: { hover?: number; hoverMax?: number; charges?: number; chargeIn?: number; blinkIn?: number; recoverIn?: number; gliding: boolean; inEnd: boolean };
+  wings?: { hover?: number; hoverMax?: number; charges?: number; chargeIn?: number; blinkIn?: number; recoverIn?: number; veilIn?: number; gliding: boolean; inEnd: boolean };
 }
 
 export class Hud {
@@ -96,6 +96,7 @@ export class Hud {
       if (w.hover !== undefined && (w.gliding || w.hover < (w.hoverMax ?? 60))) parts.push(`Hover ${'▮'.repeat(Math.ceil((w.hover / (w.hoverMax ?? 60)) * 6))}${'▯'.repeat(6 - Math.ceil((w.hover / (w.hoverMax ?? 60)) * 6))}`);
       if (w.charges !== undefined && (w.gliding || w.charges < 3)) parts.push(`Burst ${'◆'.repeat(w.charges)}${'◇'.repeat(Math.max(0, 3 - w.charges))}${w.chargeIn ? ` ${secs(w.chargeIn)}` : ''}`);
       if (w.blinkIn !== undefined && (w.gliding || w.blinkIn > 0)) parts.push(w.blinkIn > 0 ? `Blink ${secs(w.blinkIn)}` : 'Blink ready');
+      if (w.veilIn !== undefined && (w.gliding || w.veilIn > 0)) parts.push(w.veilIn > 0 ? `Veil ${secs(w.veilIn)}` : 'Veil ready');
       if (w.recoverIn !== undefined && (w.inEnd || w.recoverIn > 0)) parts.push(w.recoverIn > 0 ? `Void Recovery ${Math.floor(w.recoverIn / 1200)}:${String(Math.ceil((w.recoverIn % 1200) / 20)).padStart(2, '0')}` : 'Void Recovery ready');
     }
     const key = parts.join('|');

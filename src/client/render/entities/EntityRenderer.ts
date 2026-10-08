@@ -407,6 +407,8 @@ export class EntityRenderer {
   remove(id: number): void {
     const v = this.visuals.get(id);
     this.glowing.delete(id);
+    this.outlined.delete(id);
+    this.veiled.delete(id);
     if (!v) return;
     this.group.remove(v.object);
     v.dispose();
@@ -425,12 +427,71 @@ export class EntityRenderer {
       const v = this.visuals.get(e.id);
       if (!v) continue;
       const glowing = e.meta.glowing === true;
-      v.setBrightness(glowing ? 1 : lightAt(e.x, e.y + 0.5, e.z));
+      // V6 phase 5: eclipsed mobs are pale and outlined in light; a veiled player is hard to see
+      const pale = e.meta.eclipsed === true;
+      const veil = e.meta.veil === true;
+      v.setBrightness(glowing ? 1 : pale ? Math.max(0.85, lightAt(e.x, e.y + 0.5, e.z)) : lightAt(e.x, e.y + 0.5, e.z));
       v.update(e, alpha, time);
-      if (v.nameTag) v.nameTag.visible = !(e.meta.sneak === true);
+      if (v.nameTag) v.nameTag.visible = !(e.meta.sneak === true) && !veil;
       if (glowing !== this.glowing.has(e.id)) this.setGlowing(e.id, v, glowing);
+      if (pale !== this.outlined.has(e.id)) this.setOutline(e.id, v, pale);
+      if (veil !== this.veiled.has(e.id)) this.setVeil(e.id, v, veil);
     }
     void this.world;
+  }
+
+  /** V6 phase 5: entities drawn with a pale outline (eclipsed Void Stalkers and Phantoms). */
+  private readonly outlined = new Set<number>();
+  private readonly outlineMat = new THREE.MeshBasicMaterial({ color: 0xece4ff, side: THREE.BackSide, transparent: true, opacity: 0.55, depthWrite: false, fog: false });
+
+  private setOutline(id: number, v: EntityVisual, on: boolean): void {
+    if (on) this.outlined.add(id);
+    else this.outlined.delete(id);
+    const shells: THREE.Object3D[] = [];
+    v.object.traverse((o) => {
+      if (o.userData.outline) shells.push(o);
+    });
+    if (shells.length) {
+      for (const s of shells) s.visible = on;
+      return;
+    }
+    if (!on) return;
+    // A slightly larger back-faced copy of each box, riding on it (so it follows the animation)
+    const meshes: THREE.Mesh[] = [];
+    v.object.traverse((o) => {
+      if (o instanceof THREE.Mesh && !o.userData.outline && o.geometry instanceof THREE.BufferGeometry) meshes.push(o);
+    });
+    for (const m of meshes) {
+      const shell = new THREE.Mesh(m.geometry, this.outlineMat);
+      shell.userData.outline = true;
+      shell.scale.setScalar(1.1);
+      shell.renderOrder = 1;
+      m.add(shell);
+    }
+  }
+
+  /** V6 phase 5: the Eclipse Veil: a player all but invisible for its five seconds. */
+  private readonly veiled = new Set<number>();
+
+  private setVeil(id: number, v: EntityVisual, on: boolean): void {
+    if (on) this.veiled.add(id);
+    else this.veiled.delete(id);
+    v.object.traverse((o) => {
+      const mat = (o as THREE.Mesh).material as THREE.Material | THREE.Material[] | undefined;
+      if (!mat || o.userData.outline) return;
+      for (const m of Array.isArray(mat) ? mat : [mat]) {
+        if (on) {
+          if (m.userData.veilWas === undefined) m.userData.veilWas = { t: m.transparent, o: m.opacity };
+          m.transparent = true;
+          m.opacity = 0.12;
+        } else if (m.userData.veilWas) {
+          m.transparent = m.userData.veilWas.t;
+          m.opacity = m.userData.veilWas.o;
+          delete m.userData.veilWas;
+        }
+        m.needsUpdate = true;
+      }
+    });
   }
 
   /** Entity ids currently drawn through walls (the Glowing effect). */

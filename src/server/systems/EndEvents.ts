@@ -25,6 +25,7 @@ import { Random, hashInts } from '../../common/math/rng';
 import { inExpansion } from '../../common/endExpansion/region';
 import { DAY, STORM, ECLIPSE, eventTelegraph, type EndEventState, type EndEventsView } from '../../common/endExpansion/events';
 import { isSurvivalLike } from '../../common/game/gamemode';
+import type { EndGenerator } from '../../common/gen/end';
 
 type P3 = [number, number, number];
 
@@ -126,13 +127,18 @@ export class EndEventsSystem {
     return Math.floor((STORM.minGapDays + this.rng.next() * (STORM.maxGapDays - STORM.minGapDays)) * DAY) - STORM.warnTicks;
   }
 
+  /** Worlds made before V6 have no Expanded End, so no events either (their End stays the classic one). */
+  get enabled(): boolean {
+    return (this.end.generator as EndGenerator).terrain.expanded;
+  }
+
   /** Whether the storm is raging at a place (the Expanded End only). */
   storming(dim: { id: string }, x: number, z: number): boolean {
-    return dim.id === 'end' && this.state.storm.phase === 'active' && inExpansion(x, z);
+    return dim.id === 'end' && this.enabled && this.state.storm.phase === 'active' && inExpansion(x, z);
   }
 
   eclipsed(dim: { id: string }, x: number, z: number): boolean {
-    return dim.id === 'end' && this.state.eclipse.active && inExpansion(x, z);
+    return dim.id === 'end' && this.enabled && this.state.eclipse.active && inExpansion(x, z);
   }
 
   /** The phase 4 hook: the Void Collector draws four times as much in a storm. */
@@ -195,6 +201,7 @@ export class EndEventsSystem {
   // ------------------------------------------------------------------ the schedule
 
   tick(): void {
+    if (!this.enabled) return;
     const st = this.state;
     const t = this.time;
     // Storms
@@ -244,7 +251,7 @@ export class EndEventsSystem {
 
   /** A player arrived in the End (or joined): tell them now. */
   sync(p: ServerPlayer): void {
-    if (p.dim.id === 'end') p.send({ t: 'end_event', ...this.view() });
+    if (p.dim.id === 'end' && this.enabled) p.send({ t: 'end_event', ...this.view() });
   }
 
   // ------------------------------------------------------------------ Void Storms

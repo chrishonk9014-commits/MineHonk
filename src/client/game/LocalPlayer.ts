@@ -44,7 +44,7 @@ export class LocalPlayer {
   hoverLeft: number = ELYTRA.hoverTicks;
   hovering = false;
   /** Asks the server for an upgrade's move (Burst on a double-tapped jump while gliding). */
-  onElytra: (a: 'burst' | 'blink') => void = () => {};
+  onElytra: (a: 'burst' | 'blink' | 'veil') => void = () => {};
   private lastGlideJump = -100;
   /** Whether the equipped chest item is an Elytra that still flies (set by the game). */
   canGlide: () => boolean = () => false;
@@ -52,6 +52,8 @@ export class LocalPlayer {
   sneakSpeed: () => number = () => 0.3;
   /** Leather boots on: powder snow holds the player up. */
   powderWalk: () => boolean = () => false;
+  /** V6 phase 5: inside a low-gravity pocket (a Void Storm's, a Gravity Well): jumps go twice as high, falls half as fast. */
+  lowGravity: () => boolean = () => false;
   /**
    * The mob being ridden. With `control` this client simulates the mount's
    * body and steers it; otherwise the player sits wherever the server moves it.
@@ -161,7 +163,7 @@ export class LocalPlayer {
         this.world,
         this.body,
         { forward: input.forward, strafe: input.strafe, jump: input.jump, sneak: input.sneak, sprint: this.sprinting, yaw: this.yaw },
-        { flying: this.flying, noClip: this.abilities.noClip, walkSpeed: this.abilities.walkSpeed, flySpeed: this.abilities.flySpeed, speedMul, sneakSpeed: this.sneakSpeed(), jumpBoost: eff('jump_boost'), levitation: this.flying ? 0 : eff('levitation'), slowFalling: eff('slow_falling') > 0, powderWalk: this.powderWalk() },
+        { flying: this.flying, noClip: this.abilities.noClip, walkSpeed: this.abilities.walkSpeed, flySpeed: this.abilities.flySpeed, speedMul, sneakSpeed: this.sneakSpeed(), jumpBoost: eff('jump_boost'), levitation: this.flying ? 0 : eff('levitation'), slowFalling: eff('slow_falling') > 0, powderWalk: this.powderWalk(), lowGravity: this.lowGravity() },
         this.eyeHeight,
       );
     }

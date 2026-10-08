@@ -1099,7 +1099,12 @@ export class Interaction {
     }
     if (p.dim.id !== dimId) this.server.changeDimension(p, dimId, pos[0], pos[1], pos[2]);
     else this.server.teleport(p, pos[0], pos[1], pos[2]);
-    if (p.spawnPoint) (p as { needsSafeSpawn?: boolean }).needsSafeSpawn = true;
+    if (p.spawnPoint) {
+      (p as { needsSafeSpawn?: boolean }).needsSafeSpawn = true;
+      // V6 phase 5: a Citadel Anchor is deep inside the tower: the safe spot is found from the anchor, not the sky
+      const b = p.spawnPoint.block;
+      if (b && dimId === 'end' && this.server.citadel?.covers(b[0], b[1], b[2])) (p as { safeFrom?: number }).safeFrom = b[1] + 2;
+    }
   }
 
   onDimensionEntered(p: ServerPlayer, dim: string): void {

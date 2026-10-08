@@ -105,6 +105,11 @@ export class EndTerrain {
     return (this.expansionTerrain ??= new ExpansionTerrain(this.seed, this.version));
   }
 
+  /** Whether this world's End has the Expanded End (worlds made before V6 keep the classic End only). */
+  get expanded(): boolean {
+    return this.approachGap;
+  }
+
   private fieldValue(x: number, z: number, d: number): number {
     // Fade the outer field in past OUTER_ISLANDS
     let t = 0.2 + Math.max(0, (OUTER_ISLANDS + 120 - d) / 120) * 0.6;

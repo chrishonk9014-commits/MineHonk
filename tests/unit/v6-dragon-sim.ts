@@ -26,6 +26,24 @@ export interface SimResult {
  * streams seeded so the two runs are comparable.
  */
 export async function simulate(opts: { seed: string; rngSeed: number; additions: boolean; ticks: number; spot: number; breakCrystals?: number[] }): Promise<SimResult> {
+  // Every random stream seeded (the unseeded ones start from Math.random): the same run every time
+  const real = Math.random;
+  let st = opts.rngSeed >>> 0;
+  Math.random = (): number => {
+    st = (st + 0x6d2b79f5) | 0;
+    let t = st;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  try {
+    return await run(opts);
+  } finally {
+    Math.random = real;
+  }
+}
+
+async function run(opts: { seed: string; rngSeed: number; additions: boolean; ticks: number; spot: number; breakCrystals?: number[] }): Promise<SimResult> {
   const { server } = await makeServer({ seed: opts.seed });
   // A real view distance: the island's edges are loaded (the Edge Strike needs to see them)
   const { player } = await join(server, 'Tester', 'uuid-tester', 8);

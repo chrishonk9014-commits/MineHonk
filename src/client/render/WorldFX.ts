@@ -284,16 +284,18 @@ export class WorldFX {
   }
 
   /** A shockwave ring expanding along the ground to radius r. */
-  pulse(x: number, y: number, z: number, r: number, seconds: number, now: number): void {
+  pulse(x: number, y: number, z: number, r: number, seconds: number, now: number, color = 0xb050ff, wallOn = true): void {
     const geo = new THREE.RingGeometry(0.85, 1, 64, 1);
     geo.rotateX(-Math.PI / 2);
-    const mat = new THREE.MeshBasicMaterial({ color: 0xb050ff, transparent: true, opacity: 0.85, depthWrite: false, side: THREE.DoubleSide, fog: false });
+    const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.85, depthWrite: false, side: THREE.DoubleSide, fog: false });
     const ring = new THREE.Mesh(geo, mat);
     // A short wall so the wave reads as something to jump over
     const wallGeo = new THREE.CylinderGeometry(1, 1, 1.2, 64, 1, true);
     const wallMat = new THREE.MeshBasicMaterial({ color: 0x7a2ad0, transparent: true, opacity: 0.35, depthWrite: false, side: THREE.DoubleSide, fog: false });
     const wall = new THREE.Mesh(wallGeo, wallMat);
     wall.position.y = 0.6;
+    // (V6 phase 5: a roar's or a gust's shockwave is only light along the ground)
+    wall.visible = wallOn;
     const g = new THREE.Group();
     g.add(ring, wall);
     g.position.set(x, y + 0.05, z);

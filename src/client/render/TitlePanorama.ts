@@ -1,7 +1,14 @@
 /**
  * The title screen backdrop: a patch of real, freshly generated terrain from
- * a random seed. Since V5.5 it shows The Digital Corruption Update, one of
- * four scenes picked at random:
+ * a random seed. Since V6 it shows The End Expansion, one of four scenes
+ * picked at random:
+ *  - the Expanded End around its arrival island;
+ *  - the End Crystal Fields, glittering;
+ *  - the Void Citadel, hanging upside down over the void;
+ *  - the End Eclipse: a dark disc ringed with light over an island, a
+ *    monolith and the shards that grow under it.
+ * The V5.5 scenes are still there with ?title=computer_lab|digital_world|
+ * herobrine_cave|dragon_malware:
  *  - a computer lab: desks of computers, monitors, keyboards and speakers,
  *    server racks on network cable, and one computer whose screen has gone
  *    wrong;
@@ -47,17 +54,24 @@ import { chunkIndex } from '../../common/world/constants';
 import { seedFromString } from '../../common/math/rng';
 import { STATE_SOLID, S, stateOf } from '../../common/registry/blocks';
 import type { Settings } from '../settings';
+import { EndAtmosphere } from '../game/EndAtmosphere';
+import { EXPANSION_BIOMES } from '../../common/endExpansion/biomes';
+import { inExpansion } from '../../common/endExpansion/region';
+import { CITADEL, citadelCandidates, planCitadel } from '../../common/endExpansion/citadel';
 
 const RADIUS = 4;
 
 type EngScene = 'factory' | 'power_plant' | 'mine' | 'farm' | 'control_room' | 'computer_lab';
 type DigitalScene = 'digital_world' | 'herobrine_cave';
-type Scene = 'farlands' | 'end' | 'arena' | 'error_biome' | 'village' | 'dragon_malware' | EngScene | DigitalScene;
+type EndScene = 'expanded_end' | 'crystal_fields' | 'void_citadel' | 'end_eclipse';
+type Scene = 'farlands' | 'end' | 'arena' | 'error_biome' | 'village' | 'dragon_malware' | EngScene | DigitalScene | EndScene;
 /** The Engineering Update's set scenes (built onto overworld terrain). */
 const ENG_SCENES: EngScene[] = ['factory', 'power_plant', 'mine', 'farm', 'control_room', 'computer_lab'];
-/** The Digital Corruption Update's scenes, shown at random; the others only when asked for. */
-const RANDOM_SCENES: Scene[] = ['computer_lab', 'digital_world', 'herobrine_cave', 'dragon_malware'];
-const ALL_SCENES: Scene[] = [...ENG_SCENES, 'digital_world', 'herobrine_cave', 'dragon_malware', 'error_biome', 'village', 'farlands', 'end', 'arena'];
+/** The End Expansion's scenes, shown at random; the others only when asked for. */
+const END_SCENES: EndScene[] = ['expanded_end', 'crystal_fields', 'void_citadel', 'end_eclipse'];
+const RANDOM_SCENES: Scene[] = [...END_SCENES];
+const ALL_SCENES: Scene[] = [...END_SCENES, ...ENG_SCENES, 'digital_world', 'herobrine_cave', 'dragon_malware', 'error_biome', 'village', 'farlands', 'end', 'arena'];
+const isEndScene = (s: Scene): s is EndScene => (END_SCENES as Scene[]).includes(s);
 const isEng = (s: Scene): s is EngScene => (ENG_SCENES as Scene[]).includes(s);
 
 /** What each scene looks like: particles in the air, camera tilt, extra light. */
@@ -78,6 +92,10 @@ const LOOK: Record<Scene, { particle: string; pitch: number; nightVision: number
   digital_world: { particle: 'none', pitch: 0.06, nightVision: 0, aside: 0.35 },
   herobrine_cave: { particle: 'electric', pitch: 0.12, nightVision: 0.3, aside: 0.45 },
   dragon_malware: { particle: 'malware', pitch: 0.05, nightVision: 0.35, aside: 0.5 },
+  expanded_end: { particle: 'end_mote_float', pitch: 0.22, nightVision: 0.3, aside: 0.45 },
+  crystal_fields: { particle: 'crystal_glint', pitch: 0.28, nightVision: 0.3, aside: 0.45 },
+  void_citadel: { particle: 'void_aura', pitch: -0.08, nightVision: 0.35, aside: 0.4 },
+  end_eclipse: { particle: 'end_mote_float', pitch: 0.12, nightVision: 0.25, aside: 0.45 },
 };
 
 /** The Error's poses shown on the title screen, cycling. */
@@ -99,6 +117,8 @@ export class TitlePanorama {
   private fixedYaw: number | null = null;
   private disposed = false;
   private lastTick = 0;
+  /** V6: the Expanded End's air (sky and fog by biome) for the End Expansion's scenes. */
+  private readonly endAtmos = new EndAtmosphere();
   onReady: (() => void) | null = null;
   ready = false;
 
@@ -138,6 +158,10 @@ export class TitlePanorama {
       this.build(new EndGenerator(seed), { x: 0, y: 70, z: 0 });
       return;
     }
+    if (isEndScene(this.scene)) {
+      this.buildEndScene(seed);
+      return;
+    }
     let gen: DimensionGenerator;
     let focus: { x: number; y: number; z: number };
     if (this.scene === 'end') {
@@ -154,6 +178,50 @@ export class TitlePanorama {
       }
     }
     this.build(gen, focus);
+  }
+
+  /** V6: the End Expansion's scenes, out in the Expanded End. */
+  private buildEndScene(seed: number): void {
+    const gen = new EndGenerator(seed);
+    const ex = gen.terrain.expansion;
+    const a = ex.arrival();
+    let focus = { x: a.x, y: a.floor, z: a.z };
+    const near = (id: string): { x: number; y: number; z: number } | null => ex.findBiome(EXPANSION_BIOMES.findIndex((b) => b.id === id), a.x, a.z, 2400);
+    if (this.scene === 'crystal_fields') focus = near('end_crystal_fields') ?? focus;
+    else if (this.scene === 'end_eclipse') focus = near('astral_end') ?? near('end_barrens') ?? focus;
+    else if (this.scene === 'void_citadel') {
+      // The Citadel's first site in the Void Wastes (the title shows it on its own: no other structure is asked about)
+      for (const c of citadelCandidates(seed)) {
+        if (!inExpansion(c.x, c.z) || EXPANSION_BIOMES[ex.regionAt(c.x, c.z).biome]?.id !== 'void_wastes') continue;
+        gen.citadel = planCitadel(seed, { x: c.x, z: c.z });
+        focus = { x: c.x, y: CITADEL.floor0 - 10, z: c.z };
+        break;
+      }
+      if (!gen.citadel) this.scene = 'expanded_end';
+    }
+    this.build(gen, focus);
+  }
+
+  /** V6: an Eclipse Monolith and Eclipse Shards stamped near the focus (the eclipse scene). */
+  private stampEclipse(chunks: Map<number, Chunk>, fx: number, fz: number): void {
+    const get = (x: number, y: number, z: number): number => chunks.get(chunkIndex(x >> 4, z >> 4))?.get(x & 15, y, z & 15) ?? 0;
+    const set = (x: number, y: number, z: number, st: number): void => {
+      const c = chunks.get(chunkIndex(x >> 4, z >> 4));
+      if (c && y > 0 && y < 255) c.set(x & 15, y, z & 15, st);
+    };
+    const top = (x: number, z: number): number => (chunks.get(chunkIndex(x >> 4, z >> 4))?.getHeight(x & 15, z & 15) ?? 0) - 1;
+    const mx = fx + 6;
+    const mz = fz - 4;
+    const y0 = top(mx, mz);
+    if (y0 > 0)
+      for (let y = 1; y <= 9; y++)
+        for (const [dx, dz] of [[0, 0], [1, 0], [0, 1], [1, 1]] as const) set(mx + dx, y0 + y, mz + dz, y % 3 === 0 ? S('monolith_astral') : S('monolith_obsidian'));
+    for (let i = 0; i < 26; i++) {
+      const x = fx + Math.round(Math.cos(i * 2.4) * (3 + (i % 9)));
+      const z = fz + Math.round(Math.sin(i * 2.4) * (3 + (i % 9)));
+      const y = top(x, z);
+      if (y > 0 && STATE_SOLID[get(x, y, z)] && get(x, y + 1, z) === 0) set(x, y + 1, z, S('eclipse_shard_growth'));
+    }
   }
 
   /** V4 scenes: find the Error Biome or a village a step per frame, then build around it. */
@@ -209,6 +277,7 @@ export class TitlePanorama {
         return;
       }
       if (isEng(this.scene)) focus = { ...focus, y: stampScene(this.scene, chunks, Math.floor(focus.x), Math.floor(focus.z)) };
+      if (this.scene === 'end_eclipse') this.stampEclipse(chunks, Math.floor(focus.x), Math.floor(focus.z));
       const light = new LightEngine({ getChunk: (cx, cz) => chunks.get(chunkIndex(cx, cz)), markLightDirty: () => {} }, this.world.hasSky);
       for (const c of chunks.values()) light.initChunk(c);
       for (const c of chunks.values()) this.world.loadChunk(encodeChunk(c, { light: true, blockEntities: false }));
@@ -266,6 +335,21 @@ export class TitlePanorama {
         this.orbit = 12;
         this.boss = new ClientEntity(-1, 'herobrine', L.throne.x + 0.5, L.throne.y, L.throne.z + 0.5, 0, 0, { hbAnim: 'plugged', hbKind: 'final' });
         this.renderer!.entities.add(this.boss);
+        break;
+      }
+      case 'expanded_end':
+      case 'crystal_fields':
+      case 'end_eclipse': {
+        // Circling the island from just above it
+        const h = Math.max(focus.y, w.heightAt(fx, fz));
+        this.center = { x: fx + 0.5, y: h + (this.scene === 'expanded_end' ? 14 : 9), z: fz + 0.5 };
+        this.orbit = this.scene === 'expanded_end' ? 30 : 22;
+        break;
+      }
+      case 'void_citadel': {
+        // Circling the tower that hangs into the void, a little below its island
+        this.center = { x: fx + 0.5, y: focus.y, z: fz + 0.5 };
+        this.orbit = 50;
         break;
       }
       case 'error_biome': {
@@ -378,6 +462,12 @@ export class TitlePanorama {
       hurtTilt: 0,
       cave: undefined,
     };
+    // V6: the Expanded End's air, and the eclipse over its scene
+    if (isEndScene(this.scene)) {
+      this.endAtmos.update(true, cam.x, cam.z, (x, z) => this.world.biomeAt(x, z));
+      fs.endAtmos = this.endAtmos.state;
+      if (this.scene === 'end_eclipse') fs.endEvents = { storm: 0, eclipse: 1, dragonStorm: 0, citadel: null };
+    }
     r.render(fs);
   };
 

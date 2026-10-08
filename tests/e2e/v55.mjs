@@ -34,7 +34,8 @@ for (const scene of ['computer_lab', 'digital_world', 'herobrine_cave', 'dragon_
   await page.waitForTimeout(scene === 'digital_world' || scene === 'herobrine_cave' ? 14000 : 10000);
   await page.screenshot({ path: `${OUT}/v55-title-${scene}.png` });
 }
-check('title edition', ((await page.locator('.logo-edition').textContent()) ?? '').includes('V5.5 - The Digital Corruption Update'));
+// (The edition text moved on with V6: tests/e2e/v6.mjs checks it)
+check('title edition', ((await page.locator('.logo-edition').textContent()) ?? '').includes('V6 - The End Expansion'));
 
 await page.goto(`http://localhost:${PORT}/`);
 await page.getByText('Singleplayer').waitFor({ timeout: 30000 });

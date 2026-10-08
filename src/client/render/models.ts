@@ -257,7 +257,9 @@ function cubeTextures(def: BlockDef, state: number): { tex: string[]; rot: numbe
   // V5: battery charge bars on the sides
   if (def.texBy) {
     const v = getProp(state, def.texBy);
-    for (let i = 2; i < 6; i++) tex[i] = `${tex[i]}_${v}`;
+    // V6 phase 5: a pressed Glyph Key lights up
+    const lit = def.id === 'citadel_glyph_key' && getProp(state, 'lit') === 'true';
+    for (let i = 2; i < 6; i++) tex[i] = lit ? `citadel_glyph_key_lit_${v}` : `${tex[i]}_${v}`;
   }
   // V5: six-way engineering blocks (extractor, sorter): front where they face, back opposite
   if (def.tex.back && facing) {
@@ -769,6 +771,32 @@ function custom(def: BlockDef, state: number): ModelQuad[] {
       const q = [...box([2, 0, 2], [14, 3, 14], { up: top, down: def.tex.all!, north: side, south: side, west: side, east: side }), ...box([4, 3, 4], [12, 11, 12], { up: top, down: top, north: side, south: side, west: side, east: side }), ...box([3, 11, 3], [13, 13, 13], { up: top, down: side, north: side, south: side, west: side, east: side })];
       if (getProp(state, 'crystal') === 'true') q.push(...cross('end_crystal_cluster', 'none', 0.85, 0.2).map((c) => ({ ...c, pos: c.pos.map(([x, y, z]) => [x, 13 / 16 + y * 0.6, z] as V3) as [V3, V3, V3, V3] })));
       return q;
+    }
+    // V6 phase 5: the Citadel's Sequence Pedestal (lights while it flashes), the Guardian's altar and its head
+    case 'citadel_pedestal': {
+      const lit = getProp(state, 'lit') === 'true';
+      const side = def.tex.all!;
+      const top = lit ? def.tex.on! : def.tex.top!;
+      return [...box([2, 0, 2], [14, 3, 14], { up: side, down: side, north: side, south: side, west: side, east: side }), ...box([4, 3, 4], [12, 12, 12], { up: top, down: side, north: side, south: side, west: side, east: side }), ...box([3, 12, 3], [13, 14, 13], { up: top, down: side, north: lit ? top : side, south: lit ? top : side, west: lit ? top : side, east: lit ? top : side })];
+    }
+    case 'guardian_altar': {
+      const charged = getProp(state, 'charged') === 'true';
+      const n = parseInt(getProp(state, 'shards') ?? '0', 10);
+      const side = def.tex.all!;
+      const top = charged ? def.tex.on! : def.tex.top!;
+      const q = [...box([0, 0, 0], [16, 4, 16], { up: side, down: side, north: side, south: side, west: side, east: side }), ...box([2, 4, 2], [14, 12, 14], { up: top, down: side, north: side, south: side, west: side, east: side })];
+      // The shards set into it so far (or all four, lit, when charged)
+      const spots: [number, number][] = [[4, 4], [11, 4], [4, 11], [11, 11]];
+      for (let i = 0; i < (charged ? 4 : n); i++) {
+        const [x, z] = spots[i]!;
+        q.push(...cross('eclipse_shard_growth', 'none', 0.35, 0).map((c) => ({ ...c, pos: c.pos.map(([px, py, pz]) => [x / 16 + (px - 0.5) * 0.35, 12 / 16 + py * 0.35, z / 16 + (pz - 0.5) * 0.35] as V3) as [V3, V3, V3, V3] })));
+      }
+      return q;
+    }
+    case 'end_guardian_head': {
+      const side = def.tex.all!;
+      const q = box([3, 0, 3], [13, 10, 13], { up: side, down: side, north: def.tex.front!, south: side, west: side, east: side });
+      return rotY(q, facingDeg(getProp(state, 'facing')));
     }
     case 'ancient_reliquary': {
       // An old urn; opened, its lid is gone

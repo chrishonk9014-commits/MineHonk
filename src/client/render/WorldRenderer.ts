@@ -5,7 +5,7 @@
 import * as THREE from 'three';
 import type { ClientWorld } from '../world/ClientWorld';
 import { ChunkRenderer } from './ChunkRenderer';
-import { Sky } from './Sky';
+import { Sky, type SkyEvents } from './Sky';
 import { EntityRenderer } from './entities/EntityRenderer';
 import './entities/mobs';
 import './entities/projectiles';
@@ -68,6 +68,8 @@ export interface FrameState {
   cave?: { color: number; density: number; amount: number };
   /** V6: the Expanded End's blended sky tint, fog colour and density, and how far the view has blended in. */
   endAtmos?: { sky: THREE.Color; fog: THREE.Color; density: number; light: number; amount: number };
+  /** V6 phase 5: the End's events (storm, eclipse, the Dragon's storm, where the Citadel is). */
+  endEvents?: SkyEvents;
 }
 
 export class WorldRenderer {
@@ -131,7 +133,7 @@ export class WorldRenderer {
     this.signs = new SignText(world);
     this.glitch = new GlitchFX(settings);
     this.skyScene.add(this.sky.group);
-    this.scene.add(this.sky.cloudGroup, this.chunks.group, this.entities.group, this.particles.mesh, this.weather.mesh, this.beams.group, this.signs.group, this.glitch.group, this.worldFx.group);
+    this.scene.add(this.sky.cloudGroup, this.sky.eventGroup, this.chunks.group, this.entities.group, this.particles.mesh, this.weather.mesh, this.beams.group, this.signs.group, this.glitch.group, this.worldFx.group);
 
     const selMat = new THREE.LineBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.45 });
     this.selection = new THREE.LineSegments(new THREE.BufferGeometry(), selMat);
@@ -320,7 +322,7 @@ export class WorldRenderer {
     cam.far = Math.max(300, rd * 1.8 + 200);
     cam.updateProjectionMatrix();
 
-    const skyState = this.sky.update(cam, f.dayTime, f.time, f.biomeSky, f.rain, f.thunder, f.underwater, f.endAtmos);
+    const skyState = this.sky.update(cam, f.dayTime, f.time, f.biomeSky, f.rain, f.thunder, f.underwater, f.endAtmos, f.endEvents);
     this.lastSky = skyState;
     const u = this.chunks.uniforms;
     u.uDaylight!.value = skyState.daylight;
@@ -329,6 +331,9 @@ export class WorldRenderer {
     u.uBrightness!.value = this.settings.brightness;
     u.uNightVision!.value = f.nightVision;
     u.uFlicker!.value = 0.96 + Math.sin(f.time * 0.9) * 0.02 + Math.sin(f.time * 2.3) * 0.02;
+    // V6 phase 5: under the eclipse the End's glowing blocks (astral blocks, ores, crystals) shine brighter and paler
+    const ecl = this.world.dimension === 'end' ? f.endEvents?.eclipse ?? 0 : 0;
+    (u.uBlockTint!.value as THREE.Color).setRGB(1.0 + 0.3 * ecl, 0.93 + 0.25 * ecl, 0.8 + 0.55 * ecl);
     const fog = this.fogColor.copy(skyState.fog);
     let fogNear = rd * 0.72;
     let fogFar = rd * 0.98;
@@ -348,6 +353,13 @@ export class WorldRenderer {
       const far = Math.max(28, rd * 0.98 * (1 - a.density * 0.8));
       fogFar = fogFar + (far - fogFar) * a.amount;
       fogNear = Math.min(fogNear, fogFar * (0.75 - 0.55 * a.density * a.amount));
+    }
+    // V6 phase 5: a Void Storm's fog closes in; the eclipse's a little
+    const evs = this.world.dimension === 'end' ? f.endEvents : undefined;
+    if (evs && evs.storm + evs.eclipse + evs.dragonStorm > 0) {
+      const k = Math.max(evs.storm * 0.55, evs.eclipse * 0.25, evs.dragonStorm * 0.3);
+      fogFar = Math.max(24, fogFar * (1 - k));
+      fogNear = Math.min(fogNear, fogFar * (0.7 - 0.4 * k));
     } else if (this.world.dimension === 'computer') {
       // V5.5: the fog across the lake (the far shore is never quite clear)
       fogNear = Math.min(fogNear, 16);

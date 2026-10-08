@@ -265,6 +265,8 @@ export interface MoveAbilities {
   slowFalling?: boolean;
   /** Leather boots: walk on powder snow instead of sinking into it. */
   powderWalk?: boolean;
+  /** V6 phase 5: a low-gravity pocket: half the gravity (jumps twice as high, falls half as fast; never upwards). */
+  lowGravity?: boolean;
 }
 
 export interface MoveResult {
@@ -419,7 +421,7 @@ export function stepMovement(world: BlockAccess, b: Body, input: MoveInput, ab: 
     b.vy *= 0.98;
     b.fallDistance = 0;
   } else {
-    b.vy -= 0.08;
+    b.vy -= ab.lowGravity ? 0.04 : 0.08;
     b.vy *= 0.98;
   }
   b.vx *= slip;

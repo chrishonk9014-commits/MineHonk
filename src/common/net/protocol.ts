@@ -186,6 +186,8 @@ export type S2C =
   | { t: 'recipes'; unlocked: string[] }
   /** V6 phase 5: the End's events (Void Storms, the End Eclipse); clients draw them in the Expanded End. */
   | ({ t: 'end_event' } & EndEventsView)
+  /** V6 phase 5: a sound bed the server picks (the Citadel's floors, the Guardian's phases); null hands it back to the biome. */
+  | { t: 'ambience'; bed: string | null }
   /**
    * V6 phase 4: the worn Elytra's upgrades and their meters: hover ticks
    * left, burst charges (and ticks to the next), ticks until Ender Blink and

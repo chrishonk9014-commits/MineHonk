@@ -101,6 +101,8 @@ export class EndCitadelSystem {
   // ------------------------------------------------------------------ the site
 
   private async init(): Promise<void> {
+    // Worlds made before V6 have no Expanded End (their End stays the classic one): no Citadel
+    if (!this.gen.terrain.expanded) return;
     const st = this.state;
     let site = st.site;
     if (!site) site = await this.pickSite();
@@ -185,6 +187,7 @@ export class EndCitadelSystem {
     const now = this.server.tickNo;
     const anyNear = [...this.server.players.values()].some((p) => p.dim.id === 'end' && Math.abs(p.x - plan.x) < 160 && Math.abs(p.z - plan.z) < 160);
     if (now % 20 === 0) this.markMaps();
+    if (now % 20 === 10) this.ambience(plan);
     if (!anyNear) return;
     if (now % 10 === 0) this.discover();
     const st = this.state;
@@ -200,6 +203,26 @@ export class EndCitadelSystem {
       if (f.kind === 'engineering') this.verifyTick(f);
       if (on.length && now % 20 === 0) this.scaleConstructs(f, on.length);
     }
+  }
+
+  private readonly beds = new Map<ServerPlayer, string | null>();
+
+  /** Each player's sound bed in the Citadel: the halls, each kind of floor, the arena (the Guardian's phase while it fights). */
+  private ambience(plan: CitadelPlan): void {
+    for (const p of this.server.players.values()) {
+      let bed: string | null = null;
+      if (!p.dead && p.dim.id === 'end' && inCitadel(plan, p.x, p.y, p.z)) {
+        const k = citadelFloorAt(plan, p.x, p.y, p.z);
+        const g = this.server.guardian?.fight;
+        if (k === CITADEL.floors) bed = g ? `bed.guardian_${g.phase}` : 'bed.citadel_arena';
+        else if (k >= 0) bed = this.state.floors[k]!.done ? 'bed.ancient' : `bed.citadel_${plan.floors[k]!.kind}`;
+        else bed = 'bed.ancient';
+      }
+      if ((this.beds.get(p) ?? null) === bed) continue;
+      this.beds.set(p, bed);
+      p.send({ t: 'ambience', bed });
+    }
+    for (const p of this.beds.keys()) if (!this.server.players.has(p.conn.id)) this.beds.delete(p);
   }
 
   /** A one-time title for each player who finds it, and the advancement. */
@@ -398,15 +421,16 @@ export class EndCitadelSystem {
     const dim = this.end;
     const t = now - (l.showUntil - f.pattern!.length * 20 - 10);
     if (now < l.showUntil) {
-      // Each step: lit 14 ticks, dark 6
-      const i = Math.floor(t / 20);
-      const ph = t % 20;
+      // Each step: lit 14 ticks, dark 6 (whichever tick the show is first seen on)
+      const i = Math.floor(Math.max(0, t) / 20);
+      const ph = Math.max(0, t) % 20;
       if (i < f.pattern!.length) {
         const at = f.pedestals![f.pattern![i]!]!;
-        if (ph === 0) {
+        const lit = dim.isLoaded(at[0], at[2]) && getProp(dim.getState(...at), 'lit') === 'true';
+        if (ph < 14 && !lit) {
           this.setLit(dim, at, true);
           this.server.playSound(dim, 'citadel.crystal', at[0] + 0.5, at[1] + 1, at[2] + 0.5, 1, 0.7 + f.pattern![i]! * 0.12);
-        } else if (ph === 14) this.setLit(dim, at, false);
+        } else if (ph >= 14 && lit) this.setLit(dim, at, false);
       }
     }
     // Brief flashes of pressed pedestals go out

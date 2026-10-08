@@ -1749,6 +1749,25 @@ V.ender_dragon = {
       if (l) l.rotation.x = perched ? 0 : 0.9;
     }
     if (dying && Math.floor(time / 2) % 2 === 0) m.material.color.setRGB(1.6, 1.4, 1.8);
+    // V6 phase 5: rearing up on the portal before a Wing Gust, wings raised high
+    m.root.rotation.x = 0;
+    if (e.meta.rear === true) {
+      m.root.rotation.x = -0.55;
+      if (wl) wl.rotation.z = 1.1 + Math.sin(time * 0.6) * 0.1;
+      if (wr) wr.rotation.z = -1.1 - Math.sin(time * 0.6) * 0.1;
+      if (tl) tl.rotation.z = 0.3;
+      if (tr) tr.rotation.z = -0.3;
+    }
+    // ... and the inhale before a Void Breath Wave: jaws wide, a violet glow in its throat
+    const inhale = e.meta.inhale === true;
+    if (inhale && jaw) jaw.rotation.x = 0.6;
+    for (let i = DRAGON_NECK - 2; i < DRAGON_NECK; i++) {
+      const g = flare(m, 'neck' + i, 'throat' + i, [5.6, 5.6, 5.6], [0, 0, 2.5], 0xb040ff);
+      if (g) {
+        g.visible = inhale;
+        (g.material as THREE.MeshBasicMaterial).opacity = 0.45 + Math.sin(time * 1.2 + i) * 0.25;
+      }
+    }
   },
   // V5.5: a dragon that drank the potion leaks data: it flickers green and jerks
   extra: (m, e, time) => {
@@ -2578,6 +2597,195 @@ V.guardian_bulwark = {
     }
   },
   nameY: 3.1,
+};
+
+// ---------------------------------------------------------------------------
+// V6 phase 5: the End Guardian. An ancient construct like the Sentinels, but
+// grander: Citadel Stone trimmed with pale gold, a crystal core in its chest
+// that shows when it kneels, a crown of floating shards and a crystal lance.
+// ---------------------------------------------------------------------------
+const CSTONE = '#3a3450';
+const CSTONE_DARK = '#2a2436';
+const TRIM = '#c8b070';
+/** Citadel Stone courses with gold trim at the edges. */
+function citadelStone(p: FacePainter): void {
+  const [w, h, d] = p.size;
+  for (const face of ['front', 'back', 'left', 'right'] as const) {
+    const fw = face === 'front' || face === 'back' ? w : d;
+    for (let y = 3; y < h; y += 4) p.px(face, 0, y, CSTONE_DARK, Math.max(1, Math.ceil(fw)), 1);
+    p.px(face, 0, Math.max(0, h - 1), TRIM, Math.max(1, Math.ceil(fw)), 1);
+  }
+  p.speckle('all', '#4a4262', 0.1);
+}
+const GUARDIAN_GLOW = [0xc8b8ff, 0xd8a0ff, 0xff8ac8];
+
+V.end_guardian = {
+  parts: () => [
+    { name: 'rightLeg', pivot: [-4.5, 16, 0], from: [-3.5, -16, -3.5], size: [7, 16, 7], colors: { all: CSTONE, bottom: CSTONE_DARK }, paint: citadelStone },
+    { name: 'leftLeg', pivot: [4.5, 16, 0], from: [-3.5, -16, -3.5], size: [7, 16, 7], colors: { all: CSTONE, bottom: CSTONE_DARK }, paint: citadelStone },
+    { name: 'body', pivot: [0, 16, 0], from: [-10, 0, -6], size: [20, 18, 12], colors: { all: CSTONE, top: CSTONE_DARK }, paint: (p) => {
+      citadelStone(p);
+      // The chest plates around the core
+      p.px('front', 4, 5, TRIM, 12, 1);
+      p.px('front', 4, 13, TRIM, 12, 1);
+      p.px('front', 7, 7, '#1a1428', 6, 5);
+    } },
+    { name: 'head', parent: 'body', pivot: [0, 18, 0], from: [-4.5, 0, -4.5], size: [9, 9, 9], colors: { all: CSTONE, top: TRIM }, paint: (p) => {
+      citadelStone(p);
+      p.px('front', 1, 4, '#120c1c', 7, 2);
+    } },
+    { name: 'rightArm', parent: 'body', pivot: [-13, 16, 0], from: [-3.5, -20, -3.5], size: [7, 22, 7], colors: { all: CSTONE, bottom: TRIM }, paint: citadelStone },
+    { name: 'leftArm', parent: 'body', pivot: [13, 16, 0], from: [-3.5, -20, -3.5], size: [7, 22, 7], colors: { all: CSTONE, bottom: TRIM }, paint: citadelStone },
+    // The lance: crystal on a gold haft, held in the right hand
+    { name: 'lance', parent: 'rightArm', pivot: [0, -18, 0], from: [-1, -1, -6], size: [2, 2, 30], colors: { all: '#d8ccff', top: '#f0ecff' }, paint: (p) => p.px('top', 0, 0, TRIM, 2, 6) },
+  ],
+  anim: (m, e, alpha, time) => {
+    const st = (e.meta.state as string | undefined) ?? 'fight';
+    const phase = Math.max(1, Math.min(3, Number(e.meta.phase ?? 1)));
+    const atk = e.meta.attack as string | undefined;
+    const w = walkPhase(e, alpha);
+    const sw = Math.sin(w * 0.4) * 0.3 * Math.min(1, e.limbSpeed * 1.5);
+    const rl = m.part('rightLeg');
+    const ll = m.part('leftLeg');
+    const ra = m.part('rightArm');
+    const la = m.part('leftArm');
+    const body = m.part('body');
+    const lance = m.part('lance');
+    lookHead(m, e);
+    const pulse = 0.5 + Math.sin(time * (0.3 + phase * 0.15)) * 0.5;
+    m.root.position.y = 0;
+    m.root.rotation.x = 0;
+    if (rl) rl.rotation.set(sw, 0, 0);
+    if (ll) ll.rotation.set(-sw, 0, 0);
+    if (body) body.rotation.set(0.04, 0, 0);
+    if (ra) ra.rotation.set(-0.5, 0, 0.08);
+    if (la) la.rotation.set(-sw * 0.4, 0, -0.08);
+    if (lance) lance.rotation.set(0, 0, 0);
+    if (st === 'rise') {
+      // Rising from the floor: stones settling into place
+      m.root.position.y = -0.8 + pulse * 0.2;
+      if (body) body.rotation.x = 0.4;
+    } else if (st === 'exposed' || st === 'dying') {
+      // Kneeling, its core bare
+      m.root.position.y = -0.55;
+      if (rl) rl.rotation.x = -1.4;
+      if (ll) ll.rotation.x = 0.1;
+      if (body) body.rotation.x = 0.45;
+      if (ra) ra.rotation.set(-0.2, 0, 0.3);
+      if (la) la.rotation.set(-0.2, 0, -0.3);
+    } else if (atk === 'lance') {
+      if (ra) ra.rotation.set(-1.55, 0, 0);
+    } else if (atk === 'final') {
+      // The sweep: the lance held out level, the body turning
+      if (ra) ra.rotation.set(-1.55, 0, 0.2);
+      if (body) body.rotation.y = time * 0.08;
+    } else if (atk === 'fracture' || atk === 'collapse') {
+      if (ra) ra.rotation.set(-2.9, 0, 0.2);
+      if (la) la.rotation.set(-2.9, 0, -0.2);
+      if (body) body.rotation.x = -0.2;
+    } else if (atk === 'call' || atk === 'well') {
+      if (ra) ra.rotation.set(-0.3, 0, 1.1);
+      if (la) la.rotation.set(-0.3, 0, -1.1);
+    } else if (atk === 'orbs') {
+      if (ra) ra.rotation.set(-1.2, 0, -0.3);
+      if (la) la.rotation.set(-1.2, 0, 0.3);
+    } else if (atk === 'shield') {
+      if (ra) ra.rotation.set(-1.3, 0, -0.7);
+      if (la) la.rotation.set(-1.3, 0, 0.7);
+    } else if (e.swingTime > 0) {
+      const t = e.swingTime / 6;
+      if (ra) ra.rotation.x = -2 * t;
+    }
+    const color = GUARDIAN_GLOW[phase - 1]!;
+    joints(m, [
+      ['body', 'jShoulderR', [-11, 16, 0], 3.4],
+      ['body', 'jShoulderL', [11, 16, 0], 3.4],
+      ['body', 'jWaist', [0, 0.5, 0], 3],
+      ['rightLeg', 'jKneeR', [0, -8, -3.6], 2.4],
+      ['leftLeg', 'jKneeL', [0, -8, -3.6], 2.4],
+      ['rightArm', 'jElbowR', [0, -10, -3.6], 2.4],
+      ['leftArm', 'jElbowL', [0, -10, -3.6], 2.4],
+    ], color, st === 'exposed' ? 0.1 : 0.35 + pulse * 0.25 + (phase - 1) * 0.15);
+    // The core: dim behind its plates, blazing when it kneels
+    const core = flare(m, 'body', 'core', [6, 5, 1.2], [0, 9.5, 6.3], 0xf0e8ff);
+    if (core) {
+      core.visible = true;
+      (core.material as THREE.MeshBasicMaterial).opacity = st === 'exposed' ? 0.95 : 0.25 + pulse * 0.15;
+      core.scale.setScalar(st === 'exposed' ? 1.3 + pulse * 0.3 : 1);
+    }
+    const eye = flare(m, 'head', 'eye', [7.2, 1.6, 0.4], [0, 5, 4.7], color);
+    if (eye) {
+      eye.visible = st !== 'dying';
+      eye.scale.set(1, atk ? 1.8 : 1, 1);
+    }
+    // The lance glows as it charges
+    const tip = flare(m, 'lance', 'tip', [2.6, 2.6, 8], [0, 0, 20], 0xe8e0ff);
+    if (tip) {
+      tip.visible = atk === 'lance' || atk === 'final';
+      (tip.material as THREE.MeshBasicMaterial).opacity = 0.5 + pulse * 0.45;
+    }
+    // The crown: shards circling its head
+    for (let i = 0; i < 5; i++) {
+      const a = time * 0.05 + (i / 5) * Math.PI * 2;
+      const sh = flare(m, 'head', 'crown' + i, [1.6, 3.4, 1.6], [Math.cos(a) * 8, 12 + Math.sin(time * 0.1 + i) * 0.8, Math.sin(a) * 8], color);
+      if (sh) {
+        sh.visible = st !== 'dying';
+        sh.position.set((Math.cos(a) * 8) / 16, (12 + Math.sin(time * 0.1 + i) * 0.8) / 16, (Math.sin(a) * 8) / 16);
+      }
+    }
+    // The Crystal Shield: a shell of light while the pylons stand
+    const shield = flare(m, 'body', 'shield', [40, 50, 40], [0, 6, 0], 0xb8d8ff);
+    if (shield) {
+      shield.visible = e.meta.shield === true;
+      (shield.material as THREE.MeshBasicMaterial).opacity = 0.16 + pulse * 0.08;
+    }
+  },
+  scale: 2,
+  glow: (e) => e.meta.state === 'exposed',
+  nameY: 5.8,
+};
+
+V.guardian_pylon = {
+  parts: () => [
+    { name: 'base', pivot: [0, 0, 0], from: [-5, 0, -5], size: [10, 4, 10], colors: { all: CSTONE, top: TRIM }, paint: citadelStone },
+    { name: 'shaft', parent: 'base', pivot: [0, 4, 0], from: [-2.5, 0, -2.5], size: [5, 30, 5], colors: { all: '#b8a8f0', top: '#e8e0ff' }, paint: (p) => p.speckle('all', '#d8ccff', 0.3) },
+  ],
+  anim: (m, e, alpha, time) => {
+    void alpha;
+    const shaft = m.part('shaft');
+    if (shaft) shaft.rotation.y = time * 0.04;
+    const glow = flare(m, 'shaft', 'glow', [7, 32, 7], [0, 15, 0], 0xd8c8ff);
+    if (glow) {
+      glow.visible = true;
+      (glow.material as THREE.MeshBasicMaterial).opacity = 0.2 + Math.sin(time * 0.2 + e.id) * 0.1;
+    }
+    for (let i = 0; i < 3; i++) {
+      const a = time * 0.08 + (i / 3) * Math.PI * 2;
+      const r = flare(m, 'base', 'ring' + i, [1.6, 1.6, 1.6], [0, 0, 0], 0xf0e8ff);
+      if (r) {
+        r.visible = true;
+        r.position.set((Math.cos(a) * 6) / 16, (20 + Math.sin(time * 0.1 + i) * 6) / 16, (Math.sin(a) * 6) / 16);
+      }
+    }
+  },
+  glow: true,
+  nameY: 2.8,
+};
+
+V.void_orb = {
+  parts: () => [{ name: 'core', pivot: [0, 6, 0], from: [-4, -4, -4], size: [8, 8, 8], colors: { all: '#140a22' }, paint: (p) => p.speckle('all', '#6a2ab0', 0.25) }],
+  anim: (m, e, alpha, time) => {
+    void alpha;
+    const c = m.part('core');
+    if (c) c.rotation.set(time * 0.07, time * 0.11 + e.id, 0);
+    const halo = flare(m, 'core', 'halo', [11, 11, 11], [0, 0, 0], 0xb070ff);
+    if (halo) {
+      halo.visible = true;
+      (halo.material as THREE.MeshBasicMaterial).opacity = 0.3 + Math.sin(time * 0.4 + e.id) * 0.12;
+    }
+  },
+  glow: true,
+  nameY: 1,
 };
 
 // ---------------------------------------------------------------------------

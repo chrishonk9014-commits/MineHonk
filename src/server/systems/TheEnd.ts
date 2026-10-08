@@ -610,11 +610,7 @@ export class DragonFight {
       m.data.phase = 'perch';
       this.damageWhilePerched = 0;
     } else delete m.data.phase;
-    if (p === 'takeoff') {
-      this.schedulePerch();
-      // V6: time a pillar weave added to the last approach comes off the next wait (perches stay as frequent)
-      this.perchDue = Math.max(60, this.perchDue - this.extras.takeDebt());
-    }
+    if (p === 'takeoff') this.schedulePerch();
     m.metaDirty = true;
   }
 
@@ -649,9 +645,11 @@ export class DragonFight {
           const foe = this.focus(m, players);
           const r = this.rng.next();
           // Every so often it dives to the portal to fight from the centre
-          if (foe && (this.sincePerch >= this.perchDue || r < 1 / (this.crystalsAlive() / 3 + 2))) {
-            // V6: some approaches weave through the pillars first
-            if (!this.extras.weaveFirst(m, players)) this.setPhase('approach');
+          if (foe && (this.sincePerch >= this.perchDue || r < 1 / (this.crystalsAlive() / 3 + 2))) this.setPhase('approach');
+          // V6: as a dive to the portal comes due, now and then a weave through the pillars leads into it
+          // (started early, so the perch comes no later than it would have)
+          else if (foe && this.sincePerch >= this.perchDue - this.extras.weaveLead() && this.extras.weaveFirst(m, players)) {
+            // (weaving)
           } else if (foe && r < 0.45) {
             this.target = foe;
             // V6: now and then a breath wave, a strafing dive or an edge strike instead

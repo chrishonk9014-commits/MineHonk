@@ -90,6 +90,54 @@ function moonTexture(phase: number): THREE.Texture {
   });
 }
 
+/** V6 phase 5: the End Eclipse's disc: black, ringed with white-violet light. */
+function eclipseTexture(): THREE.Texture {
+  const size = 64;
+  const c = document.createElement('canvas');
+  c.width = size;
+  c.height = size;
+  const ctx = c.getContext('2d')!;
+  const g = ctx.createRadialGradient(32, 32, 10, 32, 32, 32);
+  g.addColorStop(0, 'rgba(0,0,0,1)');
+  g.addColorStop(0.5, 'rgba(0,0,0,1)');
+  g.addColorStop(0.56, 'rgba(255,250,255,1)');
+  g.addColorStop(0.64, 'rgba(200,160,255,0.85)');
+  g.addColorStop(0.8, 'rgba(140,80,230,0.3)');
+  g.addColorStop(1, 'rgba(90,40,180,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, size, size);
+  // A few rays of the corona
+  ctx.strokeStyle = 'rgba(230,210,255,0.35)';
+  for (let i = 0; i < 12; i++) {
+    const a = (i / 12) * Math.PI * 2 + (i % 2) * 0.1;
+    ctx.beginPath();
+    ctx.moveTo(32 + Math.cos(a) * 19, 32 + Math.sin(a) * 19);
+    ctx.lineTo(32 + Math.cos(a) * (27 + (i % 3) * 2), 32 + Math.sin(a) * (27 + (i % 3) * 2));
+    ctx.stroke();
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.magFilter = THREE.LinearFilter;
+  t.minFilter = THREE.LinearFilter;
+  return t;
+}
+
+/** V6 phase 5: what the End's events do to the sky (EndEventsClient eases these). */
+export interface SkyEvents {
+  storm: number;
+  eclipse: number;
+  dragonStorm: number;
+  citadel: [number, number, number] | null;
+}
+
+const STORM_SKY = new THREE.Color(0x1c0830);
+const STORM_FOG = new THREE.Color(0x3a1460);
+const ECLIPSE_SKY = new THREE.Color(0x020006);
+const ECLIPSE_FOG = new THREE.Color(0x0e0420);
+const DRAGON_SKY = new THREE.Color(0x0c0614);
+const DRAGON_FOG = new THREE.Color(0x221034);
+/** Where the eclipse hangs in the sky (high, to the north-east). */
+const ECLIPSE_DIR = new THREE.Vector3(0.35, 0.78, -0.52).normalize();
+
 export interface SkyState {
   daylight: number;
   fog: THREE.Color;
@@ -112,6 +160,11 @@ export class Sky {
   private readonly cloudCells = 96;
   dimension: DimensionId = 'overworld';
   cloudsEnabled = true;
+  /** V6 phase 5: the eclipse's disc, and the Void Citadel's beam (on the horizon far away; real up close). */
+  private readonly eclipse: THREE.Mesh;
+  private readonly farBeam: THREE.Mesh;
+  private readonly nearBeam: THREE.Mesh;
+  private readonly events = new THREE.Group();
 
   constructor() {
     this.group.name = 'sky';
@@ -169,6 +222,24 @@ export class Sky {
     this.stars.frustumCulled = false;
     this.group.add(this.stars);
 
+    // V6 phase 5: the End Eclipse and the Citadel's beam
+    this.eclipse = celestial(eclipseTexture(), 30);
+    (this.eclipse.material as THREE.MeshBasicMaterial).blending = THREE.NormalBlending;
+    this.eclipse.position.copy(ECLIPSE_DIR).multiplyScalar(80);
+    this.eclipse.lookAt(0, 0, 0);
+    this.eclipse.visible = false;
+    const beamMat = (): THREE.MeshBasicMaterial => new THREE.MeshBasicMaterial({ color: 0xe8d8ff, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, fog: false });
+    this.farBeam = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 120, 8, 1, true), beamMat());
+    this.farBeam.renderOrder = -92;
+    this.farBeam.frustumCulled = false;
+    this.farBeam.visible = false;
+    this.group.add(this.eclipse, this.farBeam);
+    this.nearBeam = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.2, 400, 12, 1, true), beamMat());
+    this.nearBeam.frustumCulled = false;
+    this.nearBeam.renderOrder = 6;
+    this.nearBeam.visible = false;
+    this.events.add(this.nearBeam);
+
     // Clouds
     this.cloudMat = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.8, depthWrite: true, side: THREE.FrontSide, fog: true });
     this.cloudGeo = this.buildClouds();
@@ -189,6 +260,36 @@ export class Sky {
   /** World-space cloud layer; add to the scene (not the camera-following sky group). */
   get cloudGroup(): THREE.Group {
     return this.clouds;
+  }
+
+  /** V6 phase 5: world-space event pieces (the Citadel's beam up close); add to the scene. */
+  get eventGroup(): THREE.Group {
+    return this.events;
+  }
+
+  /** The eclipse's disc and the Citadel's beam. */
+  private eventSky(camera: THREE.Camera, ev: SkyEvents | undefined, time: number): void {
+    const e = this.dimension === 'end' && ev ? ev.eclipse : 0;
+    this.eclipse.visible = e > 0.01;
+    (this.eclipse.material as THREE.MeshBasicMaterial).opacity = e;
+    const c = e > 0.01 && ev?.citadel ? ev.citadel : null;
+    this.farBeam.visible = this.nearBeam.visible = false;
+    if (!c) return;
+    const dx = c[0] + 0.5 - camera.position.x;
+    const dz = c[2] + 0.5 - camera.position.z;
+    const d = Math.hypot(dx, dz);
+    const pulse = 0.85 + Math.sin(time * 0.08) * 0.15;
+    if (d > 200) {
+      // On the horizon: a pillar of light on the dome, in the Citadel's direction
+      this.farBeam.visible = true;
+      this.farBeam.position.set((dx / d) * 85, 40, (dz / d) * 85);
+      (this.farBeam.material as THREE.MeshBasicMaterial).opacity = 0.55 * e * pulse;
+    }
+    if (d < 260) {
+      this.nearBeam.visible = true;
+      this.nearBeam.position.set(c[0] + 0.5, c[1] + 200, c[2] + 0.5);
+      (this.nearBeam.material as THREE.MeshBasicMaterial).opacity = 0.4 * e * pulse * Math.min(1, (260 - d) / 60);
+    }
   }
 
   private buildClouds(): THREE.BufferGeometry {
@@ -236,8 +337,9 @@ export class Sky {
    * Updates sky for the given time of day. Returns lighting values for the
    * world shader.
    */
-  update(camera: THREE.Camera, dayTime: number, time: number, biomeSky: number, rain: number, thunder: number, underwater: boolean, endAtmos?: { sky: THREE.Color; fog: THREE.Color; density: number; light: number; amount: number }): SkyState {
+  update(camera: THREE.Camera, dayTime: number, time: number, biomeSky: number, rain: number, thunder: number, underwater: boolean, endAtmos?: { sky: THREE.Color; fog: THREE.Color; density: number; light: number; amount: number }, events?: SkyEvents): SkyState {
     this.group.position.copy(camera.position);
+    this.eventSky(camera, events, time);
     const u = this.domeMat.uniforms;
     u.uTime!.value = time;
     u.uVoidAmount!.value = Math.min(1, Math.max(0, (63 - camera.position.y) / 20));
@@ -254,13 +356,33 @@ export class Sky {
         zenith.lerp(ea.sky, ea.amount);
         fog.lerp(ea.fog, ea.amount);
       }
+      // V6 phase 5: a Void Storm's violet murk, the Dragon's storm, the eclipse's near-black
+      const ev = dim === 'end' ? events : undefined;
+      if (ev) {
+        if (ev.dragonStorm > 0) {
+          zenith.lerp(DRAGON_SKY, 0.7 * ev.dragonStorm);
+          fog.lerp(DRAGON_FOG, 0.6 * ev.dragonStorm);
+        }
+        if (ev.storm > 0) {
+          zenith.lerp(STORM_SKY, 0.8 * ev.storm);
+          fog.lerp(STORM_FOG, 0.7 * ev.storm);
+        }
+        if (ev.eclipse > 0) {
+          zenith.lerp(ECLIPSE_SKY, 0.9 * ev.eclipse);
+          fog.lerp(ECLIPSE_FOG, 0.85 * ev.eclipse);
+        }
+      }
       u.uZenith!.value.copy(zenith);
       u.uHorizon!.value.copy(fog);
-      u.uVoid!.value.copy(ea ? fog.clone().multiplyScalar(0.55) : fog);
+      u.uVoid!.value.copy(ea || ev?.eclipse ? fog.clone().multiplyScalar(0.55) : fog);
       u.uGlowStrength!.value = 0;
-      (this.stars.material as THREE.PointsMaterial).opacity = dim === 'end' ? 0.5 * (1 - (ea ? ea.density * ea.amount : 0)) : 0;
+      let stars = dim === 'end' ? 0.5 * (1 - (ea ? ea.density * ea.amount : 0)) : 0;
+      // Under the eclipse the stars show through the fog; the storm hides them
+      if (ev) stars = Math.max(stars * (1 - ev.storm * 0.8), 0.95 * ev.eclipse);
+      (this.stars.material as THREE.PointsMaterial).opacity = stars;
       state.daylight = 0;
       state.ambient = dim === 'nether' ? 0.12 : ea ? 0.2 + (ea.light - 0.2) * ea.amount : 0.2;
+      if (ev) state.ambient = Math.max(0.08, state.ambient - 0.05 * ev.storm - 0.07 * ev.eclipse - 0.04 * ev.dragonStorm);
       state.fog.copy(fog);
       state.skyTint.setRGB(1, 1, 1);
       u.uGlitch!.value = 0;

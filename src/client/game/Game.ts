@@ -46,6 +46,8 @@ import { TouchControls } from '../ui/TouchControls';
 import { EndingCard } from '../ui/EndingCard';
 import { guideEntry } from '../../common/engineering/guide';
 import { EndAtmosphere } from './EndAtmosphere';
+import { EndEventsClient } from './EndEventsClient';
+import { inExpansion } from '../../common/endExpansion/region';
 
 export interface GameHost {
   openPause(): void;
@@ -102,7 +104,7 @@ export class Game {
   private deathPos: { dim: DimensionId; x: number; y: number; z: number } | null = null;
   /** V6 phase 4: recipes learned from blueprints, and the Elytra's upgrade meters (as of `at`). */
   unlockedRecipes = new Set<string>();
-  wings: { upgrades: string[]; hover?: number; charges?: number; chargeIn?: number; blinkIn?: number; recoverIn?: number; at: number } = { upgrades: [], at: 0 };
+  wings: { upgrades: string[]; hover?: number; charges?: number; chargeIn?: number; blinkIn?: number; recoverIn?: number; veilIn?: number; at: number } = { upgrades: [], at: 0 };
   private lastPilot = '';
   readonly chat = new Chat();
   readonly entities = new Map<number, ClientEntity>();
@@ -192,6 +194,9 @@ export class Game {
   private caveBlend = 0;
   /** V6: the Expanded End's blended sky, fog and ambience around the player. */
   readonly endAtmos = new EndAtmosphere();
+  /** V6 phase 5: the End's events (storm, eclipse, the Dragon's storm), its pockets and the server's bed. */
+  readonly endEvents = new EndEventsClient();
+  private bedOverride: string | null = null;
 
   constructor(
     readonly canvas: HTMLCanvasElement,
@@ -213,6 +218,8 @@ export class Game {
     // V6 phase 4: the worn Elytra's upgrades, and their moves sent to the server
     this.player.wingUps = () => elytraUpgrades(this.invSlots[HELMET + 1]);
     this.player.onElytra = (a) => this.send({ t: 'elytra', a });
+    // V6 phase 5: low-gravity pockets (a Void Storm's, the Guardian's Gravity Well)
+    this.player.lowGravity = () => this.dimension === 'end' && this.endEvents.inPocket(this.player.body.x, this.player.body.y, this.player.body.z, this.tickNo);
     // Elytra in the chest slot that isn't worn down to its last point
     this.player.sneakSpeed = () => {
       const legs = this.invSlots[HELMET + 2];
@@ -768,6 +775,12 @@ export class Game {
         if (m.hover !== undefined) this.player.hoverLeft = Math.min(this.player.hoverLeft, m.hover);
         break;
       }
+      case 'end_event':
+        this.endEvents.onView(m, this.tickNo);
+        break;
+      case 'ambience':
+        this.bedOverride = m.bed;
+        break;
       case 'boost':
         if (this.player.gliding) this.player.boostTicks = Math.max(this.player.boostTicks, m.ticks);
         break;
@@ -810,6 +823,10 @@ export class Game {
   }
 
   private setDimension(d: DimensionId): void {
+    if (d !== this.dimension) {
+      this.endEvents.reset();
+      this.bedOverride = null;
+    }
     this.dimension = d;
     this.world.dimension = d;
     this.world.hasSky = d === 'overworld' || d === 'farlands' || d === 'computer';
@@ -1083,6 +1100,7 @@ export class Game {
     }
     if (ups.includes('ender_blink')) out.blinkIn = left(w.blinkIn) ?? 0;
     if (ups.includes('void_recovery')) out.recoverIn = left(w.recoverIn) ?? 0;
+    if (ups.includes('eclipse_veil')) out.veilIn = left(w.veilIn) ?? 0;
     return out;
   }
 
@@ -1293,7 +1311,10 @@ export class Game {
         break;
       case 'warn_end':
       case 'zone_end':
-        if (m.id !== undefined) wf.remove(m.id);
+        if (m.id !== undefined) {
+          wf.remove(m.id);
+          this.endEvents.removePocket(m.id);
+        }
         break;
       case 'warn_beam':
       case 'laser':
@@ -1301,7 +1322,18 @@ export class Game {
         if (m.kind === 'laser') g.pulse(0.35, 12);
         break;
       case 'zone':
-        wf.zone(m.id, m.x ?? 0, m.y ?? 0, m.z ?? 0, m.r ?? 3, m.ticks === undefined ? Infinity : secs, now, m.text === 'malware' ? 0x18ff6a : m.text === 'static' ? 0xd8e8ff : 0xe020c8);
+        wf.zone(m.id, m.x ?? 0, m.y ?? 0, m.z ?? 0, m.r ?? 3, m.ticks === undefined ? Infinity : secs, now, m.text === 'malware' ? 0x18ff6a : m.text === 'static' ? 0xd8e8ff : m.text === 'lowgrav' ? 0x9a7aff : 0xe020c8);
+        // V6 phase 5: a low-gravity pocket (the player floats inside it)
+        if (m.text === 'lowgrav' && m.id !== undefined) this.endEvents.addPocket(m.id, m.x ?? 0, m.y ?? 0, m.z ?? 0, m.r ?? 3, m.ticks ?? 400, this.tickNo);
+        break;
+      case 'shake':
+        if (!this.settings.reduceMotion) this.shake = Math.max(this.shake, Math.min(1, m.strength ?? 0.5));
+        break;
+      case 'shockwave':
+        wf.pulse(m.x ?? 0, m.y ?? 0, m.z ?? 0, m.r ?? 12, secs, now, m.color, false);
+        break;
+      case 'dragon_storm':
+        this.endEvents.onDragonStorm((m.strength ?? 0) > 0);
         break;
       case 'pulse':
         wf.pulse(m.x ?? 0, m.y ?? 0, m.z ?? 0, m.r ?? 20, secs, now);
@@ -1424,7 +1456,14 @@ export class Game {
     const atm = this.endAtmos;
     atm.update(this.dimension === 'end', b.x, b.z, (x, z) => this.world.biomeAt(x, z));
     const def = atm.dominant;
-    this.audio.setBed(def ? `bed.${def.bed}` : null, atm.state.amount);
+    // V6 phase 5: the events only ever touch the Expanded End
+    const ev = this.endEvents;
+    ev.update(this.tickNo, this.dimension === 'end', this.dimension === 'end' && inExpansion(b.x, b.z) ? 1 : 0);
+    const look = ev.look;
+    // The server's bed (the Citadel, the Guardian) first, then a storm or an eclipse, then the biome's
+    const bed = this.dimension !== 'end' ? null : this.bedOverride ?? (look.storm > 0.3 ? 'bed.void_storm' : look.eclipse > 0.3 ? 'bed.end_eclipse' : look.dragonStorm > 0.3 ? 'bed.void_storm' : def ? `bed.${def.bed}` : null);
+    this.audio.setBed(bed, this.bedOverride || look.storm > 0.3 || look.eclipse > 0.3 || look.dragonStorm > 0.3 ? 1 : atm.state.amount);
+    this.eventParticles();
     const pt = def?.particles;
     if (!pt || this.settings.particles === 'minimal') return;
     const rate = pt.rate * atm.state.amount * (this.settings.particles === 'decreased' ? 0.4 : 1);
@@ -1433,6 +1472,58 @@ export class Game {
     const y = b.y + (Math.random() - 0.3) * 10;
     const z = b.z + (Math.random() - 0.5) * 20;
     if (!STATE_SOLID[this.world.getState(Math.floor(x), Math.floor(y), Math.floor(z))]) this.renderer.particles.spawn(`end_mote_${pt.motion}`, x, y, z, 1, 0.3, pt.color | (pt.glow ? 0x1000000 : 0));
+  }
+
+  /**
+   * V6 phase 5: what the events put in the air near the player: void motes
+   * and cracks along island edges in a storm; drifting light motes and faint
+   * glowing edges under the eclipse (client-side, within the particle setting).
+   */
+  private eventParticles(): void {
+    const look = this.endEvents.look;
+    if (this.settings.particles === 'minimal' || (look.storm < 0.05 && look.eclipse < 0.05 && look.dragonStorm < 0.05)) return;
+    const b = this.player.body;
+    const dense = this.settings.particles === 'decreased' ? 0.4 : 1;
+    const parts = this.renderer.particles;
+    const air = (x: number, y: number, z: number): boolean => !STATE_SOLID[this.world.getState(Math.floor(x), Math.floor(y), Math.floor(z))];
+    const storm = Math.max(look.storm, look.dragonStorm * 0.6);
+    if (storm > 0.05) {
+      for (let i = 0; i < 3; i++) {
+        if (Math.random() > storm * dense) continue;
+        const x = b.x + (Math.random() - 0.5) * 24;
+        const y = b.y + (Math.random() - 0.2) * 12;
+        const z = b.z + (Math.random() - 0.5) * 24;
+        if (air(x, y, z)) parts.spawn(Math.random() < 0.5 ? 'void_aura' : 'end_mote_fall', x, y, z, 1, 0.4, 0x8a3aff | 0x1000000);
+      }
+    }
+    if (look.eclipse > 0.05) {
+      for (let i = 0; i < 2; i++) {
+        if (Math.random() > look.eclipse * dense * 0.8) continue;
+        const x = b.x + (Math.random() - 0.5) * 28;
+        const y = b.y + (Math.random() - 0.3) * 12;
+        const z = b.z + (Math.random() - 0.5) * 28;
+        if (air(x, y, z)) parts.spawn('end_mote_float', x, y, z, 1, 0.3, 0xf0e8ff | 0x1000000);
+      }
+    }
+    // Island edges near the player: cracks in a storm, a faint glow under the eclipse
+    if (this.tickNo % 4 !== 0) return;
+    const x = Math.floor(b.x + (Math.random() - 0.5) * 32);
+    const z = Math.floor(b.z + (Math.random() - 0.5) * 32);
+    let top = -1;
+    for (let y = Math.floor(b.y) + 6; y > Math.floor(b.y) - 10; y--)
+      if (!air(x, y, z)) {
+        top = y;
+        break;
+      }
+    if (top < 0) return;
+    // An edge: open air beside it, and nothing under that air for a long way
+    const side = [[1, 0], [-1, 0], [0, 1], [0, -1]].find(([dx, dz]) => {
+      for (let y = top; y > top - 12; y--) if (!air(x + dx!, y, z + dz!)) return false;
+      return true;
+    });
+    if (!side) return;
+    if (storm > 0.3 && Math.random() < storm * 0.5) this.renderer.worldFx.warnCracks(undefined, x + 0.5, top + 1.02, z + 0.5, 1.2 + Math.random(), 6, this.tickNo / 20, 0x5a2a8a);
+    if (look.eclipse > 0.3) for (let i = 0; i < 3; i++) parts.spawn('end_mote_float', x + 0.5 + side[0]! * 0.55, top + 0.6 + i * 0.3, z + 0.5 + side[1]! * 0.55, 1, 0.1, 0xe8dcff | 0x1000000);
   }
 
   private inErrorBiome = false;
@@ -1607,6 +1698,11 @@ export class Game {
   private use(): void {
     const p = this.player;
     if (p.gamemode === 'spectator') return;
+    // V6 phase 5: the Eclipse Veil (sneak and an empty hand while gliding)
+    if (p.gliding && !this.held() && p.sneaking && p.wingUps().includes('eclipse_veil')) {
+      this.send({ t: 'elytra', a: 'veil' });
+      return;
+    }
     // V6 phase 4: Ender Blink (an empty hand while gliding)
     if (p.gliding && !this.held() && p.wingUps().includes('ender_blink')) {
       this.send({ t: 'elytra', a: 'blink' });
@@ -1787,6 +1883,7 @@ export class Game {
       darkness: this.darknessAmount(),
       cave: this.caveFog(),
       endAtmos: this.dimension === 'end' && this.endAtmos.state.amount > 0 ? this.endAtmos.state : undefined,
+      endEvents: this.dimension === 'end' ? this.endEvents.look : undefined,
       hurtTilt: this.hurtTilt,
       camDist,
       portal: this.portalFx,

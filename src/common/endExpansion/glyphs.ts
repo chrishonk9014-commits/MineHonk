@@ -12,3 +12,13 @@ export const GLYPHS: string[][] = [
   ['...#....', '..#.#...', '.#...#..', '#.....#.', '#######.', '........', '.######.', '...o....'],
   ['.###....', '#...#...', '....#...', '...#....', '..#.....', '........', 'o..o..o.', '.o....o.'],
 ];
+
+/**
+ * V6 phase 5: two more for the Void Citadel's Glyph Locks (eight in all: the
+ * six above, then these). The phase 3 stones and lore pages keep their six.
+ */
+export const CITADEL_GLYPHS: string[][] = [
+  ...GLYPHS,
+  ['#......#', '.#....#.', '..#..#..', '...oo...', '...oo...', '..#..#..', '.#....#.', '#......#'],
+  ['..#..#..', '..#..#..', '########', '..#..#..', '..#..#..', '########', '..#..#..', '..o..o..'],
+];

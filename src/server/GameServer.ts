@@ -769,6 +769,8 @@ export class GameServer {
     this.blockUpdates.onChunkReady(dim, c);
     this.mobs?.onChunkGenerated(dim, c);
     this.sculk?.onChunk(dim, c);
+    // V6 phase 5: generated machines (the Void Citadel's cores and sockets) run from the start
+    this.engineering?.onChunkLoaded(dim, c);
   }
 
   onChunkLoaded(dim: Dimension, c: Chunk, _entities: Record<string, unknown>[]): void {
@@ -913,11 +915,12 @@ export class GameServer {
   }
 
   private handlePendingSpawn(p: ServerPlayer): void {
-    const ps = p as { needsSafeSpawn?: boolean };
+    const ps = p as { needsSafeSpawn?: boolean; safeFrom?: number };
     if (!ps.needsSafeSpawn) return;
     if (!p.dim.isLoaded(p.x, p.z)) return;
-    const y = this.findSafeY(p.dim, p.x, p.z);
+    const y = this.findSafeY(p.dim, p.x, p.z, ps.safeFrom);
     ps.needsSafeSpawn = false;
+    delete ps.safeFrom;
     if (y !== null) this.teleport(p, Math.floor(p.x) + 0.5, y, Math.floor(p.z) + 0.5);
   }
 

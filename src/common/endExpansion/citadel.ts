@@ -86,8 +86,8 @@ export function citadelBlockDefs(): BlockDef[] {
     // Engineering: levers anyone may pull (but never break)
     { id: 'citadel_lever', name: 'Citadel Lever', sound: 'stone', model: 'lever', props: { face: ['floor', 'wall', 'ceiling'], facing: [...FACING4], powered: BOOL }, tex: { all: 'citadel_lever', base: 'citadel_stone' }, interact: 'lever', ...hard },
     // Engineering floors: the core and the socket (engineering components: catalog.ts)
-    { id: 'citadel_core', name: 'Citadel Core', sound: 'metal', model: 'cube', props: { facing: [...FACING4], status: ['idle', 'working', 'error'] }, tex: { all: 'citadel_core_side', top: 'citadel_core_top', bottom: 'citadel_core_top', front: 'citadel_core_front', front_on: 'citadel_core_front_on', front_err: 'citadel_core_front_err' }, light: 9, interact: 'engineering', mapColor: 0x6a4ac8, ...hard },
-    { id: 'citadel_socket', name: 'Citadel Socket', sound: 'metal', model: 'cube', props: { facing: [...FACING4], status: ['idle', 'working', 'error'] }, tex: { all: 'citadel_socket_side', top: 'citadel_socket_top', bottom: 'citadel_socket_top', front: 'citadel_socket_front', front_on: 'citadel_socket_front_on', front_err: 'citadel_socket_front_err' }, light: 5, mapColor: 0x5a3aa8, ...hard },
+    { id: 'citadel_core', name: 'Citadel Core', sound: 'metal', model: 'cube', props: { facing: [...FACING4], status: ['idle', 'working', 'error'] }, tex: { all: 'citadel_core_side', top: 'citadel_core_top', bottom: 'citadel_core_top', front: 'citadel_core_front', front_on: 'citadel_core_front_on', front_err: 'citadel_core_front_err' }, light: 9, interact: 'engineering', entity: 'eng', mapColor: 0x6a4ac8, ...hard },
+    { id: 'citadel_socket', name: 'Citadel Socket', sound: 'metal', model: 'cube', props: { facing: [...FACING4], status: ['idle', 'working', 'error'] }, tex: { all: 'citadel_socket_side', top: 'citadel_socket_top', bottom: 'citadel_socket_top', front: 'citadel_socket_front', front_on: 'citadel_socket_front_on', front_err: 'citadel_socket_front_err' }, light: 5, entity: 'eng', mapColor: 0x5a3aa8, ...hard },
     // The End Guardian: its arena floor, and the altar four Eclipse Shards wake it from
     { id: 'guardian_floor', name: 'Arena Floor', sound: 'stone', model: 'cube', tex: { all: 'guardian_floor' }, mapColor: 0x4a4060, ...hard },
     { id: 'guardian_altar', name: 'Guardian Altar', sound: 'stone', model: 'custom', props: { shards: ['0', '1', '2', '3', '4'], charged: BOOL }, tex: { all: 'guardian_altar', top: 'guardian_altar_top', on: 'guardian_altar_on' }, layer: 'cutout', opacity: 0, light: 6, mapColor: 0x9a88d0, ...hard },
@@ -438,9 +438,10 @@ export function planCitadel(seed: number, site: { x: number; z: number }): Citad
       }
       case 'engineering': {
         f.core = at(-8, 1, 6);
-        p(-8, 1, 6, stateOf('citadel_core', { facing: face('east'), status: 'idle' }));
+        // (their engineering state comes with them: the core runs, the socket waits)
+        p(-8, 1, 6, stateOf('citadel_core', { facing: face('east'), status: 'idle' }), { type: 'eng', id: 'citadel_core', energy: 0 } as BlockEntityData);
         f.socket = at(11, 1, 11);
-        p(11, 1, 11, stateOf('citadel_socket', { facing: face('north'), status: 'idle' }));
+        p(11, 1, 11, stateOf('citadel_socket', { facing: face('north'), status: 'idle' }), { type: 'eng', id: 'citadel_socket', energy: 0, cfg: { signal: 'ignore' } } as BlockEntityData);
         // Broken conduits from the core towards the socket (every so often one is gone)
         const path: [number, number][] = [];
         for (let cx = -7; cx <= 9; cx++) path.push([cx, 6]);

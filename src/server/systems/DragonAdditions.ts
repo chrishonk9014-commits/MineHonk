@@ -110,8 +110,6 @@ export class DragonAdditions {
   private dive: Dive | null = null;
   private edge: Edge | null = null;
   private weave: Weave | null = null;
-  /** Ticks a pillar weave added before the last perch (taken off the next wait, so perches come as often). */
-  private weaveDebt = 0;
   private furyUntil = 0;
   private readonly shots: FuryShot[] = [];
   private readonly shotReady = new Map<ServerPlayer, number>();
@@ -234,14 +232,12 @@ export class DragonAdditions {
     return this.enabled && (this.fight.phase === 'dive' || this.fight.phase === 'edge');
   }
 
-  /** Ticks to take off the next wait between perches (time a weave added to the last one). */
-  takeDebt(): number {
-    const d = this.weaveDebt;
-    this.weaveDebt = 0;
-    return d;
+  /** How long before a perch is due a weave may begin (it leads into the approach). */
+  weaveLead(): number {
+    return this.enabled ? DRAGON_X.weaveTicks : -Infinity;
   }
 
-  /** An approach has been decided: sometimes it weaves through the pillars first. */
+  /** A perch is nearly due: sometimes it weaves through the pillars, then comes down. */
   weaveFirst(m: Mob, players: ServerPlayer[]): boolean {
     if (!this.enabled || !this.rng.chance(DRAGON_X.weaveChance)) return false;
     return this.startWeave(m, players);
@@ -536,7 +532,6 @@ export class DragonAdditions {
     if (this.fight.steer(m, t[0], t[1], t[2], 0.75, 0.2) < 5) w.i++;
     const pt = this.fight.ticksInPhase();
     if (w.i >= w.route.length || pt > DRAGON_X.weaveTicks) {
-      this.weaveDebt += pt;
       this.endWeave(this.fight.playersInEnd());
       this.fight.setPhase('approach');
     }

@@ -469,7 +469,8 @@ for (const biome of ['end_barrens', 'shattered_end', 'astral_end', 'highlands', 
   });
 }
 
-// V6 phase 5: the Expanded End under a Void Storm and under the End Eclipse (the Astral End, compare with end-astral_end)
+// V6 phase 5: the Expanded End under a Void Storm and under the End Eclipse (the Astral End). Each is
+// measured twice from the same spot and view: first without the event (<name>-off), then under it.
 for (const [name, start, stop] of [
   ['end-storm', 'storm_start', 'storm_stop'],
   ['end-eclipse', 'eclipse_start', 'eclipse_stop'],
@@ -479,11 +480,13 @@ for (const [name, start, stop] of [
     if (!r.ok) throw new Error(r.text);
     await page.evaluate(() => (window.minehonk.game.player.flying = true));
     await page.evaluate(() => (window.minehonk.game.player.body.y += 25));
+    await settle(60000);
+    await setLook(0.785, 0.3);
+    results.push(await measure(`${name}-off`));
     const s = await page.evaluate((op) => window.minehonk.game.adminRequest({ a: 'v6', op }), start);
     if (!s.ok) throw new Error(s.text);
-    await settle(60000);
     // A storm breaks a few seconds after it is called, and the sky takes a few seconds to turn
-    await wait(8000);
+    await wait(10000);
     await setLook(0.785, 0.3);
     const m = await measure(name);
     await page.evaluate((op) => window.minehonk.game.adminRequest({ a: 'v6', op }), stop);

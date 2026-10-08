@@ -68,7 +68,7 @@ export class WorldFX {
   private readonly markers = new Map<number, Marker>();
   private nextAnon = -1;
   /**
-   * One material of each kind kept, never disposed: three.js frees a shader
+   * One drawn material of each kind kept, never disposed: three.js frees a shader
    * program when the last material using it is disposed, so without this the
    * next marker of that kind compiled it again (a long frame each time, every
    * few seconds under a Void Storm's debris rings and cracks).
@@ -80,6 +80,11 @@ export class WorldFX {
     this.remove(key);
     this.markers.set(key, m);
     this.group.add(m.obj);
+    // Note which materials get drawn (only a drawn one holds a compiled program worth keeping)
+    m.obj.traverse((o) => {
+      const mat = (o as THREE.Mesh).material as THREE.Material | undefined;
+      if (mat && !mat.userData.drawn) o.onBeforeRender = () => void (mat.userData.drawn = true);
+    });
   }
 
   remove(id: number): void {
@@ -101,7 +106,7 @@ export class WorldFX {
     const key = [mat.type, mat.side, mat.transparent, m.fog, !!m.map, m.vertexShader?.length ?? 0, m.fragmentShader?.length ?? 0].join('|');
     const kept = this.kept.get(key);
     if (kept === mat) return;
-    if (!kept) this.kept.set(key, mat);
+    if (!kept && mat.userData.drawn) this.kept.set(key, mat);
     else mat.dispose();
   }
 

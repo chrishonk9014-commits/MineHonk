@@ -1249,7 +1249,32 @@ Players gain `veiledUntil` (not saved) and the Guardian Core's first-defeat reco
 - **Two extra Admin Panel tools:** "Next phase" for the Guardian, and "Respawn the Dragon" (so the Dragon's moves can be tried after its defeat). Both are cheats.
 - **Generated machines now run from the start:** a newly generated chunk's engineering blocks are registered at once (the Citadel's cores and sockets). Before, that happened only when a chunk was loaded from storage.
 - **Respawning at a Citadel Anchor** puts the player at the anchor, not on the island above it. The safe spot is searched from the anchor's height.
+- **Warning markers no longer recompile shaders:** under a Void Storm, warning rings and cracks come and go every few seconds. Each time the last of a kind went, three.js freed its shader program, and the next compiled it again, a long frame each time. `WorldFX` now keeps one drawn material of each kind (see Performance).
 - **A phase 4 test was flaky:** a roaming Void Stalker could kill the player during a gateway trip, which also happened on the phase 4 commit. The test now keeps the player healthy while it waits.
+
+### Performance
+
+`npm run bench` at render distance 8, run on the phase 4 build (before) and this one (after) on the same machine. Rendering is headless and in software (SwiftShader), so absolute frame rates are far below a real GPU's: compare rows, and read the main-thread time and draw calls, which carry over to real hardware.
+
+| Scene | Before: ms per frame (fps) | After: ms per frame (fps) | JS ms per frame, before → after | Draw calls, before → after |
+| --- | --- | --- | --- | --- |
+| The classic End, main island (`end`) | 142 (7.1) | 152 (6.6) | 6.7 → 7.8 | 181 → 215 |
+| The classic End, outer islands (`end-outer`) | 65 (15.6) | 64 (16.0) | 4.0 → 3.1 | 32 → 19 |
+| Astral End (`end-astral_end`) | 82 (12.5) | 87 (11.7) | 2.0 → 2.3 | 22 → 22 |
+| Void Wastes (`end-void_wastes`) | 116 (8.7) | 113 (8.8) | 12.1 → 7.9 | 32 → 30 |
+
+Every scene is within 7% of its phase 4 time. The main island's after run had 11 more chunks loaded and 21% more triangles in view (85k against 70k), which accounts for its slower frames. Every Expanded End scene draws faster than the classic main island.
+
+The events are measured from one spot in the Astral End, first without the event and then under it (`end-storm`, `end-eclipse`; each records an `-off` row too):
+
+| Scene | Without: ms per frame (p95) | With: ms per frame (p95) | JS ms per frame, avg / p95 | Draw calls |
+| --- | --- | --- | --- | --- |
+| Void Storm | 90 (200) | 95 (150) | 2.4 / 6.3 → 7.4 / 8.6 | 22 → 23 |
+| End Eclipse | 88 (183) | 93 (167) | 2.2 / 5.8 → 3.1 / 7.7 | 22 → 25 |
+
+Neither event drops frames: the 95th-percentile frame is no slower with the event than without it, and each costs about 5% of the average frame. The storm's higher average JS time is the one-off compile of its markers' shaders when the first ones appear.
+
+The first storm measurement found long frames (a p95 of 196 ms of JS) every few seconds. Each time the last warning ring or crack of a kind faded and its material was disposed, three.js freed the shader program, and the next one compiled it again. `WorldFX` now keeps one drawn material of each kind, so each program is compiled once.
 
 ### Tests (phase 5)
 

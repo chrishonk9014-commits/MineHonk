@@ -1020,6 +1020,26 @@ const look5 = () => page.evaluate(() => ({ ...window.minehonk.game.endEvents.loo
   check('the eclipse ends', (await admin('eclipse_stop')).ok);
 }
 
+/** Every fx message the client gets from now on (telegraphs, banners), for framing shots. */
+await page.evaluate(() => {
+  const g = window.minehonk.game;
+  window.__fx = [];
+  const orig = g.onMessage.bind(g);
+  g.onMessage = (m) => {
+    if (m.t === 'fx') window.__fx.push(m);
+    return orig(m);
+  };
+});
+const fxSince = (n, kinds) => page.evaluate(([n, kinds]) => window.__fx.slice(n).filter((m) => kinds.includes(m.kind)), [n, kinds]);
+const fxCount = () => page.evaluate(() => window.__fx.length);
+/** The top of the ground under (x, z), searched down from y0 (null over the void). */
+const topAt = (x, z, y0 = 120) =>
+  page.evaluate(([x, z, y0]) => {
+    const w = window.minehonk.game.world;
+    for (let y = y0; y > 0; y--) if (w.getState(Math.floor(x), y, Math.floor(z))) return y;
+    return null;
+  }, [x, z, y0]);
+
 // The Void Citadel: found (a title), from outside, a puzzle floor and the parkour shaft
 let cit = null;
 {
@@ -1032,13 +1052,14 @@ let cit = null;
   check('the Citadel has a site', !!cit?.site);
   if (cit?.site) {
     const [cx, cz] = cit.site;
-    // From out in the void, a little below its island: the tower hanging down
-    const cam = { x: cx + 48, y: 92, z: cz + 30 };
+    const ey = cit.entrance?.[1] ?? 100;
+    // From above one corner: the island on top, its entrance hall, and the tower hanging down into the void
+    const cam = { x: cx + 30, y: ey + 6, z: cz + 30 };
     await moveTo(cam.x, cam.y, cam.z);
-    await aimAt(cx, 80, cz);
+    await aimAt(cx, ey - 25, cz);
     await page.waitForTimeout(5000);
     await pin(cam.x, cam.y, cam.z);
-    await aimAt(cx, 80, cz);
+    await aimAt(cx, ey - 25, cz);
     await page.waitForTimeout(1000);
     await page.screenshot({ path: `${OUT}/v6-citadel-exterior.png` });
     const floors = cit.floors ?? [];
@@ -1067,12 +1088,15 @@ let cit = null;
       check(`the mural is there (${murals.length} glyphs)`, murals.length >= 3);
       if (murals.length) {
         const c = murals.reduce((a, q) => [a[0] + q[0] / murals.length, a[1] + q[1] / murals.length, a[2] + q[2] / murals.length], [0, 0, 0]);
+        // Stand in the room facing the mural (a real move: the server checks every one)
         const inward = [cx - c[0], cz - c[2]];
         const d = Math.hypot(...inward) || 1;
-        const cam = { x: c[0] + (inward[0] / d) * 12, y: c[1] + 1, z: c[2] + (inward[1] / d) * 12 };
-        await pin(cam.x, cam.y, cam.z);
-        await aimAt(c[0], c[1], c[2]);
+        const cam = { x: c[0] + 0.5 + (inward[0] / d) * 9, y: c[1] - 1, z: c[2] + 0.5 + (inward[1] / d) * 9 };
+        await moveTo(cam.x, cam.y, cam.z);
+        await aimAt(c[0] + 0.5, c[1] + 0.5, c[2] + 0.5);
         await page.waitForTimeout(1500);
+        await pin(cam.x, cam.y, cam.z);
+        await aimAt(c[0] + 0.5, c[1] + 0.5, c[2] + 0.5);
         await page.screenshot({ path: `${OUT}/v6-citadel-glyph.png` });
       }
     }
@@ -1117,19 +1141,26 @@ let cit = null;
   check('to the arena', r.ok);
   await waitChunks();
   await page.waitForTimeout(2000);
+  const site = (await admin('status')).data?.citadel?.site;
   const sp = await admin('guardian_spawn');
   check('the Guardian wakes (Admin Panel)', sp.ok);
   await page.waitForTimeout(4000);
+  // From a corner of the arena's hall, high enough to see over its shoulders
+  const corner = site ? { x: site[0] + 14.5, y: 25, z: site[1] + 14.5 } : null;
+  if (corner) await moveTo(corner.x, corner.y, corner.z);
   const shotGuardian = async (name) => {
-    const gp = await page.evaluate(() => {
-      const e = [...window.minehonk.game.entities.values()].find((x) => x.type === 'end_guardian');
-      return e ? [e.x, e.y, e.z] : null;
-    });
+    const at = () =>
+      page.evaluate(() => {
+        const e = [...window.minehonk.game.entities.values()].find((x) => x.type === 'end_guardian');
+        return e ? [e.x, e.y, e.z] : null;
+      });
+    let gp = await at();
     if (!gp) return false;
-    const cam = { x: gp[0] + 9, y: gp[1] + 4, z: gp[2] + 9 };
-    await pin(cam.x, cam.y, cam.z);
-    await aimAt(gp[0], gp[1] + 3, gp[2]);
+    if (corner) await pin(corner.x, corner.y, corner.z);
+    await aimAt(gp[0], gp[1] + 2.5, gp[2]);
     await page.waitForTimeout(800);
+    gp = (await at()) ?? gp;
+    await aimAt(gp[0], gp[1] + 2.5, gp[2]);
     await page.screenshot({ path: `${OUT}/${name}.png` });
     return true;
   };
@@ -1161,27 +1192,80 @@ let cit = null;
   const rs = await admin('dragon_respawn');
   check('the Dragon respawned (Admin Panel)', rs.ok);
   await page.waitForFunction(() => [...window.minehonk.game.entities.values()].some((e) => e.type === 'ender_dragon'), null, { timeout: 60000 }).catch(() => {});
-  const dragonAt = () => page.evaluate(() => {
-    const e = [...window.minehonk.game.entities.values()].find((x) => x.type === 'ender_dragon');
-    return e ? { x: e.x, y: e.y, z: e.z, phase: e.meta?.phase ?? null } : null;
-  });
-  const camAt = async () => {
-    await page.evaluate(() => window.minehonk.game.adminRequest({ a: 'heal' }));
-    const d = await dragonAt();
-    if (!d) return;
-    await aimAt(d.x, d.y + 2, d.z);
+  const dragonAt = () =>
+    page.evaluate(() => {
+      const e = [...window.minehonk.game.entities.values()].find((x) => x.type === 'ender_dragon');
+      return e ? { x: e.x, y: e.y, z: e.z, phase: e.meta?.phase ?? null } : null;
+    });
+  const heal = () => page.evaluate(() => window.minehonk.game.adminRequest({ a: 'heal' }));
+  const portalY = (await topAt(0.5, 0.5, 90)) ?? 64;
+  /** Somewhere on the island to stand (hovering a little over the ground). */
+  const standAt = async (x, z, up = 3) => {
+    const gy = (await topAt(x, z, 100)) ?? portalY;
+    await moveTo(x, gy + 1 + up, z);
+    return gy + 1 + up;
   };
-  for (const t of ['breath_wave', 'strafing_dive', 'edge_strike', 'pillar_weave', 'crystal_fury', 'dragon_storm', 'roar', 'wing_gust']) {
-    await page.evaluate(() => window.minehonk.game.adminRequest({ a: 'heal' }));
+  /** Frames a telegraph (from the fx it sent) and the Dragon together, from where the player stands. */
+  const frame = async (tele) => {
+    const d = await dragonAt();
+    const b = await page.evaluate(() => ({ ...window.minehonk.game.player.body }));
+    const tx = tele ? (tele.x1 !== undefined ? (tele.x + tele.x1) / 2 : tele.x) : b.x;
+    const ty = tele ? (tele.y1 !== undefined ? (tele.y + tele.y1) / 2 : tele.y) : b.y;
+    const tz = tele ? (tele.z1 !== undefined ? (tele.z + tele.z1) / 2 : tele.z) : b.z;
+    if (!d) return aimAt(tx, ty, tz);
+    // Between the two, nearer the telegraph
+    const k = Math.min(0.5, 14 / Math.max(1, Math.hypot(d.x - tx, d.z - tz)));
+    await aimAt(tx + (d.x - tx) * k, ty + (d.y + 2 - ty) * k, tz + (d.z - tz) * k);
+  };
+  // The lowest crystal: beside its pillar, it is the nearest one
+  const crystals = await page.evaluate(() => [...window.minehonk.game.entities.values()].filter((e) => e.type === 'end_crystal').map((e) => [e.x, e.y, e.z]));
+  crystals.sort((a, b) => a[1] - b[1]);
+  for (const t of ['breath_wave', 'strafing_dive', 'edge_strike', 'crystal_fury', 'pillar_weave', 'dragon_storm', 'roar', 'wing_gust']) {
+    await heal();
+    // Where to stand for each: mid-island for the line attacks, beside a crystal's pillar for its fury,
+    // well back from the portal (outside the gust) for what it does when it lands
+    if (t === 'breath_wave' || t === 'strafing_dive' || t === 'edge_strike' || t === 'dragon_storm') await standAt(-14.5, 18.5, 4);
+    else if (t === 'crystal_fury' && crystals.length) {
+      const c = crystals[0];
+      const d = Math.hypot(c[0], c[2]) || 1;
+      await moveTo(c[0] - (c[0] / d) * 6, c[1] - 4, c[2] - (c[2] / d) * 6);
+    } else if (t === 'pillar_weave') await moveTo(-20.5, portalY + 40, 52.5);
+    else await standAt(-16.5, 9.5, 5);
+    const n0 = await fxCount();
     const res = await admin('dragon_test', { test: t });
     check(`Dragon test: ${t} (${res.text})`, res.text.length > 0);
+    let tele = null;
     if (t === 'roar' || t === 'wing_gust') {
       // These come when it lands on the portal
       await page.waitForFunction(() => [...window.minehonk.game.entities.values()].some((e) => e.type === 'ender_dragon' && e.meta?.phase === 'perch'), null, { timeout: 40000 }).catch(() => {});
-      await page.waitForTimeout(t === 'roar' ? 400 : 900);
-    } else await page.waitForTimeout(t === 'dragon_storm' ? 4000 : 1300);
-    await camAt();
-    await page.waitForTimeout(200);
+      await page.waitForTimeout(t === 'roar' ? 300 : 700);
+      await aimAt(0.5, portalY + 4, 0.5);
+    } else if (t === 'dragon_storm' || t === 'pillar_weave') {
+      await page.waitForTimeout(t === 'dragon_storm' ? 4000 : 2500);
+      const d = await dragonAt();
+      if (d) await aimAt(d.x, d.y + 2, d.z);
+    } else {
+      const kinds = t === 'edge_strike' ? ['warn_circle'] : ['warn_beam'];
+      for (let i = 0; i < 60 && !tele; i++) {
+        await page.waitForTimeout(150);
+        tele = (await fxSince(n0, kinds))[0] ?? null;
+      }
+      if (tele && (t === 'breath_wave' || t === 'strafing_dive')) {
+        // From past the far end of its line, looking back along it at the Dragon
+        const len = Math.hypot(tele.x1 - tele.x, tele.z1 - tele.z) || 1;
+        const ux = (tele.x1 - tele.x) / len;
+        const uz = (tele.z1 - tele.z) / len;
+        await moveTo(tele.x1 + ux * 8 - uz * 5, tele.y1 + 6, tele.z1 + uz * 8 + ux * 5);
+        await frame(tele);
+      } else if (tele && t === 'edge_strike') {
+        // From the island, a little above the marked edge
+        const d = Math.hypot(tele.x, tele.z) || 1;
+        await moveTo(tele.x - (tele.x / d) * 16, tele.y + 8, tele.z - (tele.z / d) * 16);
+        await aimAt(tele.x, tele.y + 1, tele.z);
+      } else if (tele && t === 'crystal_fury') await aimAt(tele.x, tele.y - 1, tele.z);
+      else await frame(tele);
+    }
+    await page.waitForTimeout(250);
     await page.screenshot({ path: `${OUT}/v6-dragon-${t.replace(/_/g, '-')}.png` });
   }
   await cmd('/gamemode creative');

@@ -67,6 +67,13 @@ export class WorldFX {
   readonly group = new THREE.Group();
   private readonly markers = new Map<number, Marker>();
   private nextAnon = -1;
+  /**
+   * One material of each kind kept, never disposed: three.js frees a shader
+   * program when the last material using it is disposed, so without this the
+   * next marker of that kind compiled it again (a long frame each time, every
+   * few seconds under a Void Storm's debris rings and cracks).
+   */
+  private readonly kept = new Map<string, THREE.Material>();
 
   private add(id: number | undefined, m: Marker): void {
     const key = id ?? this.nextAnon--;
@@ -84,8 +91,18 @@ export class WorldFX {
       const mesh = o as THREE.Mesh;
       if (mesh.geometry && !m.sharedGeometry) mesh.geometry.dispose();
       const mat = mesh.material as THREE.Material | undefined;
-      mat?.dispose();
+      if (mat) this.release(mat);
     });
+  }
+
+  /** Disposes a marker's material, unless it is the one kept for its shader program. */
+  private release(mat: THREE.Material): void {
+    const m = mat as THREE.ShaderMaterial & THREE.MeshBasicMaterial;
+    const key = [mat.type, mat.side, mat.transparent, m.fog, !!m.map, m.vertexShader?.length ?? 0, m.fragmentShader?.length ?? 0].join('|');
+    const kept = this.kept.get(key);
+    if (kept === mat) return;
+    if (!kept) this.kept.set(key, mat);
+    else mat.dispose();
   }
 
   /** A warning ring on the ground: something will hit here (V6: in the attacker's own colour). */

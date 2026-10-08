@@ -908,6 +908,10 @@ In the End Expansion tab, all advancement-neutral:
   the quest (or nothing is looked at), instead of answering "ok".
 - The tracker no longer saves empty records for quest sites a player only
   walked past.
+- Moving an item around the creative inventory no longer loses its item data
+  (an Elytra's upgrades, a Void Pack's contents, an Ancient Map's target):
+  the client can't send item data, so the server puts back its own copy of
+  the stack the player picked up.
 
 ### Tests (phase 4)
 

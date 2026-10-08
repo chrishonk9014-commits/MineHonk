@@ -624,6 +624,25 @@ describe('Elytra upgrades', () => {
     expect(j.player.inventory.get(38)!.damage).toBe(700);
   }, 180000);
 
+  it('a creative player moving an upgraded Elytra keeps its upgrades; a client can never send upgrades of its own', async () => {
+    const p = await endPad('p4-creative');
+    const { server, player, conn } = p;
+    player.setGamemode('creative');
+    const up = withUpgrade(withUpgrade(stackOf('elytra', 1), 'reinforced'), 'hover');
+    player.inventory.set(0, up);
+    // Picked up from hotbar slot 0 (player window slot 36) and put down in slot 40, as the creative screen sends it
+    server.handle(conn, { t: 'creative_set', slot: 36, item: null });
+    server.handle(conn, { t: 'creative_set', slot: 40, item: { id: up.id, count: 1, tag: { data: { upgrades: ['reinforced', 'hover'] } } } as never });
+    expect(player.inventory.get(0)).toBeNull();
+    expect(elytraUpgrades(player.inventory.get(4))).toEqual(['reinforced', 'hover']);
+    // Placed once: a fresh Elytra from the catalog later gets nothing from it
+    server.handle(conn, { t: 'creative_set', slot: 41, item: { id: up.id, count: 1 } as never });
+    expect(elytraUpgrades(player.inventory.get(5))).toEqual([]);
+    // Upgrades the client makes up are dropped
+    server.handle(conn, { t: 'creative_set', slot: 42, item: { id: up.id, count: 1, tag: { data: { upgrades: ['thrust', 'burst', 'ender_blink'] } } } as never });
+    expect(elytraUpgrades(player.inventory.get(6))).toEqual([]);
+  }, 120000);
+
   it('without upgrades an Elytra flies exactly as before (a recorded flight path, rockets and all); Thrust is faster and the server allows for it', async () => {
     const p = await endPad('p4-flight');
     const { dim, X, Y, Z, server, player } = p;

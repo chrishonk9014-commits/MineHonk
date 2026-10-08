@@ -94,6 +94,13 @@ export class Containers {
   private readonly activeFurnaces = new Map<string, { dim: Dimension; x: number; y: number; z: number }>();
   private readonly windows = new Map<ServerPlayer, Window>();
   private readonly playerCraft = new Map<ServerPlayer, Inventory>();
+  /**
+   * What a creative player last picked up out of a slot, as the server has it. The creative
+   * inventory moves items by sending them back whole, and the client can't send item data
+   * (an Elytra's upgrades, a Void Pack's contents), so a stack put down again gets its data
+   * from this copy.
+   */
+  private readonly creativeHand = new WeakMap<ServerPlayer, ItemStack>();
 
   constructor(private readonly server: GameServer) {}
 
@@ -886,6 +893,16 @@ export class Containers {
     const s = w.slots[slot];
     if (!s || s.output) return;
     if (item && !s.mayPlace(item)) return;
+    const was = s.get();
+    if (!item && was) this.creativeHand.set(p, cloneStack(was)!);
+    if (item) {
+      // The same stack put back down: its data comes from the server's copy, never the client's
+      const held = this.creativeHand.get(p);
+      if (held?.tag?.data && held.id === item.id && item.count <= held.count && (item.damage ?? 0) === (held.damage ?? 0)) {
+        item = { ...item, tag: { ...(item.tag ?? {}), data: structuredClone(held.tag.data) } };
+        if (item.count >= held.count) this.creativeHand.delete(p);
+      }
+    }
     s.set(item);
     this.syncInventory(p);
   }

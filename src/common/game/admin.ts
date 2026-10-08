@@ -129,6 +129,7 @@ export const V6_OPS = [
   'fill_eu',
   'force_gate',
   'open_sanctum',
+  'end_rig',
 ] as const;
 export type V6Op = (typeof V6_OPS)[number];
 

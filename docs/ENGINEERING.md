@@ -94,6 +94,75 @@ Everything is server authoritative; state lives in block entities and item
 entities, networks are rebuilt from the world, so saves cannot duplicate or
 lose items, energy or fluid.
 
+## End engineering (V6 phase 4)
+
+The End Expansion's machines are ordinary components: `ComponentDef`s in the
+same catalog (the `E` list, `endComp(...)`), joining the same EU networks
+through the same cables, in the same machine window, with the same states and
+signal modes, saved in the same `{ type: 'eng' }` block entities and crafted
+at the Engineering Crafting Table. "End Power" is just EU made by End
+generators. Their logic is in `src/server/engineering/end.ts`
+(`EndEngineering`), called from the engineering step after the V5 machines.
+
+| Machine | Kind | EU | Notes |
+| --- | --- | --- | --- |
+| Crystal Generator | generator | makes 128 EU/t | burns one End Crystal Fragment per 400 ticks (its fuel slot takes nothing else); buffer 51,200 |
+| Void Collector | generator | makes 24 EU/t | only with at least 32 blocks of air below it, all the way down to the bottom of the world; ×`server.endEvents.voidStormFactor()` (phase 5's Void Storms, ×4) |
+| Restored Ancient Core | generator | makes 512 EU/t | never runs out; never crafted: restored from a dormant Ancient Core where it was found; Silk Touch picks a restored one up |
+| Void Cell | battery | stores 2,000,000 EU, 4,096 EU/t in and out | the ordinary battery logic; keeps its charge when broken |
+| End Processor | machine | uses 64 EU/t, 100 ticks a job | the recipes below |
+| Crystal Grower | machine | uses 32 EU/t | grows an End Crystal Cluster on Crystalline End Stone beside it (with air above) every 6,000 ticks (5 minutes) |
+| Teleportation Node | transport | 1,000 EU + 10 EU a block per trip, from its own buffer (250,000) | see [END_EXPANSION.md](END_EXPANSION.md#transport) |
+| Ender Bridge Projector | transport | 16 EU/t per 16 blocks of bridge | up to 64 blocks of Ender Light the way it faces; flickers and fades over 3 seconds without power or its signal |
+| Ender Rail | transport | 1 EU/t (or a signal) | powered, drives minecarts twice as fast as a powered rail; can lie on Ender Light |
+| Restored Ancient Lens | machine | uses 256 EU/t | the Lost Observatory's telescope: wakes after 600 ticks powered (quest only, never crafted) |
+| Crystal Pedestal | machine | uses 64 EU/t | the Crystal Vault's pedestals: lit only by a network with a burning Crystal Generator (quest only, never crafted) |
+| Ancient Conduit, Ancient Core (dormant) | cable | 512 EU/t | blocks found in the ancient structures; they carry power like cables but keep their own shapes |
+
+End Processor recipes (`MACHINE_RECIPES.end_processor`; a recipe can give a
+range with `countMax`):
+
+| In | Out |
+| --- | --- |
+| Ender Ore | 2 Ender Scrap (a furnace still gives 1) |
+| Void Crystal Ore | 4 to 6 Void Shards |
+| End Crystal Cluster | 5 End Crystal Fragments |
+| Ancient End Fragment (the block) | 3 Ancient Fragments, and a 4% chance of an Ancient Key Shard |
+| Chorus Stalk | 4 Chorus Fiber |
+
+Rules kept from the spec:
+
+- **Few and focused.** Eight craftable End components, each needing the
+  End's own resources (Ender Alloy, End Crystal Fragments, Void Shards,
+  Astral Shards, Crystalline and Dark End Stone, chorus).
+- **No working machines in structures.** Structures hold dormant cores,
+  cracked lenses and conduits; a player restores or powers them.
+- **Uncraftable means uncraftable.** Components marked `uncraftable` (the
+  restored core, lens and pedestal) are left out of `COMPONENTS` (so out of
+  the crafting table and the creative tab) but keep their Engineering Book
+  entries, which say where they come from.
+- **Cheats stay cheats.** Machines placed with cheat items or in a cheat
+  context (and anything the Admin Panel fills or builds) are marked
+  `cheat`, and nothing they do earns an advancement.
+- **Status.** New status texts (`END_STATUS_TEXT`): no void below, no
+  Crystalline End Stone, charging, no crystal, no Crystal Generator power,
+  blocked. Each End machine has idle, working and error fronts
+  (`tools/textures/v6phase4.ts`) and its own hum (`synth.ts`).
+
+The Engineering Book has two new chapters, **End Engineering** and **End
+Transport** (`guide.ts`), with the usual entries; recipes are shown from the
+Recipe Book's data, not repeated.
+
+Advancements (End tab): Power From the End (run a Crystal Generator), It
+Still Hums (restore an Ancient Core), Bottled Void (fill a Void Cell), Light
+Underfoot (cross the void on an Ender Bridge), Been There, Built That
+(teleport between two of your own nodes).
+
+The Admin Panel's End Expansion tab can fill the looked-at machine's buffer
+and build an **End test line** (a fuelled Crystal Generator charging a Void
+Cell, an End Processor, a Crystal Grower, two Teleportation Nodes and an
+Ender Bridge Projector), all cheat-marked.
+
 ## Where things live
 
 - `src/common/engineering/`: `catalog.ts` (components, block and item
@@ -109,3 +178,7 @@ lose items, energy or fluid.
 - Client: `ui/EngineeringBook.ts`, the `machine` and `eng_crafting` layouts
   in `ui/InventoryScreen.ts`, models in `render/models.ts`, monitor screens
   in `render/SignText.ts`, textures in `tools/textures/v5.ts`.
+- V6 phase 4: `src/server/engineering/end.ts` (the End machines, bridges,
+  rails, lens and pedestals), `src/server/systems/EndTransport.ts` (nodes,
+  gateways, minecarts, the Void Skiff), textures in
+  `tools/textures/v6phase4.ts`.

@@ -669,7 +669,26 @@ function adminOf(w: World, i = 0): (action: Record<string, unknown>) => { ok: bo
   };
 }
 
-const END_QUEST_ADVANCEMENTS = ['quest_lost_observatory', 'quest_broken_gateway', 'quest_silent_city', 'quest_crystal_vault', 'quest_dragons_history', 'all_end_quests', 'repair_gateway_pair', 'teleport_own_nodes', 'fill_void_cell', 'elytra_upgrade', 'elytra_full', 'restore_ancient_core'];
+const END_QUEST_ADVANCEMENTS = ['quest_lost_observatory', 'quest_broken_gateway', 'quest_silent_city', 'quest_crystal_vault', 'quest_dragons_history', 'all_end_quests', 'repair_gateway_pair', 'teleport_own_nodes', 'fill_void_cell', 'elytra_upgrade', 'elytra_full', 'restore_ancient_core', 'run_crystal_generator'];
+
+describe("the quests' lore", () => {
+  it('the three quest fragments follow the lore rules, are never placed as loot, and are listed in the docs', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { QUEST_LORE, loreWeight, LORE_SITES } = await import('../../src/common/endExpansion/lore');
+    const docs = readFileSync('docs/END_EXPANSION.md', 'utf8');
+    expect(QUEST_LORE.map((f) => f.id)).toEqual(['stars_circle', 'gateways_stitches', 'sanctum_seen']);
+    for (const f of QUEST_LORE) {
+      expect(f.lines.length, f.id).toBeLessThanOrEqual(4);
+      for (const line of f.lines) {
+        expect(line.length, f.id).toBeLessThan(70);
+        expect(docs, `${f.id} missing from the docs`).toContain(line);
+      }
+      expect(docs).toContain(f.id);
+      expect(f.lines.join(' ').toLowerCase()).not.toMatch(/herobrine|computer|farlands|error/);
+      for (const site of LORE_SITES) expect(loreWeight(f, site), `${f.id} at ${site}`).toBe(0);
+    }
+  });
+});
 
 describe('saves, old worlds and the Admin Panel', () => {
   it('quest states, gateways, the Silent City, nodes, machines and Elytra data survive a save; the quests carry on after it', async () => {
@@ -958,5 +977,24 @@ describe('saves, old worlds and the Admin Panel', () => {
     // The status shows the quests
     const status = admin({ a: 'v6', op: 'quest_reset', quest: 'silent_city' }).data as { quests?: { on: boolean } };
     expect(status.quests?.on).toBe(true);
+    // The End test line, built up in the open: it runs, its bridge reaches out, and none of it counts
+    const ry = 200;
+    w.server.teleport(p, sanct()!.at[0] + 40.5, ry, sanct()!.at[2] + 0.5);
+    p.abilities.flying = true;
+    const [rx, rz] = [Math.floor(p.x) + 2, Math.floor(p.z) + 2];
+    await settle(w.server, 600, () => end.isLoaded(rx - 16, rz) && end.isLoaded(rx + 48, rz));
+    w.server.teleport(p, rx - 1.5, ry, rz - 1.5);
+    expect(admin({ a: 'v6', op: 'end_rig' }).ok).toBe(true);
+    p.abilities.flying = true;
+    tick(w.server, 80);
+    const gen = end.getBlockEntity(rx, ry, rz) as EngBE;
+    expect(gen.cheat).toBeTruthy();
+    expect(gen.status).toBe('working');
+    expect(w.server.endTransport!.nodeList().filter(([k]) => k.includes(`,${ry},`)).length).toBe(2);
+    expect(blockId(end.getState(rx + 11, ry, rz + 1))).toMatch(/^ender_light/);
+    expect(blockId(end.getState(rx + 30, ry, rz + 1))).toMatch(/^ender_light/);
+    expect(((end.getBlockEntity(rx + 4, ry, rz) as EngBE).items ?? []).some((it) => !!it)).toBe(true);
+    tick(w.server, 40);
+    nothingEarned();
   }, 1500000);
 });

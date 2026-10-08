@@ -277,9 +277,10 @@ It is still the End: going there never changes dimension. **Phase 2** fills it
 with five new mobs and its own stone, ores, crystal, chorus wood and Ender
 Alloy. **Phase 3** builds it up: new End Cities, the remains of an older
 civilization, five giant structures, their Guardian Constructs, and the
-Dragon's Nest under the main island. Later phases bring quests and the
-ancient machines to life, then Void Storms, the Dragon's expansion and the
-Citadel's boss. Design notes:
+Dragon's Nest under the main island. **Phase 4** brings it to life: End
+machines on the Engineering Update's networks, new ways across the void, five
+quests in the ancient structures and Elytra upgrades. Phase 5 brings Void
+Storms, the Dragon's expansion and the Citadel's boss. Design notes:
 [docs/END_EXPANSION.md](docs/END_EXPANSION.md).
 
 - **The Expansion Portal** stands on the main End island, apart from the exit
@@ -383,11 +384,43 @@ Citadel's boss. Design notes:
   the Expansion Portal into a vast hollow under the main island. It is full of
   empty nest hollows, older stone and its own broken portal. Worlds where the
   dragon is already dead get it too.
-- **Twenty-five advancements** in the End tab:
+- **End engineering** (phase 4), on the same EU networks, cables, machine
+  window and Engineering Crafting Table as V5, made from the End's own
+  resources:
+  - the **Crystal Generator** (128 EU/t from End Crystal Fragments), the
+    **Void Collector** (24 EU/t, only over open void) and the **Restored
+    Ancient Core** (512 EU/t for ever; restored from a dormant core in a
+    giant structure, never crafted);
+  - the **Void Cell** (2,000,000 EU), the **End Processor** (more out of the
+    End's ores, crystal, old stone and chorus) and the **Crystal Grower**
+    (crystal grows back);
+  - an **End Engineering** chapter in the Engineering Book.
+- **Getting about** (phase 4):
+  - **Ender Bridges**: a projector lays a walkable bridge of light up to 64
+    blocks over the void, which flickers and fades when its power goes.
+  - **Teleportation Nodes**: name them, lock them, and travel between nodes
+    you built (1,000 EU + 10 EU a block), never across dimensions.
+  - **Ancient Gateways**: every broken portal has a pair far round the band;
+    mend both and they link for good.
+  - **Rails and minecarts**, and **Ender Rails** that run twice as fast and
+    can lie on a bridge of light.
+  - The **Void Skiff**, a slow flying boat for two that burns Void Shards;
+    its recipe is learned from a blueprint found in the Shipyards' ships.
+- **Five quests** (phase 4), shown step by step in the quest tracker:
+  **The Lost Observatory** (mend and power an ancient telescope), **The
+  Broken Gateway**, **The Silent City** (an Ancient Key and the Silent Bell,
+  which stills Constructs), **The Crystal Vault** (four crystals, a Crystal
+  Generator and a waking Bulwark) and **The Dragon's History** (a hidden
+  Sanctum). Loot once per world, advancements for everyone who takes part.
+- **Elytra upgrades** (phase 4): three module slots at the smithing table:
+  Reinforced, Thrust, Hover, Burst, Void Recovery and Ender Blink. An Elytra
+  without them flies exactly as before.
+- **Forty advancements** in the End tab:
   - reaching the Expanded End and visiting all seven biomes;
   - ten for its mobs and resources (phase 2);
   - thirteen for its structures, lore, giants, the Nest and the Bulwark
-    (phase 3).
+    (phase 3);
+  - fifteen for its machines, travel, quests and Elytra upgrades (phase 4).
 - **Admin Panel**: an End Expansion tab to:
   - switch, build and reach the portal;
   - teleport to the arrival platform or any biome, and show where you are;
@@ -397,12 +430,15 @@ Citadel's boss. Design notes:
   - give any resource, artifact, weapon, map or lore book, or whole kits;
   - locate and teleport to the nearest of every structure;
   - build any structure where you stand;
-  - build the Dragon's Nest and reset a structure's loot.
+  - build the Dragon's Nest and reset a structure's loot;
+  - start, complete, reset or reach any End quest, fill a machine's EU,
+    force-repair a gateway pair, open the Sanctum and build an End test
+    line.
 
   As always, nothing done there counts towards advancements.
 - **Old worlds**: phase 3 structures appear only in worlds created from now
   on, in newly explored chunks. Older worlds load unchanged, and still get the
-  Nest.
+  Nest. Phase 3 worlds get every phase 4 quest in their structures.
 
 ### Recipe Book
 

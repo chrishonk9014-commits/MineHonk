@@ -14,7 +14,9 @@ import type { EndExpansionSystem } from '../systems/EndExpansion';
 import { expansionGiveSets } from '../../common/endExpansion/resources';
 import { EXPANSION_STRUCTURE_IDS, GIANT_IDS, expansionStructureName } from '../../common/endExpansion/structures';
 import { LORE, NEST_LORE } from '../../common/endExpansion/lore';
-import { stackOf, type ItemStack } from '../../common/game/itemstack';
+import { stackOf, markAdmin, type ItemStack } from '../../common/game/itemstack';
+import { S, stateOf } from '../../common/registry/blocks';
+import { portAt } from '../engineering/ports';
 import { END_QUESTS, type EndQuestId } from '../../common/endExpansion/quests';
 
 export interface ExpansionAdminHelpers {
@@ -182,7 +184,7 @@ export function expansionAdmin(sys: EndExpansionSystem, h: ExpansionAdminHelpers
       if (op === 'quest_complete') return withQuests(eq.adminComplete(p, q));
       const site = eq.nearestSite(p.dim.id === 'end' ? p : ({ ...p, x: ex.arrival().x, z: ex.arrival().z } as ServerPlayer), q);
       if (!site) return { ok: false, text: `No ${END_QUESTS.find((x) => x.id === q)!.title} site found.` };
-      h.queueTeleport(p, site.at[0] + 0.5, site.at[1], site.at[2] + 0.5, END_QUESTS.find((x) => x.id === q)!.title, false);
+      h.queueTeleport(p, site.at[0] + 0.5, site.at[1], site.at[2] + 0.5, `start of ${END_QUESTS.find((x) => x.id === q)!.title}`, false);
       return { ok: true, text: `Going to the nearest start of ${END_QUESTS.find((x) => x.id === q)!.title}...`, data: { ...sys.status(p), pending: true } };
     }
     case 'fill_eu': {
@@ -204,6 +206,45 @@ export function expansionAdmin(sys: EndExpansionSystem, h: ExpansionAdminHelpers
     case 'open_sanctum': {
       if (!s.endQuests) return { ok: false, text: 'The quests are not running.' };
       return { ...s.endQuests.openSanctum(), data: sys.status(p) };
+    }
+    case 'end_rig': {
+      // A working End line beside the player, on its own floor (over the void, the bridge has somewhere to go):
+      // a fuelled Crystal Generator -> cable -> Void Cell, End Processor, Crystal Grower, two Teleportation
+      // Nodes, and an Ender Bridge Projector at the far end facing east. Everything in it is a cheat.
+      const eng = s.engineering;
+      if (!eng) return { ok: false, text: 'Engineering is not running.' };
+      const dim = p.dim;
+      const x0 = Math.floor(p.x) + 2;
+      const y0 = Math.floor(p.y);
+      const z0 = Math.floor(p.z) + 2;
+      const place = (x: number, y: number, z: number, st: number): void => {
+        dim.setBlock(x, y, z, st);
+        s.admin.setBlockMark(dim, x, y, z, st !== 0);
+        const be = eng.node(dim, x, y, z)?.be();
+        if (be) {
+          be.cheat = 1;
+          be.by = p.uuid;
+        }
+      };
+      for (let x = -1; x <= 10; x++) for (let z = -1; z <= 3; z++) for (let y = 0; y <= 3; y++) place(x0 + x, y0 + y, z0 + z, 0);
+      for (let x = -1; x <= 10; x++) for (let z = -1; z <= 3; z++) place(x0 + x, y0 - 1, z0 + z, S('end_stone_bricks'));
+      place(x0, y0, z0, S('crystal_generator'));
+      place(x0, y0, z0 + 1, S('insulated_cable'));
+      for (let x = 1; x <= 9; x++) place(x0 + x, y0, z0 + 1, S('insulated_cable'));
+      place(x0 + 2, y0, z0, S('void_cell'));
+      place(x0 + 4, y0, z0, stateOf('end_processor', { facing: 'north' }));
+      place(x0 + 6, y0, z0, S('crystal_grower'));
+      place(x0 + 6, y0, z0 - 1, S('crystalline_end_stone'));
+      for (const z of [z0, z0 + 2]) {
+        place(x0 + 8, y0, z, S('teleport_node'));
+        s.endTransport?.onNodePlaced(p, dim, x0 + 8, y0, z, true);
+      }
+      place(x0 + 10, y0, z0 + 1, stateOf('ender_bridge_projector', { facing: 'east' }));
+      const cell = eng.node(dim, x0 + 2, y0, z0)?.be();
+      if (cell) cell.energy = 500_000;
+      portAt(s, dim, x0, y0, z0, 1)?.insert(markAdmin(stackOf('end_crystal_fragment', 64)));
+      portAt(s, dim, x0 + 4, y0, z0, 1)?.insert(markAdmin(stackOf('ender_ore', 32)));
+      return { ok: true, text: 'Built an End test line beside you: a fuelled Crystal Generator charging a Void Cell along a cable, an End Processor, a Crystal Grower on Crystalline End Stone, two Teleportation Nodes and an Ender Bridge Projector facing east. Everything in it is a cheat.', data: { ...sys.status(p), rig: [x0, y0, z0] } };
     }
     case 'where': {
       const st = sys.status(p) as { here: { x: number; y: number; z: number; inExpansion: boolean; biome: string | null } };

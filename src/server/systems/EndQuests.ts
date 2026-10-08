@@ -8,11 +8,12 @@
  *   Fragments), power it (256 EU/t for 30 s, engineering/end.ts), look
  *   through it: an Ancient Map to the nearest giant structure the looker
  *   hasn't found, once an in-game day.
- * - THE BROKEN GATEWAY: every broken portal has a pair, found by a census of
- *   the broken portals in its cell of the band (seed-determined, so the same
- *   in every world with that seed). Mend one (12 Ancient End Bricks and an
- *   End Crystal), follow the map to the other, mend that: a gateway both ways
- *   for good (the network is `level.flags.endGates`).
+ * - THE BROKEN GATEWAY: every broken portal (in End Ruins and the Fallen
+ *   City) has a pair far round the band, found by a census of every broken
+ *   portal the band's plan holds (seed-determined, so the same in every world
+ *   with that seed; with an odd count, one is left over). Mend one (12
+ *   Ancient End Bricks and an End Crystal), follow the map to the other, mend
+ *   that: a gateway both ways for good (the network is `level.flags.endGates`).
  * - THE SILENT CITY: one per world (`level.flags.silentCity`): the Fallen
  *   City nearest the arrival island, or with none within 4,000 blocks the
  *   nearest End Settlement, or failing that End Ruins. Its sealed hall and

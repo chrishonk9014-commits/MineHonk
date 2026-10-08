@@ -1,6 +1,6 @@
 # Version 6 - The End Expansion
 
-Design notes for V6's first three phases:
+Design notes for V6's first four phases:
 
 - **Phase 1, the portal and the world:** the Expansion Portal and the
   Expanded End's land and atmosphere.
@@ -11,8 +11,12 @@ Design notes for V6's first three phases:
   civilization's remains, the five giant structures, the Guardian Constructs
   and the Dragon's Nest (see [Phase 3](#phase-3-structures-the-ancient-civilization-and-the-dragons-nest)).
 
-Phase 4 brings quests, repairs and the ancient machines to life; phase 5 the
-Void Storms, the Dragon's expansion and the Citadel's boss.
+- **Phase 4, engineering, transport, quests and Elytra upgrades:** End
+  machines on V5 engineering, bridges, nodes, ancient gateways, rails and the
+  Void Skiff, five quests in the ancient structures, and Elytra modules (see
+  [Phase 4](#phase-4-engineering-transport-quests-and-elytra-upgrades)).
+
+Phase 5 brings the Void Storms, the Dragon's expansion and the Citadel's boss.
 
 ## Where it is
 
@@ -677,6 +681,260 @@ The End Expansion tab gains a Structures section and a Dragon's Nest section. Ev
   - the inside of the Dragon's Nest;
   - an Ender Glyph Stone wall.
 
+## Phase 4: engineering, transport, quests and Elytra upgrades
+
+Phase 4 makes the Expanded End somewhere to build in, travel across and
+finish things: End machines on V5 engineering, five ways of getting about,
+five quests in the ancient structures, and upgrades for the Elytra. It adds
+no new generator version (structures already carried their quest parts in
+phase 3), no new ending, and nothing to the classic End.
+
+The rules it keeps:
+
+- **No second systems.** The machines are V5 components (see
+  [ENGINEERING.md](ENGINEERING.md#end-engineering-v6-phase-4)); "End Power" is
+  EU. The quests are V4 quests (a `QuestSpec` of kind `'end'` in the
+  structure plans, records in `level.quests.end`, the same tracker). Recipes
+  are in the Recipe Book.
+- **The End is not a factory.** Eight craftable End components, all made
+  from the End's own resources. No structure spawns with a working machine:
+  cores are dormant, lenses cracked, gateways broken.
+- **The Elytra is never nerfed.** An Elytra without upgrades, with or
+  without rockets, flies exactly as before (a recorded flight path is
+  checked against a verbatim copy of the old code).
+- **Exploration still matters.** Nodes link only nodes players built;
+  gateways only pairs players mended; nothing takes anyone somewhere they
+  couldn't already reach.
+- **Server-authoritative, save-compatible, cheat-neutral.** New state lives
+  only in block entities, quest records, item data (`tag.data`) and
+  `level.flags`. The client never sends item data the server keeps (an
+  Elytra's upgrades can't be faked). Anything done with the Admin Panel
+  earns nothing.
+
+### End engineering
+
+| Machine | EU | What it does |
+| --- | --- | --- |
+| Crystal Generator | +128 EU/t | burns an End Crystal Fragment every 400 ticks |
+| Void Collector | +24 EU/t | only with 32+ blocks of open air below it, down to the bottom of the world; ×4 during a phase 5 Void Storm (`server.endEvents.voidStormFactor`) |
+| Restored Ancient Core | +512 EU/t | never runs out; restored, never crafted (below); Silk Touch picks it up |
+| Void Cell | stores 2,000,000 | 4,096 EU/t in and out; keeps its charge when broken |
+| End Processor | −64 EU/t | Ender Ore → 2 Ender Scrap; Void Crystal Ore → 4–6 Void Shards; End Crystal Cluster → 5 End Crystal Fragments; Ancient End Fragment → 3 Ancient Fragments (4% an Ancient Key Shard); Chorus Stalk → 4 Chorus Fiber |
+| Crystal Grower | −32 EU/t | an End Crystal Cluster on Crystalline End Stone beside it every 5 minutes |
+| Teleportation Node | 1,000 + 10/block a trip | below |
+| Ender Bridge Projector | −16 EU/t per 16 blocks | below |
+| Ender Rail | −1 EU/t | below |
+
+Recipes (Engineering Crafting Table): Crystal Generator (fragments, Ender
+Alloy, cable, control circuit), Void Collector (Crystal Glass, Void Shards,
+Dark End Stone), Void Cell (Void Shards, Ender Alloy, a battery), End
+Processor (Ender Alloy, fragments, a crusher, a control circuit), Crystal
+Grower (fragments, Crystal Glass, Crystalline End Stone, a control circuit),
+Teleportation Node (Astral Shards, an Ender Pearl, Ender Alloy, an advanced
+circuit, steel plates), Ender Bridge Projector (Chorus Rope, fragments,
+Ender Alloy, a control circuit), Ender Rail ×16 (Ender Alloy, a fragment).
+
+**Ancient Cores.** Dormant cores in the ancient structures carry power like
+cables. In each giant structure one of them (the first anyone restores) can
+be brought back with 8 Ancient Fragments and an Astral Shard. A restored
+core can be moved with Silk Touch; it is the only way to have one.
+
+Each machine has idle, working and error fronts and its own hum. The
+Engineering Book has **End Engineering** and **End Transport** chapters.
+
+### Transport
+
+| Way | Rules |
+| --- | --- |
+| **Ender Bridges** | The projector lays a walkable, translucent, unbreakable bridge of Ender Light up to 64 blocks the way it faces, stopping at the first solid block; 16 EU/t per started 16 blocks. Without power (or without its signal, in a signal mode) the bridge flickers, then fades over 3 seconds: the flicker is the warning to get off. |
+| **Teleportation Nodes** | Placed by players. Each has a name (set in its window) and is public unless its owner locks it. Its window lists every other node in the same dimension: all of the End's, or in the Overworld those within 2,000 blocks of spawn (other dimensions: none). A trip costs 1,000 EU + 10 EU a block from the departure node's buffer, after 40 ticks standing on the node (with particles); the arrival must be clear, or nothing happens and nothing is paid. Never across dimensions. The node index is `level.flags.endNodes`, so nodes in unloaded chunks still show. |
+| **Ancient Gateways** | Every broken portal (in End Ruins and the Fallen City) has a pair, fixed by the seed, about a sixteenth of the way round the band (median over 1,500 blocks). Mend both ends and the pair becomes a gateway, both ways, for good. It works like an End gateway, looks ancient, and never touches the classic gateways. See the Broken Gateway. |
+| **Ender Rails** | Powered by a signal or by 1 EU/t from a cable, they drive minecarts at twice a powered rail's speed (0.8 blocks/tick). They can lie on Ender Light, so a line can cross the void on a bridge. Plain rails, powered rails and minecarts came with them (MineHonk had none before). |
+| **Void Skiff** | A flying boat for a pilot and one passenger: 1.5× walking speed, hovers 3 blocks over whatever is below (ground or void), rises and sinks slowly (jump / sprint) and never climbs more than 16 blocks above the lowest it was in the last minute. It burns a Void Shard every 30 seconds from a 16-shard tank (feed it shards with a right click); dry, it sinks slowly and warns the pilot. Its recipe (Chorus Planks, Chorus Cloth, Void Shards, an Ender Alloy Ingot) is locked until a player reads a **Void Skiff Blueprint**, found in the Shipyards' finished ships. |
+
+Elytra and rockets stay the fastest way to explore; the skiff is for
+carrying a friend across the void, not for speed.
+
+### Quests
+
+Each quest starts at its trigger, keeps its steps on the server and shows
+the next step in the quest tracker (in the End's colours). Loot is given
+once per world; advancements once per player. Everyone nearby when a step is
+done shares it. Admin completions award nothing and give cheat-marked items.
+
+<details>
+<summary><b>Spoilers: walkthroughs</b></summary>
+
+**THE LOST OBSERVATORY** (End Observatories and the Void Observatory)
+
+1. Find the observatory's Ancient Lens (it is cracked).
+2. Repair it with 8 Ancient Fragments. The conduits down to the core at the
+   telescope's foot mend with it.
+3. Power it: 256 EU/t into the core for 30 seconds (the tracker shows the
+   charge).
+4. Look through it (right click with an empty hand): an Ancient Map to the
+   nearest giant structure the looker hasn't found. Once an in-game day.
+
+Rewards: 2 Astral Shards and the *stars_circle* fragment (once per world).
+
+**THE BROKEN GATEWAY** (End Ruins and the Fallen City)
+
+1. Inspect a broken portal.
+2. Repair its frame: 12 Ancient End Bricks and an End Crystal. Its sheet
+   comes back dead, and you get an Ancient Map to its pair.
+3. Follow the map.
+4. Repair the pair the same way: both sheets light.
+5. Step through. The first time in the world: the *gateways_stitches*
+   fragment.
+
+**THE SILENT CITY** (one per world: the Fallen City nearest the arrival
+island; with none within 4,000 blocks, the nearest End Settlement; failing
+that, End Ruins)
+
+1. Find the city's sealed hall (built into the city when its chunks load).
+2. Collect the 4 Ancient Key Shards from the city's reliquaries.
+3. Combine them into the Ancient Key (crafting).
+4. Open the hall and recover the **Silent Bell**.
+
+The Silent Bell holds every Construct within 64 blocks still for 10 seconds;
+5 minutes to ring again. The Ancient Key is kept, and also opens the End
+Fortress's inner keep and the End Library's archive.
+
+**THE CRYSTAL VAULT** (End Palaces)
+
+1. Inspect the vault door: four empty pedestals rise.
+2. Put an End Crystal on each.
+3. Power them from a working Crystal Generator (other power doesn't light
+   them). The crystals light one by one, then the door opens.
+4. Survive the vault's Bulwark, which wakes as the door opens.
+
+Loot: Astral Shards and Ender Alloy gear in the vault. The first vault each
+player clears also gives the **Ender Blink** module (only once per player).
+
+**THE DRAGON'S HISTORY** (the Dragon's Nest)
+
+1. Read the Nest's five fragments.
+2. Find three more fragments about the Dragon.
+3. Gather four Dragon Scale Fragments.
+4. Repair the Nest's ring with them. It opens one way into the **Sanctum**,
+   a small hidden room deep in the band, built the first time anyone goes
+   through. It holds the **Sanctum Dragon Scale** (the Void Recovery module),
+   the *sanctum_seen* fragment, and a way back to the Nest.
+
+</details>
+
+### Elytra upgrades
+
+Modules go on at the smithing table (Elytra + module). An Elytra takes three,
+never the same one twice; shears at the smithing table take the newest off
+(the module is lost). Upgrades live in the item's data, so they survive
+repairs (either membrane), anvils, renaming and saves. The tooltip lists
+them, each shows as a small mark on the worn wings, and the HUD shows meters
+for Hover, Burst, Blink and Void Recovery.
+
+| Module | Effect | Made from |
+| --- | --- | --- |
+| Reinforced | 864 durability instead of 432 | 2 End Phantom Membranes, an Ender Alloy Ingot |
+| Thrust | gliding picks up speed 30% faster; rockets push 20% harder (the server's movement check allows for it) | an Astral Shard, an End Phantom Membrane, 2 Void Shards |
+| Hover | sneak while gliding to hang in the air, up to 3 seconds until you stand on the ground again; a point of durability every 10 ticks of it | 4 End Crystal Fragments, an End Phantom Membrane |
+| Burst | double-tap jump while gliding: a rocket's push for 8 ticks; 3 charges, each back 10 seconds after use | 4 Void Shards, 4 Astral Dust, an End Phantom Membrane |
+| Void Recovery | in the End only, falling below the void line puts you back on the last solid ground you stood on, for a quarter of the wings' remaining durability; 5 minutes to recharge (saved with the player) | the Sanctum Dragon Scale |
+| Ender Blink | while gliding, use with an empty hand: 8 blocks straight ahead, cut short before anything solid (never into a block); 20 seconds to recharge | the Crystal Vault's reward |
+
+### Advancements (phase 4)
+
+All in the End tab, awarded by the server, never under a cheat:
+
+| Advancement | For |
+| --- | --- |
+| Power From the End | running a Crystal Generator |
+| It Still Hums | restoring an Ancient Core |
+| Bottled Void | filling a Void Cell |
+| Light Underfoot | crossing the void on an Ender Bridge |
+| Been There, Built That | teleporting between two of your own nodes |
+| Two Edges, Held Together | repairing both ends of an ancient gateway |
+| Void Sailor | piloting a Void Skiff across 500 blocks of void |
+| The Lost Observatory, The Broken Gateway, The Silent City, The Crystal Vault, The Dragon's History | each quest |
+| Everything the End Remembers | all five quests |
+| Better Wings / Fully Fledged | an Elytra upgrade / all three slots filled |
+
+### Admin Panel (phase 4)
+
+In the End Expansion tab, all advancement-neutral:
+
+- **End quests:** for each quest, Start, Complete, Reset (everywhere, with
+  its blocks where loaded) and Teleport to its nearest start; a status line.
+  A completion marks the record a cheat: no advancements, cheat-marked
+  rewards, and the world's loot stays unclaimed.
+- **Give sets:** End machines and transport (every machine, nodes, bridges,
+  rails, minecarts, the skiff and its blueprint), Elytra and modules (with a
+  smithing table and shears), quest items (the Ancient Key, the Silent Bell,
+  the Sanctum Dragon Scale, shards, scale fragments, bricks, crystals).
+- **Tests (look at the block first):** fill the machine's EU (it is marked a
+  cheat); force-repair a gateway and its pair; open the Sanctum; build an End
+  test line (a fuelled Crystal Generator charging a Void Cell, an End
+  Processor, a Crystal Grower, two nodes and an Ender Bridge Projector).
+- Structures the panel generates keep their quests, so they can be tried
+  out, but their records start as cheats.
+
+### Saves and old worlds
+
+- New state: machine block entities; `level.quests.end` (quest records);
+  `level.flags.endNodes`, `endGates`, `silentCity`, `dragonSanctum` and
+  `endGenerated` (structures the panel built); the player's unlocked recipes,
+  End rewards, Void Recovery cooldown and followed quest; Elytra upgrades in
+  item data.
+- Phase 1–3 saves load as they are (missing records start empty). Phase 3
+  worlds (generator 8) have every quest in their structures, including
+  chunks generated before phase 4. Phase 1 and 2 worlds have no structures,
+  so only the Dragon's History (once the Nest is carved).
+- Looking at a quest site creates no record; only doing something does.
+
+### Deviations from the plan
+
+- **Rails were missing.** MineHonk had no rails or minecarts; Ender Rails
+  needed them, so plain rails, powered rails and minecarts came first.
+- **The Sanctum Dragon Scale** is the Void Recovery material, named apart
+  from the Ender Dragon's existing scale item.
+- **Broken portals** are in End Ruins and the Fallen City (the structures
+  that had them in phase 3).
+- **Admin-built structures** hold working quests, but count for nothing.
+- **The End Processor's "artifact shard"** is an Ancient Key Shard (4%), so
+  a Silent City key can, slowly, come from processing too.
+
+### Fixes along the way
+
+- Admin quest operations now report failure when a world has no site for
+  the quest (or nothing is looked at), instead of answering "ok".
+- The tracker no longer saves empty records for quest sites a player only
+  walked past.
+
+### Tests (phase 4)
+
+- `tests/unit/v6-phase4.test.ts`: each End machine (output, fuel, the void
+  check and storm hook, the restored core, the Void Cell, the processor's
+  recipes, the grower, signal modes, nothing found-only is craftable);
+  bridges (length, load, cost, fade), the bridge advancement, rails on Ender
+  Light at twice a powered rail's speed, the Void Skiff (fuel, sinking with
+  a warning, the climb limit, two riders), nodes (cost, warm-up, unsafe
+  arrivals, no crossing dimensions, locks); the Elytra (slots, duplicates,
+  shears, repairs and anvils and saves, an unchanged flight path, Thrust,
+  Hover, Burst, Blink never into blocks, Void Recovery End-only with its
+  cooldown).
+- `tests/unit/v6-quests.test.ts`: each quest end to end through the
+  client's own messages, with two players where it matters; gateway pairs
+  (deterministic, symmetric, far apart, at most one left over) and two-way
+  travel; once-per-world and once-per-player rewards; saves (machines,
+  nodes, gates, quest records, Elytra data) and carrying on after a reload;
+  phase 1–3 saves; every Admin Panel op, with nothing earned.
+- The phase 1 regression hashes and the V5 engineering tests pass unchanged.
+- `tests/e2e/v6.mjs` (phase 4 part): the End test line over the void
+  (`v6-crystal-generator.png`), its Ender Bridge (`v6-ender-bridge.png`), a
+  node's window (`v6-teleport-node.png`), a Void Skiff flown off the edge
+  (`v6-void-skiff.png`), a repaired gateway (`v6-ancient-gateway.png`), the
+  quest tracker (`v6-quest-tracker.png`), an Elytra upgraded at a smithing
+  table (`v6-elytra-smithing.png`) and its tooltip (`v6-elytra-tooltip.png`).
+
 ## Lore pool (review)
 
 Every fragment in `src/common/endExpansion/lore.ts`, word for word, for review and hand editing (a test keeps the two in step: change both). The rules:
@@ -921,3 +1179,23 @@ Placement weights by site and topic: a fragment's weight at a site is its topic'
 - `nest_first_fire` (Stone Rubbing, The history of the End)
   > THE FIRST FIRE WAS LIT HERE\
   > NOT ON THE PILLARS
+
+#### The quests' fragments (phase 4, fixed, found nowhere else)
+
+Each is given by one quest, once per world, and never placed in loot.
+
+- `stars_circle` (Star Chart, The history of the End): the Lost Observatory
+  > Every star we chart is the same distance from us.\
+  > Seen from the green world, they are not.\
+  > What stands at the middle of the circle?
+
+- `gateways_stitches` (Torn Page, The End gateways): the Broken Gateway
+  > The gateways were never meant for walking through.\
+  > The oldest map calls them stitches.\
+  > Stitches hold two edges together.
+
+- `sanctum_seen` (Inscription, The Ender Dragon): the Dragon's History, in the Sanctum
+  > THE FIRST FIRE WAS NOT LIT FOR WARMTH\
+  > IT WAS LIT TO BE SEEN\
+  > FROM PAST THE EDGE\
+  > IT WAS SEEN

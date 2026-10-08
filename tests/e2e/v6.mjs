@@ -14,7 +14,13 @@
  * structure (the world's own, or built here from the Admin Panel when the
  * world has none); a giant's discovery title; both Guardian Constructs and
  * their telegraphs; a wall of Ender Glyph Stone and its glyphs; the Dragon's
- * Nest from inside and its crack. Screenshots go to tests/e2e/out/v6-*.png.
+ * Nest from inside and its crack.
+ *
+ * Phase 4: the Admin Panel's End test line over the void (a Crystal
+ * Generator charging a Void Cell, an End Processor, a Crystal Grower), its
+ * Ender Bridge reaching out, a Teleportation Node's window, a Void Skiff
+ * fuelled, boarded and flown, a repaired ancient gateway, the quest tracker,
+ * and an upgraded Elytra's tooltip. Screenshots go to tests/e2e/out/v6-*.png.
  */
 import { spawn, execFileSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -594,6 +600,315 @@ if (sites3.glyphs) {
     check('the crack is open in the ground', open === 0);
     await page.screenshot({ path: `${OUT}/v6-dragon-nest-crack.png` });
   }
+}
+
+// ---------------------------------------------------------------- phase 4
+await cmd('/gamemode creative');
+await page.evaluate(() => window.minehonk.game.adminRequest({ a: 'clear_inventory' }));
+const stateOf = (str) => page.evaluate((s) => window.minehonkState(s), str);
+const setSlot = (slot, id, count = 1, tag) =>
+  page.evaluate(([slot, id, count, tag]) => {
+    const it = window.minehonkRegistry.itemById.get(id);
+    window.minehonk.game.send({ t: 'creative_set', slot, item: it ? { id: it.num, count, ...(tag ? { tag } : {}) } : null });
+  }, [slot, id, count, tag ?? null]);
+const hotbar = async (i) => {
+  await page.keyboard.press(`Digit${i + 1}`);
+  await page.waitForTimeout(200);
+};
+let seqNo = 90000;
+const useOnBlock = (x, y, z, face = 1) => page.evaluate(([x, y, z, face, seq]) => window.minehonk.game.send({ t: 'use_on', x, y, z, face, hx: 0.5, hy: 1, hz: 0.5, hand: 0, yaw: window.minehonk.game.player.yaw, pitch: window.minehonk.game.player.pitch, seq }), [x, y, z, face, seqNo++]);
+/** Moves the camera (a real teleport: the server checks every move), then holds it there. */
+const moveTo = async (x, y, z) => {
+  await cmd(`/tp ${x} ${y} ${z}`);
+  await fly();
+  await page.waitForTimeout(700);
+  await pin(x, y, z);
+};
+/** Aims the camera from where it is at a point. */
+const aimAt = (x, y, z) =>
+  page.evaluate(([x, y, z]) => {
+    const pl = window.minehonk.game.player;
+    const b = pl.body;
+    const dx = x - b.x;
+    const dy = y - (b.y + 1.62);
+    const dz = z - b.z;
+    pl.yaw = Math.atan2(-dx, -dz);
+    // (a positive pitch looks down)
+    pl.pitch = -Math.atan2(dy, Math.hypot(dx, dz));
+  }, [x, y, z]);
+
+// The End test line, built out over open void beside the arrival platform: a Crystal Generator charging a Void Cell,
+// an End Processor, a Crystal Grower, two Teleportation Nodes, and an Ender Bridge reaching out east
+let rig = null;
+{
+  const r = await adminTp('tp_arrival');
+  check('back at the arrival platform for the End test line', r.ok);
+  await waitChunks();
+  await fly();
+  // Open void: a run of empty columns east of a spot (nothing in them at any height)
+  const spot = await page.evaluate(() => {
+    const g = window.minehonk.game;
+    const w = g.world;
+    const b = g.player.body;
+    const empty = (x, z) => {
+      if (!w.isLoaded(x, z)) return false;
+      for (let y = 0; y < 220; y += 2) if (w.getState(x, y, z) !== 0) return false;
+      return true;
+    };
+    let best = null;
+    for (let r = 16; r <= 96 && !best; r += 8)
+      for (let a = 0; a < 32 && !best; a++) {
+        const x = Math.floor(b.x + Math.cos((a / 32) * Math.PI * 2) * r);
+        const z = Math.floor(b.z + Math.sin((a / 32) * Math.PI * 2) * r);
+        let ok = true;
+        for (let k = 0; k <= 48 && ok; k += 3) for (let dz = -1; dz <= 4 && ok; dz++) ok = empty(x + k, z + dz);
+        if (ok) best = { x, z };
+      }
+    return best ? { ...best, y: Math.floor(b.y) } : null;
+  });
+  check('open void found beside the arrival platform', !!spot);
+  if (spot) {
+    await goTo(spot.x - 1.5, spot.y, spot.z - 1.5);
+    await pin(spot.x - 1.5, spot.y, spot.z - 1.5);
+    const built = await admin('end_rig');
+    check('the End test line is built', built.ok);
+    const o = built.data?.rig;
+    if (o) rig = { x: o[0], y: o[1], z: o[2] };
+    console.log('rig at', JSON.stringify(rig), 'spot', JSON.stringify(spot));
+    await page.waitForTimeout(6000);
+    // From above and in front of the line
+    const cam = { x: rig.x + 4.5, y: rig.y + 4, z: rig.z + 6.5 };
+    await moveTo(cam.x, cam.y, cam.z);
+    await aimAt(rig.x + 4.5, rig.y + 0.5, rig.z + 0.5);
+    await page.waitForTimeout(2500);
+    await pin(cam.x, cam.y, cam.z);
+    await aimAt(rig.x + 4.5, rig.y + 0.5, rig.z + 0.5);
+    await page.waitForTimeout(1000);
+    const states = await page.evaluate(([x, y, z]) => [0, 2, 4, 6, 8, 10].map((dx) => window.minehonk.game.world.getState(x + dx, y, z + (dx === 10 ? 1 : 0))), [rig.x, rig.y, rig.z]);
+    check('the test line is on screen (machines in place)', states.every((st) => st !== 0));
+    await page.screenshot({ path: `${OUT}/v6-crystal-generator.png` });
+    // The bridge: Ender Light out over the void, seen along its length
+    const light = await page.evaluate(([x, y, z]) => {
+      const w = window.minehonk.game.world;
+      let n = 0;
+      for (let k = 11; k <= 74; k++) if (w.getState(x + k, y, z) !== 0) n++;
+      return n;
+    }, [rig.x, rig.y, rig.z + 1]);
+    check(`the Ender Bridge reaches out over the void (${light} blocks)`, light >= 40);
+    const bcam = { x: rig.x + 8.5, y: rig.y + 3.5, z: rig.z + 4.5 };
+    await moveTo(bcam.x, bcam.y, bcam.z);
+    await aimAt(rig.x + 40, rig.y, rig.z + 1.5);
+    await page.waitForTimeout(2000);
+    await pin(bcam.x, bcam.y, bcam.z);
+    await aimAt(rig.x + 40, rig.y, rig.z + 1.5);
+    await page.waitForTimeout(800);
+    await page.screenshot({ path: `${OUT}/v6-ender-bridge.png` });
+    // A Teleportation Node's window: its name, the lock, the other node with its cost
+    await moveTo(rig.x + 8.5, rig.y + 0.2, rig.z + 1.5);
+    await useOnBlock(rig.x + 8, rig.y, rig.z);
+    await page.waitForTimeout(1500);
+    check('the node window is open', (await page.locator('.eng-gui').count()) === 1);
+    const nodeText = (await page.locator('.eng-gui').textContent().catch(() => '')) ?? '';
+    check('the node window lists the other node', /Node 2|Node 1/.test(nodeText));
+    await page.screenshot({ path: `${OUT}/v6-teleport-node.png` });
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(500);
+  }
+}
+
+// The Void Skiff: put on the line's floor, fuelled, boarded, flown out over the void (seen from behind)
+if (rig) {
+  await setSlot(36, 'void_skiff');
+  await setSlot(37, 'void_shard', 64);
+  await hotbar(0);
+  // (on the line's south edge, clear of the machines; it flies off south over the void)
+  await moveTo(rig.x + 2.5, rig.y + 0.2, rig.z + 3.5);
+  await useOnBlock(rig.x + 4, rig.y - 1, rig.z + 3);
+  await page.waitForTimeout(1500);
+  const skiff = (await entitiesOf('void_skiff'))[0];
+  check('the Void Skiff is placed', !!skiff);
+  if (skiff) {
+    await hotbar(1);
+    await page.evaluate((id) => window.minehonk.game.send({ t: 'interact', id, hand: 0 }), skiff.id);
+    await page.waitForTimeout(600);
+    await setSlot(37, null);
+    await page.waitForTimeout(400);
+    await page.evaluate((id) => window.minehonk.game.send({ t: 'interact', id, hand: 0 }), skiff.id);
+    await page.waitForTimeout(1500);
+    const aboard = await page.evaluate(() => window.minehonk.game.player.vehicle?.kind ?? null);
+    check('boarded the Void Skiff as its pilot', aboard === 'skiff');
+    await page.evaluate(() => {
+      const pl = window.minehonk.game.player;
+      pl.yaw = Math.PI;
+      pl.pitch = -0.15;
+    });
+    await page.keyboard.down('KeyW');
+    await page.keyboard.down('Space');
+    await page.waitForTimeout(2500);
+    await page.keyboard.up('Space');
+    await page.waitForTimeout(2500);
+    await page.keyboard.up('KeyW');
+    const flown = (await entitiesOf('void_skiff'))[0];
+    check('the skiff flew out over the void', !!flown && flown.z > skiff.z + 4 && flown.meta?.lit === true);
+    // Seen from behind and above (third person, looking down past the pilot at the void)
+    await page.evaluate(() => {
+      const pl = window.minehonk.game.player;
+      pl.yaw = Math.PI;
+      pl.pitch = 0.45;
+    });
+    await page.keyboard.press('F5');
+    await page.waitForTimeout(1500);
+    await page.screenshot({ path: `${OUT}/v6-void-skiff.png` });
+    await page.keyboard.press('F5');
+    await page.keyboard.press('F5');
+    await page.keyboard.down('ShiftLeft');
+    await page.waitForTimeout(300);
+    await page.keyboard.up('ShiftLeft');
+    await page.waitForTimeout(500);
+  }
+}
+
+// A repaired ancient gateway: the nearest broken portal with a pair, mended and linked from the Admin Panel
+{
+  await cmd('/gamemode creative');
+  const r = await adminTp('quest_tp', { quest: 'broken_gateway' });
+  check(`teleported to a broken portal (${r.text})`, r.ok);
+  await waitChunks();
+  await fly();
+  const done = await admin('quest_complete', { quest: 'broken_gateway' });
+  check('the gateway and its pair are repaired', done.ok);
+  await page.waitForTimeout(3000);
+  const gx = await stateOf('ancient_gateway[axis=x]');
+  const gz = await stateOf('ancient_gateway[axis=z]');
+  const sheet = await page.evaluate(([gx, gz]) => {
+    const g = window.minehonk.game;
+    const w = g.world;
+    const b = g.player.body;
+    const cells = [];
+    for (let dx = -24; dx <= 24; dx++)
+      for (let dz = -24; dz <= 24; dz++)
+        for (let dy = -16; dy <= 16; dy++) {
+          const st = w.getState(Math.floor(b.x) + dx, Math.floor(b.y) + dy, Math.floor(b.z) + dz);
+          if (st === gx || st === gz) cells.push([Math.floor(b.x) + dx, Math.floor(b.y) + dy, Math.floor(b.z) + dz, st === gx ? 'x' : 'z']);
+        }
+    return cells;
+  }, [gx, gz]);
+  check(`the ancient gateway is lit (${sheet.length} cells)`, sheet.length >= 4);
+  if (sheet.length) {
+    const c = sheet.reduce((a, s) => [a[0] + s[0] / sheet.length, a[1] + s[1] / sheet.length, a[2] + s[2] / sheet.length], [0, 0, 0]);
+    const axis = sheet[0][3];
+    // In front of the sheet, on whichever side is open
+    let cam = null;
+    for (const sgn of [1, -1]) {
+      const p = axis === 'x' ? [c[0] + 0.5, c[1] - 0.5, c[2] + 0.5 + sgn * 6] : [c[0] + 0.5 + sgn * 6, c[1] - 0.5, c[2] + 0.5];
+      const open = await page.evaluate(([x, y, z]) => window.minehonk.game.world.getState(Math.floor(x), Math.floor(y + 1), Math.floor(z)) === 0, p);
+      if (open && !cam) cam = p;
+    }
+    cam ??= axis === 'x' ? [c[0] + 0.5, c[1] + 1, c[2] + 6.5] : [c[0] + 6.5, c[1] + 1, c[2] + 0.5];
+    await moveTo(cam[0], cam[1], cam[2]);
+    await aimAt(c[0] + 0.5, c[1] + 0.5, c[2] + 0.5);
+    await page.waitForTimeout(2500);
+    await pin(cam[0], cam[1], cam[2]);
+    await aimAt(c[0] + 0.5, c[1] + 0.5, c[2] + 0.5);
+    await page.waitForTimeout(800);
+    await page.screenshot({ path: `${OUT}/v6-ancient-gateway.png` });
+  }
+  await admin('quest_reset', { quest: 'broken_gateway' });
+}
+
+// The quest tracker: an observatory's quest started, its next step on the HUD
+{
+  const r = await adminTp('quest_tp', { quest: 'lost_observatory' });
+  check(`teleported to a Lost Observatory (${r.text})`, r.ok);
+  await waitChunks();
+  await fly();
+  const st = await admin('quest_start', { quest: 'lost_observatory' });
+  check('the observatory quest is started', st.ok);
+  const shown = await page.waitForFunction(() => {
+    const q = document.querySelector('.quest-end');
+    return !!q && /Repair the lens/.test(q.textContent ?? '');
+  }, null, { timeout: 15000 }).then(() => true, () => false);
+  check('the quest tracker shows the next step', shown);
+  await look(0, 0.1);
+  await page.waitForTimeout(800);
+  await page.screenshot({ path: `${OUT}/v6-quest-tracker.png` });
+  await admin('quest_reset', { quest: 'lost_observatory' });
+}
+
+// An Elytra upgraded at a smithing table (through the window's clicks, as a player does it), then its tooltip
+{
+  await page.evaluate(() => window.minehonk.game.adminRequest({ a: 'clear_inventory' }));
+  await cmd('/gamemode survival');
+  const given = await admin('give_set', { set: 'elytra_modules' });
+  check('the Elytra and modules are given', given.ok);
+  await page.waitForTimeout(800);
+  const at = await here();
+  const table = [Math.floor(at.x) + 2, Math.floor(at.y), Math.floor(at.z)];
+  await cmd(`/fill ${table[0]} ${table[1]} ${table[2]} ${table[0]} ${table[1]} ${table[2]} smithing_table`);
+  await cmd(`/fill ${table[0]} ${table[1] + 1} ${table[2]} ${table[0]} ${table[1] + 1} ${table[2]} air`);
+  /** The hotbar slot holding an item (by id), or -1. */
+  const hotbarOf = (id) => page.evaluate((id) => {
+    const it = window.minehonkRegistry.itemById.get(id);
+    const inv = window.minehonk.game.invSlots;
+    for (let i = 0; i < 9; i++) if (inv[36 + i]?.id === it.num) return i;
+    return -1;
+  }, id);
+  const click = (slot) => page.evaluate(([slot, seq]) => {
+    const g = window.minehonk.game;
+    g.send({ t: 'click', window: g.window.id, slot, button: 0, mode: 'pickup', seq });
+  }, [slot, seqNo++]);
+  for (const mod of ['reinforced_module', 'thrust_module', 'ender_blink_module']) {
+    // (a new window each time: clicks for the last one, already closed, would be ignored)
+    const before = await page.evaluate(() => window.minehonk.game.window?.id ?? -1);
+    await useOnBlock(table[0], table[1], table[2]);
+    const open = await page.waitForFunction((before) => {
+      const w = window.minehonk.game.window;
+      return !!w && w.kind === 'smithing' && w.id !== before;
+    }, before, { timeout: 10000 }).then(() => true, () => false);
+    await page.waitForTimeout(400);
+    check(`the smithing table is open for the ${mod}`, open);
+    // Elytra into the base slot, the module beside it, the result back into the hotbar
+    const e = await hotbarOf('elytra');
+    const m = await hotbarOf(mod);
+    await click(30 + e);
+    await page.waitForTimeout(300);
+    await click(0);
+    await page.waitForTimeout(300);
+    await click(30 + m);
+    await page.waitForTimeout(300);
+    await click(1);
+    await page.waitForTimeout(600);
+    if (mod === 'ender_blink_module') await page.screenshot({ path: `${OUT}/v6-elytra-smithing.png` });
+    await click(2);
+    await page.waitForTimeout(300);
+    await click(30 + e);
+    await page.waitForTimeout(300);
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(500);
+  }
+  const ups = await page.evaluate(() => {
+    const g = window.minehonk.game;
+    const it = window.minehonkRegistry.itemById.get('elytra');
+    return g.invSlots.find((s) => s?.id === it.num)?.tag?.data?.upgrades ?? null;
+  });
+  check(`the Elytra carries three upgrades (${JSON.stringify(ups)})`, Array.isArray(ups) && ups.length === 3);
+  await page.keyboard.press('KeyE');
+  await page.waitForTimeout(1500);
+  let tip = '';
+  const slots = page.locator('.slot');
+  const n = await slots.count();
+  for (let i = n - 1; i >= 0 && !/Upgrades/.test(tip); i--) {
+    const box = await slots.nth(i).boundingBox();
+    if (!box) continue;
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.move(box.x + box.width / 2 + 1, box.y + box.height / 2 + 1);
+    await page.waitForTimeout(120);
+    tip = (await page.locator('.tooltip:not(.hidden)').textContent().catch(() => '')) ?? '';
+  }
+  check('the Elytra tooltip lists its upgrades', /Upgrades \(3\/3\)/.test(tip) && /Thrust/.test(tip) && /Ender Blink/.test(tip));
+  await page.screenshot({ path: `${OUT}/v6-elytra-tooltip.png` });
+  await page.keyboard.press('Escape');
+  await cmd('/gamemode creative');
 }
 
 check('no page errors', errors.length === 0);

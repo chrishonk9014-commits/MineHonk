@@ -1,0 +1,31 @@
+# MineHonk cloud hub: accounts, friends, join codes, the public world list,
+# WebRTC signaling and the relay for browser-hosted worlds.
+# Deployed by .github/workflows/deploy-hub.yml (no terminal needed).
+name = "minehonk-hub"
+main = "src/index.ts"
+compatibility_date = "2025-09-01"
+workers_dev = true
+
+[vars]
+# Sites allowed to call the hub (the game on GitHub Pages)
+ALLOWED_ORIGINS = "https://chrishonk9014-commits.github.io"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "minehonk-hub"
+# The deploy workflow fills in the real id (it creates the database the first time)
+database_id = "00000000-0000-0000-0000-000000000000"
+migrations_dir = "migrations"
+
+[[durable_objects.bindings]]
+name = "LOBBY"
+class_name = "LobbyDO"
+
+[[durable_objects.bindings]]
+name = "RELAY"
+class_name = "RelayDO"
+
+# The free plan offers SQLite-backed Durable Objects
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["LobbyDO", "RelayDO"]

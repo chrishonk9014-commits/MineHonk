@@ -157,17 +157,22 @@ export class SqlHubStore implements HubStore {
     return Number(r?.n ?? 0);
   }
 
+  /**
+   * The cloud hub only lists public worlds whose hosts are online: it sets
+   * their ids here so listing never scans every public world ever made.
+   */
+  publicIds: string[] | null = null;
+
   async candidates(viewer: string): Promise<WorldEntry[]> {
-    const rows = await this.db
-      .prepare(
-        `SELECT data FROM worlds WHERE owner = ?1
-           OR id IN (SELECT world_id FROM world_members WHERE uuid = ?1)
-           OR visibility = 'public'
-           OR (visibility = 'friends' AND owner IN (SELECT b FROM friends WHERE a = ?1))
-         LIMIT 500`,
-      )
-      .bind(viewer)
-      .all<{ data: string }>();
+    const pub = this.publicIds === null ? `visibility = 'public'` : `id IN (SELECT value FROM json_each(?2))`;
+    const stmt = this.db.prepare(
+      `SELECT data FROM worlds WHERE owner = ?1
+         OR id IN (SELECT world_id FROM world_members WHERE uuid = ?1)
+         OR ${pub}
+         OR (visibility = 'friends' AND owner IN (SELECT b FROM friends WHERE a = ?1))
+       LIMIT 500`,
+    );
+    const rows = await (this.publicIds === null ? stmt.bind(viewer) : stmt.bind(viewer, JSON.stringify(this.publicIds))).all<{ data: string }>();
     return rows.results.map((r) => parseWorld(r.data)).filter((e): e is WorldEntry => !!e);
   }
 

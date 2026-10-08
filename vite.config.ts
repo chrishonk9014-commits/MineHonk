@@ -19,6 +19,24 @@ function assetVersion(): string {
   return h.digest('hex').slice(0, 10);
 }
 
+/** The game's version (package.json): shown in the public world list, checked when joining. */
+const pkg = JSON.parse(readFileSync('package.json', 'utf8')) as { version: string };
+
+/**
+ * The cloud hub for "Playing online": VITE_HUB_URL, or for the GitHub Pages
+ * build the deployed hub's address (hub/deployed-url.txt, written after the
+ * deploy workflow first runs).
+ */
+function hubUrl(): string {
+  if (process.env.VITE_HUB_URL !== undefined) return process.env.VITE_HUB_URL.replace(/\/+$/, '');
+  if (!process.env.PAGES_BASE) return '';
+  try {
+    return readFileSync('hub/deployed-url.txt', 'utf8').trim().replace(/\/+$/, '');
+  } catch {
+    return '';
+  }
+}
+
 export default defineConfig({
   root: '.',
   // GitHub Pages serves the game from /<repo>/ (PAGES_BASE=/MineHonk/ npx vite build)
@@ -26,6 +44,8 @@ export default defineConfig({
   publicDir: 'public',
   define: {
     __ASSET_VERSION__: JSON.stringify(assetVersion()),
+    __GAME_VERSION__: JSON.stringify(pkg.version),
+    __HUB_URL__: JSON.stringify(hubUrl()),
   },
   build: {
     outDir: 'dist',

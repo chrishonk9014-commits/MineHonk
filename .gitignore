@@ -9,3 +9,7 @@ server-data/
 tests/e2e/out/
 dist-bench*/
 tests/perf/out/
+
+# Local Cloudflare hub state (wrangler dev)
+hub/.wrangler/
+.wrangler/

@@ -11,11 +11,18 @@ import type { S2C, C2S } from '../common/net/protocol';
 import type { NewWorldOptions } from '../server/world/LevelData';
 import { initItems } from '../common/registry/items';
 import { installGameplay } from '../server/gameplay';
+import { BrowserHost, type HostConfig, type HostOptionsPatch } from './hosting';
+import type { HostSettingsPush } from '../common/net/hubProtocol';
 
 initItems();
 
 let server: GameServer | null = null;
 const post = (m: unknown, transfer: Transferable[] = []): void => (self as unknown as Worker).postMessage(m, transfer);
+/** Other players joining through the page (browser hosting). */
+const host = new BrowserHost(
+  () => server,
+  (m, transfer) => post(m, transfer ?? []),
+);
 
 const conn: Connection = {
   id: 'local',
@@ -35,7 +42,15 @@ type In =
   | { type: 'c2s'; msg: unknown }
   | { type: 'stop' }
   | { type: 'pause'; paused: boolean }
-  | { type: 'save' };
+  | { type: 'save' }
+  | { type: 'host'; config: HostConfig }
+  | { type: 'unhost'; reason?: string }
+  | { type: 'remote_open'; cid: number; remote: string }
+  | { type: 'remote_data'; cid: number; piece: Uint8Array }
+  | { type: 'remote_close'; cid: number }
+  | { type: 'remote_buffered'; cid: number; bytes: number }
+  | { type: 'host_settings'; settings: HostSettingsPush }
+  | { type: 'host_options'; options: HostOptionsPatch };
 
 self.onmessage = async (ev: MessageEvent<In>) => {
   const m = ev.data;
@@ -63,14 +78,41 @@ self.onmessage = async (ev: MessageEvent<In>) => {
         if (server) server.handle(conn, m.msg);
         break;
       case 'pause':
-        // Only meaningful for the single player integrated server
-        if (server && server.players.size <= 1) server.paused = !!m.paused;
+        // Only meaningful for the single player integrated server (a hosted world never pauses)
+        if (server && server.players.size <= 1 && !host.hosting) server.paused = !!m.paused;
+        break;
+      case 'host':
+        await host.start(m.config);
+        post({ type: 'hosting', on: true });
+        break;
+      case 'unhost':
+        host.stop(m.reason);
+        post({ type: 'hosting', on: false });
+        break;
+      case 'remote_open':
+        host.open(m.cid, m.remote);
+        break;
+      case 'remote_data':
+        host.data(m.cid, m.piece);
+        break;
+      case 'remote_close':
+        host.close(m.cid);
+        break;
+      case 'remote_buffered':
+        host.buffered(m.cid, m.bytes);
+        break;
+      case 'host_settings':
+        host.applySettings(m.settings);
+        break;
+      case 'host_options':
+        host.applyOptions(m.options);
         break;
       case 'save':
         if (server) await server.saveAll().catch((e) => server?.saveFailed(e));
         post({ type: 'saved' });
         break;
       case 'stop':
+        host.stop('The host left the game');
         if (server) {
           await server.stop();
           server = null;

@@ -97,8 +97,8 @@ describe('cloud hub (local Wrangler)', () => {
 
     // A code joins strangers (and remembers them)
     expect((await stranger.call('POST', '/join', { code: 'ZZZZ-ZZZZ' })).data.error).toBe('Code not found');
-    const j = await stranger.call<{ world: { id: string; online: boolean } }>('POST', '/join', { code: reg.data.joinCode.toLowerCase() });
-    expect(j.data.world).toMatchObject({ id, online: true });
+    const j = await stranger.call<{ id: string; online: boolean }>('POST', '/join', { code: reg.data.joinCode.toLowerCase() });
+    expect(j.data).toMatchObject({ id, online: true });
     const st = await stranger.call<{ ticket: string; relayOnly: boolean }>('POST', '/ticket', { world: id, compat: COMPAT });
     expect((await verifyTicket(st.data.ticket, key))!.via).toBe('member');
 

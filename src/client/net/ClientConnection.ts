@@ -3,6 +3,8 @@ import { encode, decode } from '@msgpack/msgpack';
 import type { C2S, S2C } from '../../common/net/protocol';
 import type { NewWorldOptions } from '../../server/world/LevelData';
 import type { Identity } from '../../server/net/Connection';
+import type { HostConfig, HostOut, HostOptionsPatch } from '../../worker/hosting';
+import type { HostSettingsPush } from '../../common/net/hubProtocol';
 
 export interface ClientConnection {
   send(msg: C2S): void;
@@ -17,6 +19,8 @@ export class WorkerConnection implements ClientConnection {
   onMessage: (msg: S2C) => void = () => {};
   onClose: (reason: string) => void = () => {};
   onLog: (text: string) => void = (t) => console.log(t);
+  /** Browser hosting: what the integrated server sends to other players (see HostSession). */
+  onHost: (m: HostOut | { type: 'hosting'; on: boolean }) => void = () => {};
   private readonly worker: Worker;
   private stopped: Promise<void> | null = null;
   private stopResolve: (() => void) | null = null;
@@ -43,6 +47,13 @@ export class WorkerConnection implements ClientConnection {
         case 'saved':
           this.saveResolve?.();
           break;
+        case 'remote_send':
+        case 'remote_kick':
+        case 'players':
+        case 'level_settings':
+        case 'hosting':
+          this.onHost(m as unknown as HostOut);
+          break;
       }
     };
     this.worker.onerror = (e) => {
@@ -58,6 +69,40 @@ export class WorkerConnection implements ClientConnection {
 
   setPaused(paused: boolean): void {
     this.worker.postMessage({ type: 'pause', paused });
+  }
+
+  // ------------------------------------------------------------------ browser hosting
+
+  host(config: HostConfig): void {
+    this.worker.postMessage({ type: 'host', config });
+  }
+
+  unhost(reason?: string): void {
+    this.worker.postMessage({ type: 'unhost', reason });
+  }
+
+  remoteOpen(cid: number, remote: string): void {
+    this.worker.postMessage({ type: 'remote_open', cid, remote });
+  }
+
+  remoteData(cid: number, piece: Uint8Array): void {
+    this.worker.postMessage({ type: 'remote_data', cid, piece }, [piece.buffer as ArrayBuffer]);
+  }
+
+  remoteClose(cid: number): void {
+    this.worker.postMessage({ type: 'remote_close', cid });
+  }
+
+  remoteBuffered(cid: number, bytes: number): void {
+    this.worker.postMessage({ type: 'remote_buffered', cid, bytes });
+  }
+
+  hostSettings(settings: HostSettingsPush): void {
+    this.worker.postMessage({ type: 'host_settings', settings });
+  }
+
+  hostOptions(options: HostOptionsPatch): void {
+    this.worker.postMessage({ type: 'host_options', options });
   }
 
   save(): Promise<void> {

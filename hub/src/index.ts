@@ -425,7 +425,8 @@ async function api(req: Request, url: URL, env: Env): Promise<unknown | Response
       const hosted = (await hub.loadHosted()).get(r.entry.id);
       if (!hosted) throw new HttpError(409, 'The host is offline');
       if (hosted.players >= hosted.maxPlayers) throw new HttpError(409, 'World is full');
-      return { world: { ...r.summary, online: true, players: hosted.players, maxPlayers: hosted.maxPlayers, cheats: hosted.cheats, version: hosted.version } };
+      // The same shape as the Node server's answer: the world's summary
+      return { ...r.summary, online: true, players: hosted.players, maxPlayers: hosted.maxPlayers, cheats: hosted.cheats, version: hosted.version };
     }
     case 'POST /ticket':
       if (!ticketLimiter.take(me)) throw new HttpError(429, 'Slow down a little');

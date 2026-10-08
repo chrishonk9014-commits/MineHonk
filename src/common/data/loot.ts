@@ -480,8 +480,47 @@ export const LOOT_TABLES: Record<string, LootTable> = {
   'chest/dragon_sanctum': {
     pools: [
       { rolls: 1, entries: [e('sanctum_dragon_scale', 1)] },
+      // V6 phase 5: one of the Citadel Star Chart's pieces
+      { rolls: 1, entries: [e('citadel_star_chart_piece', 1)] },
       { rolls: 1, entries: [loreOf('sanctum_seen')] },
       { rolls: [1, 3], entries: [e('dragon_scale_fragment', 6), e('ancient_fragment', 10, [2, 4]), e('end_crystal_fragment', 8, [3, 6])] },
+    ],
+  },
+  // V6 phase 5: the events, the Void Citadel and the End Guardian
+  'chest/storm_remnant': {
+    pools: [
+      { rolls: [3, 5], entries: [e('ancient_fragment', 14, [2, 5]), e('void_shard', 12, [1, 3]), e('end_crystal_fragment', 6, [2, 4]), e('astral_dust', 4, [1, 3]), e('ender_glyph_stone', 3, [1, 2])] },
+      { rolls: 1, entries: artifacts(100, { ancient_coin: 8, glyph_tablet: 5, ancient_key_shard: 4, cracked_ender_eye: 3, old_crystal_lens: 3 }) },
+    ],
+  },
+  'chest/eclipse_monolith': {
+    pools: [
+      { rolls: 1, entries: [lore(1, 'eclipse_monolith')] },
+      { rolls: [2, 4], entries: [e('eclipse_shard', 1, [1, 2])] },
+      { rolls: [1, 3], entries: [e('astral_shard', 8), e('astral_dust', 10, [2, 4]), e('end_crystal_fragment', 8, [2, 5]), e('ancient_fragment', 6, [1, 3])] },
+    ],
+  },
+  'chest/citadel_library': {
+    pools: [
+      { rolls: 1, entries: [lore(1, 'void_citadel')] },
+      { rolls: [2, 4], entries: [e('ancient_fragment', 12, [2, 5]), e('experience_bottle', 8, [2, 5]), book(6), e('ender_glyph_stone', 4, [1, 3]), e('astral_dust', 6, [2, 4])] },
+    ],
+  },
+  'chest/citadel_vault': {
+    pools: [
+      { rolls: [1, 2], entries: [ench('ender_alloy_sword', 3, [30, 39]), ench('ender_alloy_helmet', 3, [30, 39]), ench('ender_alloy_chestplate', 3, [30, 39]), ench('ender_alloy_leggings', 3, [30, 39]), ench('ender_alloy_boots', 3, [30, 39]), ench('ender_alloy_pickaxe', 3, [30, 39])] },
+      { rolls: [3, 5], entries: [e('astral_shard', 12, [1, 3]), e('eclipse_shard', 8, [1, 2]), e('ender_scrap', 6), e('diamond', 6, [2, 4]), e('ancient_fragment', 8, [2, 4])] },
+      { rolls: 1, entries: [e('ancient_blade', 2), e('voidpiercer', 2), e('shardstaff', 2), none(6)] },
+      { rolls: 1, entries: artifacts(100, { ancient_coin: 10, glyph_tablet: 8, old_crystal_lens: 6, ancient_key_shard: 6, cracked_ender_eye: 5 }) },
+    ],
+  },
+  // The End Guardian's spoils besides its head, the Core, the Lance and the Veil (EndGuardian.ts)
+  'chest/end_guardian': {
+    pools: [
+      { rolls: 1, entries: [ench('ender_alloy_sword', 3, [30, 39]), ench('ender_alloy_helmet', 3, [30, 39]), ench('ender_alloy_chestplate', 3, [30, 39]), ench('ender_alloy_leggings', 3, [30, 39]), ench('ender_alloy_boots', 3, [30, 39]), ench('ender_alloy_pickaxe', 3, [30, 39])] },
+      { rolls: 1, entries: [e('astral_shard', 1, [3, 6])] },
+      { rolls: 1, entries: [e('eclipse_shard', 1, [2, 4])] },
+      { rolls: [1, 2], entries: [e('ender_scrap', 6, [1, 2]), e('ancient_fragment', 8, [3, 6]), e('experience_bottle', 6, [3, 6])] },
     ],
   },
   // The Dragon's Nest: rolled once per world (each chest once, shared by everyone)

@@ -162,7 +162,8 @@ export class VoidSlipGoal implements Goal {
 export class BeastTargetGoal implements Goal {
   flags: GoalFlag[] = ['target'];
   canUse(m: Mob): boolean {
-    const t = sys(m).angryTarget(m);
+    // V6 phase 5: in a Void Storm a Chorus Beast turns on anyone it sees
+    const t = sys(m).angryTarget(m) ?? (m.dim.server.endEvents?.storming(m.dim, m.x, m.z) ? sys(m).seenPlayer(m, 24) : null);
     if (!t) return false;
     m.target = t;
     m.metaDirty = true;
@@ -170,7 +171,8 @@ export class BeastTargetGoal implements Goal {
   }
   canContinue(m: Mob): boolean {
     const t = m.target;
-    return !!t && isAlive(t) && isPlayer(t) && sys(m).isAngryAt(m, t) && distSq(m, t) < 28 * 28;
+    const storm = !!m.dim.server.endEvents?.storming(m.dim, m.x, m.z);
+    return !!t && isAlive(t) && isPlayer(t) && (sys(m).isAngryAt(m, t) || storm) && distSq(m, t) < (storm ? 42 : 28) ** 2;
   }
   stop(m: Mob): void {
     m.target = null;

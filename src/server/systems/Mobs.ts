@@ -1410,7 +1410,8 @@ export class MobSystem {
     if (s.roleOf(p) === 'visitor' && target instanceof Mob && target.def.category !== 'monster' && target.def.category !== 'boss') return;
     // Reach & line of sight
     const [ex, ey, ez] = s.eyePos(p);
-    const reach = p.gamemode === 'creative' ? 6 : 4.5;
+    // V6 phase 5: the Guardian's Lance reaches two blocks further
+    const reach = (p.gamemode === 'creative' ? 6 : 4.5) + (items[p.inventory.get(p.selectedSlot)?.id ?? -1]?.id === 'guardians_lance' ? 2 : 0);
     const cx = Math.max(target.x - target.body.width / 2, Math.min(ex, target.x + target.body.width / 2));
     const cy = Math.max(target.y, Math.min(ey, target.y + target.body.height));
     const cz = Math.max(target.z - target.body.width / 2, Math.min(ez, target.z + target.body.width / 2));

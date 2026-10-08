@@ -28,6 +28,8 @@ import { arrivalLayout } from '../../common/gen/endExpansion';
 import { EXPANSION_PORTAL_SITE, inExpansion } from '../../common/endExpansion/region';
 import { EXPANSION_BIOMES } from '../../common/endExpansion/biomes';
 import { buildExpansionPortal, setExpansionPortalAlive } from '../../common/endExpansion/portal';
+import { RARE_END_LOOT } from '../../common/endExpansion/guardian';
+import { DRAGON_TESTS } from '../../common/endExpansion/dragon';
 
 /** Ticks a survival player stands in the portal before it takes them (instant in creative). */
 export const EXPANSION_PORTAL_DELAY = 60;
@@ -196,6 +198,12 @@ export class EndExpansionSystem {
     } else this.toIsland(p);
   }
 
+  /** V6 phase 5: where the arrival platform stands (somewhere safe to set a player down). */
+  arrivalSpot(): [number, number, number] {
+    const L = arrivalLayout(this.generator.terrain.expansion.arrival());
+    return [L.stand.x, L.stand.y, L.stand.z];
+  }
+
   /** Sends a player to the arrival platform in the Expanded End. */
   toExpansion(p: ServerPlayer, cheat: boolean): void {
     const a = this.generator.terrain.expansion.arrival();
@@ -304,6 +312,13 @@ export class EndExpansionSystem {
         constructs: CONSTRUCTS.map((id) => ({ id, name: mobDef(id)?.name ?? id })),
         ...(this.server.endStructures?.status() ?? {}),
       },
+      // Phase 5: events, the Citadel, the Guardian and the Dragon's additions
+      events: this.server.endEvents?.status() ?? null,
+      citadel: this.server.citadel?.status() ?? null,
+      guardian: this.server.guardian?.status() ?? null,
+      dragon: { alive: !!this.server.theEnd?.fight.dragon, phase: this.server.theEnd?.fight.phase ?? null, storm: this.server.theEnd?.fight.extras.storming ?? false, craters: this.server.theEnd?.fight.extras.pendingRestore() ?? 0 },
+      rare: RARE_END_LOOT.map((g) => ({ id: g.id, name: g.name })),
+      dragonTests: DRAGON_TESTS,
     };
   }
 }

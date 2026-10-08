@@ -52,6 +52,8 @@ function players(m: Mob, range: number): Target[] {
   const out: Target[] = [];
   for (const p of m.dim.server.players.values()) {
     if (p.dim !== m.dim || !isAlive(p)) continue;
+    // V6 phase 5: under the Eclipse Veil no mob picks them out
+    if (p.veiledUntil > m.dim.server.tickNo) continue;
     if (distSq(m, p) <= range * range) out.push(p);
   }
   return out;
@@ -403,7 +405,7 @@ export class MeleeAttackGoal implements Goal {
     return !!m.target && isAlive(m.target);
   }
   canContinue(m: Mob): boolean {
-    return !!m.target && isAlive(m.target) && distSq(m, m.target) < (m.def.followRange ?? 32) ** 2;
+    return !!m.target && isAlive(m.target) && distSq(m, m.target) < ((m.def.followRange ?? 32) * stormFollow(m)) ** 2;
   }
   start(): void {
     this.repath = 0;
@@ -444,7 +446,7 @@ export class RangedAttackGoal implements Goal {
     return !!m.target && isAlive(m.target);
   }
   canContinue(m: Mob): boolean {
-    return this.canUse(m) && distSq(m, m.target!) < (m.def.followRange ?? 40) ** 2;
+    return this.canUse(m) && distSq(m, m.target!) < ((m.def.followRange ?? 40) * stormFollow(m)) ** 2;
   }
   start(): void {
     this.cooldown = this.interval / 2;
@@ -661,7 +663,7 @@ export class NearestTargetGoal implements Goal {
     const t = m.target;
     if (!t || !isAlive(t)) return false;
     if (m.dim.server.level.difficulty === 'peaceful' && m.def.category === 'monster') return false;
-    return distSq(m, t) < ((m.def.followRange ?? 32) + 4) ** 2;
+    return distSq(m, t) < ((m.def.followRange ?? 32) * stormFollow(m) + 4) ** 2;
   }
   stop(m: Mob): void {
     m.target = null;
@@ -670,7 +672,12 @@ export class NearestTargetGoal implements Goal {
 }
 
 export function nearestPlayerTarget(range: number, pred?: (m: Mob, p: Target) => boolean): (m: Mob) => Target | null {
-  return (m) => nearest(m, players(m, range).filter((p) => !pred || pred(m, p)));
+  return (m) => nearest(m, players(m, range * stormFollow(m)).filter((p) => !pred || pred(m, p)));
+}
+
+/** V6 phase 5: in a Void Storm, Void Stalkers and Chorus Beasts follow half as far again. */
+export function stormFollow(m: Mob): number {
+  return m.dim.server.endEvents?.followFactor(m) ?? 1;
 }
 
 export function nearestEntityTarget(range: number, pred: (e: Entity) => boolean): (m: Mob) => Target | null {

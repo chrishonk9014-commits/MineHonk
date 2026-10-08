@@ -86,7 +86,8 @@ export class EndEngineering {
         }
         be.burn = Math.max(0, (be.burn ?? 0) - N);
         if (!be.cheat) this.eng.grant(n, 'run_crystal_generator');
-        return CRYSTAL_GEN.gen;
+        // V6 phase 5: a Void Storm makes End crystal burn hotter (+50%)
+        return CRYSTAL_GEN.gen * (this.server.endEvents?.crystalFactor(n.dim, n.x, n.z) ?? 1);
       }
       case 'void_collector':
         if (!this.voidBelow(n.dim, n.x, n.y, n.z)) {
@@ -95,6 +96,7 @@ export class EndEngineering {
         }
         return VOID_COLLECTOR.gen * this.voidStormFactor(n.dim, n.x, n.z);
       case 'restored_ancient_core':
+      case 'citadel_core':
         return n.c.energy!.gen!;
       default:
         return null;
@@ -117,7 +119,7 @@ export class EndEngineering {
         continue;
       }
       const mc = n.c.machine;
-      if (mc !== 'grower' && mc !== 'lens' && mc !== 'pedestal' && mc !== 'bridge' && mc !== 'rail') continue;
+      if (mc !== 'grower' && mc !== 'lens' && mc !== 'pedestal' && mc !== 'bridge' && mc !== 'rail' && mc !== 'socket') continue;
       const be = n.be();
       if (!be) continue;
       switch (mc) {
@@ -135,6 +137,9 @@ export class EndEngineering {
           break;
         case 'rail':
           this.rail(n, be, N);
+          break;
+        case 'socket':
+          this.socket(n, be, N);
           break;
       }
     }
@@ -241,6 +246,18 @@ export class EndEngineering {
       n.dirty = true;
     }
     this.eng.machines.setStatus(n, !crystal ? 'no_crystal' : powered ? 'working' : 'no_crystal_power');
+  }
+
+  /** V6 phase 5: a Citadel Socket draws its power from the floor's core (the Citadel checks its signal). */
+  private socket(n: EngNode, be: EngBE, N: number): void {
+    const use = (n.c.energy?.use ?? 64) * N;
+    const powered = (be.energy ?? 0) >= use;
+    if (powered) be.energy = (be.energy ?? 0) - use;
+    if (!!be.powered !== powered) {
+      be.powered = powered;
+      n.dirty = true;
+    }
+    this.eng.machines.setStatus(n, powered ? 'working' : 'no_power');
   }
 
   /** The cells a projector's bridge would fill now (to the first block in the way, 64 at most, loaded only). */

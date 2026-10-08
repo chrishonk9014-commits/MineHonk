@@ -13,7 +13,7 @@
 import type { ItemDef } from '../registry/itemTypes';
 import type { ItemStack } from '../game/itemstack';
 
-export type ElytraUpgrade = 'reinforced' | 'thrust' | 'hover' | 'burst' | 'void_recovery' | 'ender_blink';
+export type ElytraUpgrade = 'reinforced' | 'thrust' | 'hover' | 'burst' | 'void_recovery' | 'ender_blink' | 'eclipse_veil';
 
 export interface ElytraModule {
   id: ElytraUpgrade;
@@ -30,11 +30,15 @@ export const ELYTRA_MODULES: readonly ElytraModule[] = [
   { id: 'burst', item: 'burst_module', name: 'Burst', desc: 'Double-tap jump while gliding for a burst of speed without a rocket. 3 charges, each back after 10 seconds.' },
   { id: 'void_recovery', item: 'sanctum_dragon_scale', name: 'Void Recovery', desc: 'Falling into the End\'s void brings you back to the last ground you stood on. Costs a quarter of the wings\' durability; 5 minutes to recharge. Only in the End.' },
   { id: 'ender_blink', item: 'ender_blink_module', name: 'Ender Blink', desc: 'While gliding, use an empty hand to blink 8 blocks ahead. It never blinks into blocks. 20 seconds to recharge.' },
+  // V6 phase 5: from the End Guardian
+  { id: 'eclipse_veil', item: 'eclipse_veil_module', name: 'Eclipse Veil', desc: 'While gliding, sneak and use an empty hand: hard to see for 5 seconds, and mobs lose track of you. 60 seconds to recharge.' },
 ];
 
 /** The numbers (ticks, blocks, multipliers). */
 export const ELYTRA = {
   slots: 3,
+  /** V6 phase 5: a Guardian Core at the smithing table opens a fourth slot. */
+  maxSlots: 4,
   durability: 432,
   /** Thrust: glide acceleration and rocket boost multipliers. */
   thrustGlide: 1.3,
@@ -74,10 +78,15 @@ export function elytraItemDefs(): ItemDef[] {
 
 const VALID = new Set<string>(ELYTRA_MODULES.map((m) => m.id));
 
+/** How many upgrade slots an Elytra has: three, or four once a Guardian Core went on. */
+export function elytraSlots(s: ItemStack | null | undefined): number {
+  return s?.tag?.data?.slots === ELYTRA.maxSlots ? ELYTRA.maxSlots : ELYTRA.slots;
+}
+
 /** The upgrades on an Elytra (in the order they were added). */
 export function elytraUpgrades(s: ItemStack | null | undefined): ElytraUpgrade[] {
   const up = s?.tag?.data?.upgrades;
-  return Array.isArray(up) ? (up.filter((u) => typeof u === 'string' && VALID.has(u)) as ElytraUpgrade[]).slice(0, ELYTRA.slots) : [];
+  return Array.isArray(up) ? (up.filter((u) => typeof u === 'string' && VALID.has(u)) as ElytraUpgrade[]).slice(0, elytraSlots(s)) : [];
 }
 
 export function hasUpgrade(s: ItemStack | null | undefined, u: ElytraUpgrade): boolean {
@@ -93,7 +102,7 @@ export function moduleUpgrade(itemId: string): ElytraUpgrade | null {
 export function cannotAdd(s: ItemStack, u: ElytraUpgrade): string | null {
   const ups = elytraUpgrades(s);
   if (ups.includes(u)) return 'It already has that upgrade.';
-  if (ups.length >= ELYTRA.slots) return 'All three upgrade slots are taken.';
+  if (ups.length >= elytraSlots(s)) return elytraSlots(s) === ELYTRA.maxSlots ? 'All four upgrade slots are taken.' : 'All three upgrade slots are taken.';
   return null;
 }
 
@@ -101,6 +110,11 @@ export function cannotAdd(s: ItemStack, u: ElytraUpgrade): string | null {
 export function withUpgrade(s: ItemStack, u: ElytraUpgrade): ItemStack {
   const ups = [...elytraUpgrades(s), u];
   return { ...s, tag: { ...(s.tag ?? {}), data: { ...(s.tag?.data ?? {}), upgrades: ups } } };
+}
+
+/** The Elytra with its fourth slot open (a copy). */
+export function withFourthSlot(s: ItemStack): ItemStack {
+  return { ...s, tag: { ...(s.tag ?? {}), data: { ...(s.tag?.data ?? {}), slots: ELYTRA.maxSlots } } };
 }
 
 /** The Elytra without its newest upgrade (a copy), or null when it has none. */
@@ -130,8 +144,9 @@ export function glideFactors(ups: readonly ElytraUpgrade[]): { glide: number; ro
 export function upgradeLines(s: ItemStack): string[] {
   const ups = elytraUpgrades(s);
   if (!ups.length) return [];
-  const free = ELYTRA.slots - ups.length;
-  return [`Upgrades (${ups.length}/${ELYTRA.slots}):`, ...ups.map((u) => `  ${ELYTRA_MODULES.find((m) => m.id === u)!.name}`), ...(free ? [`  ${free} slot${free === 1 ? '' : 's'} free`] : [])];
+  const slots = elytraSlots(s);
+  const free = slots - ups.length;
+  return [`Upgrades (${ups.length}/${slots}):`, ...ups.map((u) => `  ${ELYTRA_MODULES.find((m) => m.id === u)!.name}`), ...(free ? [`  ${free} slot${free === 1 ? '' : 's'} free`] : [])];
 }
 
 /**
@@ -139,9 +154,11 @@ export function upgradeLines(s: ItemStack): string[] {
  * the newest one off (the module is lost). Null when nothing happens (also
  * when the module can't go on: a duplicate, or no slot left).
  */
-export function elytraSmith(base: ItemStack | null, addition: ItemStack | null, idOf: (s: ItemStack) => string): { result: ItemStack; kind: 'add' | 'remove'; upgrade: ElytraUpgrade | null } | null {
+export function elytraSmith(base: ItemStack | null, addition: ItemStack | null, idOf: (s: ItemStack) => string): { result: ItemStack; kind: 'add' | 'remove' | 'slot'; upgrade: ElytraUpgrade | null } | null {
   if (!base || !addition || idOf(base) !== 'elytra') return null;
   const a = idOf(addition);
+  // V6 phase 5: the Guardian Core opens a fourth slot (once)
+  if (a === 'guardian_core') return elytraSlots(base) < ELYTRA.maxSlots ? { result: { ...withFourthSlot(base), count: 1 }, kind: 'slot', upgrade: null } : null;
   if (a === 'shears') {
     const ups = elytraUpgrades(base);
     const out = withoutNewest(base);

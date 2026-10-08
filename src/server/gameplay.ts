@@ -30,6 +30,9 @@ import { EndStructuresSystem } from './systems/EndStructures';
 import { EndTransportSystem } from './systems/EndTransport';
 import { EndQuestsSystem } from './systems/EndQuests';
 import { ElytraUpgrades } from './systems/ElytraUpgrades';
+import { EndEventsSystem } from './systems/EndEvents';
+import { EndCitadelSystem } from './systems/EndCitadel';
+import { EndGuardianSystem } from './systems/EndGuardian';
 import { itemIdOf, type ItemStack } from '../common/game/itemstack';
 import { Mob } from './entity/Mob';
 import type { ServerPlayer } from './player/ServerPlayer';
@@ -64,6 +67,13 @@ export function installGameplay(server: GameServer): void {
   const endQuests = new EndQuestsSystem(server);
   server.endQuests = endQuests;
   const elytra = new ElytraUpgrades(server);
+  // V6 phase 5: the End's events, the Void Citadel and the End Guardian
+  const endEvents = new EndEventsSystem(server);
+  server.endEvents = endEvents;
+  const citadel = new EndCitadelSystem(server);
+  server.citadel = citadel;
+  const guardian = new EndGuardianSystem(server);
+  server.guardian = guardian;
   server.elytra = elytra;
   const vehicle = (p: ServerPlayer, target: Entity, hand: 0 | 1): boolean => {
     if (!(target instanceof Mob) || !target.def.vehicle) return false;
@@ -97,14 +107,14 @@ export function installGameplay(server: GameServer): void {
     it.containers.openVoidPack(p, hand === 1 ? OFFHAND : p.selectedSlot);
     return true;
   };
-  h.useItem = (p, stack, hand) => voidPack(p, stack, hand) || endUse(p, stack, hand) || endStructures.useItem(p, stack, hand) || !!server.herobrine?.useItem(p, stack) || !!server.endgame?.useItem(p, stack) || mobs.useItem(p, stack) || end.fillBottle(p, stack) || ws.fillBottle(p, stack) || ws.throwSplash(p, stack) || end.useItem(p, stack) || far.useItem(p, stack) || gadgets.useItem(p, stack, hand);
+  h.useItem = (p, stack, hand) => voidPack(p, stack, hand) || endUse(p, stack, hand) || endStructures.useItem(p, stack, hand) || guardian.useItem(p, stack, hand) || !!server.herobrine?.useItem(p, stack) || !!server.endgame?.useItem(p, stack) || mobs.useItem(p, stack) || end.fillBottle(p, stack) || ws.fillBottle(p, stack) || ws.throwSplash(p, stack) || end.useItem(p, stack) || far.useItem(p, stack) || gadgets.useItem(p, stack, hand);
   const quests = new StructureQuests(server);
   server.structureQuests = quests;
   const temples = new TempleTrials(server);
   server.templeTrials = temples;
   const engineering = new Engineering(server);
   server.engineering = engineering;
-  h.useBlock = (p, x, y, z, state) => endQuests.useBlock(p, x, y, z, state) || endStructures.useBlock(p, x, y, z, state) || !!server.herobrine?.useBlock(p, x, y, z, state) || quests.useBlock(p, x, y, z, state) || temples.useBlock(p, x, y, z, state) || engineering.useBlock(p, x, y, z, state) || ws.useBlock(p, x, y, z, state);
+  h.useBlock = (p, x, y, z, state) => citadel.useBlock(p, x, y, z, state) || endQuests.useBlock(p, x, y, z, state) || endStructures.useBlock(p, x, y, z, state) || !!server.herobrine?.useBlock(p, x, y, z, state) || quests.useBlock(p, x, y, z, state) || temples.useBlock(p, x, y, z, state) || engineering.useBlock(p, x, y, z, state) || ws.useBlock(p, x, y, z, state);
   h.windowAction = (p, m) => ws.windowAction(p, m);
   const prevUseOnBlock = h.useItemOnBlock;
   // A minecart onto a rail, a Void Skiff onto the block (on top of it)
@@ -137,6 +147,8 @@ export function installGameplay(server: GameServer): void {
     if (m.type === 'ender_dragon') end.fight.onDeath(m, killer, info);
     else if (m.type === 'the_error') errorBoss.onDeath(m, killer, info);
     else if (m.type === 'herobrine') herobrine.onBossDeath(m, killer, info);
+    // V6 phase 5: the End Guardian (and its pylons and orbs)
+    else if (guardian.onDeath(m, killer)) return true;
     // Other bosses (the Glitch Beast) drop their loot like any mob
     else return false;
     return true;
@@ -152,6 +164,8 @@ export function installGameplay(server: GameServer): void {
   h.onDimension = (p, dim) => {
     prevDim?.(p, dim);
     progression.onDimension(p, dim);
+    // V6 phase 5: arriving in the End, hear of its events at once
+    endEvents.sync(p);
   };
   const prevTick = h.tick;
   h.tick = () => {
@@ -167,6 +181,9 @@ export function installGameplay(server: GameServer): void {
     endTransport.tick();
     endQuests.tick();
     elytra.tick();
+    endEvents.tick();
+    citadel.tick();
+    guardian.tick();
     endgame.tick();
     errorBoss.tick();
     glitched.tick();

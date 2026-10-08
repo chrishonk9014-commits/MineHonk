@@ -22,7 +22,7 @@ import { collisionShape } from '../../common/physics/shapes';
 import { STATE_FLUID, S } from '../../common/registry/blocks';
 import { biomeOf } from '../../common/registry/biomes';
 import { isSurvivalLike } from '../../common/game/gamemode';
-import { isAdminStack, itemIdOf } from '../../common/game/itemstack';
+import { isAdminStack, itemIdOf, stackOf, markAdmin } from '../../common/game/itemstack';
 import { inExpansion } from '../../common/endExpansion/region';
 import { EXPANSION_BIOME_IDS } from '../../common/endExpansion/biomes';
 import { EXPANSION_MOBS, EXPANSION_MOB_CAPS, MITE_FORMATION_RANGE, PHANTOM_COOLDOWN, PHANTOM_MIN_DISTANCE, SPAWN_AREA, isExpansionMob, type ExpansionMob } from '../../common/endExpansion/mobs';
@@ -234,6 +234,8 @@ export class EndMobsSystem {
   }
 
   onNaturalSpawn(p: ServerPlayer, m: Mob): void {
+    // V6 phase 5: what comes out under the End Eclipse is eclipsed
+    if ((m.type === 'void_stalker' || m.type === 'end_phantom') && this.server.endEvents?.eclipsed(m.dim, m.x, m.z)) this.eclipse(m);
     if (m.type === 'end_phantom') {
       m.data.homeX = m.x;
       m.data.homeY = m.y;
@@ -486,6 +488,9 @@ export class EndMobsSystem {
     m.noAi = false;
     for (const k of ['slip', 'untouchable', 'returnAt', 'riseX', 'riseY', 'riseZ', 'riseAt', 'slipTries', 'returnFor', 'riseFor']) delete m.data[k];
     m.data.slipReady = this.now + SLIP_COOLDOWN;
+    // V6 phase 5: an eclipsed stalker has a second void slip in it
+    m.data.slips = Number(m.data.slips ?? 0) + 1;
+    if (m.data.eclipsed && Number(m.data.slips) < 2) delete m.data.lowSlip;
     if (p && isAlive(p) && p.dim === m.dim) {
       m.target = p;
       m.yaw = Math.atan2(-(p.x - m.x), -(p.z - m.z));
@@ -545,6 +550,21 @@ export class EndMobsSystem {
 
   isAngryAt(m: Mob, p: Target): boolean {
     return isPlayer(p) && this.angerList(m).includes(p.uuid);
+  }
+
+  /** V6 phase 5: the nearest survival player a mob can see (a storm-maddened Chorus Beast's pick). */
+  seenPlayer(m: Mob, range: number): ServerPlayer | null {
+    let best: ServerPlayer | null = null;
+    let bd = range * range;
+    for (const p of this.server.players.values()) {
+      if (p.dim !== m.dim || !isAlive(p) || !isSurvivalLike(p.gamemode)) continue;
+      const d = p.distanceSq(m.x, m.y, m.z);
+      if (d < bd && canSee(m, p)) {
+        bd = d;
+        best = p;
+      }
+    }
+    return best;
   }
 
   angryTarget(m: Mob): ServerPlayer | null {
@@ -823,8 +843,19 @@ export class EndMobsSystem {
     this.server.playSound(dim, 'mob.end_crystal_mite.burrow', x + 0.5, y + 0.5, z + 0.5, 1, 0.8);
   }
 
+  /** V6 phase 5: an eclipsed mob (pale outline; stalkers take less and slip twice). */
+  eclipse(m: Mob): void {
+    m.data.eclipsed = true;
+    m.metaDirty = true;
+  }
+
   /** Advancements for killing the expansion's mobs (never for cheat-spawned ones). */
   onDeath(m: Mob, killer: ServerPlayer | null): void {
+    // V6 phase 5: eclipsed mobs drop more, and Eclipse Shards
+    if (m.data.eclipsed && this.server.level.rules.doMobLoot) {
+      const extra = [stackOf('eclipse_shard', 1 + Math.floor(Math.random() * 2)), ...(m.type === 'void_stalker' ? [stackOf('void_shard', 1 + Math.floor(Math.random() * 3))] : [stackOf('end_phantom_membrane', 1)])];
+      for (const st of extra) this.server.mining.dropItem(m.dim, m.x, m.y + 0.5, m.z, m.admin ? markAdmin(st) : st);
+    }
     if (!killer || m.admin) return;
     const it = this.server.interaction;
     if (m.type === 'void_stalker' && Array.isArray(m.data.slipVictims) && (m.data.slipVictims as string[]).includes(killer.uuid)) it.grant(killer, 'void_slip');

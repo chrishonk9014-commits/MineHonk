@@ -72,7 +72,10 @@ export class GameServer {
   /** V6 phase 4: Elytra upgrades. */
   elytra: import('./systems/ElytraUpgrades').ElytraUpgrades | null = null;
   /** V6 phase 5 hook: the End's weather events (a Void Storm quadruples Void Collectors). */
-  endEvents?: { voidStormFactor(dim: Dimension, x: number, z: number): number };
+  /** V6 phase 5: the End's events, the Void Citadel and the End Guardian. */
+  endEvents: import('./systems/EndEvents').EndEventsSystem | null = null;
+  citadel: import('./systems/EndCitadel').EndCitadelSystem | null = null;
+  guardian: import('./systems/EndGuardian').EndGuardianSystem | null = null;
   farlands: import('./systems/Farlands').FarlandsSystem | null = null;
   /** Fireworks, fishing, compasses, jukeboxes, beacons (installed by gameplay). */
   gadgets: import('./systems/Gadgets').Gadgets | null = null;

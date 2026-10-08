@@ -473,6 +473,8 @@ export class AdminService {
           a.set,
           a.structure,
           a.quest,
+          a.spot,
+          a.test,
         );
       case 'v5':
         if (!this.server.engineering) return { ok: false, text: 'Engineering is not running.' };

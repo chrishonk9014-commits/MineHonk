@@ -24,6 +24,7 @@ import { ExpansionTerrain } from './endExpansion';
 import { APPROACH_FADE_END, APPROACH_FADE_START, EXPANSION_GENERATOR, EXPANSION_INNER, EXPANSION_OUTER, EXPANSION_STRUCTURES_GENERATOR, chunkInExpansion, inExpansion } from '../endExpansion/region';
 import { expansionStructureTypes } from './structures/expanded';
 import { EXPANSION_STRUCTURE_IDS, GIANT_IDS, GIANT_TYPE } from '../endExpansion/structures';
+import type { CitadelPlan } from '../endExpansion/citadel';
 import type { Start } from './structures/manager';
 
 /** Distance from the centre where the outer islands begin. */
@@ -328,6 +329,17 @@ export class EndGenerator implements DimensionGenerator {
 
   private readonly structuresOn: boolean;
   private census: StructureManager | null = null;
+  /**
+   * V6 phase 5: the Void Citadel, once the server has picked its site (it is
+   * built into the chunks generated from then on; saved chunks never change).
+   */
+  citadel: CitadelPlan | null = null;
+
+  /** Whether the Citadel's footprint holds a column (features keep out of it). */
+  private inCitadel(x: number, z: number, reach = 0): boolean {
+    const c = this.citadel;
+    return !!c && x + reach >= c.bounds.x0 && x - reach <= c.bounds.x1 && z + reach >= c.bounds.z0 && z - reach <= c.bounds.z1;
+  }
 
   private newExpansionManager(): StructureManager {
     return new StructureManager(
@@ -398,8 +410,15 @@ export class EndGenerator implements DimensionGenerator {
     let expansionStarts: Start[] = [];
     if (nearExpansion(cx, cz)) {
       const ex = this.expansionStructures;
-      this.terrain.expansion.decorate(v, ex ? (x, z, reach) => this.coveredBy(x, z, reach) : undefined);
+      const cit = this.citadel;
+      const keepOut = ex && cit ? (x: number, z: number, reach: number) => this.coveredBy(x, z, reach) || this.inCitadel(x, z, reach) : ex ? (x: number, z: number, reach: number) => this.coveredBy(x, z, reach) : cit ? (x: number, z: number, reach: number) => this.inCitadel(x, z, reach) : undefined;
+      this.terrain.expansion.decorate(v, keepOut);
       if (ex) expansionStarts = ex.build(v);
+      // The Void Citadel's part of this chunk (and its Constructs)
+      if (cit && (cx << 4) + 15 >= cit.bounds.x0 && cx << 4 <= cit.bounds.x1 && (cz << 4) + 15 >= cit.bounds.z0 && cz << 4 <= cit.bounds.z1) {
+        cit.build(v);
+        expansionStarts.push({ type: 'void_citadel', x: cit.x, y: cit.entrance[1], z: cit.z, pieces: [], bounds: cit.bounds, entities: cit.entities });
+      }
     }
     c.recount();
     c.recomputeHeightmap();

@@ -17,6 +17,8 @@ export interface FoodDef {
 
 export type UseKind =
   | 'place_block'
+  /** V6 phase 5: the Guardian's Lance fires a short Crystal Lance. */
+  | 'guardians_lance'
   | 'engineering_book'
   /** V5.5: the witch's grimoire (opens its pages on the client). */
   | 'grimoire'

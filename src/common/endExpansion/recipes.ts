@@ -97,4 +97,8 @@ export function addExpansionRecipes(r: RecipeKit): void {
   for (const m of ['reinforced_module', 'thrust_module', 'hover_module', 'burst_module', 'sanctum_dragon_scale', 'ender_blink_module']) r.smith('elytra', m, 'elytra');
   // The Silent City: four Ancient Key Shards make the Ancient Key
   r.shapeless('ancient_key', 1, 'ancient_key_shard', 'ancient_key_shard', 'ancient_key_shard', 'ancient_key_shard');
+  // V6 phase 5: three Citadel Star Chart pieces make the Void Citadel Map; the Guardian Core adds a fourth Elytra slot
+  r.shapeless('void_citadel_map', 1, 'citadel_star_chart_piece', 'citadel_star_chart_piece', 'citadel_star_chart_piece');
+  r.smith('elytra', 'guardian_core', 'elytra');
+  r.smith('elytra', 'eclipse_veil_module', 'elytra');
 }

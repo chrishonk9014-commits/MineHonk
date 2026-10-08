@@ -9,6 +9,8 @@ import { GAME_MODES, DIFFICULTIES, type GameMode, type Difficulty } from './game
 import { EXPANSION_BIOME_IDS } from '../endExpansion/biomes';
 import { expansionGiveSets } from '../endExpansion/resources';
 import { END_QUEST_IDS } from '../endExpansion/quests';
+import { RARE_END_LOOT } from '../endExpansion/guardian';
+import { DRAGON_TESTS } from '../endExpansion/dragon';
 
 export const ADMIN_DIMENSIONS: DimensionId[] = ['overworld', 'nether', 'end', 'farlands', 'computer'];
 
@@ -130,7 +132,22 @@ export const V6_OPS = [
   'force_gate',
   'open_sanctum',
   'end_rig',
+  // Phase 5: events, the Void Citadel, the End Guardian, rare loot and the Dragon's new moves
+  'storm_start',
+  'storm_stop',
+  'eclipse_start',
+  'eclipse_stop',
+  'citadel_tp',
+  'citadel_solve',
+  'citadel_reset',
+  'guardian_spawn',
+  'guardian_defeat',
+  'guardian_reset',
+  'give_rare',
+  'dragon_test',
 ] as const;
+/** V6 phase 5: where the Admin Panel's Citadel teleport goes (the entrance, a floor 1-6, the arena). */
+export const CITADEL_SPOTS = ['entrance', '1', '2', '3', '4', '5', '6', 'arena'] as const;
 export type V6Op = (typeof V6_OPS)[number];
 
 export function structureName(id: string): string {
@@ -175,7 +192,7 @@ export type AdminAction =
   /** V5.5: the Herobrine story (all cheats: never advancements). */
   | { a: 'v55'; op: V55Op }
   /** V6: the End Expansion (tp_biome names one of the Expanded End's biomes). */
-  | { a: 'v6'; op: V6Op; biome?: string; set?: string; structure?: string; quest?: string };
+  | { a: 'v6'; op: V6Op; biome?: string; set?: string; structure?: string; quest?: string; spot?: string; test?: string };
 
 export type AdminActionName = AdminAction['a'];
 
@@ -202,6 +219,9 @@ export function validateAdmin(raw: unknown): AdminAction | null {
       if (m.op === 'give_set') return typeof m.set === 'string' && expansionGiveSets().some((g) => g.id === m.set) ? { a: 'v6', op: 'give_set', set: m.set } : null;
       if (m.op === 'tp_structure' || m.op === 'generate_here') return typeof m.structure === 'string' && EXPANSION_STRUCTURE_IDS.includes(m.structure) ? { a: 'v6', op: m.op, structure: m.structure } : null;
       if (m.op === 'quest_start' || m.op === 'quest_complete' || m.op === 'quest_reset' || m.op === 'quest_tp') return typeof m.quest === 'string' && (END_QUEST_IDS as readonly string[]).includes(m.quest) ? { a: 'v6', op: m.op, quest: m.quest } : null;
+      if (m.op === 'citadel_tp') return typeof m.spot === 'string' && (CITADEL_SPOTS as readonly string[]).includes(m.spot) ? { a: 'v6', op: 'citadel_tp', spot: m.spot } : null;
+      if (m.op === 'give_rare') return typeof m.set === 'string' && RARE_END_LOOT.some((g) => g.id === m.set) ? { a: 'v6', op: 'give_rare', set: m.set } : null;
+      if (m.op === 'dragon_test') return typeof m.test === 'string' && (DRAGON_TESTS as readonly string[]).includes(m.test) ? { a: 'v6', op: 'dragon_test', test: m.test } : null;
       return { a: 'v6', op: m.op as V6Op };
     case 'v4':
       if (!V4_OPS.includes(m.op as V4Op)) return null;

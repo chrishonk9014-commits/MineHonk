@@ -32,7 +32,10 @@ export type LoreSite =
   | 'void_observatory'
   | 'end_fortress'
   | 'fallen_city'
-  | 'dragon_nest';
+  | 'dragon_nest'
+  // V6 phase 5: the Void Citadel's libraries, and the Eclipse Monoliths (each only its own set)
+  | 'void_citadel'
+  | 'eclipse_monolith';
 
 export interface LoreFragment {
   id: string;
@@ -135,10 +138,36 @@ export const QUEST_LORE: LoreFragment[] = [
   { id: 'sanctum_seen', topic: 'dragon', kind: 'inscription', lines: ['THE FIRST FIRE WAS NOT LIT FOR WARMTH', 'IT WAS LIT TO BE SEEN', 'FROM PAST THE EDGE', 'IT WAS SEEN'] },
 ];
 
-export const LORE_BY_ID = new Map([...LORE, ...NEST_LORE, ...QUEST_LORE].map((f) => [f.id, f]));
+/**
+ * Phase 5: the End Eclipse's own set, found only in the Eclipse Monoliths
+ * (one a monolith).
+ */
+export const ECLIPSE_LORE: LoreFragment[] = [
+  { id: 'eclipse_marks', topic: 'history', kind: 'star_chart', lines: ['The dark one crosses the light once in a long while.', 'We marked every night it came.', 'The marks never repeat.'] },
+  { id: 'eclipse_growth', topic: 'civilization', kind: 'note', lines: ['Things grow on the stone when it is dark above.', 'By morning they are gone.', 'We stopped trying to keep them.'] },
+  { id: 'eclipse_light', topic: 'history', kind: 'log', lines: ['A light stood up out of the deep band last night.', 'Nobody had built anything there.', 'Nobody would go and look.'] },
+  { id: 'eclipse_still', topic: 'endermen', kind: 'inscription', lines: ['THEY ALL STOOD STILL', 'AND LOOKED THE SAME WAY'] },
+  { id: 'eclipse_ring', topic: 'fragmented', kind: 'translation', lines: ['...when the ring of light closes, the pieces...', '...[the rest is worn away]'] },
+];
+
+/**
+ * Phase 5: the Void Citadel's own set, found only in its libraries.
+ */
+export const CITADEL_LORE: LoreFragment[] = [
+  { id: 'citadel_downwards', topic: 'civilization', kind: 'torn_page', lines: ['We built it downwards.', 'Every floor was a promise to go deeper.', 'Nobody remembers who asked for the bottom.'] },
+  { id: 'citadel_doors', topic: 'civilization', kind: 'log', lines: ['The doors were never meant to keep anything out.', 'Each one asks a question.', 'Nobody wrote down the answers.'] },
+  { id: 'citadel_waits', topic: 'history', kind: 'inscription', lines: ['IT DOES NOT SLEEP', 'IT WAITS FOR THE DARK SKY', 'IT REMEMBERS THE SHAPE OF US'] },
+  { id: 'citadel_first_word', topic: 'civilization', kind: 'translation', lines: ['...the first word was carved before the first door...', '...its meaning [cracked through]...'] },
+  { id: 'citadel_other_void', topic: 'fragmented', kind: 'note', lines: ['The void under the tower is not the same void.', 'Drop a stone in and listen.', 'It does not land.'] },
+  { id: 'citadel_tall_ones', topic: 'endermen', kind: 'log', lines: ['The tall ones never came down here.', 'We thought it was fear.', 'It might have been respect.'] },
+  { id: 'citadel_lamps', topic: 'cities', kind: 'torn_page', lines: ['The lamps were lit once, from below.', 'They are still burning.', 'Nobody has been below since.'] },
+  { id: 'citadel_chart_end', topic: 'history', kind: 'star_chart', lines: ['The chart ends at the tower.', 'Past it, someone drew only a circle.'] },
+];
+
+export const LORE_BY_ID = new Map([...LORE, ...NEST_LORE, ...QUEST_LORE, ...ECLIPSE_LORE, ...CITADEL_LORE].map((f) => [f.id, f]));
 
 /** How much each site leans towards each topic (0 = never). */
-const TOPIC_WEIGHTS: Record<Exclude<LoreSite, 'dragon_nest'>, Partial<Record<LoreTopic, number>>> = {
+const TOPIC_WEIGHTS: Record<Exclude<LoreSite, 'dragon_nest' | 'void_citadel' | 'eclipse_monolith'>, Partial<Record<LoreTopic, number>>> = {
   end_outpost: { overworld: 3, gateways: 3, fragmented: 2, endermen: 1 },
   end_settlement: { endermen: 3, cities: 3, overworld: 2, history: 1 },
   end_ruins: { civilization: 3, history: 3, cities: 2, fragmented: 2 },
@@ -157,6 +186,10 @@ const TOPIC_WEIGHTS: Record<Exclude<LoreSite, 'dragon_nest'>, Partial<Record<Lor
 /** A fragment's placement weight at a site. */
 export function loreWeight(f: LoreFragment, site: LoreSite): number {
   if (QUEST_LORE.includes(f)) return 0;
+  // Phase 5: the Citadel's and the Eclipse's sets are their places' alone
+  if (site === 'void_citadel') return CITADEL_LORE.includes(f) ? 1 : 0;
+  if (site === 'eclipse_monolith') return ECLIPSE_LORE.includes(f) ? 1 : 0;
+  if (CITADEL_LORE.includes(f) || ECLIPSE_LORE.includes(f)) return 0;
   if (site === 'dragon_nest') return NEST_LORE.includes(f) ? 1 : 0;
   if (NEST_LORE.includes(f)) return 0;
   if (f.only) return f.only.includes(site) ? 3 : 0;
@@ -165,12 +198,12 @@ export function loreWeight(f: LoreFragment, site: LoreSite): number {
 
 /** Picks a fragment for a site by its weights. */
 export function pickLore(site: LoreSite, rng: Random): LoreFragment {
-  const pool = [...LORE, ...NEST_LORE].map((f) => ({ f, weight: loreWeight(f, site) })).filter((e) => e.weight > 0);
+  const pool = [...LORE, ...NEST_LORE, ...ECLIPSE_LORE, ...CITADEL_LORE].map((f) => ({ f, weight: loreWeight(f, site) })).filter((e) => e.weight > 0);
   return rng.weighted(pool).f;
 }
 
 /** Every site lore is found at. */
-export const LORE_SITES: LoreSite[] = ['end_outpost', 'end_settlement', 'end_ruins', 'end_library', 'end_observatory', 'end_shipyard', 'end_metropolis', 'end_palace', 'end_colossus', 'crystal_cathedral', 'void_observatory', 'end_fortress', 'fallen_city', 'dragon_nest'];
+export const LORE_SITES: LoreSite[] = ['end_outpost', 'end_settlement', 'end_ruins', 'end_library', 'end_observatory', 'end_shipyard', 'end_metropolis', 'end_palace', 'end_colossus', 'crystal_cathedral', 'void_observatory', 'end_fortress', 'fallen_city', 'dragon_nest', 'void_citadel', 'eclipse_monolith'];
 
 /** Display name of a lore book (by the fragment it holds). */
 export function loreBookName(id: string): string | null {

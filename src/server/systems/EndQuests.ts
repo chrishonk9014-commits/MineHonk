@@ -436,6 +436,15 @@ export class EndQuestsSystem {
     const day = Math.floor(this.server.level.time / QUEST.lookEvery);
     const cheat = this.has(r, 'cheat') || this.server.admin.inContext(p);
     this.server.playSound(p.dim, 'block.telescope', x + 0.5, y + 0.5, z + 0.5, 1, 1);
+    // V6 phase 5: under the End Eclipse the telescope finds the Void Citadel (once each eclipse)
+    const citadel = this.server.endEvents?.eclipsed(p.dim, x, z) ? this.server.citadel?.citadelMap(cheat) : null;
+    if (citadel && !this.has(r, `eclipse:${day}`)) {
+      r.flags = r.flags!.filter((f) => !f.startsWith('eclipse:'));
+      this.flag(r, `eclipse:${day}`);
+      this.say(p, 'Under the eclipse, far out in the void, a tower hangs upside down. It is marked.');
+      this.give(p, citadel, cheat);
+      return true;
+    }
     if (this.has(r, `day:${day}`)) {
       this.say(p, 'The stars have nothing more to show tonight.');
       return true;

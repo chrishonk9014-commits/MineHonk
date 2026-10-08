@@ -18,6 +18,7 @@ import { stackOf, markAdmin, type ItemStack } from '../../common/game/itemstack'
 import { S, stateOf } from '../../common/registry/blocks';
 import { portAt } from '../engineering/ports';
 import { END_QUESTS, type EndQuestId } from '../../common/endExpansion/quests';
+import { RARE_END_LOOT } from '../../common/endExpansion/guardian';
 
 export interface ExpansionAdminHelpers {
   /** Teleports (as a cheat) once the destination has loaded; the result follows as a second reply. */
@@ -30,7 +31,7 @@ export interface ExpansionAdminHelpers {
 
 type Result = { ok: boolean; text: string; data?: unknown } | null;
 
-export function expansionAdmin(sys: EndExpansionSystem, h: ExpansionAdminHelpers, p: ServerPlayer, op: V6Op, biome?: string, set?: string, structure?: string, quest?: string): Result {
+export function expansionAdmin(sys: EndExpansionSystem, h: ExpansionAdminHelpers, p: ServerPlayer, op: V6Op, biome?: string, set?: string, structure?: string, quest?: string, spot?: string, test?: string): Result {
   const s = sys.server;
   const gen = s.dim('end').generator as EndGenerator;
   const ex = gen.terrain.expansion;
@@ -245,6 +246,66 @@ export function expansionAdmin(sys: EndExpansionSystem, h: ExpansionAdminHelpers
       portAt(s, dim, x0, y0, z0, 1)?.insert(markAdmin(stackOf('end_crystal_fragment', 64)));
       portAt(s, dim, x0 + 4, y0, z0, 1)?.insert(markAdmin(stackOf('ender_ore', 32)));
       return { ok: true, text: 'Built an End test line beside you: a fuelled Crystal Generator charging a Void Cell along a cable, an End Processor, a Crystal Grower on Crystalline End Stone, two Teleportation Nodes and an Ender Bridge Projector facing east. Everything in it is a cheat.', data: { ...sys.status(p), rig: [x0, y0, z0] } };
+    }
+    // Phase 5: the events, the Void Citadel, the End Guardian, rare loot and the Dragon's new moves
+    case 'storm_start':
+    case 'storm_stop':
+    case 'eclipse_start':
+    case 'eclipse_stop': {
+      const ev = s.endEvents;
+      if (!ev) return { ok: false, text: 'The End events are not running.' };
+      if (op === 'storm_start') ev.startStorm(true);
+      else if (op === 'storm_stop') ev.stopStorm();
+      else if (op === 'eclipse_start') ev.startEclipse(true);
+      else ev.stopEclipse();
+      const text = { storm_start: 'A Void Storm breaks in a few seconds over the Expanded End (cheat: no advancements).', storm_stop: 'The Void Storm is over.', eclipse_start: 'The End Eclipse begins (cheat: no advancements).', eclipse_stop: 'The End Eclipse is over.' }[op];
+      return ok(text);
+    }
+    case 'citadel_tp': {
+      const c = s.citadel;
+      if (!c?.plan) return { ok: false, text: 'The Void Citadel has no site yet (it is chosen when the End is first loaded).' };
+      const which = spot === 'entrance' || spot === 'arena' ? spot : Number(spot) - 1;
+      const at = c.spotOf(which);
+      if (!at) return { ok: false, text: 'No such place in the Citadel.' };
+      const label = spot === 'entrance' ? 'the Void Citadel\'s entrance' : spot === 'arena' ? 'the End Guardian\'s arena' : `floor ${spot} of the Void Citadel`;
+      h.queueTeleport(p, at[0] + 0.5, at[1], at[2] + 0.5, label, false);
+      return pending(`Preparing a landing at ${label}...`);
+    }
+    case 'citadel_solve': {
+      const c = s.citadel;
+      if (!c?.plan) return { ok: false, text: 'The Void Citadel has no site yet.' };
+      return ok(c.solve(p));
+    }
+    case 'citadel_reset': {
+      const c = s.citadel;
+      if (!c) return { ok: false, text: 'The Void Citadel is not running.' };
+      return ok(c.reset());
+    }
+    case 'guardian_spawn': {
+      const g = s.guardian;
+      if (!g || !s.citadel?.plan) return { ok: false, text: 'The Void Citadel has no site yet.' };
+      if (g.fight) return { ok: false, text: 'The End Guardian is already awake.' };
+      return g.begin(p, true) ? ok('The End Guardian awakens (cheat: no advancements, no loot).') : { ok: false, text: 'The arena is not loaded: go there first (Citadel: arena).' };
+    }
+    case 'guardian_defeat':
+      return s.guardian ? ok(s.guardian.forceDefeat()) : { ok: false, text: 'The End Guardian is not running.' };
+    case 'guardian_reset':
+      return s.guardian ? ok(s.guardian.reset()) : { ok: false, text: 'The End Guardian is not running.' };
+    case 'give_rare': {
+      const g = RARE_END_LOOT.find((k) => k.id === set);
+      if (!g) return { ok: false, text: 'Unknown item.' };
+      for (const [id, n] of g.items) h.give(p, id, n);
+      return ok(`Gave the ${g.name} (cheat items: they never count for advancements).`);
+    }
+    case 'dragon_test': {
+      const f = s.theEnd?.fight;
+      if (!f) return { ok: false, text: 'The End is not running.' };
+      // A test makes the fight a cheat: its defeat awards nothing
+      if (f.dragon && !f.dragon.dead) {
+        f.dragon.admin = true;
+        s.level.flags.dragonAdmin = true;
+      }
+      return { ...f.extras.test(test ?? ''), data: sys.status(p) };
     }
     case 'where': {
       const st = sys.status(p) as { here: { x: number; y: number; z: number; inExpansion: boolean; biome: string | null } };

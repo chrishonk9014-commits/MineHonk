@@ -253,6 +253,8 @@ export class Gadgets {
     const st = dim.getState(x, y, z);
     const id = blocks[STATE_BLOCK[st]!]!.id;
     if (id.endsWith('_bed')) return true;
+    // V6 phase 5: a Citadel Anchor never runs out
+    if (id === 'citadel_anchor') return true;
     if (id !== 'respawn_anchor') return false;
     const charges = parseInt(getProp(st, 'charges') ?? '0', 10);
     if (charges <= 0) return false;

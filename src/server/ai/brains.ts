@@ -376,6 +376,7 @@ export function installBrain(m: Mob): void {
       // These fights are driven by their own controllers
       break;
     case 'vehicle':
+    case 'end_guardian':
       // Minecarts and Void Skiffs: the transport system drives them
       break;
   }

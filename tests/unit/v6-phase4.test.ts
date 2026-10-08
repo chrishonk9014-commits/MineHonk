@@ -85,10 +85,12 @@ describe('End engineering', () => {
     const node = server.engineering!.node(dim, vx, Y, Z)!;
     expect(node.rate).toBe(VOID_COLLECTOR.gen);
     // The phase 5 hook
-    server.endEvents = { voidStormFactor: () => 4 };
+    const ev = server.endEvents!;
+    const real = ev.voidStormFactor;
+    ev.voidStormFactor = () => 4;
     tick(server, 8);
     expect(node.rate).toBe(VOID_COLLECTOR.gen * 4);
-    server.endEvents = undefined;
+    ev.voidStormFactor = real;
     // Anything below it, however far down, stops it
     dim.setBlock(vx, 20, Z, S('end_stone'));
     tick(server, 8);

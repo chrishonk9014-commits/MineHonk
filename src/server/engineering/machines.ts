@@ -329,7 +329,8 @@ export class MachineLogic {
         // V6 phase 4: the End generators
         case 'crystal_generator':
         case 'void_collector':
-        case 'restored_ancient_core': {
+        case 'restored_ancient_core':
+        case 'citadel_core': {
           const r = this.eng.end.generate(n, be, N);
           if (r === null) continue;
           rate = r;
@@ -371,6 +372,7 @@ export class MachineLogic {
         case 'grower':
         case 'lens':
         case 'pedestal':
+        case 'socket':
           break;
         case 'drill':
         case 'quarry':

@@ -3,6 +3,7 @@
  * uses the shared player physics with synthetic input (ground mobs), or a
  * simple velocity model for flyers and swimmers.
  */
+import { ECLIPSE } from '../../common/endExpansion/events';
 import { LivingEntity, type HurtInfo } from './Living';
 import type { Entity } from './Entity';
 import type { MobDef } from '../../common/data/mobs';
@@ -505,6 +506,12 @@ export class Mob extends LivingEntity {
     }
     // V6 phase 3: a Bulwark behind its shield takes half (and any hit wakes it)
     if (isConstruct(this.type)) amount = this.dim.server.constructs?.scaleDamage(this, amount, info) ?? amount;
+    // V6 phase 5: the End Guardian (its shield, its exposed core, its untouchable moments); eclipsed Void Stalkers
+    if (this.type === 'end_guardian') {
+      amount = this.dim.server.guardian?.scaleDamage(this, amount, info) ?? amount;
+      if (amount <= 0) return 0;
+    }
+    if (this.data.eclipsed && this.type === 'void_stalker') amount *= ECLIPSE.stalkerDamageTaken;
     // V6 phase 4: vehicles break into their item (no death, no loot)
     if (this.def.vehicle) return this.dim.server.endTransport?.vehicleHurt(this, amount, info) ?? 0;
     // Herobrine: can't be hurt between moments of his fights, and never dies the first time
@@ -582,7 +589,7 @@ export class Mob extends LivingEntity {
     if (this.owner) m.tame = true;
     if (this.fuse >= 0) m.fuse = this.fuse;
     if (this.angryAt || this.target) m.angry = true;
-    for (const k of ['tele', 'slip', 'stun', 'shield', 'awake', 'color', 'sheared', 'size', 'profession', 'variant', 'charged', 'carried', 'phase', 'open', 'saddle', 'leashPos', 'puff', 'dancing', 'playDead', 'rolling', 'eating', 'trusting', 'tongue', 'emerge', 'dig', 'angerLevel', 'sonic', 'listen', 'sniff', 'voidbound', 'errorPhase', 'errorAnim', 'clone', 'malware', 'hbAnim', 'hbKind', 'apparition', 'lit']) if (this.data[k] !== undefined) m[k] = this.data[k];
+    for (const k of ['tele', 'slip', 'stun', 'shield', 'awake', 'color', 'sheared', 'size', 'profession', 'variant', 'charged', 'carried', 'phase', 'open', 'saddle', 'leashPos', 'puff', 'dancing', 'playDead', 'rolling', 'eating', 'trusting', 'tongue', 'emerge', 'dig', 'angerLevel', 'sonic', 'listen', 'sniff', 'voidbound', 'errorPhase', 'errorAnim', 'clone', 'malware', 'hbAnim', 'hbKind', 'apparition', 'lit', 'eclipsed', 'state', 'attack', 'inhale', 'rear']) if (this.data[k] !== undefined) m[k] = this.data[k];
     if (this.data.glowTicks) m.glowing = true;
     if (this.data.leash && this.metaHolder) m.leash = this.metaHolder;
     if (this.rider) m.rider = this.rider.id;

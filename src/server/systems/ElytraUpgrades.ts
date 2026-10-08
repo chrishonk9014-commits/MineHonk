@@ -15,6 +15,10 @@
  * - Void Recovery: in the End, falling below the void line puts the wearer
  *   back on the last ground they stood on, for a quarter of the wings'
  *   remaining durability; 5 minutes to recharge (saved with the player).
+ * - Eclipse Veil (V6 phase 5, from the End Guardian): sneak and use an empty
+ *   hand while gliding: hard to see for 5 seconds, and every mob after them
+ *   loses them (none can pick them out until it ends); 60 seconds to
+ *   recharge.
  *
  * The client gets the meters (`elytra` messages) for its HUD and to know
  * when hovering, bursting or blinking will be accepted.
@@ -29,6 +33,8 @@ import { ELYTRA, elytraUpgrades, glideFactors, type ElytraUpgrade } from '../../
 import { VOID_LINE } from '../../common/endExpansion/transport';
 import { lookDir } from './Interaction';
 import { isSurvivalLike } from '../../common/game/gamemode';
+import { Mob } from '../entity/Mob';
+import { VEIL } from '../../common/endExpansion/guardian';
 
 type P3 = [number, number, number];
 
@@ -39,6 +45,8 @@ interface WingState {
   charges: number[];
   /** When Ender Blink is ready again. */
   blinkAt: number;
+  /** When the Eclipse Veil is ready again. */
+  veilAt: number;
   /** The last solid ground stood on in the End. */
   ground: P3 | null;
   /** What the client was last told. */
@@ -55,7 +63,7 @@ export class ElytraUpgrades {
   private of(p: ServerPlayer): WingState {
     let s = this.state.get(p);
     if (!s) {
-      s = { hover: 0, charges: Array(ELYTRA.burstCharges).fill(0), blinkAt: 0, ground: null, sent: '' };
+      s = { hover: 0, charges: Array(ELYTRA.burstCharges).fill(0), blinkAt: 0, veilAt: 0, ground: null, sent: '' };
       this.state.set(p, s);
     }
     return s;
@@ -79,7 +87,7 @@ export class ElytraUpgrades {
 
   // ------------------------------------------------------------------ the client's moves
 
-  action(p: ServerPlayer, a: 'burst' | 'blink'): void {
+  action(p: ServerPlayer, a: 'burst' | 'blink' | 'veil'): void {
     if (p.dead || !p.gliding || p.vehicle) return;
     const ups = this.upgrades(p);
     const s = this.of(p);
@@ -96,6 +104,13 @@ export class ElytraUpgrades {
       this.sync(p, true);
       return;
     }
+    if (a === 'veil') {
+      if (!ups.includes('eclipse_veil') || s.veilAt > now) return;
+      s.veilAt = now + VEIL.cooldown;
+      this.veil(p);
+      this.sync(p, true);
+      return;
+    }
     if (!ups.includes('ender_blink') || s.blinkAt > now) return;
     const to = this.blinkTarget(p);
     if (!to) return;
@@ -105,6 +120,23 @@ export class ElytraUpgrades {
     this.server.teleport(p, to[0], to[1], to[2], undefined, undefined, true);
     this.server.particles(p.dim, 'portal', to[0], to[1] + 0.9, to[2], 20, 0.5);
     this.sync(p, true);
+  }
+
+  /** The Eclipse Veil: hard to see for a while, and every mob after them loses them. */
+  veil(p: ServerPlayer): void {
+    const now = this.server.tickNo;
+    p.veiledUntil = now + VEIL.ticks;
+    p.metaDirty = true;
+    for (const e of p.dim.entitiesNear(p.x, p.y, p.z, 96, (x) => x instanceof Mob)) {
+      const m = e as Mob;
+      if (m.target === p) m.target = null;
+      if (m.angryAt === p.uuid) m.angryAt = null;
+    }
+    this.server.playSound(p.dim, 'elytra.veil', p.x, p.y + 1, p.z, 1, 1);
+    this.server.particles(p.dim, 'void_aura', p.x, p.y + 0.9, p.z, 24, 0.6);
+    this.server.later(VEIL.ticks + 1, () => {
+      if (p.veiledUntil <= this.server.tickNo) p.metaDirty = true;
+    });
   }
 
   /** Up to 8 blocks along the look, cut short before the first thing in the way (never into a block). */
@@ -183,7 +215,7 @@ export class ElytraUpgrades {
     const st = this.of(p);
     const ups = this.upgrades(p);
     const now = this.server.tickNo;
-    const msg: { t: 'elytra'; upgrades: string[]; hover?: number; charges?: number; chargeIn?: number; blinkIn?: number; recoverIn?: number } = { t: 'elytra', upgrades: ups };
+    const msg: { t: 'elytra'; upgrades: string[]; hover?: number; charges?: number; chargeIn?: number; blinkIn?: number; recoverIn?: number; veilIn?: number } = { t: 'elytra', upgrades: ups };
     if (ups.includes('hover')) msg.hover = ELYTRA.hoverTicks - st.hover;
     if (ups.includes('burst')) {
       msg.charges = st.charges.filter((t) => t <= now).length;
@@ -192,8 +224,9 @@ export class ElytraUpgrades {
     }
     if (ups.includes('ender_blink')) msg.blinkIn = Math.max(0, st.blinkAt - now);
     if (ups.includes('void_recovery')) msg.recoverIn = p.recoverCooldown;
+    if (ups.includes('eclipse_veil')) msg.veilIn = Math.max(0, st.veilAt - now);
     // Counting down on its own: only changes of state (not each tick of a countdown) are news
-    const key = JSON.stringify({ ...msg, chargeIn: msg.chargeIn ? 1 : 0, blinkIn: msg.blinkIn ? 1 : 0, recoverIn: msg.recoverIn ? 1 : 0, hover: msg.hover === undefined ? undefined : Math.ceil(msg.hover / 10) });
+    const key = JSON.stringify({ ...msg, chargeIn: msg.chargeIn ? 1 : 0, blinkIn: msg.blinkIn ? 1 : 0, recoverIn: msg.recoverIn ? 1 : 0, veilIn: msg.veilIn ? 1 : 0, hover: msg.hover === undefined ? undefined : Math.ceil(msg.hover / 10) });
     if (!force && key === st.sent) return;
     st.sent = key;
     p.send(msg);

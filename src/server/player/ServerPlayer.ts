@@ -149,6 +149,8 @@ export class ServerPlayer extends Entity {
   endQuest: string | null = null;
   /** V6 phase 4: ticks until the Elytra's Void Recovery works again (saved with the player). */
   recoverCooldown = 0;
+  /** V6 phase 5: the Eclipse Veil hides them from mobs until this tick. */
+  veiledUntil = 0;
   /** Endings this player has reached (V3). */
   endings = new Set<string>();
   /** An ending card waiting to be shown (after walking out through the End portal). */
@@ -237,6 +239,7 @@ export class ServerPlayer extends Entity {
     const m: Record<string, unknown> = { name: this.name, sneak: this.sneaking, held: this.heldItem()?.id ?? 0 };
     if (this.effects.has('glowing')) m.glowing = true;
     if (this.gliding) m.glide = true;
+    if (this.veiledUntil > this.dim.server.tickNo) m.veil = true;
     if (this.vehicle) m.riding = this.vehicle.id;
     const chest = this.inventory.get(38);
     if (chest && chest.id === ELYTRA()) {

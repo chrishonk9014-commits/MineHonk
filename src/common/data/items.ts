@@ -6,6 +6,9 @@
 import { transportItemDefs } from '../endExpansion/transport';
 import { elytraItemDefs } from '../endExpansion/elytra';
 import { questItemDefs } from '../endExpansion/quests';
+import { eventItemDefs } from '../endExpansion/events';
+import { citadelItemDefs } from '../endExpansion/citadel';
+import { guardianItemDefs } from '../endExpansion/guardian';
 import type { ItemDef } from '../registry/itemTypes';
 import type { ToolType } from '../registry/blockTypes';
 import { COLORS } from './blocks';
@@ -378,5 +381,9 @@ for (const d of ancientItemDefs()) add(d);
 for (const d of transportItemDefs()) add(d);
 for (const d of elytraItemDefs()) add(d);
 for (const d of questItemDefs()) add(d);
+// V6 phase 5
+for (const d of eventItemDefs()) add(d);
+for (const d of citadelItemDefs()) add(d);
+for (const d of guardianItemDefs()) add(d);
 
 export const ITEM_DEFS: readonly ItemDef[] = defs;

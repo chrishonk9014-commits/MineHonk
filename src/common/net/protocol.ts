@@ -1,3 +1,4 @@
+import type { EndEventsView } from '../endExpansion/events';
 import type { AdminAction } from '../game/admin';
 import type { WorldRole } from './multiplayer';
 /**
@@ -55,7 +56,7 @@ export type C2S =
   /** V6 phase 4: the Void Skiff pilot's controls (forward, sideways: -1..1; up/down: -1, 0, 1). */
   | { t: 'pilot'; f: number; s: number; v: number }
   /** V6 phase 4: an Elytra upgrade's move (Burst, Ender Blink); Hover is the move packet's sneak while gliding. */
-  | { t: 'elytra'; a: 'burst' | 'blink' };
+  | { t: 'elytra'; a: 'burst' | 'blink' | 'veil' };
 
 export type ClickMode = 'pickup' | 'quick' | 'swap' | 'drop' | 'drag_start' | 'drag_add' | 'drag_end' | 'collect' | 'clone';
 
@@ -183,12 +184,14 @@ export type S2C =
   | { t: 'mount'; id: number | null; control?: boolean; seat?: number; width?: number; height?: number; speed?: number; jump?: number; x?: number; y?: number; z?: number; yaw?: number; kind?: 'minecart' | 'skiff'; pilot?: boolean }
   /** V6 phase 4: recipes this player has learned from blueprints. */
   | { t: 'recipes'; unlocked: string[] }
+  /** V6 phase 5: the End's events (Void Storms, the End Eclipse); clients draw them in the Expanded End. */
+  | ({ t: 'end_event' } & EndEventsView)
   /**
    * V6 phase 4: the worn Elytra's upgrades and their meters: hover ticks
    * left, burst charges (and ticks to the next), ticks until Ender Blink and
    * Void Recovery are ready. Absent fields: that upgrade isn't fitted.
    */
-  | { t: 'elytra'; upgrades: string[]; hover?: number; charges?: number; chargeIn?: number; blinkIn?: number; recoverIn?: number }
+  | { t: 'elytra'; upgrades: string[]; hover?: number; charges?: number; chargeIn?: number; blinkIn?: number; recoverIn?: number; veilIn?: number }
   /** The server corrected the steered mount's position. */
   | { t: 'vehicle_pos'; x: number; y: number; z: number }
   /** A jukebox starts (track) or stops (null) playing. */
@@ -280,7 +283,14 @@ export type FxKind =
   /** The digital world shutting down: SHUTDOWN text, fade to black. */
   | 'shutdown'
   /** A computer seizing up: its screen and the world around it tear (x,y,z = the computer). */
-  | 'takeover';
+  | 'takeover'
+  // V6 phase 5: the End Expansion's events, the Dragon additions and the End Guardian
+  /** The camera shakes (strength 0..1, for ticks). */
+  | 'shake'
+  /** A ring of light racing outwards along the ground from (x,y,z) to radius r over ticks. */
+  | 'shockwave'
+  /** The Dragon's cosmetic storm over the main island (strength 1 on, 0 off). */
+  | 'dragon_storm';
 export type WindowKind =
   | 'player'
   | 'crafting'

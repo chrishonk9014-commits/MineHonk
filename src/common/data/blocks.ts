@@ -12,6 +12,8 @@ import { addExpansionResourceBlocks } from '../endExpansion/resources';
 import { addAncientBlocks } from '../endExpansion/ancient';
 import { transportBlockDefs } from '../endExpansion/transport';
 import { questBlockDefs } from '../endExpansion/quests';
+import { eventBlockDefs } from '../endExpansion/events';
+import { citadelBlockDefs } from '../endExpansion/citadel';
 
 const defs: BlockDef[] = [];
 const add = (d: BlockDef): BlockDef => {
@@ -1039,5 +1041,8 @@ addAncientBlocks({ add, family, woodSet });
 for (const d of endEngineeringBlockDefs()) add(d);
 for (const d of transportBlockDefs()) add(d);
 for (const d of questBlockDefs()) add(d);
+// V6 phase 5: the End's events, the Void Citadel and the End Guardian's arena
+for (const d of eventBlockDefs()) add(d);
+for (const d of citadelBlockDefs()) add(d);
 
 export const BLOCK_DEFS: readonly BlockDef[] = defs;

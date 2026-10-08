@@ -259,6 +259,8 @@ export class Containers {
     const stacks = rollLoot(be.loot, { rng, difficulty: this.server.level.difficulty });
     // V6 phase 3: Ancient Maps are tied to the giant structure nearest the chest
     this.server.endStructures?.markMaps(dim, x, z, stacks);
+    // V6 phase 5: the first looting of a giant structure's vault holds a Citadel Star Chart Piece
+    this.server.citadel?.onLootRolled(dim, x, y, z, be.loot, stacks);
     // Loot first opened under a cheat (e.g. after a cheat teleport) is cheat-made
     if (cheat || this.server.admin.blockMarked(dim, x, y, z)) for (const st of stacks) markAdmin(st);
     // Spread stacks over random slots, splitting some stacks like a hand-packed chest
@@ -458,7 +460,7 @@ export class Containers {
       const add = inv.get(1);
       wings = elytraSmith(base, add, itemIdOf);
       // An Elytra with a module that can't go on (a duplicate, or no slot left) or shears with nothing to take off: nothing
-      const elytraWork = !!base && !!add && itemIdOf(base) === 'elytra' && (!!moduleUpgrade(itemIdOf(add)) || itemIdOf(add) === 'shears');
+      const elytraWork = !!base && !!add && itemIdOf(base) === 'elytra' && (!!moduleUpgrade(itemIdOf(add)) || itemIdOf(add) === 'shears' || itemIdOf(add) === 'guardian_core');
       const r = wings || elytraWork ? null : smithingResult(base, add);
       out.stack = wings ? cloneStack(wings.result) : r !== null && base ? { ...cloneStack(base), id: r, count: 1 } : null;
       if (out.stack && (isAdminStack(inv.get(1)) || this.server.admin.inContext(p))) out.stack = markAdmin(out.stack);
@@ -487,6 +489,8 @@ export class Containers {
         if (w?.kind === 'add' && !isAdminStack(taken) && !this.server.admin.inContext(pl)) {
           this.server.interaction.grant(pl, 'elytra_upgrade');
           if (elytraUpgrades(taken).length >= ELYTRA.slots) this.server.interaction.grant(pl, 'elytra_full');
+          // V6 phase 5: all four slots (the Guardian Core's) filled
+          if (elytraUpgrades(taken).length >= ELYTRA.maxSlots) this.server.interaction.grant(pl, 'elytra_four_slots');
         }
         refresh();
       },

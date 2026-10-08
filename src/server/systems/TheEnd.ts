@@ -18,6 +18,7 @@ import { EnderEye, EndCrystal } from '../entity/EndEntities';
 import { Mob, approachAngle, isPlayer } from '../entity/Mob';
 import { END_SPAWN, EndGenerator, buildExitPortal, endPillars, exitPortalY } from '../../common/gen/end';
 import { rollLoot } from '../../common/game/loot';
+import { DragonAdditions } from './DragonAdditions';
 
 interface BreathCloud {
   dim: Dimension;
@@ -29,7 +30,8 @@ interface BreathCloud {
   owner: Entity | null;
 }
 
-type Phase = 'hold' | 'strafe' | 'approach' | 'perch' | 'takeoff' | 'charge' | 'dying';
+/** V6 phase 5 adds the breath wave, the strafing dive, the edge strike and the pillar weave (DragonAdditions.ts). */
+export type Phase = 'hold' | 'strafe' | 'approach' | 'perch' | 'takeoff' | 'charge' | 'dying' | 'wave' | 'dive' | 'edge' | 'weave';
 
 const HOLD_RADIUS = 58;
 const NODES = 12;
@@ -333,8 +335,8 @@ export class EndSystem {
     this.fight.onCrystalDestroyed(c, by);
   }
 
-  breathCloud(dim: Dimension, x: number, y: number, z: number, owner: Entity | null): void {
-    this.clouds.push({ dim, x, y, z, radius: 3, ticks: 200, owner });
+  breathCloud(dim: Dimension, x: number, y: number, z: number, owner: Entity | null, radius = 3, ticks = 200): void {
+    this.clouds.push({ dim, x, y, z, radius, ticks, owner });
     this.server.playSound(dim, 'fizz', x, y, z, 1, 0.6);
   }
 
@@ -419,11 +421,15 @@ export class DragonFight {
   private sincePerch = 0;
   private perchDue = 0;
   private readonly rng = new Random();
+  /** V6 phase 5: the new moves (breath wave, wing gust, roar, weave, dive, crystal fury, edge strike, storm). */
+  readonly extras: DragonAdditions;
 
   constructor(
     private readonly server: GameServer,
     private readonly end: EndSystem,
-  ) {}
+  ) {
+    this.extras = new DragonAdditions(server, this);
+  }
 
   private get flags(): Record<string, unknown> {
     return this.server.level.flags;
@@ -433,8 +439,40 @@ export class DragonFight {
     return this.server.dim('end');
   }
 
-  private portalY(): number {
+  portalY(): number {
     return exitPortalY((this.dim.generator as EndGenerator).terrain);
+  }
+
+  /** Ticks spent in the current phase. */
+  ticksInPhase(): number {
+    return this.phaseTicks;
+  }
+
+  /** Survival and adventure players in the End (the fight's audience). */
+  playersInEnd(): ServerPlayer[] {
+    return this.players();
+  }
+
+  /** Who the dragon would turn on now. */
+  foeOf(m: Mob): Entity | null {
+    return this.focus(m, this.players());
+  }
+
+  /** A breath cloud of the dragon's (V6: smaller, shorter ones for the breath wave). */
+  breathCloud(x: number, y: number, z: number, owner: Entity | null, radius: number, ticks: number): void {
+    this.end.breathCloud(this.dim, x, y, z, owner, radius, ticks);
+  }
+
+  /** V6: one of the new attacks is over: down to the portal if a perch is due (so perches come as often), else circling again. */
+  endAttack(): void {
+    const m = this.dragon;
+    if (!m || m.dead) return;
+    const foe = this.focus(m, this.players());
+    this.setPhase(foe && this.sincePerch >= this.perchDue ? 'approach' : 'hold');
+  }
+
+  ringGateway(n: number): { x: number; y: number; z: number } {
+    return EndSystem.ringGateway(n);
   }
 
   private players(): ServerPlayer[] {
@@ -475,6 +513,7 @@ export class DragonFight {
       this.clearBars();
     }
     if (!this.dragon) {
+      this.extras.idle();
       // Spawn when someone is in the End and the dragon has not been beaten
       if (players.length && !this.flags.dragonKilled && dim.isLoaded(0, 0)) this.spawnDragon();
       return;
@@ -489,6 +528,7 @@ export class DragonFight {
       }
       // Nobody left: put the dragon away, remembering its health
       this.flags.dragonHealth = m.health;
+      this.extras.end();
       m.remove();
       this.dragon = null;
       this.clearBars();
@@ -505,6 +545,7 @@ export class DragonFight {
     this.heal(m);
     this.fly(m, players);
     this.contact(m);
+    this.extras.tick(m, players);
     if (m.health < this.lastHealth && this.phase === 'perch') this.damageWhilePerched += this.lastHealth - m.health;
     this.lastHealth = m.health;
     if (this.server.tickNo % 20 === 0) this.flags.dragonHealth = m.health;
@@ -561,7 +602,7 @@ export class DragonFight {
     this.perchDue = Math.round((180 + this.crystalsAlive() * 15 + this.rng.int(120)) * scale);
   }
 
-  private setPhase(p: Phase): void {
+  setPhase(p: Phase): void {
     this.phase = p;
     this.phaseTicks = 0;
     const m = this.dragon!;
@@ -569,11 +610,15 @@ export class DragonFight {
       m.data.phase = 'perch';
       this.damageWhilePerched = 0;
     } else delete m.data.phase;
-    if (p === 'takeoff') this.schedulePerch();
+    if (p === 'takeoff') {
+      this.schedulePerch();
+      // V6: time a pillar weave added to the last approach comes off the next wait (perches stay as frequent)
+      this.perchDue = Math.max(60, this.perchDue - this.extras.takeDebt());
+    }
     m.metaDirty = true;
   }
 
-  private steer(m: Mob, tx: number, ty: number, tz: number, speed: number, turn = 0.08): number {
+  steer(m: Mob, tx: number, ty: number, tz: number, speed: number, turn = 0.08): number {
     const b = m.body;
     const dx = tx - b.x;
     const dy = ty - b.y;
@@ -604,10 +649,13 @@ export class DragonFight {
           const foe = this.focus(m, players);
           const r = this.rng.next();
           // Every so often it dives to the portal to fight from the centre
-          if (foe && (this.sincePerch >= this.perchDue || r < 1 / (this.crystalsAlive() / 3 + 2))) this.setPhase('approach');
-          else if (foe && r < 0.45) {
+          if (foe && (this.sincePerch >= this.perchDue || r < 1 / (this.crystalsAlive() / 3 + 2))) {
+            // V6: some approaches weave through the pillars first
+            if (!this.extras.weaveFirst(m, players)) this.setPhase('approach');
+          } else if (foe && r < 0.45) {
             this.target = foe;
-            this.setPhase(this.rng.chance(0.25) ? 'charge' : 'strafe');
+            // V6: now and then a breath wave, a strafing dive or an edge strike instead
+            if (!this.extras.pickAttack(m, foe, players)) this.setPhase(this.rng.chance(0.25) ? 'charge' : 'strafe');
           }
         }
         break;
@@ -677,6 +725,12 @@ export class DragonFight {
       case 'takeoff':
         if (this.steer(m, this.nodePos(this.node).x, py + 30, this.nodePos(this.node).z, 0.5, 0.1) < 10 || this.phaseTicks > 100) this.setPhase('hold');
         break;
+      case 'wave':
+      case 'dive':
+      case 'edge':
+      case 'weave':
+        this.extras.fly(m, players);
+        break;
       case 'dying':
         break;
     }
@@ -693,6 +747,8 @@ export class DragonFight {
     const t = this.focus(m, players);
     if (t) m.yaw = approachAngle(m.yaw, Math.atan2(-(t.x - m.x), -(t.z - m.z)), 0.1);
     m.headYaw = m.yaw;
+    // V6: the roar and the wing gust
+    this.extras.perch(m, players, this.phaseTicks, py);
     if (!t) return;
     const pt = this.phaseTicks;
     const dx = t.x - m.x;
@@ -749,7 +805,7 @@ export class DragonFight {
 
   /** Wings and body knock players away and hurt them while flying. */
   private contact(m: Mob): void {
-    if (this.phase === 'perch') return;
+    if (this.phase === 'perch' || this.extras.noContact()) return;
     const hw = 4;
     for (const p of this.players()) {
       const cd = this.hitCooldown.get(p) ?? 0;
@@ -871,6 +927,8 @@ export class DragonFight {
       }
       if (player && !player.dead) this.server.interaction.grant(player, 'destroy_end_crystal');
     }
+    // V6: the others flare and guard their pillars for a while
+    this.extras.onCrystalDestroyed();
     // Four crystals on the exit portal re-summon a defeated dragon
     this.checkRespawn();
   }
@@ -983,6 +1041,7 @@ export class DragonFight {
     delete this.flags.dragonAdmin;
     delete this.flags.dragonHealth;
     this.clearBars();
+    this.extras.end();
     m.remove();
     this.dragon = null;
     this.server.broadcastChat('The Ender Dragon has been defeated!', 'system');
@@ -1011,6 +1070,7 @@ export class DragonFight {
     delete this.flags.dragonAdmin;
     delete this.flags.dragonHealth;
     this.clearBars();
+    this.extras.end();
     m?.remove();
     this.dragon = null;
     this.secretRun = false;

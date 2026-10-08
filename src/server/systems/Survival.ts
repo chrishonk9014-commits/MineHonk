@@ -40,6 +40,9 @@ export type DamageSource =
   | 'freeze'
   | 'glitch'
   | 'sonic_boom'
+  // V6 phase 5: the End's events and the End Guardian
+  | 'void_debris'
+  | 'guardian'
   | 'kill';
 
 /** Freezing meter at which the cold starts to hurt (ticks). */
@@ -617,6 +620,10 @@ function deathMessage(p: ServerPlayer, info: DamageInfo): string {
       return `${p.name} was obliterated by a sonic shriek${by ? ` from ${by}` : ''}`;
     case 'glitch':
       return `${p.name} was deleted by the Farlands`;
+    case 'void_debris':
+      return `${p.name} was struck by Void Debris`;
+    case 'guardian':
+      return `${p.name} was struck down by the End Guardian`;
     default:
       return `${p.name} died`;
   }

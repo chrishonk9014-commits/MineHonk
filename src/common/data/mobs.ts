@@ -67,7 +67,9 @@ export type Brain =
   | 'guardian_sentinel'
   | 'guardian_bulwark'
   // V6 phase 4: vehicles (no AI: the transport system drives them)
-  | 'vehicle';
+  | 'vehicle'
+  // V6 phase 5: the End Guardian and its pylons and orbs (its fight drives them)
+  | 'end_guardian';
 
 export interface MobDef {
   id: string;
@@ -218,6 +220,10 @@ mob({ id: 'end_phantom', name: 'End Phantom', category: 'monster', width: 2, hei
 // V6 phase 3: the Guardian Constructs guard the Expanded End's structures (built, not born; never spawn naturally)
 mob({ id: 'guardian_sentinel', name: 'Guardian Construct: Sentinel', category: 'monster', width: 0.9, height: 2.4, eye: 2.1, health: 40, speed: 0.11, damage: 8, armor: 10, knockbackRes: 0.4, followRange: 24, brain: 'guardian_sentinel', model: 'guardian_sentinel', egg: [0x9a8a68, 0x7ae0ff], fireImmune: true, maxSpawnLight: 15, xp: 12, idleInterval: 220, edgeGuard: true });
 mob({ id: 'guardian_bulwark', name: 'Guardian Construct: Bulwark', category: 'monster', width: 1.6, height: 2.8, eye: 2.4, health: 120, speed: 0.07, damage: 14, armor: 14, knockbackRes: 1, followRange: 24, brain: 'guardian_bulwark', model: 'guardian_bulwark', egg: [0x6a5a48, 0xc8a0ff], fireImmune: true, maxSpawnLight: 15, xp: 40, idleInterval: 300, edgeGuard: true });
+// V6 phase 5: the End Guardian (the Void Citadel's arena), its shield pylons and its void orbs
+mob({ id: 'end_guardian', name: 'The End Guardian', category: 'boss', width: 2.4, height: 5.6, eye: 4.8, health: 1000, speed: 0.1, damage: 12, armor: 16, knockbackRes: 1, followRange: 64, brain: 'end_guardian', model: 'end_guardian', egg: [0x3a3050, 0xe8e0ff], fireImmune: true });
+mob({ id: 'guardian_pylon', name: 'Crystal Pylon', category: 'boss', width: 1, height: 2.6, health: 16, speed: 0, knockbackRes: 1, brain: 'end_guardian', model: 'guardian_pylon', egg: [0x6a5a9a, 0xe8e0ff], fireImmune: true, flying: true });
+mob({ id: 'void_orb', name: 'Void Orb', category: 'boss', width: 0.8, height: 0.8, health: 4, speed: 0.12, knockbackRes: 0, brain: 'end_guardian', model: 'void_orb', egg: [0x100818, 0xb070ff], fireImmune: true, flying: true });
 // V6 phase 4: vehicles
 mob({ id: 'minecart', name: 'Minecart', category: 'ambient', width: 0.98, height: 0.7, health: 6, speed: 0, brain: 'vehicle', model: 'minecart', egg: [0x6a6a6a, 0x3a3a3a], vehicle: 'minecart', mount: { seat: 0.3, control: 'vehicle', tame: false }, idleInterval: 1000000 });
 mob({ id: 'void_skiff', name: 'Void Skiff', category: 'ambient', width: 1.6, height: 0.9, health: 20, speed: 0, brain: 'vehicle', model: 'void_skiff', egg: [0x3a2a4a, 0xb080ff], vehicle: 'skiff', fireImmune: true, flying: true, mount: { seat: 0.45, control: 'vehicle', tame: false }, idleInterval: 1000000 });

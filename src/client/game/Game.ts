@@ -1099,7 +1099,7 @@ export class Game {
         return { kind: 'needle', target: this.dimension === 'overworld' ? [this.worldSpawn[0] + 0.5, this.worldSpawn[2] + 0.5] : null, colors: { face: '#d8d8d8', rim: '#8a8a8a', tip: '#d02020' } };
       }
       // V6 phase 3: an Ancient Map points at the giant structure it was drawn for
-      if (id === 'ancient_map') {
+      if (id === 'ancient_map' || id === 'void_citadel_map') {
         const tgt = st.tag?.data?.target as number[] | undefined;
         return { kind: 'needle', target: tgt && st.tag?.data?.dim === this.dimension ? [tgt[0]! + 0.5, tgt[2]! + 0.5] : null, colors: { face: '#d8c8a0', rim: '#8a7a5a', tip: '#3ab0d0' } };
       }
@@ -1475,7 +1475,8 @@ export class Game {
     // Entity ray test
     this.entityTarget = null;
     if (p.gamemode === 'spectator' || p.dead) return;
-    const reach = p.gamemode === 'creative' ? 5 : 3;
+    // V6 phase 5: the Guardian's Lance reaches two blocks further
+    const reach = (p.gamemode === 'creative' ? 5 : 3) + (items[this.held()?.id ?? -1]?.id === 'guardians_lance' ? 2 : 0);
     const blockHit = this.interaction.target;
     const blockDist = blockHit ? Math.hypot(blockHit.px - eye[0], blockHit.py - eye[1], blockHit.pz - eye[2]) : Infinity;
     let best = Math.min(reach, blockDist);

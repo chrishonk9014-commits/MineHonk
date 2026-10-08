@@ -672,10 +672,15 @@ export function adminScreen(host: AdminHost): Screen {
             sets?: { id: string; name: string; items: string[] }[];
             structures?: Structs;
             located?: { id: string; name: string; giant: boolean; at: { x: number; y: number; z: number; distance: number } | null }[];
+            events?: P5Events | null;
+            citadel?: { site: number[] | null; entrance?: number[]; floors?: { kind: string; done: boolean }[]; charts?: number } | null;
+            guardian?: { awake?: boolean; phase?: number; health?: number; charged?: boolean; reformsIn?: number; defeats?: number } | null;
+            dragon?: { alive: boolean; phase: string | null; storm: boolean; craters: number };
           }
         | undefined;
       if (!st?.arrival) return;
       clear(state);
+      showP5(st);
       showMobs(st);
       showSets(st.sets);
       showStructures(st.structures, st.located);
@@ -691,6 +696,28 @@ export function adminScreen(host: AdminHost): Screen {
       for (const [k, v] of rows) state.append(el('div', { class: 'row' }, el('span', { class: 'muted' }, k), el('span', {}, v)));
     };
     const op = (o: V6Op, biome?: string): void => void send(biome ? { a: 'v6', op: o, biome } : { a: 'v6', op: o }).then((r) => showState(r.data));
+    // Phase 5: the events, the Void Citadel, the End Guardian, rare loot and the Dragon's new moves
+    type P5Events = { storm?: string; stormLeft?: number; eclipse?: boolean; eclipseLeft?: number; remnants?: number; monoliths?: number; shards?: number; nextStorm?: number };
+    const p5Line = el('div', { class: 'admin-stats' });
+    const secs = (t: number | undefined): string => `${Math.ceil((t ?? 0) / 20)} s`;
+    const showP5 = (st: { events?: P5Events | null; citadel?: { site: number[] | null; floors?: { kind: string; done: boolean }[]; charts?: number } | null; guardian?: { awake?: boolean; phase?: number; health?: number; charged?: boolean; reformsIn?: number; defeats?: number } | null; dragon?: { alive: boolean; phase: string | null; storm: boolean; craters: number } }): void => {
+      clear(p5Line);
+      const ev = st.events;
+      const c = st.citadel;
+      const g = st.guardian;
+      const rows: [string, string][] = [
+        ['Void Storm', ev ? (ev.storm === 'active' ? `raging (${secs(ev.stormLeft)} left, ${ev.remnants ?? 0} remnants)` : ev.storm === 'warning' ? 'approaching' : `calm (next in about ${Math.round((ev.nextStorm ?? 0) / 1200)} min)`) : 'not running'],
+        ['End Eclipse', ev ? (ev.eclipse ? `under way (${secs(ev.eclipseLeft)} left, ${ev.monoliths ?? 0} monoliths, ${ev.shards ?? 0} shards)` : 'none') : 'not running'],
+        ['Void Citadel', c?.site ? `at ${c.site.join(', ')}: ${c.floors?.filter((f) => f.done).length ?? 0} of ${c.floors?.length ?? 6} floors done` : 'no site yet'],
+        ['End Guardian', g ? (g.awake ? `awake, phase ${g.phase}, ${Math.ceil(g.health ?? 0)} health` : g.reformsIn ? `re-forms in ${Math.ceil(g.reformsIn / 24000)} days` : `waiting (altar ${g.charged ? 'charged' : 'wants 4 Eclipse Shards'})`) : 'not running'],
+        ['Ender Dragon (V6)', st.dragon ? `${st.dragon.alive ? `alive (${st.dragon.phase})` : 'not here'}${st.dragon.storm ? ', storm' : ''}${st.dragon.craters ? `, ${st.dragon.craters} crater blocks to put back` : ''}` : ''],
+      ];
+      for (const [k, v] of rows) p5Line.append(el('div', { class: 'row' }, el('span', { class: 'muted' }, k), el('span', {}, v)));
+    };
+    const p5 = (body: Record<string, unknown>): void => void send({ a: 'v6', ...body } as never).then((r) => showState(r.data));
+    const citadelSpots: [string, string][] = [['entrance', 'Entrance'], ['1', 'Floor 1'], ['2', 'Floor 2'], ['3', 'Floor 3'], ['4', 'Floor 4'], ['5', 'Floor 5'], ['6', 'Floor 6'], ['arena', 'Arena']];
+    const rareLoot: [string, string][] = [['guardian_core', 'Guardian Core'], ['guardians_lance', "The Guardian's Lance"], ['eclipse_veil', 'Eclipse Veil module'], ['eclipse_shards', 'Eclipse Shards'], ['star_chart', 'Star Chart pieces'], ['guardian_head', 'End Guardian Head']];
+    const dragonTests: [string, string][] = [['breath_wave', 'Void Breath Wave'], ['wing_gust', 'Wing Gust'], ['roar', 'Roar'], ['pillar_weave', 'Pillar Weave'], ['strafing_dive', 'Strafing Dive'], ['crystal_fury', 'Crystal Fury'], ['edge_strike', 'Edge Strike'], ['dragon_storm', 'Dragon Storm']];
     const chips = (...b: HTMLElement[]): HTMLElement => el('div', { class: 'admin-chips' }, ...b);
     // Phase 2: the Expanded End's mobs (spawned as cheat mobs: killing them never counts) and resources
     const mobBox = el('div', {});
@@ -777,6 +804,16 @@ export function adminScreen(host: AdminHost): Screen {
         'div',
         { class: 'admin-col' },
         el('div', { class: 'muted small' }, 'Everything here is a cheat: it never awards an advancement. A portal opened here before the Ender Dragon is defeated leads to a cheat visit.'),
+        section('Events', el('div', { class: 'muted small' }, 'Over the Expanded End. Started here, nothing in them counts for advancements.'), chips(btn('Start a Void Storm', () => op('storm_start'), 'btn chip'), btn('Stop the storm', () => op('storm_stop'), 'btn chip'), btn('Start an End Eclipse', () => op('eclipse_start'), 'btn chip'), btn('End the eclipse', () => op('eclipse_stop'), 'btn chip')), p5Line),
+        section(
+          'The Void Citadel',
+          el('div', { class: 'muted small' }, 'Teleport (the Citadel is built as its chunks load), solve the floor you are on, or seal every floor again.'),
+          chips(...citadelSpots.map(([id, label]) => btn(label, () => p5({ op: 'citadel_tp', spot: id }), 'btn chip'))),
+          chips(btn('Solve this floor', () => op('citadel_solve'), 'btn chip'), btn('Reset Citadel progress', () => op('citadel_reset'), 'btn chip')),
+        ),
+        section('The End Guardian', el('div', { class: 'muted small' }, 'In the arena. A Guardian woken or felled here gives no loot and no advancement.'), chips(btn('Spawn', () => op('guardian_spawn'), 'btn chip'), btn('Force defeat', () => op('guardian_defeat'), 'btn chip'), btn('Reset', () => op('guardian_reset'), 'btn chip'))),
+        section('Rare End loot', el('div', { class: 'muted small' }, 'Cheat-marked items: they never count for advancements.'), chips(...rareLoot.map(([id, label]) => btn(label, () => p5({ op: 'give_rare', set: id }), 'btn chip')))),
+        section("The Dragon's new moves", el('div', { class: 'muted small' }, 'One at a time, in the End while the Dragon lives (the fight becomes a cheat: its defeat awards nothing).'), chips(...dragonTests.map(([id, label]) => btn(label, () => p5({ op: 'dragon_test', test: id }), 'btn chip')))),
         section('End quests', el('div', { class: 'muted small' }, 'Start, complete (no advancements; any reward is cheat-made), reset, or go to the nearest start. Sites are searched from you in the End.'), questBox, questLine),
         section('Engineering and transport tests', el('div', { class: 'muted small' }, 'Look at the block first.'), chips(btn('Fill the machine\'s EU', () => op('fill_eu'), 'btn chip'), btn('Force-repair this gateway and its pair', () => op('force_gate'), 'btn chip'), btn("Open the Dragon's History Sanctum", () => op('open_sanctum'), 'btn chip'), btn('Build an End test line', () => op('end_rig'), 'btn chip'))),
         section('Expansion Portal', chips(btn('Activate', () => op('activate'), 'btn chip'), btn('Deactivate', () => op('deactivate'), 'btn chip'), btn('Build the portal', () => op('build_portal'), 'btn chip'), btn('Teleport to the portal', () => op('tp_portal'), 'btn chip'))),

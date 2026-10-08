@@ -234,6 +234,10 @@ endComp({ id: 'crystal_pedestal', name: 'Crystal Pedestal', kind: 'machine', tie
 endComp({ id: 'ancient_conduit', name: 'Ancient Conduit', kind: 'cable', tier: 2, nets: ['energy'], cableCap: 512, existing: true, uncraftable: true, desc: 'The old machines\' conduits carry power again, up to 512 EU/t: cable an observatory\'s telescope at its foot and the power climbs the tube.', guide: 'end_engineering' });
 endComp({ id: 'ancient_core', name: 'Ancient Core (dormant)', kind: 'cable', tier: 2, nets: ['energy'], cableCap: 512, existing: true, uncraftable: true, desc: 'A dormant core passes power along like a conduit. In a giant structure one core can be restored (8 Ancient Fragments and an Astral Shard) into a Restored Ancient Core.', guide: 'end_engineering' });
 
+// V6 phase 5: the Void Citadel's engineering floors (their blocks are the Citadel's, never crafted or broken)
+endComp({ id: 'citadel_core', name: 'Citadel Core', kind: 'generator', tier: 4, nets: ['energy'], energy: { capacity: 102400, maxOut: 1024, gen: ANCIENT_CORE_GEN }, existing: true, uncraftable: true, desc: 'A Void Citadel\'s core, still running: 512 EU/t to whatever its broken conduits reach. Bridge them with your own cable.', guide: 'end_engineering' });
+endComp({ id: 'citadel_socket', name: 'Citadel Socket', kind: 'machine', tier: 4, nets: ['energy'], energy: { capacity: 64 * 200, maxIn: 512, use: 64 }, machine: 'socket', signal: true, existing: true, uncraftable: true, desc: 'The lock of a Void Citadel\'s engineering floor: powered from the floor\'s core, it opens the door when the signal it gets follows the rule on the wall. Use it to have it check.', guide: 'end_engineering' });
+
 /** End engineering components (phase 4). */
 export const END_COMPONENTS: readonly ComponentDef[] = E;
 /**

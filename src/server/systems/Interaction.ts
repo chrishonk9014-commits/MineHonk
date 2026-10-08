@@ -269,6 +269,7 @@ export class Interaction {
         this.containers.openFurnace(p, dim, x, y, z, 'smoker');
         return true;
       case 'chest':
+        this.server.endEvents?.onChestOpened(p, dim, x, y, z);
         this.containers.openChest(p, dim, x, y, z);
         return true;
       case 'barrel':
@@ -1143,6 +1144,8 @@ export class Interaction {
   }
 
   onBlockMined(p: ServerPlayer, blockId: string, drops: ItemStack[], cheat = false): void {
+    // V6 phase 5: Eclipse Shards (their list, and the advancement)
+    this.server.endEvents?.onMined(p, blockId, cheat);
     if (cheat) return;
     this.grant(p, 'mine_block');
     if (blockId === 'end_crystal_cluster' && drops.length) this.grant(p, 'mine_crystal_cluster');

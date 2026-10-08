@@ -469,6 +469,28 @@ for (const biome of ['end_barrens', 'shattered_end', 'astral_end', 'highlands', 
   });
 }
 
+// V6 phase 5: the Expanded End under a Void Storm and under the End Eclipse (the Astral End, compare with end-astral_end)
+for (const [name, start, stop] of [
+  ['end-storm', 'storm_start', 'storm_stop'],
+  ['end-eclipse', 'eclipse_start', 'eclipse_stop'],
+]) {
+  await run(name, async () => {
+    const r = await page.evaluate(() => window.minehonk.game.adminRequest({ a: 'v6', op: 'tp_biome', biome: 'astral_end' }));
+    if (!r.ok) throw new Error(r.text);
+    await page.evaluate(() => (window.minehonk.game.player.flying = true));
+    await page.evaluate(() => (window.minehonk.game.player.body.y += 25));
+    const s = await page.evaluate((op) => window.minehonk.game.adminRequest({ a: 'v6', op }), start);
+    if (!s.ok) throw new Error(s.text);
+    await settle(60000);
+    // A storm breaks a few seconds after it is called, and the sky takes a few seconds to turn
+    await wait(8000);
+    await setLook(0.785, 0.3);
+    const m = await measure(name);
+    await page.evaluate((op) => window.minehonk.game.adminRequest({ a: 'v6', op }), stop);
+    return m;
+  });
+}
+
 await cmd('/dimension overworld').catch(() => {});
 await page.waitForFunction(() => window.minehonk.game.dimension === 'overworld', null, { timeout: 180000 }).catch(() => {});
 await wait(2000);

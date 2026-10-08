@@ -301,16 +301,17 @@ describe('THE BROKEN GATEWAY', () => {
     expect(p.achievements.has('repair_gateway_pair')).toBe(true);
     // 5. Step through: to the first portal (its chunks load first), its sheet now lit too
     w.server.teleport(p, B.base[0] + 0.5, B.base[1], B.base[2] + 0.5);
-    await settle(w.server, 1500, () => Math.hypot(p.x - A.base[0], p.z - A.base[2]) < 8);
+    // (kept healthy while waiting: a Void Stalker roaming near a gateway can otherwise end the trip)
+    await settle(w.server, 1500, () => ((p.health = 20), Math.hypot(p.x - A.base[0], p.z - A.base[2]) < 8));
     expect(Math.hypot(p.x - A.base[0], p.z - A.base[2])).toBeLessThan(8);
-    await settle(w.server, 60);
+    await settle(w.server, 60, () => ((p.health = 20), false));
     for (const c of A.sheet) expect(blockId(end.getState(...c))).toBe('ancient_gateway');
     expect(p.achievements.has('quest_broken_gateway')).toBe(true);
     expect(stacks(p).some((s) => s.tag?.lore === 'gateways_stitches')).toBe(true);
     // And back the other way
-    await settle(w.server, 80);
+    await settle(w.server, 80, () => ((p.health = 20), false));
     w.server.teleport(p, A.base[0] + 0.5, A.base[1], A.base[2] + 0.5);
-    await settle(w.server, 1500, () => Math.hypot(p.x - B.base[0], p.z - B.base[2]) < 8);
+    await settle(w.server, 1500, () => ((p.health = 20), Math.hypot(p.x - B.base[0], p.z - B.base[2]) < 8));
     expect(Math.hypot(p.x - B.base[0], p.z - B.base[2])).toBeLessThan(8);
     // The classic gateways are untouched (nothing here is an end_gateway)
     for (const c of [...A.sheet, ...B.sheet]) expect(blockId(end.getState(...c))).not.toBe('end_gateway');

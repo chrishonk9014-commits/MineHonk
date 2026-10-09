@@ -940,7 +940,9 @@ export class Game {
   }
 
   private tick(): void {
-    if (this.paused) {
+    // Nothing to do (or tell the server) before it has said where the player is:
+    // a move from the default position would look like a 40-block jump
+    if (this.paused || !this.joined) {
       this.input.consume();
       return;
     }

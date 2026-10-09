@@ -111,8 +111,11 @@ async function openPage(p) {
     app.startGame = (conn) => {
       start(conn);
       const h = conn.onMessage;
+      window.__invMsgs = [];
       conn.onMessage = (m) => {
         window.__msgCounts[m.t] = (window.__msgCounts[m.t] ?? 0) + 1;
+        if (m.t === 'inventory' || (m.t === 'slot' && m.window === 0) || m.t === 'welcome' || m.t === 'teleport')
+          window.__invMsgs.push(m.t === 'inventory' ? `inventory w${m.window}: ${m.slots.map((x, i) => (x ? `${i}:${x.id}x${x.count}` : '')).filter(Boolean).join(' ')}` : m.t === 'slot' ? `slot ${m.slot}: ${m.item ? `${m.item.id}x${m.item.count}` : '-'}` : `${m.t} ${[m.x, m.y, m.z].map((v) => Math.round(v)).join(',')}`);
         h(m);
       };
     };
@@ -164,6 +167,7 @@ async function cycleTo(scr, label, want) {
 }
 
 async function fillHostForm(scr, o) {
+  if (o.mode) await cycleTo(scr, 'Game Mode', o.mode);
   if (o.visibility) await cycleTo(scr, 'Visibility', o.visibility);
   if (o.cheats !== undefined) await cycleTo(scr, 'Allow Cheats', o.cheats ? 'ON' : 'OFF');
   if (o.joiners) await cycleTo(scr, 'Joiners', o.joiners);
@@ -528,7 +532,9 @@ if (section('core')) {
     const b = g.player.body;
     return { inv: g.invSlots.filter(Boolean).map((s) => `${s.id}x${s.count}`).sort(), x: b.x, y: b.y, z: b.z };
   });
-  check('coming back restores inventory and position', JSON.stringify(back.inv) === JSON.stringify(saved.inv) && Math.hypot(back.x - saved.x, back.z - saved.z) < 2, JSON.stringify({ saved, back }));
+  const restored = JSON.stringify(back.inv) === JSON.stringify(saved.inv) && Math.hypot(back.x - saved.x, back.z - saved.z) < 2;
+  if (!restored) console.log('rejoin messages', JSON.stringify(await joiner.page.evaluate(() => window.__invMsgs)));
+  check('coming back restores inventory and position', restored, JSON.stringify({ saved, back }));
   check('the operator role is remembered', (await roleOf(hostOf, 'Joiny')) === 'operator');
 
   // ---- the host closes the tab
@@ -771,6 +777,39 @@ if (section('security') && farm && carol) {
     return e === "You're banned from this world" ? e : null;
   }, 10000, 1000);
   check('a banned player cannot come back', again === "You're banned from this world");
+}
+
+// ------------------------------------------------------------------ game modes
+if (section('modes')) {
+  if (!hostOf.uuid) {
+    await signUp(hostOf);
+    await signUp(joiner);
+  } else {
+    for (const p of [hostOf, joiner]) {
+      await openPage(p);
+      await toOnline(p);
+    }
+  }
+  // Every mode but Spectator is on offer for a new world
+  await tabTo(hostOf, 'host');
+  await click(hostOf, 'Create New World');
+  const modeBtn = top(hostOf).locator('button', { hasText: 'Game Mode:' }).first();
+  const offered = [];
+  for (let i = 0; i < 6; i++) {
+    offered.push((await modeBtn.textContent()).replace('Game Mode: ', ''));
+    await modeBtn.click();
+  }
+  check(`new worlds can be hosted in ${[...new Set(offered)].join(', ')}`, ['Survival', 'Hardcore', 'Creative', 'Adventure', 'God Mode'].every((m) => offered.includes(m)) && !offered.includes('Spectator'), offered.join(','));
+  await cycleTo(top(hostOf), 'Game Mode', 'Hardcore');
+  check('Hardcore never allows cheats', await top(hostOf).locator('button', { hasText: 'Allow Cheats:' }).isDisabled());
+  await click(hostOf, 'Cancel');
+  const creative = await hostNew(hostOf, 'Creative Corner', { mode: 'Creative', visibility: 'Private (code only)' });
+  check('the host plays in Creative', (await hostOf.page.evaluate(() => window.minehonk.game.player.gamemode)) === 'creative');
+  await joinByCode(joiner, creative.code);
+  await inGame(joiner);
+  check('a player who joins plays in Creative too', (await joiner.page.evaluate(() => [window.minehonk.game.player.gamemode, window.minehonk.game.worldInfo?.mode])).every((m) => m === 'creative'));
+  await leaveToTitle(joiner);
+  await hostOf.page.evaluate(() => window.minehonk.quitToTitle());
 }
 
 // ------------------------------------------------------------------ Open to Multiplayer, then the host leaves (relay and direct)

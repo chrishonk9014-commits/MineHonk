@@ -393,14 +393,16 @@ export class App implements GameHost, S.ScreenHost {
       return;
     }
     const id = 'w' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    const mode = (options.mode as GameMode) ?? 'survival';
     await this.startWorld(id, {
       id,
       name: options.name,
       seed: randomSeedString(),
-      mode: (options.mode as GameMode) ?? 'survival',
+      mode,
+      // (a Hardcore world is made hard, as in single player)
       difficulty: 'normal',
-      godHearts: 10,
-      cheats: options.cheats,
+      godHearts: options.godHearts ?? 10,
+      cheats: mode === 'hardcore' ? false : options.cheats,
       owner: this.profile.uuid,
     });
   }
@@ -432,6 +434,10 @@ export class App implements GameHost, S.ScreenHost {
   /** Pause menu > Open to Multiplayer (single player, signed in or not). */
   private async openToMultiplayer(): Promise<void> {
     const api = this.cloud();
+    if (this.game?.worldInfo?.mode === 'spectator') {
+      this.push(S.messageScreen(this, 'Open to Multiplayer', "Spectator worlds can't be put online. Host a world in another game mode."));
+      return;
+    }
     if (!(await api.health())) {
       this.push(S.messageScreen(this, 'Open to Multiplayer', 'MineHonk online cannot be reached right now. Try again in a moment.'));
       return;

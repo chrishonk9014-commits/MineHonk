@@ -170,6 +170,17 @@ describe('a world hosted in the browser', () => {
     expect((await adminResult()).ok).toBe(false);
   });
 
+  it('never allows cheats in a Hardcore world', async () => {
+    server.level.hardcore = true;
+    host.applyOptions({ name: 'Brave', visibility: 'friends', cheats: true, pvp: false, defaultRole: 'builder', maxPlayers: 3, joinCode: null });
+    expect(server.level.cheats).toBe(false);
+    host.applySettings({ name: 'Brave', visibility: 'friends', joinCode: null, allowlist: [], banned: [], operators: [], roles: {}, defaultRole: 'builder', pvp: false, cheats: true, announceAdmin: true, maxPlayers: 3 });
+    expect(server.level.cheats).toBe(false);
+    server.level.hardcore = false;
+    host.applyOptions({ name: 'Brave', visibility: 'friends', cheats: true, pvp: false, defaultRole: 'builder', maxPlayers: 3, joinCode: null });
+    expect(server.level.cheats).toBe(true);
+  });
+
   it('keeps the hub in step with the world, and follows the hub’s changes', async () => {
     await settle();
     expect(settings.length).toBeGreaterThan(0);

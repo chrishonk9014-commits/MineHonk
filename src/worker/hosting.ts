@@ -332,7 +332,8 @@ export class BrowserHost {
     const l = s.level;
     l.name = o.name;
     l.visibility = o.visibility;
-    l.cheats = o.cheats;
+    // Never cheats in a Hardcore world (as in single player)
+    l.cheats = o.cheats && !l.hardcore;
     l.pvp = o.pvp;
     l.defaultRole = o.defaultRole;
     l.joinCode = o.joinCode;
@@ -357,7 +358,7 @@ export class BrowserHost {
     l.roles = { ...p.roles };
     l.defaultRole = p.defaultRole;
     l.pvp = p.pvp;
-    l.cheats = p.cheats;
+    l.cheats = p.cheats && !l.hardcore;
     l.announceAdmin = p.announceAdmin;
     l.joinCode = p.joinCode;
     c.maxPlayers = p.maxPlayers;

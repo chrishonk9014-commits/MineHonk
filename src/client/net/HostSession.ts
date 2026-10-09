@@ -15,6 +15,7 @@ import type { HubApi } from './HubApi';
 import type { HubLobby } from './HubLobby';
 import type { WorkerConnection } from './ClientConnection';
 import type { WorldDetails, WorldVisibility } from '../../common/net/multiplayer';
+import type { GodHearts } from '../../common/game/gamemode';
 import type { LobbyOut, SignalData, HostedWorld } from '../../common/net/hubProtocol';
 import { decodeRelay, relayFrames, RELAY_CLOSE, RELAY_DATA, RELAY_OPEN, type RelayRecord } from '../../common/net/hubProtocol';
 import type { HostOut, LevelSettings } from '../../worker/hosting';
@@ -29,6 +30,8 @@ export interface HostOptions {
   pvp: boolean;
   defaultRole: 'builder' | 'visitor';
   mode: string;
+  /** God Mode's maximum health (new worlds). */
+  godHearts?: GodHearts;
 }
 
 interface RtcPeer {

@@ -9,7 +9,7 @@ import { titled, wrapClick, confirmScreen, type Screen, type ScreenHost, type Wo
 import type { HubApi } from '../net/HubApi';
 import type { HostOptions, HostSession } from '../net/HostSession';
 import { normalizeJoinCode, type FriendsResponse, type WorldSummary, type WorldRole, type WorldVisibility } from '../../common/net/multiplayer';
-import { GAME_MODE_INFO, type GameMode } from '../../common/game/gamemode';
+import { GAME_MODE_INFO, GOD_HEART_PRESETS, type GameMode, type GodHearts } from '../../common/game/gamemode';
 
 export interface OnlineContext {
   api: HubApi;
@@ -69,8 +69,12 @@ const modeName = (m: string): string => GAME_MODE_INFO[m as GameMode]?.name ?? m
 // ---------------------------------------------------------------------------
 // Hosting settings (the Host tab, "Open to Multiplayer", the hosting panel)
 // ---------------------------------------------------------------------------
-export function hostOptionsForm(o: HostOptions, isTouch: boolean, opts: { lockName?: boolean } = {}): { root: HTMLElement; read: () => HostOptions } {
-  const cur = { ...o };
+/** Game modes a world can be hosted in (spectator is for watching, not a world to share). */
+export const HOST_MODES: readonly GameMode[] = ['survival', 'hardcore', 'creative', 'adventure', 'god'];
+
+export function hostOptionsForm(o: HostOptions, isTouch: boolean, opts: { lockName?: boolean; newWorld?: boolean } = {}): { root: HTMLElement; read: () => HostOptions } {
+  const cur: HostOptions = { ...o, godHearts: o.godHearts ?? 10 };
+  if (opts.newWorld && !HOST_MODES.includes(cur.mode as GameMode)) cur.mode = 'survival';
   const name = field('World name', { max: 48, value: cur.name });
   if (opts.lockName) name.disabled = true;
   const visHelp = el('div', { class: 'muted', style: { maxWidth: 'calc(var(--s) * 300)', textAlign: 'center' } }, VIS_HELP[cur.visibility]);
@@ -81,13 +85,47 @@ export function hostOptionsForm(o: HostOptions, isTouch: boolean, opts: { lockNa
   const sizes = [2, 3, 4, 5, 6, 8, 10, 12, 16];
   const max = cycle((v: number) => `Max Players: ${v}`, sizes, sizes.includes(cur.maxPlayers) ? cur.maxPlayers : 8, (v) => (cur.maxPlayers = v), 'btn half');
   const onOff = (label: string) => (v: boolean): string => `${label}: ${v ? 'ON' : 'OFF'}`;
-  const cheats = cycle(onOff('Allow Cheats'), [false, true], cur.cheats, (v) => (cur.cheats = v), 'btn half');
+  // Allow Cheats follows the game mode, as in single player: never in Hardcore
+  const cheats = el('button', { class: 'btn half' }) as HTMLButtonElement;
+  cheats.style.width = 'calc(var(--s) * 150)';
+  const showCheats = (): void => {
+    const hardcore = cur.mode === 'hardcore';
+    if (hardcore) cur.cheats = false;
+    cheats.disabled = hardcore;
+    cheats.textContent = onOff('Allow Cheats')(cur.cheats);
+  };
+  cheats.onclick = (e) => {
+    e.stopPropagation();
+    cur.cheats = !cur.cheats;
+    showCheats();
+  };
+  showCheats();
   const pvp = cycle(onOff('PvP'), [false, true], cur.pvp, (v) => (cur.pvp = v), 'btn half');
   const role = cycle((v: 'builder' | 'visitor') => `Joiners: ${v === 'visitor' ? 'Visitors' : 'Builders'}`, ['builder', 'visitor'] as const, cur.defaultRole, (v) => (cur.defaultRole = v), 'btn half');
+  // The game mode: chosen for a new world; an existing world keeps its own
+  const modeDesc = el('div', { class: 'muted', style: { maxWidth: 'calc(var(--s) * 300)', textAlign: 'center' } }, GAME_MODE_INFO[cur.mode as GameMode]?.description ?? '');
+  const hearts = cycle((v: GodHearts) => `Max Hearts: ${v === 'infinite' ? '∞' : v}`, GOD_HEART_PRESETS, cur.godHearts ?? 10, (v) => (cur.godHearts = v), 'btn half');
+  hearts.classList.toggle('hidden', cur.mode !== 'god');
+  const modeRow = opts.newWorld
+    ? el(
+        'div',
+        { class: 'row' },
+        cycle((v: GameMode) => `Game Mode: ${GAME_MODE_INFO[v].name}`, HOST_MODES, cur.mode as GameMode, (v) => {
+          cur.mode = v;
+          if (v === 'creative') cur.cheats = true;
+          modeDesc.textContent = GAME_MODE_INFO[v].description;
+          hearts.classList.toggle('hidden', v !== 'god');
+          showCheats();
+        }, 'btn half'),
+        hearts,
+      )
+    : el('div', { class: 'label' }, `Game Mode: ${modeName(cur.mode)}`);
   const root = el(
     'div',
     { class: 'stack' },
     name,
+    modeRow,
+    modeDesc,
     el('div', { class: 'row' }, vis, max),
     visHelp,
     el('div', { class: 'row' }, cheats, pvp),
@@ -101,9 +139,9 @@ export function hostOptionsForm(o: HostOptions, isTouch: boolean, opts: { lockNa
   };
 }
 
-export function hostSettingsScreen(host: ScreenHost, title: string, initial: HostOptions, isTouch: boolean, startLabel: string, start: (o: HostOptions) => void | Promise<void>): Screen {
+export function hostSettingsScreen(host: ScreenHost, title: string, initial: HostOptions, isTouch: boolean, startLabel: string, start: (o: HostOptions) => void | Promise<void>, opts: { newWorld?: boolean } = {}): Screen {
   const { root, body } = titled(title);
-  const form = hostOptionsForm(initial, isTouch);
+  const form = hostOptionsForm(initial, isTouch, opts);
   const s = status();
   const go = button(startLabel, () => {
     host.uiClick();
@@ -196,8 +234,9 @@ export function onlineScreen(host: ScreenHost, ctx: OnlineContext, start: Tab = 
     };
     const openSettings = (w: LocalWorld | null): void => {
       host.uiClick();
+      if (w?.mode === 'spectator') return setStatus(s, "Spectator worlds can't be hosted. Choose another world, or create a new one.", true);
       const initial: HostOptions = { name: w?.name ?? `${api.account?.name ?? 'My'}'s World`, visibility: 'friends', maxPlayers: 8, cheats: w?.cheats ?? false, pvp: false, defaultRole: 'builder', mode: w?.mode ?? 'survival' };
-      host.push(hostSettingsScreen(host, w ? `Host "${w.name}"` : 'Host a New World', initial, ctx.isTouch, 'Start Hosting', (o) => ctx.host(w?.id ?? null, o)));
+      host.push(hostSettingsScreen(host, w ? `Host "${w.name}"` : 'Host a New World', initial, ctx.isTouch, 'Start Hosting', (o) => ctx.host(w?.id ?? null, o), { newWorld: !w }));
     };
     const hostBtn = button('Host Selected World', () => selected && openSettings(selected), 'btn half');
     render();

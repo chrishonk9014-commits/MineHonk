@@ -296,7 +296,9 @@ export class WorldsCore {
     if (e.banned.includes(viewer)) throw new WorldError('You are banned from this world');
     if (e.owner !== viewer && (await this.friends.blockedEither(e.owner, viewer))) throw new WorldError('No world has that code');
     let entry = e;
-    if (!(await this.roleFor(e, viewer)))
+    // Whoever has the code is invited from now on (and, for a browser-hosted
+    // world, may connect directly like a friend, not relay-only like a stranger)
+    if (!isMember(e, viewer))
       entry = await this.mutate(e.id, (w) => {
         if (!w.allowlist.includes(viewer)) w.allowlist.push(viewer);
       });

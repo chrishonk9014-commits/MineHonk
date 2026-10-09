@@ -16,7 +16,39 @@ npm run dev            # game at http://localhost:5173 (single player works imme
 Single player runs an integrated server in a Web Worker and saves worlds in
 IndexedDB. Worlds can be exported to and imported from `.mhworld` files.
 
-### Multiplayer server
+## Playing online
+
+Play with friends right from the website, on a computer or a phone. Nothing to
+install.
+
+1. Open the game and choose **Multiplayer**. Create an account (a player name
+   and a password; there is no email, so remember your password).
+2. **Host** a world: pick one of your single player worlds or create a new
+   one, choose who may join (**Private** with a code, **Friends**, or
+   **Public**), and press **Start Hosting**. You get a join code like
+   `ABC7-92KD` to share. Keep the tab open: your world is online while it runs.
+3. Friends **join** with the code, or from their **Friends** tab (*Playing
+   your world — JOIN*), or from the invitation you send them. Anyone can join
+   **Public** worlds from the Public tab.
+
+Already playing alone? Pause and choose **Open to Multiplayer**: the world goes
+online without restarting. The pause menu's **Hosting...** shows the code and
+the players, lets you make operators, kick, ban, invite friends, change the
+settings (including **Allow Cheats**) and stop hosting.
+
+The world, everyone's inventories and progress are saved in the host's
+browser. Players who come back find everything where they left it. Single
+player is unchanged and needs no account.
+
+Running the site yourself? The online hub is set up once on websites, with no
+terminal: [docs/ONLINE_SETUP.md](docs/ONLINE_SETUP.md). How it works, privacy
+and limits: [docs/MULTIPLAYER.md](docs/MULTIPLAYER.md).
+
+### Self-hosting (advanced)
+
+A dedicated Node server can host worlds on a machine you control (it does not
+need the online hub). In the game, choose **Multiplayer → Server address...**
+to connect to it.
 
 ```bash
 npm run build          # client (dist/) + dedicated server (dist-server/)
@@ -539,7 +571,13 @@ Turn on **Allow Cheats** when you create a world, or toggle it later from the
 pause menu (world owner only). The Admin Panel (F8 or the pause menu) is
 available to the world owner in single player and to the owner and operators
 in multiplayer. Builders and visitors never get it. Every action is checked
-and carried out by the server.
+and carried out by the server (in a hosted world, the host's).
+
+In multiplayer the owner decides: **Allow Cheats** is a hosting setting that
+can be changed at any time, operators are made from the hosting panel (or with
+`/op`), and every admin action is announced in chat (*[Admin] Name used: give
+diamond ×64*) unless the owner turns announcements off. Worlds with cheats on
+show a **Cheats ON** badge in the Friends and Public lists and when joining.
 
 - **Items**: give any registered item. Search, filter by category and choose
   a quantity (more than a stack is split across slots or dropped).
@@ -568,7 +606,8 @@ still earns advancements as usual.
 npm run typecheck      # TypeScript
 npm test               # unit and integration tests (vitest)
 npm run test:e2e       # browser smoke test against the production build
-npm run test:e2e:mp    # two-browser multiplayer test against a real hub
+npm run test:e2e:mp    # two-browser multiplayer test against the Node server
+npm run test:e2e:online  # browser-hosted multiplayer, up to five browsers, against a local cloud hub
 npm run gen:assets     # regenerate textures, atlases and the pixel font
 ```
 
@@ -609,9 +648,14 @@ src/server    authoritative GameServer: dimensions and chunk streaming, lighting
               mining and building, containers, survival, mobs and AI, combat,
               explosions, portals, the End and dragon fight, the Farlands,
               workstations, commands, moderation and roles
-src/worker    single player integrated server (Web Worker + IndexedDB)
-src/server-node  dedicated hub: accounts, friends, world registry, hosting, file
-              storage, HTTP API and the WebSocket game transport
+src/worker    integrated server (Web Worker + IndexedDB): single player, and
+              hosting from the browser (hosting.ts)
+src/hub       shared hub logic (accounts, friends, world registry, tickets) behind
+              a storage interface, used by both hubs
+hub           the cloud hub: Cloudflare Worker, D1 migrations, lobby and relay
+              Durable Objects (deployed by .github/workflows/deploy-hub.yml)
+src/server-node  dedicated hub (self-hosting): file storage, HTTP API and the
+              WebSocket game transport
 src/client    three.js renderer, meshing worker, UI, audio synthesis, input
 tools         procedural asset generation (textures, font) and debug maps
 tests         unit, integration and end-to-end tests
@@ -634,9 +678,14 @@ when they disagree.
 
 ### Security notes
 
-- Passwords are hashed with scrypt. Session tokens are random, sent as
-  bearer headers and stored only as hashes. Repeated failed logins lock the
-  account for a few minutes.
+- Passwords are hashed with scrypt on the Node server. Online, the browser
+  stretches them first (PBKDF2, 600,000 rounds) and the hub stores a salted
+  hash of that. Session tokens are random, sent as bearer headers and stored
+  only as hashes. Repeated failed logins lock the account for a few minutes.
+- Joining a browser-hosted world takes a short-lived join ticket signed by the
+  hub; the host checks it before connecting and again before letting the
+  player in. Strangers from the public list connect only through a relay, so
+  no one sees anyone else's IP address.
 - The in-game name always comes from the account and never from the client.
   Join codes are only visible to owners and operators.
 - Sign-in, join codes and the API are rate limited. Game sockets have packet

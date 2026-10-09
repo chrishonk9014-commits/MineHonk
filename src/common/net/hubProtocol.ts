@@ -84,6 +84,28 @@ export interface RelayRecord {
   data: Uint8Array;
 }
 
+/** The largest relay frame the hub accepts (larger ones are dropped). */
+export const RELAY_MAX_FRAME = 256 * 1024;
+
+/** Packs records into as few relay frames as possible, each within `max` bytes. */
+export function relayFrames(records: RelayRecord[], max = RELAY_MAX_FRAME): Uint8Array[] {
+  const frames: Uint8Array[] = [];
+  let group: RelayRecord[] = [];
+  let size = 0;
+  for (const r of records) {
+    const n = 9 + r.data.length;
+    if (group.length && size + n > max) {
+      frames.push(encodeRelay(group));
+      group = [];
+      size = 0;
+    }
+    group.push(r);
+    size += n;
+  }
+  if (group.length) frames.push(encodeRelay(group));
+  return frames;
+}
+
 export function encodeRelay(records: RelayRecord[]): Uint8Array {
   let n = 0;
   for (const r of records) n += 9 + r.data.length;

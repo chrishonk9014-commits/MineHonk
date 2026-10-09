@@ -29,6 +29,7 @@ export class HubLobby {
     const ws = new WebSocket(this.api.socketUrl('/lobby'), ['minehonk', `auth.${this.api.token}`]);
     this.ws = ws;
     ws.onopen = () => {
+      console.debug('[lobby] connected');
       this.retry = 0;
       this.connected = true;
       this.onState(true);
@@ -49,7 +50,8 @@ export class HubLobby {
       }
       for (const l of [...this.listeners]) l(m);
     };
-    ws.onclose = () => {
+    ws.onclose = (e) => {
+      console.debug('[lobby] closed', e.code, e.reason);
       if (this.ping) clearInterval(this.ping);
       this.ping = null;
       this.connected = false;

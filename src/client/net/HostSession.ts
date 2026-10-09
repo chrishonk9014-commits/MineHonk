@@ -16,7 +16,7 @@ import type { HubLobby } from './HubLobby';
 import type { WorkerConnection } from './ClientConnection';
 import type { WorldDetails, WorldVisibility } from '../../common/net/multiplayer';
 import type { LobbyOut, SignalData, HostedWorld } from '../../common/net/hubProtocol';
-import { decodeRelay, encodeRelay, RELAY_CLOSE, RELAY_DATA, RELAY_OPEN, type RelayRecord } from '../../common/net/hubProtocol';
+import { decodeRelay, relayFrames, RELAY_CLOSE, RELAY_DATA, RELAY_OPEN, type RelayRecord } from '../../common/net/hubProtocol';
 import type { HostOut, LevelSettings } from '../../worker/hosting';
 import { importVerifyKey, verifyTicket } from '../../hub/tickets';
 import { GAME_VERSION, compatKey } from './version';
@@ -74,7 +74,7 @@ export class HostSession {
   private lastSettings: LevelSettings | null = null;
   players = 1;
   /** Bytes sent to other players (all transports), for the bandwidth figures. */
-  readonly stats = { bytesSent: 0, since: performance.now(), rtc: 0, relay: 0 };
+  readonly stats = { bytesSent: 0, since: performance.now(), rtc: 0, relay: 0, relayMessagesOut: 0, relayMessagesIn: 0 };
   onChange: () => void = () => {};
   onError: (message: string) => void = () => {};
   /** The browser held the server back (a hidden tab). */
@@ -101,6 +101,8 @@ export class HostSession {
     const s = new HostSession(api, lobby, conn, details, opts, ice);
     s.ticketKey = await importVerifyKey(key);
     conn.host({ hubWorldId: details.id, hubKey: key, maxPlayers: opts.maxPlayers, hostUuid: opts.hostUuid, hostName: api.account?.name ?? 'Host' });
+    // The world takes the settings chosen for hosting (visibility, cheats, who may build)
+    s.pushOptions();
     s.announce();
     s.openRelay();
     return s;
@@ -126,9 +128,14 @@ export class HostSession {
     Object.assign(this.options, { ...patch, newCode: undefined });
     const o = this.options;
     this.details = await this.api.hostWorld({ id: this.details.id, name: o.name, visibility: o.visibility, mode: o.mode, cheats: o.cheats, pvp: o.pvp, defaultRole: o.defaultRole, maxPlayers: o.maxPlayers, newCode: patch.newCode === true });
-    this.conn.hostOptions({ name: o.name, visibility: o.visibility, cheats: o.cheats, pvp: o.pvp, defaultRole: o.defaultRole, maxPlayers: o.maxPlayers, joinCode: this.details.joinCode ?? null });
+    this.pushOptions();
     this.announce();
     this.onChange();
+  }
+
+  private pushOptions(): void {
+    const o = this.options;
+    this.conn.hostOptions({ name: o.name, visibility: o.visibility, cheats: o.cheats, pvp: o.pvp, defaultRole: o.defaultRole, maxPlayers: o.maxPlayers, joinCode: this.details.joinCode ?? null });
   }
 
   /** The world's own settings changed in game (/op, /ban, cheats...): the hub's registry follows. */
@@ -203,8 +210,11 @@ export class HostSession {
         this.relayBatch = [];
         return;
       }
-      // Every relayed player's traffic for this moment in one message
-      this.relay.send(encodeRelay(this.relayBatch) as Uint8Array<ArrayBuffer>);
+      // Every relayed player's traffic for this moment, in as few messages as the relay takes
+      for (const frame of relayFrames(this.relayBatch)) {
+        this.relay.send(frame as Uint8Array<ArrayBuffer>);
+        this.stats.relayMessagesOut++;
+      }
       for (const cid of this.relayCids.values()) this.conn.remoteBuffered(cid, this.relay.bufferedAmount);
       this.relayBatch = [];
     });
@@ -260,6 +270,7 @@ export class HostSession {
   private async onSignal(from: string, fromName: string, sid: string, data: SignalData): Promise<void> {
     const key = `${from}|${sid}`;
     if (data.kind === 'offer') {
+      console.debug('[host] offer from', fromName);
       if (this.pending.size + this.peers.size >= MAX_PEERS) return this.refuse(from, sid, 'World is full');
       // Only joiners with a valid ticket for this world get a peer connection at all
       const claims = this.ticketKey ? await verifyTicket(data.ticket, this.ticketKey) : null;
@@ -271,6 +282,7 @@ export class HostSession {
       pc.onicecandidate = (e) => this.lobby.send({ t: 'signal', to: from, world: this.details.id, sid, data: { kind: 'candidate', candidate: e.candidate ? e.candidate.toJSON() : null } });
       pc.ondatachannel = (e) => this.channel(peer, e.channel);
       pc.onconnectionstatechange = () => {
+        console.debug('[host] connection to', fromName, pc.connectionState);
         if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
           this.pending.delete(key);
           if (peer.cid) this.gone(peer.cid);
@@ -290,6 +302,7 @@ export class HostSession {
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
       this.lobby.send({ t: 'signal', to: from, world: this.details.id, sid, data: { kind: 'answer', sdp: answer.sdp ?? '' } });
+      console.debug('[host] answered', fromName);
       return;
     }
     if (data.kind === 'candidate') {
@@ -341,6 +354,7 @@ export class HostSession {
     ws.onopen = () => (this.relayRetry = 0);
     ws.onmessage = (e) => {
       if (!(e.data instanceof ArrayBuffer)) return;
+      this.stats.relayMessagesIn++;
       const records = decodeRelay(new Uint8Array(e.data));
       if (!records) return;
       for (const r of records) {

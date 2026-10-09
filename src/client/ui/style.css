@@ -868,6 +868,16 @@ body {
   color: #aaaaaa;
   font-style: italic;
 }
+.player-list .pl-role {
+  margin-left: calc(var(--s) * 4);
+  color: #aaaaaa;
+}
+.player-list .pl-role.owner {
+  color: #ffd060;
+}
+.player-list .pl-role.operator {
+  color: #55ffff;
+}
 .player-list .ping {
   color: #55ff55;
   letter-spacing: calc(var(--s) * -1);

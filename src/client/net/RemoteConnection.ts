@@ -38,7 +38,7 @@ export class RemoteConnection implements ClientConnection {
   private pc: RTCPeerConnection | null = null;
   private ws: WebSocket | null = null;
   private offLobby: (() => void) | null = null;
-  readonly stats = { bytesIn: 0, bytesOut: 0 };
+  readonly stats = { bytesIn: 0, bytesOut: 0, messagesOut: 0 };
 
   constructor(
     private readonly api: HubApi,
@@ -80,25 +80,36 @@ export class RemoteConnection implements ClientConnection {
       const dc = pc.createDataChannel('game', { ordered: true });
       dc.binaryType = 'arraybuffer';
       let opened = false;
+      let failed = false;
       const fail = (why: string): void => {
-        if (opened) return;
+        if (opened || failed) return;
+        failed = true;
         clearTimeout(timer);
+        clearTimeout(cap);
         this.offLobby?.();
         this.offLobby = null;
         pc.close();
         this.pc = null;
         reject(new Error(why));
       };
-      const timer = setTimeout(() => fail('timed out'), this.opts.rtcTimeoutMs ?? 12_000);
+      // The handshake gets its time from when the offer leaves (setting the game up
+      // on a slow device must not eat it), within an overall limit
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const cap = setTimeout(() => fail('timed out'), 30_000);
       const signal = (data: SignalData): void => this.lobby.send({ t: 'signal', to: this.t.host, world, sid, data });
       const queued: RTCIceCandidateInit[] = [];
       let remoteSet = false;
       this.offLobby = this.lobby.on((m: LobbyOut) => {
-        if (m.t === 'error' && /offline/.test(m.message)) return fail('refused:The host is offline');
+        if (m.t === 'error') {
+          // The hub could not pass the offer on: say so, or go straight to the relay
+          if (/offline/.test(m.message)) return fail('refused:The host is offline');
+          return fail(m.message);
+        }
         if (m.t !== 'signal' || m.sid !== sid || m.from !== this.t.host) return;
         const d = m.data as SignalData;
         if (d.kind === 'refused') fail(`refused:${d.reason}`);
         else if (d.kind === 'answer') {
+          console.debug('[join] answer from the host');
           void pc.setRemoteDescription({ type: 'answer', sdp: d.sdp }).then(async () => {
             remoteSet = true;
             for (const c of queued) await pc.addIceCandidate(c).catch(() => {});
@@ -110,6 +121,7 @@ export class RemoteConnection implements ClientConnection {
       });
       pc.onicecandidate = (e) => signal({ kind: 'candidate', candidate: e.candidate ? e.candidate.toJSON() : null });
       pc.onconnectionstatechange = () => {
+        console.debug('[join] connection', pc.connectionState);
         if (pc.connectionState === 'failed') {
           if (!opened) fail('failed');
           else this.end('The host left the game');
@@ -118,6 +130,7 @@ export class RemoteConnection implements ClientConnection {
       dc.onopen = () => {
         opened = true;
         clearTimeout(timer);
+        clearTimeout(cap);
         this.offLobby?.();
         this.offLobby = null;
         this.transport = 'rtc';
@@ -138,6 +151,8 @@ export class RemoteConnection implements ClientConnection {
         .then(async (offer) => {
           await pc.setLocalDescription(offer);
           signal({ kind: 'offer', sdp: offer.sdp ?? '', ticket: this.t.ticket, relayOnly: this.t.relayOnly });
+          console.debug('[join] offer sent');
+          if (!opened && !failed) timer = setTimeout(() => fail('timed out'), this.opts.rtcTimeoutMs ?? 12_000);
         })
         .catch((e) => fail(String(e)));
     });
@@ -147,11 +162,13 @@ export class RemoteConnection implements ClientConnection {
 
   private relay(): Promise<void> {
     return new Promise((resolve, reject) => {
+      const t0 = performance.now();
       const ws = new WebSocket(this.api.socketUrl(`/relay/${this.t.world.id}`), ['minehonk', `ticket.${this.t.ticket}`]);
       ws.binaryType = 'arraybuffer';
       this.ws = ws;
       let opened = false;
       ws.onopen = () => {
+        console.debug(`[join] relay open after ${Math.round(performance.now() - t0)} ms`);
         opened = true;
         this.transport = 'relay';
         this.out = (piece) => {
@@ -180,6 +197,7 @@ export class RemoteConnection implements ClientConnection {
   private write(payload: Uint8Array): void {
     for (const p of toPieces(payload)) {
       this.stats.bytesOut += p.length;
+      this.stats.messagesOut++;
       this.out?.(p);
     }
   }

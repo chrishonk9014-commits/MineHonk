@@ -100,7 +100,16 @@ class RemoteConn implements Connection {
     if (!this.queue.length) return;
     const batch = this.queue;
     this.queue = [];
-    const pieces = toPieces(encode(batch));
+    let pieces: Uint8Array[];
+    try {
+      pieces = toPieces(encode(batch));
+    } catch (e) {
+      // Never let one bad message take the world down for everyone: this player
+      // reconnects instead of playing on with a gap in what they were sent
+      console.error('[host] could not send to a player', e);
+      this.close('Connection error, please join again');
+      return;
+    }
     let n = 0;
     for (const p of pieces) n += p.length;
     this.bufferedBytes += n;

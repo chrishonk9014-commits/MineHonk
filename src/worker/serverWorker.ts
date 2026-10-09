@@ -29,6 +29,9 @@ const conn: Connection = {
   remote: 'local',
   send(msg: S2C) {
     const transfer: Transferable[] = [];
+    // Chunk data is encoded for each player; a light update is shared by everyone
+    // who has that chunk (other players, when the world is hosted), so it is copied
+    if (msg.t === 'light') msg = { ...msg, data: msg.data.slice() };
     if (msg.t === 'chunk' || msg.t === 'light') transfer.push(msg.data.buffer as ArrayBuffer);
     post({ type: 's2c', msg }, transfer);
   },

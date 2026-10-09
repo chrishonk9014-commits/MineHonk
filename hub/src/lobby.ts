@@ -94,6 +94,7 @@ export class LobbyDO extends DurableObject<Env> {
     if (typeof raw !== 'string' || raw.length > MAX_MESSAGE) return;
     const a = this.att(ws);
     if (!this.limits.take(`${a.uuid}`)) {
+      console.log(`lobby: ${a.name} is sending too fast`);
       this.send(ws, { t: 'error', message: 'Slow down a little' });
       return;
     }

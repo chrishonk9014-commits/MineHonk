@@ -1,0 +1,224 @@
+# Puts the MineHonk online hub (accounts, friends, join codes, the public world
+# list, WebRTC signaling and the relay) on Cloudflare's free plan. Nothing to
+# install and no terminal: it runs here on GitHub.
+#
+# One-time setup (on websites, about 5 minutes): docs/ONLINE_SETUP.md
+#   1. a free Cloudflare account
+#   2. repository secrets CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID
+# Then: Actions > Deploy online hub > Run workflow (or push a change to the hub).
+#
+# Safe to run again and again: the database is created only the first time,
+# and only new migrations are applied.
+name: Deploy online hub
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'hub/**'
+      - 'src/hub/**'
+      - 'src/common/net/**'
+      - 'src/common/game/gamemode.ts'
+      - 'src/server/moderation/ChatFilter.ts'
+      - '.github/workflows/deploy-hub.yml'
+
+concurrency:
+  group: deploy-hub
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  WRANGLER_VERSION: '4.149.0'
+  DB_NAME: minehonk-hub
+
+jobs:
+  deploy:
+    name: Deploy the hub to Cloudflare
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      TURN_KEY_ID: ${{ secrets.TURN_KEY_ID }}
+      TURN_KEY_API_TOKEN: ${{ secrets.TURN_KEY_API_TOKEN }}
+    steps:
+      - name: Check the Cloudflare secrets
+        run: |
+          missing=""
+          [ -z "$CLOUDFLARE_API_TOKEN" ] && missing="$missing CLOUDFLARE_API_TOKEN"
+          [ -z "$CLOUDFLARE_ACCOUNT_ID" ] && missing="$missing CLOUDFLARE_ACCOUNT_ID"
+          if [ -n "$missing" ]; then
+            {
+              echo "## Cloudflare is not set up yet"
+              echo
+              echo "Add these repository secrets:**$missing**"
+              echo
+              echo "GitHub: **Settings > Secrets and variables > Actions > New repository secret**."
+              echo "Step-by-step guide: [docs/ONLINE_SETUP.md](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/blob/${GITHUB_SHA}/docs/ONLINE_SETUP.md)."
+              echo "Then open this run again and press **Re-run all jobs**."
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::error title=Cloudflare is not set up yet::Add the repository secrets$missing (Settings > Secrets and variables > Actions), then re-run. Guide: docs/ONLINE_SETUP.md"
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+
+      # ---------------------------------------------------------------- the database
+      - name: Look for the hub database
+        id: list
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          wranglerVersion: ${{ env.WRANGLER_VERSION }}
+          workingDirectory: hub
+          quiet: true
+          command: d1 list --json
+
+      - name: Is it there?
+        id: found
+        env:
+          LIST: ${{ steps.list.outputs.command-output }}
+        run: |
+          id=$(node -e '
+            const out = process.env.LIST || "";
+            const list = JSON.parse(out.slice(out.indexOf("[")) || "[]");
+            const db = list.find((d) => d.name === process.env.DB_NAME);
+            process.stdout.write(db ? db.uuid : "");
+          ')
+          echo "id=$id" >> "$GITHUB_OUTPUT"
+          if [ -n "$id" ]; then echo "Found the database $DB_NAME ($id)"; else echo "No database yet: creating it"; fi
+
+      - name: Create the hub database (first deploy only)
+        if: steps.found.outputs.id == ''
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          wranglerVersion: ${{ env.WRANGLER_VERSION }}
+          workingDirectory: hub
+          command: d1 create ${{ env.DB_NAME }}
+
+      - name: Look for it again
+        id: list2
+        if: steps.found.outputs.id == ''
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          wranglerVersion: ${{ env.WRANGLER_VERSION }}
+          workingDirectory: hub
+          quiet: true
+          command: d1 list --json
+
+      - name: Point the hub at its database
+        env:
+          FOUND: ${{ steps.found.outputs.id }}
+          LIST: ${{ steps.list2.outputs.command-output }}
+        run: |
+          id="$FOUND"
+          if [ -z "$id" ]; then
+            id=$(node -e '
+              const out = process.env.LIST || "";
+              const list = JSON.parse(out.slice(out.indexOf("[")) || "[]");
+              const db = list.find((d) => d.name === process.env.DB_NAME);
+              process.stdout.write(db ? db.uuid : "");
+            ')
+          fi
+          if [ -z "$id" ]; then
+            echo "::error title=No database::Could not create or find the D1 database $DB_NAME. Check that the API token was made from the 'Edit Cloudflare Workers' template and has D1 Edit."
+            exit 1
+          fi
+          sed -i "s/^database_id = .*/database_id = \"$id\"/" hub/wrangler.toml
+          grep -n "database_id" hub/wrangler.toml
+
+      - name: Apply database migrations
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          wranglerVersion: ${{ env.WRANGLER_VERSION }}
+          workingDirectory: hub
+          command: d1 migrations apply ${{ env.DB_NAME }} --remote
+
+      # ---------------------------------------------------------------- the Worker
+      - name: Deploy the hub
+        id: deploy
+        if: env.TURN_KEY_ID == ''
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          wranglerVersion: ${{ env.WRANGLER_VERSION }}
+          workingDirectory: hub
+          command: deploy
+
+      # With the optional Cloudflare TURN key, players behind strict networks connect directly more often
+      - name: Deploy the hub (with TURN)
+        id: deploy_turn
+        if: env.TURN_KEY_ID != ''
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          wranglerVersion: ${{ env.WRANGLER_VERSION }}
+          workingDirectory: hub
+          secrets: |
+            TURN_KEY_ID
+            TURN_KEY_API_TOKEN
+          command: deploy
+
+      - name: Check that the hub answers
+        env:
+          URL1: ${{ steps.deploy.outputs.deployment-url }}
+          URL2: ${{ steps.deploy_turn.outputs.deployment-url }}
+          OUT1: ${{ steps.deploy.outputs.command-output }}
+          OUT2: ${{ steps.deploy_turn.outputs.command-output }}
+        run: |
+          url="${URL1:-$URL2}"
+          if [ -z "$url" ]; then url=$(printf '%s\n%s' "$OUT1" "$OUT2" | grep -o 'https://[A-Za-z0-9.-]*workers\.dev' | head -n 1); fi
+          if [ -z "$url" ]; then
+            echo "::error title=No address::The deploy did not report the hub's address."
+            exit 1
+          fi
+          url="${url%/}"
+          ok=""
+          for i in 1 2 3 4 5 6 7 8 9 10; do
+            if curl -fsS "$url/api/health" -o health.json; then ok=1; break; fi
+            sleep 3
+          done
+          if [ -z "$ok" ]; then
+            echo "::error title=The hub does not answer::$url/api/health did not respond."
+            exit 1
+          fi
+          cat health.json; echo
+          echo "::notice title=MineHonk hub is online::$url"
+          {
+            echo "## MineHonk hub is online"
+            echo
+            echo "Address: **$url**"
+            echo
+            echo '```'
+            cat health.json
+            echo
+            echo '```'
+            echo
+            echo "The game on GitHub Pages uses this address (hub/deployed-url.txt)."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: What went wrong?
+        if: failure()
+        run: |
+          {
+            echo "## The hub was not deployed"
+            echo
+            echo "Common fixes:"
+            echo
+            echo "- **\"You need to register a workers.dev subdomain\"**: in the Cloudflare dashboard open **Workers & Pages** once and pick a subdomain, then re-run."
+            echo "- **Authentication error / 10000**: the API token is wrong or expired. Make a new one from the **Edit Cloudflare Workers** template and update the CLOUDFLARE_API_TOKEN secret."
+            echo "- **Account ID**: CLOUDFLARE_ACCOUNT_ID must be the 32-character Account ID from the dashboard's Workers & Pages page."
+            echo
+            echo "Guide: docs/ONLINE_SETUP.md. After fixing, open this run and press **Re-run all jobs**."
+          } >> "$GITHUB_STEP_SUMMARY"

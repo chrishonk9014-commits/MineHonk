@@ -504,7 +504,7 @@ export class App implements GameHost, S.ScreenHost {
     if (this.game) await this.quitToTitle();
     this.clearStack();
     this.audio.music.stop();
-    this.setLoading(`Joining ${t.world.name}...`, `Hosted by ${t.hostName}`);
+    this.setLoading(`Joining ${t.world.name}...`, `Hosted by ${t.hostName}${t.world.cheats ? ' · Cheats ON' : ''}`);
     const hello = { t: 'hello' as const, version: PROTOCOL_VERSION, name: api.account?.name ?? this.profile.name, viewDistance: this.settings.renderDistance, registryHash: registryHash() };
     const forceRelay = new URLSearchParams(location.search).has('relay');
     const conn = new RemoteConnection(api, lobby, t, hello, { forceRelay });

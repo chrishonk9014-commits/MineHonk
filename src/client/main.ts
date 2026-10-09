@@ -9,6 +9,7 @@ import { setIcons } from './ui/slots';
 import { AudioEngine } from './audio/Audio';
 import { Input } from './input/Input';
 import { App } from './App';
+import { compatKey } from './net/version';
 
 async function boot(): Promise<void> {
   const status = document.getElementById('boot-status');
@@ -31,7 +32,7 @@ async function boot(): Promise<void> {
     document.getElementById('boot')?.remove();
     const app = new App(canvas, ui, assets, settings, profile, audio, input);
     // Developer handle: only in development builds and automated test browsers
-    if (import.meta.env.DEV || navigator.webdriver) Object.assign(window, { minehonk: app, minehonkState: stateFromString, minehonkRegistry: { itemById, blockById, blockOfState: (st: number) => STATE_BLOCK[st] } });
+    if (import.meta.env.DEV || navigator.webdriver) Object.assign(window, { minehonk: app, minehonkState: stateFromString, minehonkRegistry: { itemById, blockById, blockOfState: (st: number) => STATE_BLOCK[st] }, minehonkNet: { compatKey } });
   } catch (e) {
     console.error(e);
     setStatus(`Failed to start: ${(e as Error).message}`);

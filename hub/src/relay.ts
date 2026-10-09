@@ -8,15 +8,13 @@
  */
 import { DurableObject } from 'cloudflare:workers';
 import type { Env } from './env';
-import { encodeRelay, decodeRelay, RELAY_CLOSE, RELAY_DATA, RELAY_OPEN } from '../../src/common/net/hubProtocol';
+import { encodeRelay, decodeRelay, RELAY_CLOSE, RELAY_DATA, RELAY_OPEN, RELAY_MAX_FRAME } from '../../src/common/net/hubProtocol';
 
 interface Attachment {
   role: 'host' | 'joiner';
   conn: number;
   uuid: string;
 }
-
-const MAX_FRAME = 256 * 1024;
 
 export class RelayDO extends DurableObject<Env> {
   constructor(ctx: DurableObjectState, env: Env) {
@@ -56,7 +54,7 @@ export class RelayDO extends DurableObject<Env> {
   }
 
   override async webSocketMessage(ws: WebSocket, msg: string | ArrayBuffer): Promise<void> {
-    if (typeof msg === 'string' || msg.byteLength > MAX_FRAME) return;
+    if (typeof msg === 'string' || msg.byteLength > RELAY_MAX_FRAME) return;
     const a = ws.deserializeAttachment() as Attachment;
     if (a.role === 'joiner') {
       const host = this.host();

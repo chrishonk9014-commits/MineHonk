@@ -11,6 +11,10 @@ import { isEnderAlloy } from '../../common/endExpansion/resources';
 export const ITEM_DESPAWN_TICKS = 6000;
 
 export class ItemEntity extends Entity {
+  override updateInterval(): number {
+    return 10;
+  }
+
   readonly type = 'item';
   pickupDelay = 10;
   /** Only this player may pick it up until the delay passes (thrown items). */
@@ -152,6 +156,10 @@ export class ItemEntity extends Entity {
 
 /** Experience orb. */
 export class XpOrb extends Entity {
+  override updateInterval(): number {
+    return 10;
+  }
+
   readonly type = 'xp_orb';
   constructor(public value: number) {
     super(0.5, 0.5);

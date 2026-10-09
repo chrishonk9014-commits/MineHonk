@@ -44,6 +44,8 @@ export interface ServerOptions {
   /** Whether a given identity may join (multiplayer permission hook). */
   canJoin?: (id: Identity, level: LevelData) => string | null;
   maxPlayers?: number;
+  /** Send slow, unimportant movement (loot) less often to players on the network. */
+  spareBandwidth?: boolean;
 }
 
 export class GameServer {
@@ -136,6 +138,7 @@ export class GameServer {
       autosaveTicks: opts.autosaveTicks ?? 20 * 60 * 2,
       log: opts.log ?? ((m) => console.log(m)),
       maxPlayers: opts.maxPlayers ?? 16,
+      spareBandwidth: opts.spareBandwidth ?? false,
       filterChat: opts.filterChat,
       canJoin: opts.canJoin,
     };
@@ -983,12 +986,20 @@ export class GameServer {
   /** Entity visibility + movement replication. */
   private trackEntities(): void {
     const movers: Entity[] = [];
+    // Throttled entities that stopped before network players got their last position
+    const settled: Entity[] = [];
+    const spare = !!this.opts.spareBandwidth;
     for (const d of this.dims.values()) {
       for (const e of d.entities.values()) {
         const ls = e.lastSent;
-        if (ls.x !== e.x || ls.y !== e.y || ls.z !== e.z || ls.yaw !== e.yaw || ls.pitch !== e.pitch || ls.headYaw !== e.headYaw) movers.push(e);
+        if (ls.x !== e.x || ls.y !== e.y || ls.z !== e.z || ls.yaw !== e.yaw || ls.pitch !== e.pitch || ls.headYaw !== e.headYaw) {
+          movers.push(e);
+          if (spare && e.updateInterval() > 1) e.remoteStale = true;
+        } else if (e.remoteStale) settled.push(e);
       }
     }
+    // A throttled entity goes to network players on its own beat
+    const due = (e: Entity): boolean => (this.tickNo + e.id) % e.updateInterval() === 0;
     for (const p of this.players.values()) {
       const dim = p.dim;
       const visible = new Set<number>();
@@ -1010,10 +1021,17 @@ export class GameServer {
         p.send({ t: 'despawn', ids: gone });
       }
       const list: number[] = [];
+      const network = spare && p.conn.remote !== 'local';
       for (const e of movers) {
         if (e === p || !p.tracked.has(e.id)) continue;
+        if (network && e.updateInterval() > 1 && !due(e)) continue;
         list.push(e.id, round3(e.x), round3(e.y), round3(e.z), round3(e.yaw), round3(e.pitch), round3(e.headYaw));
       }
+      if (network)
+        for (const e of settled) {
+          if (!p.tracked.has(e.id) || !due(e)) continue;
+          list.push(e.id, round3(e.x), round3(e.y), round3(e.z), round3(e.yaw), round3(e.pitch), round3(e.headYaw));
+        }
       if (list.length) p.send({ t: 'moves', list });
       for (const d of this.dims.values()) {
         if (d !== dim) continue;
@@ -1031,6 +1049,7 @@ export class GameServer {
         }
       }
     }
+    if (spare) for (const e of [...movers, ...settled]) if (e.remoteStale && due(e)) e.remoteStale = false;
     for (const e of movers) {
       const ls = e.lastSent;
       ls.x = e.x;

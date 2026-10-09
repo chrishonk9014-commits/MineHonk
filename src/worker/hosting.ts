@@ -166,6 +166,8 @@ export class BrowserHost {
     l.hosting = { hubId: config.hubWorldId, maxPlayers: config.maxPlayers };
     (s.opts as { maxPlayers: number }).maxPlayers = config.maxPlayers;
     s.opts.canJoin = (identity, level) => this.canJoin(identity.uuid, level);
+    // The host's upload is what limits a hosted world
+    s.opts.spareBandwidth = true;
     s.paused = false;
     s.onPlayerJoined = () => this.post({ type: 'players', count: s.players.size });
     s.onPlayerLeft = () => this.post({ type: 'players', count: s.players.size });
@@ -194,6 +196,7 @@ export class BrowserHost {
     const s = this.server();
     if (s) {
       s.opts.canJoin = undefined;
+      s.opts.spareBandwidth = false;
       (s.opts as { maxPlayers: number }).maxPlayers = 1;
     }
     this.config = null;

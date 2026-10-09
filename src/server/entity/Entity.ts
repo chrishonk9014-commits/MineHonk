@@ -23,6 +23,8 @@ export abstract class Entity {
   bucketKey = NaN;
   /** Last position broadcast to clients (for delta updates). */
   lastSent = { x: NaN, y: NaN, z: NaN, yaw: NaN, pitch: NaN, headYaw: NaN };
+  /** Moved since network players last got its position (see updateInterval). */
+  remoteStale = false;
   /** Entities that are not persisted with chunks (players, projectiles in flight...). */
   persistent = false;
   /** Set when metadata changed and needs broadcasting. */
@@ -104,5 +106,14 @@ export abstract class Entity {
   /** Range (blocks) within which players track this entity. */
   trackingRange(): number {
     return 80;
+  }
+
+  /**
+   * Ticks between position updates for players on the network, when the
+   * server is asked to spare bandwidth (browser hosting): loot drifting on
+   * water need not be sent 20 times a second.
+   */
+  updateInterval(): number {
+    return 1;
   }
 }

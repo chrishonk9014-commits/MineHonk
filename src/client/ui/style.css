@@ -2979,7 +2979,7 @@ body {
   --ul-fs: max(calc(var(--s) * 6), 12px);
   --ul-fs-small: max(calc(var(--s) * 5), 11px);
   position: relative;
-  width: min(calc(var(--s) * 420), calc(100vw - 16px));
+  width: min(max(calc(var(--s) * 420), 960px), calc(100vw - 16px));
   height: calc(100vh - var(--s) * 12);
   display: flex;
   flex-direction: column;

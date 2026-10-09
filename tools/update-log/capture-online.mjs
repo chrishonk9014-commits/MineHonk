@@ -156,24 +156,70 @@ await shot(friend, 'friends-join');
 await top(friend).locator('.friend-row', { hasText: 'Honk' }).locator('.join-btn').click();
 await inGame(friend);
 
-// Two players in one world: the friend steps back and looks at the host
+// Two players in one world: on a flat, open spot near spawn, five blocks apart, facing each other
 await friend.page.waitForTimeout(3000);
-await friend.page.keyboard.down('KeyS');
-await friend.page.waitForTimeout(900);
-await friend.page.keyboard.up('KeyS');
-await friend.page.waitForTimeout(800);
-await host.page.evaluate(() => window.minehonk.game.send({ t: 'chat', text: 'Welcome to Honk Island!' }));
-await friend.page.evaluate(() => {
+const say = (p, text) => p.page.evaluate((t) => window.minehonk.game.send({ t: 'chat', text: t }), text);
+await say(host, '/op Pip');
+const spot = await host.page.evaluate(() => {
   const g = window.minehonk.game;
-  const me = g.player.body;
-  const other = [...g.entities.values()].find((e) => e.type === 'player');
-  if (other) {
-    g.player.yaw = Math.atan2(other.x - me.x, other.z - me.z);
-    g.player.pitch = 0.15;
-  }
-  g.hudHidden = true;
+  const reg = window.minehonkRegistry;
+  const idOf = new Map([...reg.blockById.values()].map((b) => [b.num, b.id]));
+  // Plants and snow layers are not ground: look under them
+  const PLANT = /(^|_)(grass|fern|flower|dandelion|poppy|tulip|orchid|allium|bluet|daisy|cornflower|lily_of_the_valley|bush|sapling|mushroom|snow|marigold|reeds?|sprouts|roots|petals|clover)$/;
+  const nameAt = (x, y, z) => {
+    const n = idOf.get(reg.blockOfState(g.world.getState(x, y, z))) ?? 'air';
+    return n === 'air' || n === 'cave_air' || PLANT.test(n) ? 'air' : n;
+  };
+  const ground = (x, z, near) => {
+    for (let y = near + 12; y > near - 12; y--) {
+      const n = nameAt(x, y, z);
+      if (n === 'air') continue;
+      return /^(grass_block|dirt|coarse_dirt|podzol|sand|red_sand|stone|gravel|snow_block|mud|clay|moss_block|mycelium|terracotta|sandstone)$/.test(n) ? y : null;
+    }
+    return null;
+  };
+  const b = g.player.body;
+  const bx = Math.floor(b.x);
+  const bz = Math.floor(b.z);
+  for (let r = 0; r < 64; r++)
+    for (let dx = -r; dx <= r; dx++)
+      for (let dz = -r; dz <= r; dz++) {
+        if (Math.max(Math.abs(dx), Math.abs(dz)) !== r) continue;
+        const x = bx + dx;
+        const z = bz + dz;
+        const y0 = ground(x, z, Math.floor(b.y));
+        if (y0 === null) continue;
+        let ok = true;
+        // The line between them and a little either side: level ground with three blocks of air above
+        for (let k = -1; k <= 6 && ok; k++)
+          for (let s = 0; s <= 0 && ok; s++) {
+            if (ground(x + s, z + k, y0) !== y0) ok = false;
+            // nothing at all in the way, not even grass (only thin snow)
+            for (let h = 1; h <= 3 && ok; h++) if (!/^(air|cave_air|snow)$/.test(idOf.get(reg.blockOfState(g.world.getState(x + s, y0 + h, z + k))) ?? 'air')) ok = false;
+          }
+        if (ok) return { x: x + 0.5, y: y0 + 1, z: z + 0.5, from: [bx, Math.floor(b.y), bz] };
+      }
+  return null;
 });
-await shot(friend, 'together', { settle: 2500 });
+console.log('spot', JSON.stringify(spot));
+if (spot) {
+  await say(host, `/tp ${spot.x} ${spot.y} ${spot.z}`);
+  await say(friend, `/tp ${spot.x} ${spot.y} ${spot.z + 5}`);
+  await friend.page.waitForTimeout(2500);
+  // (a yaw of θ looks along (-sin θ, -cos θ)): the friend looks to -z, the host to +z
+  await host.page.evaluate(() => (window.minehonk.game.player.yaw = Math.PI));
+  await friend.page.evaluate(() => {
+    const g = window.minehonk.game;
+    g.player.yaw = 0;
+    g.player.pitch = 0.12;
+  });
+} else console.log('no flat spot found: the players stay where they spawned');
+await say(host, 'Welcome to Honk Island!');
+await friend.page.evaluate(() => {
+  window.minehonk.game.hudHidden = true;
+  document.head.append(Object.assign(document.createElement('style'), { textContent: '.chat .line:not(:last-child),.crosshair{display:none}' }));
+});
+await shot(friend, 'together', { settle: 3000 });
 
 // The hosting panel: the join code, who is playing, and the owner's tools
 await host.page.evaluate(() => window.minehonk.openPause());

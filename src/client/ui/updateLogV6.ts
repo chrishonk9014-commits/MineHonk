@@ -62,7 +62,7 @@ export const V6_LOG: UpdateEntry = {
           items: [
             { icon: 'end_portal_frame', title: 'The Expansion Portal', text: 'A second portal on the main island, opened by the dragon\'s defeat.', link: 'portal' },
             { icon: 'chorus_stalk', title: 'Seven new biomes', text: 'From flat barrens to glowing crystal fields and a dark, misty waste.', link: 'biomes' },
-            { icon: 'void_stalker_hide', title: 'Five new creatures', text: 'Endlings, Void Stalkers, Chorus Beasts, Crystal Mites and End Phantoms.', link: 'mobs' },
+            { icon: 'spawn_egg_void_stalker', title: 'Five new creatures', text: 'Endlings, Void Stalkers, Chorus Beasts, Crystal Mites and End Phantoms.', link: 'mobs' },
             { icon: 'ender_alloy_ingot', title: 'Ender Alloy and new resources', text: 'A tier above netherite, plus four ores, crystal, chorus wood and astral materials.', link: 'resources' },
             { icon: 'purpur_block', title: 'Cities and giant structures', text: 'Eight End City variants and five giant structures to discover.', link: 'structures' },
             { icon: 'ender_glyph_stone', title: 'An ancient civilization', text: 'Glyphs, artifacts, ancient weapons and the Guardian Constructs.', link: 'ancient' },
@@ -155,7 +155,7 @@ export const V6_LOG: UpdateEntry = {
     {
       id: 'mobs',
       title: 'New Creatures',
-      icon: 'void_stalker_hide',
+      icon: 'spawn_egg_endling',
       blocks: [
         {
           k: 'cards',
@@ -505,7 +505,7 @@ export const V6_LOG: UpdateEntry = {
     {
       id: 'dragon',
       title: "The Dragon's New Moves",
-      icon: 'dragon_egg',
+      icon: 'dragon_breath',
       blocks: [
         { k: 'p', text: 'The Ender Dragon keeps everything it had (200 health, its crystals, its perches) and learns eight new moves. Every one is named on a warning banner and shown before it lands. Tested against the old fight, it perches a little more often and deals no more damage overall.' },
         {
@@ -530,7 +530,7 @@ export const V6_LOG: UpdateEntry = {
       title: 'The Void Citadel',
       icon: 'void_citadel_map',
       blocks: [
-        { k: 'img', img: 'title-void-citadel', caption: 'The Void Citadel: an island with a tower hanging beneath it into the void.' },
+        { k: 'img', img: 'citadel-exterior', caption: 'The Void Citadel: an island with a tower hanging beneath it into the void.' },
         { k: 'p', text: 'One per world, deep in the Void Wastes, 8,600 to 9,400 blocks out. Six floors, each with a puzzle or a fight, a Citadel Anchor (it sets your respawn point and never runs out), a library and a vault. Finish a floor and its sealed door opens onto a ladder down to the next, for everyone, for good.' },
         {
           k: 'example',
@@ -557,7 +557,6 @@ export const V6_LOG: UpdateEntry = {
         {
           k: 'gallery',
           items: [
-            { img: 'citadel-exterior', caption: 'The tower from outside.' },
             { img: 'citadel-glyph', caption: 'A Glyph Lock floor.' },
             { img: 'citadel-parkour', caption: 'The parkour route, outside the walls.' },
           ],
@@ -570,7 +569,7 @@ export const V6_LOG: UpdateEntry = {
     {
       id: 'guardian',
       title: 'The End Guardian',
-      icon: 'end_guardian_head',
+      icon: 'guardians_lance',
       blocks: [
         { k: 'p', text: 'At the bottom of the Citadel lies a round arena over a lower floor that catches every fall. Feed the altar four Eclipse Shards (it comes charged the first time) and the End Guardian wakes: 1,000 health, more for every extra player.' },
         {

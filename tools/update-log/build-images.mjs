@@ -17,14 +17,19 @@ const SHOTS = path.resolve('tests/e2e/out');
 const OUT = path.resolve('public/updatelog/v6');
 fs.mkdirSync(OUT, { recursive: true });
 
-/** The End is dark: game views are brightened a little. Menus and windows are left as they are. */
-const GAME = 'brightness(1.22) contrast(1.04) saturate(1.08)';
+/**
+ * The End is dark: game views get an automatic exposure (brightened towards an average
+ * brightness, up to 2.2 times). Menus and windows are left as they are.
+ */
+const GAME = 'auto';
 const shots = [];
 const add = (name, src, opts = {}) => shots.push({ name, src, width: 800, filter: GAME, ...opts });
 
-add('title-expanded-end', 'clean/v6-title-expanded-end.png', { width: 1280, filter: 'brightness(1.1)' });
-for (const t of ['crystal-fields', 'void-citadel', 'end-eclipse']) add(`title-${t}`, `clean/v6-title-${t}.png`, { filter: 'brightness(1.1)' });
-for (const n of ['portal-dormant', 'portal-alive', 'arrival', 'chorus-tree', 'ender-bridge', 'crystal-generator', 'void-skiff', 'ancient-gateway', 'discovery-title', 'glyph-wall', 'dragon-nest', 'dragon-nest-crack', 'storm', 'storm-remnant', 'eclipse-sky', 'eclipse-monolith', 'citadel-exterior', 'citadel-glyph', 'citadel-parkour', 'guardian-phase1', 'guardian-phase2', 'guardian-phase3', 'guardian-victory', 'telegraph-lunge', 'telegraph-throw', 'telegraph-sentinel', 'telegraph-bulwark'])
+add('title-expanded-end', 'clean/v6-title-expanded-end.png', { width: 1280 });
+for (const t of ['crystal-fields', 'end-eclipse']) add(`title-${t}`, `clean/v6-title-${t}.png`);
+// The eclipse is meant to be dark
+add('eclipse-sky', 'clean/v6-eclipse-sky.png', { filter: 'brightness(1.15)' });
+for (const n of ['portal-dormant', 'portal-alive', 'arrival', 'chorus-tree', 'ender-bridge', 'crystal-generator', 'void-skiff', 'ancient-gateway', 'discovery-title', 'glyph-wall', 'dragon-nest', 'dragon-nest-crack', 'storm', 'storm-remnant', 'eclipse-monolith', 'citadel-exterior', 'citadel-glyph', 'citadel-parkour', 'guardian-phase1', 'guardian-phase2', 'guardian-phase3', 'guardian-victory', 'telegraph-lunge', 'telegraph-throw', 'telegraph-sentinel', 'telegraph-bulwark'])
   add(n, `clean/v6-${n}.png`);
 for (const b of ['end_barrens', 'shattered_end', 'astral_end', 'highlands', 'end_crystal_fields', 'chorus_forest', 'void_wastes']) add(`biome-${b}`, `clean/v6-biome-${b}.png`);
 for (const m of ['endling', 'void_stalker', 'chorus_beast', 'end_crystal_mite', 'end_phantom']) add(`mob-${m}`, `clean/v6-mob-${m}.png`);
@@ -61,8 +66,22 @@ for (const s of shots) {
       const c = document.createElement('canvas');
       c.width = w;
       c.height = h;
-      const ctx = c.getContext('2d');
+      const ctx = c.getContext('2d', { willReadFrequently: true });
       ctx.imageSmoothingQuality = 'high';
+      if (filter === 'auto') {
+        // Average brightness (Rec. 709 luma), then a brightness factor towards 0.36, from 1.0 to 2.2
+        ctx.drawImage(img, 0, 0, w, h);
+        const d = ctx.getImageData(0, 0, w, h).data;
+        let sum = 0;
+        let n = 0;
+        for (let i = 0; i < d.length; i += 4 * 7) {
+          sum += (0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2]) / 255;
+          n++;
+        }
+        const k = Math.min(2.2, Math.max(1, 0.36 / Math.max(0.01, sum / n)));
+        ctx.clearRect(0, 0, w, h);
+        filter = `brightness(${k.toFixed(2)}) contrast(1.05) saturate(1.08)`;
+      }
       if (filter) ctx.filter = filter;
       ctx.drawImage(img, 0, 0, w, h);
       return c.toDataURL('image/webp', 0.8);

@@ -324,12 +324,14 @@ if (section('core')) {
     return { x, y, z };
   });
   // Start digging, hold, finish (a finish that comes too soon is refused, so wait longer each time)
+  // Done when the block is gone: air, or water flowing in on a beach
   const dig = async (b) => {
+    const was = await stateAt(hostOf, b);
     for (const hold of [800, 1600, 3200, 6400]) {
       await joiner.page.evaluate(({ x, y, z }) => window.minehonk.game.send({ t: 'dig', action: 'start', x, y, z, face: 1 }), b);
       await wait(hold);
       await joiner.page.evaluate(({ x, y, z }) => window.minehonk.game.send({ t: 'dig', action: 'finish', x, y, z, face: 1 }), b);
-      if (await until(async () => (await stateAt(hostOf, b)) === 0, 1500)) return true;
+      if (await until(async () => (await stateAt(hostOf, b)) !== was, 1500)) return true;
     }
     return false;
   };

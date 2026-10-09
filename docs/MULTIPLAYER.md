@@ -74,7 +74,9 @@ Setting the hub up (once, on websites only): [ONLINE_SETUP.md](ONLINE_SETUP.md).
    the ticket with the hub's public key **before** creating a peer connection.
 4. If the data channel does not open within 12 seconds of the offer (30 at
    most, for slow devices), or the network blocks WebRTC, the joiner connects
-   to the world's relay instead, presenting the ticket.
+   to the world's relay instead, presenting the ticket. The joiner connects
+   first and only then builds the game (renderer, meshing), so a slow phone
+   does not hold up its own connection.
 5. The first message on either transport is `{t:'join', ticket, hello}`. The
    host verifies the ticket again (signature, world, expiry), checks the game
    version, then applies the world's own rules (bans, private worlds, roles,
@@ -185,23 +187,44 @@ The hub is built for Cloudflare's free Workers plan:
 | STUN | free, unlimited | direct connections |
 
 Accounts, friends and lists cost almost nothing. The scarce resource is the
-**relay**: a relayed player sends and receives a few dozen frames a second, so
-the free plan covers roughly 10–15 relayed player-hours a day (see the
-measurements below). Most players connect directly and never touch it; public
-worlds use TURN first when the TURN key is set, which is why the setup guide
-suggests it. If a daily limit is reached, the hub pauses until the next day
-(nothing is charged).
+**relay**. A world with relayed players sends the relay about 40 frames a
+second (the host packs every relayed player's traffic for a moment into one
+frame) and each relayed player a few more: about 43 incoming messages a second
+in the measurement below, or about 2 billable requests a second. That makes
+roughly **13 hours a day of relayed play** on the free plan, shared by all
+worlds; adding relayed players to a world costs little. Most players connect
+directly and never touch the relay. Public worlds use TURN first when the TURN
+key is set, which is why the setup guide suggests it. If a daily limit is
+reached, the hub pauses until the next day (nothing is charged).
 
 ## Bandwidth
 
 Measured by `tests/e2e/online.mjs` (section `bandwidth`): a host and four
 players walking around in survival for a minute, render distance 4.
 
-BANDWIDTH_TABLE
+| | Measured |
+| --- | --- |
+| Host upload, four players | **123 KB/s** (about 1 Mbit/s), 31 KB/s per player |
+| Each player's download | 22–35 KB/s |
+| Joining (world around the spawn, render distance 4) | about 1 MB |
+| Relay frames, world with two relayed players | 40 a second from the host, 1–2 a second from each player |
 
-The host's upload grows with the number of players and how much the world
-changes around them (new chunks are the largest part). Hosting eight players
-needs roughly twice the four-player figure.
+What keeps it low:
+
+- The host **deflates** what it sends (`src/common/net/payload.ts`): chunk data
+  shrinks about five times. Players' small batches go as they are, and the
+  host never inflates anything a player sends.
+- **Loot updates less often** for players on the network: items and XP orbs
+  drifting on water go out twice a second instead of 20 times (always ending
+  where they came to rest). A world with leaves decaying near water can have
+  hundreds of them; before this, the same four-player test measured
+  1,320 KB/s.
+- Each moment's messages for a player travel together (one batch per tick).
+
+The host's upload grows with the number of players and how much changes
+around them (new chunks are the largest part), so eight players need roughly
+twice the four-player figure: about 2 Mbit/s, which most home connections
+have.
 
 ## Tests
 

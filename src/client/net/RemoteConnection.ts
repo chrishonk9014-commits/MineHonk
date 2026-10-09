@@ -13,6 +13,7 @@ import type { HubApi, TicketResponse } from './HubApi';
 import type { HubLobby } from './HubLobby';
 import { PieceJoiner, toPieces, type SignalData, type LobbyOut } from '../../common/net/hubProtocol';
 import { toB64url, randomBytes } from '../../hub/crypto';
+import { packPayload, unpackPayload } from '../../common/net/payload';
 
 export interface RemoteOptions {
   /** Skip WebRTC (tests, or a network that blocks it). */
@@ -221,7 +222,7 @@ export class RemoteConnection implements ClientConnection {
   // ------------------------------------------------------------------ the game protocol
 
   private sendJoin(): void {
-    this.write(encode({ t: 'join', ticket: this.t.ticket, hello: this.hello }));
+    this.write(packPayload(encode({ t: 'join', ticket: this.t.ticket, hello: this.hello }), false));
     this.flush();
     this.settle.ok();
   }
@@ -245,7 +246,9 @@ export class RemoteConnection implements ClientConnection {
     if (!payload) return;
     let batch: unknown;
     try {
-      batch = decode(payload);
+      const body = unpackPayload(payload, true);
+      if (!body) return this.end('Bad data from the host');
+      batch = decode(body);
     } catch {
       return;
     }
@@ -271,7 +274,7 @@ export class RemoteConnection implements ClientConnection {
     // The hello rides in the join message
     const batch = this.queue.filter((m) => m.t !== 'hello');
     this.queue = [];
-    if (batch.length) this.write(encode(batch));
+    if (batch.length) this.write(packPayload(encode(batch), false));
   }
 
   private end(reason: string): void {

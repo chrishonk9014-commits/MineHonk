@@ -43,3 +43,30 @@ describe('relay frames', () => {
     expect(relayFrames([]).length).toBe(0);
   });
 });
+
+describe('payloads', () => {
+  it('deflates what the host sends when it pays, and inflates it back', async () => {
+    const { packPayload, unpackPayload } = await import('../../src/common/net/payload');
+    // Chunk-like data: long runs of the same few values
+    const big = Uint8Array.from({ length: 200_000 }, (_, i) => (i % 4096 < 3000 ? 1 : i & 7));
+    const packed = packPayload(big);
+    expect(packed[0]).toBe(1);
+    expect(packed.length).toBeLessThan(big.length / 4);
+    expect([...unpackPayload(packed, true)!]).toEqual([...big]);
+    // Small batches go as they are
+    const small = bytes(100);
+    expect(packPayload(small)[0]).toBe(0);
+    expect([...unpackPayload(packPayload(small), true)!]).toEqual([...small]);
+  });
+
+  it('never inflates what a player sends, and refuses bombs', async () => {
+    const { packPayload, unpackPayload } = await import('../../src/common/net/payload');
+    const zeros = new Uint8Array(4_000_000);
+    const packed = packPayload(zeros);
+    expect(unpackPayload(packed, false)).toBeNull();
+    expect(unpackPayload(packed, true, 1_000_000)).toBeNull();
+    expect(unpackPayload(packed, true)?.length).toBe(zeros.length);
+    expect(unpackPayload(Uint8Array.of(9, 1, 2), true)).toBeNull();
+    expect(unpackPayload(Uint8Array.of(1, 255, 255, 255), true)).toBeNull();
+  });
+});

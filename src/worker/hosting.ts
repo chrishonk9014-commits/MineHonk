@@ -13,6 +13,7 @@ import type { C2S, S2C } from '../common/net/protocol';
 import { PROTOCOL_VERSION } from '../common/net/protocol';
 import { registryHash } from '../common/registry/hash';
 import { PieceJoiner, toPieces, type HostSettingsPush } from '../common/net/hubProtocol';
+import { packPayload, unpackPayload } from '../common/net/payload';
 import { importVerifyKey, verifyTicket, type TicketClaims } from '../hub/tickets';
 import { roleIn } from '../hub/worlds';
 import type { WorldEntry } from '../hub/store';
@@ -102,7 +103,7 @@ class RemoteConn implements Connection {
     this.queue = [];
     let pieces: Uint8Array[];
     try {
-      pieces = toPieces(encode(batch));
+      pieces = toPieces(packPayload(encode(batch)));
     } catch (e) {
       // Never let one bad message take the world down for everyone: this player
       // reconnects instead of playing on with a gap in what they were sent
@@ -238,7 +239,10 @@ export class BrowserHost {
     if (!payload) return;
     let msg: unknown;
     try {
-      msg = decode(payload);
+      // Players send batches as they are: the host never inflates their data
+      const body = unpackPayload(payload, false);
+      if (!body) return this.kick(r, 'Bad packet');
+      msg = decode(body);
     } catch {
       return this.kick(r, 'Bad packet');
     }

@@ -11,6 +11,7 @@ import { BrowserHost, type HostOut } from '../../src/worker/hosting';
 import { generateTicketKeys, importSigningKey, signTicket, type TicketClaims } from '../../src/hub/tickets';
 import { toPieces, PieceJoiner } from '../../src/common/net/hubProtocol';
 import { fromB64url, toB64url } from '../../src/hub/crypto';
+import { packPayload, unpackPayload } from '../../src/common/net/payload';
 import type { GameServer } from '../../src/server/GameServer';
 import type { S2C } from '../../src/common/net/protocol';
 
@@ -48,7 +49,7 @@ function onPost(m: HostOut): void {
     for (const p of m.pieces) {
       const whole = r.joiner.push(p);
       if (!whole) continue;
-      for (const msg of decode(whole) as S2C[]) {
+      for (const msg of decode(unpackPayload(whole, true)!) as S2C[]) {
         r.msgs.push(msg);
         if (msg.t === 'kick') r.kicked ??= msg.reason;
       }
@@ -65,13 +66,13 @@ async function remoteJoin(t: string, h = hello()): Promise<Remote> {
   const r = { cid, msgs: [] as S2C[], kicked: null as string | null, joiner: new PieceJoiner() };
   remotes.set(cid, r);
   host.open(cid, 'test');
-  for (const p of toPieces(encode({ t: 'join', ticket: t, hello: h }))) host.data(cid, p);
+  for (const p of toPieces(packPayload(encode({ t: 'join', ticket: t, hello: h }), false))) host.data(cid, p);
   await settle();
   return r;
 }
 
 function sendAs(r: Remote, msgs: unknown[]): void {
-  for (const p of toPieces(encode(msgs))) host.data(r.cid, p);
+  for (const p of toPieces(packPayload(encode(msgs), false))) host.data(r.cid, p);
 }
 
 beforeEach(async () => {
@@ -119,7 +120,7 @@ describe('a world hosted in the browser', () => {
     const cid = nextCid++;
     remotes.set(cid, { cid, msgs: [], kicked: null, joiner: new PieceJoiner() });
     host.open(cid, 'test');
-    for (const p of toPieces(encode([{ t: 'chat', text: 'hi' }]))) host.data(cid, p);
+    for (const p of toPieces(packPayload(encode([{ t: 'chat', text: 'hi' }]), false))) host.data(cid, p);
     await settle();
     expect(remotes.get(cid)!.kicked).toBe('Expected a join ticket');
     expect(server.players.size).toBe(1);

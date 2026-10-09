@@ -346,18 +346,25 @@ if (section('core')) {
   check(`the joiner breaks a block and the host sees it go (state ${before})`, before !== 0 && broken);
   const hasItem = () => joiner.page.evaluate(() => window.minehonk.game.invSlots.some((s) => s && s.count > 0));
   let picked = await until(hasItem, 3000);
-  // Standing on the edge of the hole: step towards the drop, as a player would
-  for (let i = 0; i < 4 && !picked; i++) {
-    await joiner.page.evaluate(() => {
-      const g = window.minehonk.game;
-      const b = g.player.body;
-      const item = [...g.entities.values()].filter((e) => e.type === 'item').sort((a, c) => Math.hypot(a.x - b.x, a.z - b.z) - Math.hypot(c.x - b.x, c.z - b.z))[0];
-      if (item) g.player.yaw = Math.atan2(-(item.x - b.x), -(item.z - b.z));
-    });
+  // Standing at the edge of the hole: walk onto the drop, as a player would
+  if (!picked) {
     await joiner.page.keyboard.down('KeyW');
-    await wait(250);
+    const t0 = Date.now();
+    while (!picked && Date.now() - t0 < 10000) {
+      const d = await joiner.page.evaluate(() => {
+        const g = window.minehonk.game;
+        const b = g.player.body;
+        const item = [...g.entities.values()].filter((e) => e.type === 'item').sort((a, c) => Math.hypot(a.x - b.x, a.z - b.z) - Math.hypot(c.x - b.x, c.z - b.z))[0];
+        if (!item) return -1;
+        g.player.yaw = Math.atan2(-(item.x - b.x), -(item.z - b.z));
+        return Math.hypot(item.x - b.x, item.z - b.z);
+      });
+      // Close enough: stop and let it come (pickup reaches about a block around the player)
+      if (d >= 0 && d < 0.6) await joiner.page.keyboard.up('KeyW');
+      picked = await until(hasItem, 120, 40);
+    }
     await joiner.page.keyboard.up('KeyW');
-    picked = await until(hasItem, 2000);
+    picked = picked || (await until(hasItem, 2000));
   }
   if (!picked) console.log('pickup debug', JSON.stringify(await joiner.page.evaluate(() => { const g = window.minehonk.game; const b = g.player.body; return { body: [b.x, b.y, b.z, b.onGround], items: [...g.entities.values()].filter((e) => e.type === 'item').map((e) => [e.x, e.y, e.z]), gm: g.player.gamemode }; })));
   check('the joiner picks up what dropped', picked);

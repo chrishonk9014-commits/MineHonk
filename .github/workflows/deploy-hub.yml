@@ -67,6 +67,16 @@ jobs:
 
       - uses: actions/checkout@v4
 
+      # ---------------------------------------------------------------- the account
+      - name: Check the Cloudflare token
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          wranglerVersion: ${{ env.WRANGLER_VERSION }}
+          workingDirectory: hub
+          command: whoami
+
       # ---------------------------------------------------------------- the database
       - name: Look for the hub database
         id: list
@@ -76,7 +86,6 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           wranglerVersion: ${{ env.WRANGLER_VERSION }}
           workingDirectory: hub
-          quiet: true
           command: d1 list --json
 
       - name: Is it there?
@@ -112,7 +121,6 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           wranglerVersion: ${{ env.WRANGLER_VERSION }}
           workingDirectory: hub
-          quiet: true
           command: d1 list --json
 
       - name: Point the hub at its database

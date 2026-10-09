@@ -100,7 +100,23 @@ async function openPage(p) {
   });
   await page.goto(`${WEB}/${p.opts.query ?? ''}`);
   await page.getByText('Multiplayer', { exact: true }).waitFor({ timeout: 60000 });
-  await page.evaluate(() => (window.minehonk.settings.renderDistance = 4));
+  await page.evaluate(() => {
+    window.minehonk.settings.renderDistance = 4;
+    // Five software-rendered browsers share a few cores: draw less often (the game still ticks 20 times a second)
+    window.minehonk.settings.maxFps = 10;
+    // Counts what each game receives, by message type (shown when something hangs)
+    const app = window.minehonk;
+    const start = app.startGame.bind(app);
+    window.__msgCounts = {};
+    app.startGame = (conn) => {
+      start(conn);
+      const h = conn.onMessage;
+      conn.onMessage = (m) => {
+        window.__msgCounts[m.t] = (window.__msgCounts[m.t] ?? 0) + 1;
+        h(m);
+      };
+    };
+  });
   p.page = page;
 }
 
@@ -168,7 +184,7 @@ const inGame = async (p, ms = 120000) => {
   try {
     await p.page.waitForFunction(() => window.minehonk.game?.joined && !document.querySelector('.loading:not(.hidden)'), null, { timeout: ms });
   } catch (e) {
-    console.log(`[${p.name} state]`, await p.page.evaluate(() => ({ status: [...document.querySelectorAll('.status-line')].map((x) => x.textContent).join(' | '), loading: document.querySelector('.loading')?.innerText, screens: [...document.querySelectorAll('.screens > .screen:not(.hidden)')].map((x) => x.innerText.slice(0, 200)), transport: window.minehonk.conn?.transport, joined: window.minehonk.game?.joined, stats: window.minehonk.conn?.stats })));
+    console.log(`[${p.name} state]`, await p.page.evaluate(() => ({ status: [...document.querySelectorAll('.status-line')].map((x) => x.textContent).join(' | '), loading: document.querySelector('.loading')?.innerText, screens: [...document.querySelectorAll('.screens > .screen:not(.hidden)')].map((x) => x.innerText.slice(0, 200)), transport: window.minehonk.conn?.transport, joined: window.minehonk.game?.joined, stats: window.minehonk.conn?.stats, counts: window.__msgCounts, pos: window.minehonk.game && [window.minehonk.game.player.body.x, window.minehonk.game.player.body.y, window.minehonk.game.player.body.z], frozen: window.minehonk.game?.player.frozen, chunks: window.minehonk.game?.world.chunks?.size, renderDistance: window.minehonk.settings.renderDistance })));
     throw e;
   }
 };
@@ -639,6 +655,7 @@ if (section('mobile') && farm) {
   await joinByCode(phone, farm.code);
   await inGame(phone);
   check('a phone joins and plays', (await playerNames(phone)).includes('Hosty') && (await phone.page.locator('.touch-layer:not(.hidden)').count()) > 0);
+  console.log('phone download', JSON.stringify(await phone.page.evaluate(() => ({ transport: window.minehonk.conn.transport, kb: Math.round(window.minehonk.conn.stats.bytesIn / 1024), counts: window.__msgCounts }))));
   const overflow = await phone.page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
   check('nothing spills sideways on the phone', !overflow);
   await phone.page.screenshot({ path: `${OUT}/online-phone.png` });

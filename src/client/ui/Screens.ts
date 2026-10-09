@@ -12,6 +12,7 @@ import { itemById } from '../../common/registry/items';
 import type { ItemIcons } from '../render/ItemIcons';
 import { LIMITS } from '../../common/net/protocol';
 import { updateLogScreen } from './UpdateLogScreen';
+import { undoCount, undoAutoOptimize } from '../game/AutoOptimizer';
 
 export interface Screen {
   root: HTMLElement;
@@ -400,7 +401,20 @@ function videoScreen(host: ScreenHost, inGame: boolean): Screen {
     el('div', { class: 'row' }, cycle((v: boolean) => `Smooth Lighting: ${onOff(v)}`, [true, false], s.smoothLighting, (v) => ((s.smoothLighting = v), change(true))), cycle((v: boolean) => `Leaves: ${v ? 'Fancy' : 'Fast'}`, [true, false], s.fancyLeaves, (v) => ((s.fancyLeaves = v), change(true)))),
     el('div', { class: 'row' }, cycle((v: boolean) => `Clouds: ${onOff(v)}`, [true, false], s.clouds, (v) => ((s.clouds = v), change())), cycle((v: boolean) => `View Bobbing: ${onOff(v)}`, [true, false], s.viewBobbing, (v) => ((s.viewBobbing = v), change()))),
     el('div', { class: 'row' }, slider((v) => `Max Framerate: ${v === 0 ? 'Unlimited' : v + ' fps'}`, s.maxFps, 0, 240, 10, (v) => ((s.maxFps = v), change())), slider((v) => `Resolution: ${Math.round(v * 100)}%`, s.resolutionScale, 0.25, 1, 0.05, (v) => ((s.resolutionScale = v), change()))),
-    el('div', { class: 'row' }, cycle((v: boolean) => `Show FPS: ${onOff(v)}`, [false, true], s.showFps, (v) => ((s.showFps = v), change()))),
+    el('div', { class: 'row' }, cycle((v: boolean) => `Show FPS: ${onOff(v)}`, [false, true], s.showFps, (v) => ((s.showFps = v), change())), cycle((v: boolean) => `Auto Optimize: ${onOff(v)}`, [true, false], s.autoOptimize, (v) => ((s.autoOptimize = v), change()))),
+    el('div', { class: 'label auto-opt-help' }, 'Auto Optimize lowers settings by itself when the game lags badly.'),
+    ...(undoCount(s)
+      ? [
+          button(
+            `Undo Auto Optimize (${undoCount(s)} setting${undoCount(s) > 1 ? 's' : ''})`,
+            wrapClick(host, () => {
+              change(undoAutoOptimize(s));
+              host.replace(videoScreen(host, inGame));
+            }),
+            'btn wide auto-opt-undo',
+          ),
+        ]
+      : []),
     el('div', { class: 'label', style: { marginTop: 'calc(var(--s) * 4)' } }, 'Render distance presets'),
     el(
       'div',

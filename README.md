@@ -84,6 +84,10 @@ also connect their platform's moderation service through
 - **Inventory** E, **drop** Q, **swap hands** F, **chat** T, **commands** /
 - **Player list** Tab, **achievements** L, **debug info** F3, **camera** F5, **hide HUD** F1, **screenshot** F2
 - **Admin Panel** F8 (worlds with cheats on, owner and operators only)
+- **Auto Optimize**: when the game lags badly for a few seconds (under 20
+  frames a second, or stuttering), it lowers one setting at a time, least
+  noticeable first, and says what it changed. Options > Video Settings can
+  undo it all or switch it off.
 - Gamepads are supported. Every key can be rebound under Options → Controls.
 
 ### Game modes

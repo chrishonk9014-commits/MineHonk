@@ -17,7 +17,8 @@ import { Chat } from '../ui/Chat';
 import { InventoryScreen, type WindowState } from '../ui/InventoryScreen';
 import { SignEditor, PlayerList } from '../ui/Overlays';
 import type { Input } from '../input/Input';
-import type { Settings } from '../settings';
+import { saveSettings, type Settings } from '../settings';
+import { AutoOptimizer, type Optimization } from './AutoOptimizer';
 import type { AudioEngine } from '../audio/Audio';
 import { MusicPlayer, discTitle } from '../audio/Audio';
 import { type Slot, type ItemStack, maxDurability } from '../../common/game/itemstack';
@@ -158,6 +159,8 @@ export class Game {
   private thirdPerson: 0 | 1 | 2 = 0;
   private hudHidden = false;
   private flash = 0;
+  /** Lowers performance settings when the game lags badly (off in automated browsers unless ?autoopt). */
+  readonly autoOptimizer: AutoOptimizer;
   /** Account or profile name used for this player's look. */
   private playerName: string | null = null;
   /** Portal swirl strength 0..1 while standing in a portal, and its colour. */
@@ -209,6 +212,7 @@ export class Game {
     readonly host: GameHost,
   ) {
     this.player = new LocalPlayer(this.world);
+    this.autoOptimizer = new AutoOptimizer(settings, !(typeof navigator !== 'undefined' && navigator.webdriver && !/[?&]autoopt\b/.test(location.search)));
     setUnlockedRecipes([]);
     this.player.vehiclePos = () => {
       const v = this.player.vehicle;
@@ -635,7 +639,10 @@ export class Game {
           b.vx = vx;
           b.vy = vy;
           b.vz = vz;
-        } else this.player.setPos(m.x, m.y, m.z);
+        } else {
+          this.player.setPos(m.x, m.y, m.z);
+          this.autoOptimizer.hold(performance.now(), 6000);
+        }
         if (m.yaw !== undefined) this.player.yaw = m.yaw;
         if (m.pitch !== undefined) this.player.pitch = m.pitch;
         this.player.seq = m.seq;
@@ -914,6 +921,8 @@ export class Game {
     this.touchClose.classList.toggle('hidden', !(this.input.touchMode && (!!this.screen || this.chat.open)));
     this.look(dt);
     this.render(this.acc / 50, dt);
+    const opt = this.autoOptimizer.frame(now, this.joined && !this.paused && !this.loadingTerrain && !this.player.frozen && !this.host.screenOpen && document.visibilityState === 'visible');
+    if (opt) this.onAutoOptimized(opt);
     this.frames++;
     if (now - this.fpsTime >= 1000) {
       this.fps = Math.round((this.frames * 1000) / (now - this.fpsTime));
@@ -1154,6 +1163,8 @@ export class Game {
       this.loadingTerrain = false;
       this.host.setLoading(null);
       this.resume();
+      // The first seconds in a world mesh many chunks at once: not lag
+      this.autoOptimizer.hold(performance.now(), 8000);
     }
   }
 
@@ -2107,7 +2118,16 @@ export class Game {
     this.conn.onClose = () => {};
   }
 
+  /** Auto Optimize lowered a setting: apply and save it, and say what changed and how to undo it. */
+  private onAutoOptimized(o: Optimization): void {
+    saveSettings(this.settings);
+    this.applySettings(o.rebuild);
+    this.hud.toast('Lag detected', o.text);
+    this.chat.add(`Auto Optimize: the game was running at ${o.fps} fps, so it lowered ${o.text}.${o.last ? ' That is as low as it goes.' : ''} To undo it or turn it off: Options > Video Settings.`, 'system');
+  }
+
   applySettings(rebuildChunks = false): void {
+    this.autoOptimizer.hold(performance.now(), rebuildChunks ? 8000 : 4000);
     this.renderer.resize();
     if (rebuildChunks) this.renderer.chunks.rebuildAll();
     this.audio.applyVolumes();

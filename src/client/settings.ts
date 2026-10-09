@@ -42,6 +42,10 @@ export interface Settings {
   showFps: boolean;
   resolutionScale: number;
   maxFps: number;
+  /** Lower performance settings by itself when the game lags badly (src/client/game/AutoOptimizer.ts). */
+  autoOptimize: boolean;
+  /** What Auto Optimize lowered, as it was before: Video Settings can put it back. */
+  autoOptimizeUndo: Partial<Pick<Settings, 'particles' | 'clouds' | 'resolutionScale' | 'renderDistance' | 'smoothLighting' | 'fancyLeaves'>> | null;
   highContrast: boolean;
   reduceMotion: boolean;
   subtitles: boolean;
@@ -102,6 +106,8 @@ export const DEFAULT_SETTINGS: Settings = {
   showFps: false,
   resolutionScale: 1,
   maxFps: 0,
+  autoOptimize: true,
+  autoOptimizeUndo: null,
   highContrast: false,
   reduceMotion: false,
   subtitles: false,

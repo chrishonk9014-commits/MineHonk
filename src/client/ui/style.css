@@ -3457,3 +3457,7 @@ body {
     aspect-ratio: 16 / 5;
   }
 }
+.label.auto-opt-help {
+  max-width: calc(var(--s) * 200);
+  text-align: center;
+}

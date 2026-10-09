@@ -716,6 +716,16 @@ export const V6_LOG: UpdateEntry = {
           text: 'A new **End Expansion** tab covers everything in V6: the portal, biomes, mobs, kits, structures, the Nest, quests, storms and eclipses, the Citadel, the Guardian and each of the Dragon\'s new moves. The **Teleport** tab can also find and take you to any Expanded End biome or structure from anywhere. Like every cheat, none of it earns advancements.',
         },
         { k: 'img', img: 'admin-teleport-end', caption: "The Teleport tab's End lists, with the Expanded End." },
+        { k: 'h', text: 'Auto Optimize' },
+        {
+          k: 'p',
+          text: 'If the game lags badly for a few seconds in a row (under 20 frames a second, or stuttering), it lowers one setting at a time, the least noticeable first: particles, clouds, resolution, render distance, then smooth lighting and fancy leaves. A message says what changed. Menus, loading screens and the first seconds after a teleport never count.',
+        },
+        {
+          k: 'example',
+          title: 'Getting your settings back',
+          text: 'Open **Options > Video Settings** and press **Undo Auto Optimize** to put back everything it lowered. The **Auto Optimize** button there switches it off.',
+        },
         { k: 'h', text: 'Fixes' },
         {
           k: 'list',

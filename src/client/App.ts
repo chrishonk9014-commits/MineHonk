@@ -508,6 +508,15 @@ export class App implements GameHost, S.ScreenHost {
     const hello = { t: 'hello' as const, version: PROTOCOL_VERSION, name: api.account?.name ?? this.profile.name, viewDistance: this.settings.renderDistance, registryHash: registryHash() };
     const forceRelay = new URLSearchParams(location.search).has('relay');
     const conn = new RemoteConnection(api, lobby, t, hello, { forceRelay });
+    // Connect first, then build the game: setting up the renderer on a slow
+    // device must not hold up the connection (what arrives meanwhile is kept)
+    try {
+      await conn.ready;
+    } catch (e) {
+      this.setLoading(null);
+      this.push(S.messageScreen(this, 'Multiplayer', (e as Error).message));
+      return;
+    }
     this.conn = conn;
     this.worldId = null;
     this.quitting = false;

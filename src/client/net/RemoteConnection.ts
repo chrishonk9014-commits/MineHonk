@@ -25,8 +25,13 @@ const hasTurn = (servers: RTCIceServer[]): boolean => servers.some((s) => [s.url
 
 export class RemoteConnection implements ClientConnection {
   readonly local = false;
-  onMessage: (msg: S2C) => void = () => {};
   onClose: (reason: string) => void = () => {};
+  /** Settles once a transport is open (or with the reason it could not be). */
+  readonly ready: Promise<void>;
+  private settle!: { ok: () => void; fail: (e: Error) => void };
+  private handler: ((msg: S2C) => void) | null = null;
+  /** What arrives before the game is listening (it is built once connected). */
+  private early: S2C[] = [];
   /** How this connection ended up travelling. */
   transport: 'rtc' | 'relay' | null = null;
   private queue: C2S[] = [];
@@ -47,7 +52,33 @@ export class RemoteConnection implements ClientConnection {
     private readonly hello: C2S & { t: 'hello' },
     private readonly opts: RemoteOptions = {},
   ) {
+    this.ready = new Promise((ok, fail) => (this.settle = { ok, fail }));
+    // Nobody may be waiting yet; the reason also reaches onClose
+    this.ready.catch(() => {});
     void this.connect();
+  }
+
+  get onMessage(): (msg: S2C) => void {
+    return this.handler ?? (() => {});
+  }
+
+  set onMessage(fn: (msg: S2C) => void) {
+    this.handler = fn;
+    if (!this.early.length) return;
+    // Hand over what came first, once whoever is attaching has finished
+    queueMicrotask(() => {
+      const early = this.early;
+      this.early = [];
+      for (const m of early) {
+        if (this.ended) return;
+        this.handler?.(m);
+      }
+    });
+  }
+
+  private deliver(m: S2C): void {
+    if (this.handler && !this.early.length) this.handler(m);
+    else this.early.push(m);
   }
 
   private async connect(): Promise<void> {
@@ -192,6 +223,7 @@ export class RemoteConnection implements ClientConnection {
   private sendJoin(): void {
     this.write(encode({ t: 'join', ticket: this.t.ticket, hello: this.hello }));
     this.flush();
+    this.settle.ok();
   }
 
   private write(payload: Uint8Array): void {
@@ -220,7 +252,7 @@ export class RemoteConnection implements ClientConnection {
     if (!Array.isArray(batch)) return;
     for (const m of batch) {
       if (this.ended) return;
-      this.onMessage(m as S2C);
+      this.deliver(m as S2C);
     }
   }
 
@@ -245,6 +277,7 @@ export class RemoteConnection implements ClientConnection {
   private end(reason: string): void {
     if (this.ended) return;
     this.ended = true;
+    this.settle.fail(new Error(reason));
     this.cleanup();
     if (!this.closedByUs) this.onClose(reason);
   }

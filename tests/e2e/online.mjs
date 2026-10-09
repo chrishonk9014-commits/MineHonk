@@ -483,7 +483,9 @@ if (section('core')) {
         const x = Math.floor(b.x) + dx;
         const z = Math.floor(b.z) + dz;
         const y = fy + dy;
-        if (g.world.getState(x, y, z) !== 0 && g.world.getState(x, y + 1, z) === 0 && g.world.getState(x, y + 2, z) === 0) {
+        // Not where the joiner is standing (the server never places a block inside a player)
+        const touches = x + 1 > b.x - 0.35 && x < b.x + 0.35 && z + 1 > b.z - 0.35 && z < b.z + 0.35;
+        if (!touches && g.world.getState(x, y, z) !== 0 && g.world.getState(x, y + 1, z) === 0 && g.world.getState(x, y + 2, z) === 0) {
           g.send({ t: 'use_on', x, y, z, face: 1, hx: 0.5, hy: 1, hz: 0.5, hand: 0, yaw: g.player.yaw, pitch: g.player.pitch, seq: 1 });
           // On top, or in place of a replaceable block (snow, grass) that was clicked
           return { x, y: y + 1, z, base: y };

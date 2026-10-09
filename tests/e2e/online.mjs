@@ -207,6 +207,12 @@ async function toOnline(p) {
 
 /** Pause menu > Hosting... */
 async function openPanel(p) {
+  await p.page.evaluate(() => {
+    const app = window.minehonk;
+    if (app.game?.player.dead) app.game.respawn();
+    app.closeScreens();
+  });
+  await p.page.waitForTimeout(300);
   await p.page.evaluate(() => window.minehonk.openPause());
   await click(p, 'Hosting...');
   await top(p).locator('.join-code').waitFor({ timeout: 10000 });
@@ -423,12 +429,14 @@ if (section('core')) {
     const b = g.player.body;
     const fy = Math.round(b.y);
     // On top of a neighbouring block at foot or head height, with room above it (a face the player can see)
-    for (const dy of [-1, 0])
-      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+    const near = [];
+    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1], [2, 0], [-2, 0], [0, 2], [0, -2]]) near.push([dx, dz]);
+    for (const dy of [-1, 0, -2, 1])
+      for (const [dx, dz] of near) {
         const x = Math.floor(b.x) + dx;
         const z = Math.floor(b.z) + dz;
         const y = fy + dy;
-        if (g.world.getState(x, y, z) !== 0 && g.world.getState(x, y + 1, z) === 0) {
+        if (g.world.getState(x, y, z) !== 0 && g.world.getState(x, y + 1, z) === 0 && g.world.getState(x, y + 2, z) === 0) {
           g.send({ t: 'use_on', x, y, z, face: 1, hx: 0.5, hy: 1, hz: 0.5, hand: 0, yaw: g.player.yaw, pitch: g.player.pitch, seq: 1 });
           return { x, y: y + 1, z };
         }
@@ -436,6 +444,15 @@ if (section('core')) {
     return null;
   });
   const placed = placeAt && (await until(async () => (await stateAt(hostOf, placeAt)) !== 0, 8000));
+  if (!placed)
+    console.log('place debug', JSON.stringify(await joiner.page.evaluate(() => {
+      const g = window.minehonk.game;
+      const b = g.player.body;
+      const x0 = Math.floor(b.x), y0 = Math.round(b.y), z0 = Math.floor(b.z);
+      const rows = [];
+      for (let dy = -2; dy <= 2; dy++) for (let dz = -1; dz <= 1; dz++) rows.push(`${dy},${dz}: ` + [-1, 0, 1].map((dx) => g.world.getState(x0 + dx, y0 + dy, z0 + dz)).join(' '));
+      return { body: [b.x, b.y, b.z, b.onGround, b.inWater], held: g.held(), rows };
+    })));
   check('the joiner places a block and the host sees it', placed, JSON.stringify(placeAt));
   await changeHosting(hostOf, { cheats: false });
   await until(() => joiner.page.evaluate(() => !window.minehonk.game.worldInfo?.cheats), 10000);
@@ -492,6 +509,8 @@ if (section('friends')) {
   const friendsNow = await joiner.page.evaluate(() => window.minehonk.cloudApi.friends()).then((f) => f.friends.map((x) => x.name));
   check('two players become friends (request, accept)', friendsNow.includes('Hosty'), JSON.stringify(friendsNow));
   farm = await hostNew(hostOf, 'Friendly Farm', { visibility: 'Friends', cheats: true });
+  // The host stays safe while the tests click through menus
+  await adminAs(hostOf, { a: 'gamemode', mode: 'creative' });
   // The friend's list shows where they are, and JOIN (no code)
   const joinRow = await until(async () => {
     await tabTo(joiner, 'friends');

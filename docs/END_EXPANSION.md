@@ -200,6 +200,15 @@ These are the `V6_OPS` in `src/common/game/admin.ts`, checked by `validateAdmin`
 
 Every op is a cheat. None of them awards an advancement.
 
+### The Teleport tab
+
+The Teleport tab's End lists hold the Expanded End as well (`AdminService.catalog` and `expansionSearch`), in worlds that have it:
+
+- **Biomes:** the seven Expanded End biomes, named with "(Expanded End)" (its End Highlands is not the main End's).
+- **Structures:** the End City 2.0 variants and the giant structures (worlds with Expanded End structures), marked the same way, the Void Citadel (its entrance) and the Dragon's Nest (its floor once carved, otherwise where its entrance will be).
+
+Find nearest and Teleport search from the player when they are in the Expanded End, otherwise from the arrival platform (as `tp_biome` and `tp_structure` above), so they work from any dimension. Teleports are cheat arrivals like every other Admin Panel teleport. Worlds made before V6 list none of the Expanded End's biomes and structures.
+
 ## Tests (phase 1)
 
 - **`tests/unit/v6-regression.test.ts`:** the classic End is byte-identical (generators 1 to 8), older worlds keep their outer islands, V6 worlds have the approach gap, and generators 6 to 8 leave the other dimensions alone.

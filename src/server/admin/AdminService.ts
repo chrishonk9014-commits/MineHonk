@@ -14,13 +14,16 @@
  * of events started by a cheat stays advancement-neutral. Normal play is
  * untouched.
  */
-import { EXPANSION_BIOME_IDS } from '../../common/endExpansion/biomes';
+import { EXPANSION_BIOME_IDS, expansionBiomeIndex } from '../../common/endExpansion/biomes';
+import { EXPANSION_STRUCTURE_IDS } from '../../common/endExpansion/structures';
+import { inExpansion } from '../../common/endExpansion/region';
+import type { EndGenerator } from '../../common/gen/end';
 import type { GameServer } from '../GameServer';
 import type { ServerPlayer } from '../player/ServerPlayer';
 import type { Dimension } from '../world/Dimension';
 import type { Entity } from '../entity/Entity';
 import { Mob } from '../entity/Mob';
-import { validateAdmin, describeAdmin, xpForLevel, structureName, ADMIN_DIMENSIONS, type AdminAction, type AdminCatalog, type LocateResult, type V4Op } from '../../common/game/admin';
+import { validateAdmin, describeAdmin, xpForLevel, structureName, ADMIN_DIMENSIONS, EXPANDED_END_SUFFIX, type AdminAction, type AdminCatalog, type LocateResult, type V4Op } from '../../common/game/admin';
 import { GlitchedQuestSystem } from '../systems/GlitchedQuest';
 import { StructureQuests } from '../systems/StructureQuests';
 import { TempleTrials } from '../systems/TempleTrials';
@@ -58,6 +61,10 @@ interface Search {
   teleport: boolean;
   steps: Generator<void, { x: number; y: number; z: number } | null>;
   started: number;
+  /** What the replies call it, when not the plain structure or biome name. */
+  label?: string;
+  /** Land on the surface around the spot rather than near the spot itself. */
+  surface?: boolean;
 }
 
 interface PendingTp {
@@ -798,6 +805,15 @@ export class AdminService {
     const oz = p.dim === dim ? p.z : p.z * scale;
     let steps: Search['steps'];
     let id: string;
+    if (a.dim === 'end') {
+      const ex = this.expansionSearch(p, a);
+      if (ex && 'text' in ex) return ex;
+      if (ex) {
+        const structure = a.a === 'locate_structure' || a.a === 'tp_structure';
+        this.searches.push({ p, req, kind: structure ? 'structure' : 'biome', dim: 'end', id: structure ? a.structure : a.biome, teleport: a.a.startsWith('tp_'), started: this.server.tickNo, ...ex });
+        return null;
+      }
+    }
     if (a.a === 'locate_structure' || a.a === 'tp_structure') {
       id = a.structure;
       const g = dim.generator;
@@ -818,6 +834,54 @@ export class AdminService {
     }
     this.searches.push({ p, req, kind: a.a.includes('structure') ? 'structure' : 'biome', dim: a.dim, id, teleport: a.a.startsWith('tp_'), steps, started: this.server.tickNo });
     return null; // replied when the search finishes
+  }
+
+  /**
+   * V6: the End Expansion's biomes and structures in the End's Teleport lists.
+   * The Expanded End lies thousands of blocks out, so (as on the End Expansion
+   * tab) it is searched from the player when they are out there, otherwise
+   * from the arrival platform. The Dragon's Nest and the Void Citadel are one
+   * place each. Null for everything else in the End.
+   */
+  private expansionSearch(p: ServerPlayer, a: AdminAction & { a: 'locate_structure' | 'tp_structure' | 'locate_biome' | 'tp_biome' }): Pick<Search, 'steps' | 'label' | 'surface'> | { ok: false; text: string } | null {
+    const s = this.server;
+    const at = (pos: { x: number; y: number; z: number } | null): Search['steps'] =>
+      (function* (): Generator<void, { x: number; y: number; z: number } | null> {
+        return pos;
+      })();
+    const structure = a.a === 'locate_structure' || a.a === 'tp_structure' ? a.structure : null;
+    if (structure === 'dragon_nest') {
+      const es = s.endStructures;
+      if (!es) return { ok: false, text: "The Dragon's Nest is not in this world." };
+      const plan = es.nestPlan();
+      // Before it is carved, the landing is where its entrance will be
+      if (es.nest?.built) return { steps: at({ x: plan.floor[0], y: plan.floor[1], z: plan.floor[2] }) };
+      return { steps: at({ x: plan.entrance[0], y: plan.entrance[1], z: plan.entrance[2] }), label: "Dragon's Nest entrance (not carved yet)", surface: true };
+    }
+    if (structure === 'void_citadel') {
+      const spot = s.citadel?.plan ? s.citadel.spotOf('entrance') : null;
+      if (!spot) return { ok: false, text: 'The Void Citadel has no site yet (it is chosen when the End is first loaded).' };
+      return { steps: at({ x: spot[0], y: spot[1], z: spot[2] }), label: "the Void Citadel's entrance" };
+    }
+    const biomeId = a.a === 'locate_biome' || a.a === 'tp_biome' ? a.biome : null;
+    const biome = biomeId === null ? -1 : expansionBiomeIndex(biomeId);
+    if (biome < 0 && (structure === null || !EXPANSION_STRUCTURE_IDS.includes(structure))) return null;
+    const gen = s.dim('end').generator as EndGenerator;
+    if (!gen.terrain.expanded) return { ok: false, text: 'This world was made before the End Expansion, so its End has no Expanded End.' };
+    if (structure !== null && !gen.expansionStructures) return { ok: false, text: 'This world was made before the Expanded End had structures (only newly made worlds have them).' };
+    const ex = gen.terrain.expansion;
+    const arrival = ex.arrival();
+    const from = p.dim.id === 'end' && inExpansion(p.x, p.z) ? { x: Math.floor(p.x), z: Math.floor(p.z) } : { x: arrival.x, z: arrival.z };
+    if (structure !== null) {
+      return {
+        steps: (function* (): Generator<void, { x: number; y: number; z: number } | null> {
+          const st = yield* gen.expansionSteps(structure, from.x, from.z);
+          return st ? { x: st.x, y: st.y + 1, z: st.z } : null;
+        })(),
+      };
+    }
+    const name = biomes.find((b) => b.id === biomeId)?.name ?? 'biome';
+    return { steps: at(ex.findBiome(biome, from.x, from.z)), label: `${name}${EXPANDED_END_SUFFIX}` };
   }
 
   // ------------------------------------------------------------------ tick
@@ -858,7 +922,7 @@ export class AdminService {
 
   private finishSearch(q: Search, pos: { x: number; y: number; z: number } | null): void {
     const p = q.p;
-    const label = q.kind === 'structure' ? structureName(q.id) : q.kind === 'cave' ? caveFeatureName(q.id) : biomes.find((b) => b.id === q.id)?.name ?? q.id;
+    const label = q.label ?? (q.kind === 'structure' ? structureName(q.id) : q.kind === 'cave' ? caveFeatureName(q.id) : biomes.find((b) => b.id === q.id)?.name ?? q.id);
     if (!pos) {
       p.send({ t: 'admin_result', req: q.req, ok: false, text: `No ${label} found within range in the ${q.dim}.` });
       return;
@@ -872,7 +936,7 @@ export class AdminService {
       p.send({ t: 'admin_result', req: q.req, ok: true, text: `Nearest ${label}: ${res.distance} blocks away in the ${q.dim}.`, data: res });
       return;
     }
-    this.pending.push({ p, req: q.req, dim: q.dim, x: pos.x, y: pos.y, z: pos.z, label, surface: q.kind === 'biome', since: this.server.tickNo });
+    this.pending.push({ p, req: q.req, dim: q.dim, x: pos.x, y: pos.y, z: pos.z, label, surface: q.surface ?? q.kind === 'biome', since: this.server.tickNo });
     p.send({ t: 'admin_result', req: q.req, ok: true, text: `Found ${label} ${res.distance} blocks away. Preparing a safe landing...`, data: { ...res, pending: true } });
   }
 
@@ -984,12 +1048,18 @@ export class AdminService {
     const structures: Record<string, string[]> = {};
     const bl: AdminCatalog['biomes'] = {};
     const caves: NonNullable<AdminCatalog['caves']> = {};
+    // V6: the Expanded End's biomes are listed with the End's in worlds that have it
+    const expanded = (s.dim('end').generator as EndGenerator).terrain.expanded;
     for (const d of ADMIN_DIMENSIONS) {
       structures[d] = s.dim(d).generator.structureTypes?.() ?? [];
       if (s.dim(d).generator.caves) caves[d] = caveFeatures();
-      // (the Expanded End's biomes are reached from the End Expansion tab)
-      bl[d] = biomes.filter((b) => b.dimension === d && b.id !== 'error_biome' && !EXPANSION_BIOME_IDS.includes(b.id)).map((b) => ({ id: b.id, name: b.name }));
+      bl[d] = biomes
+        .filter((b) => b.dimension === d && b.id !== 'error_biome' && (expanded || !EXPANSION_BIOME_IDS.includes(b.id)))
+        .map((b) => ({ id: b.id, name: EXPANSION_BIOME_IDS.includes(b.id) ? `${b.name}${EXPANDED_END_SUFFIX}` : b.name }));
     }
+    // ...and its two single places (its other structures come from the generator's list)
+    if (s.endStructures) structures.end!.push('dragon_nest');
+    if (s.citadel && expanded) structures.end!.push('void_citadel');
     return {
       structures,
       biomes: bl,

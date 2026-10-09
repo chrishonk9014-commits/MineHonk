@@ -11,7 +11,7 @@ import type { ItemStack } from '../../common/game/itemstack';
 import { POTIONS } from '../../common/data/potions';
 import { ENCHANTMENTS } from '../../common/data/enchantments';
 import { MOB_DEFS } from '../../common/data/mobs';
-import { structureName, TIME_PRESETS, ADMIN_DIMENSIONS, type AdminAction, type AdminCatalog, type LocateResult, type V4Op, type V5Op, type V55Op, type V6Op } from '../../common/game/admin';
+import { structureName, inExpandedEnd, EXPANDED_END_SUFFIX, TIME_PRESETS, ADMIN_DIMENSIONS, type AdminAction, type AdminCatalog, type LocateResult, type V4Op, type V5Op, type V55Op, type V6Op } from '../../common/game/admin';
 import { EXPANSION_BIOMES } from '../../common/endExpansion/biomes';
 import { END_QUESTS } from '../../common/endExpansion/quests';
 import type { DimensionId } from '../../common/data/biomes';
@@ -333,7 +333,9 @@ export function adminScreen(host: AdminHost): Screen {
     };
     // Structures
     const sBox = resultBox();
-    const structures = (): { value: string; label: string }[] => (catalog?.structures[memory.dim] ?? []).map((id) => ({ value: id, label: structureName(id) })).sort((a, b) => a.label.localeCompare(b.label));
+    // The End's lists: the main End first, then the Expanded End (V6)
+    const byName = (a: { label: string }, b: { label: string }): number => Number(a.label.endsWith(EXPANDED_END_SUFFIX)) - Number(b.label.endsWith(EXPANDED_END_SUFFIX)) || a.label.localeCompare(b.label);
+    const structures = (): { value: string; label: string }[] => (catalog?.structures[memory.dim] ?? []).map((id) => ({ value: id, label: inExpandedEnd(id) ? `${structureName(id)}${EXPANDED_END_SUFFIX}` : structureName(id) })).sort(byName);
     let sSel = select(structures(), memory.structure, (v) => (memory.structure = v));
     const sHolder = el('div', {}, sSel);
     const findS = async (tp: boolean): Promise<void> => {
@@ -352,7 +354,7 @@ export function adminScreen(host: AdminHost): Screen {
     };
     // Biomes
     const bBox = resultBox();
-    const biomesFor = (): { value: string; label: string }[] => (catalog?.biomes[memory.dim] ?? []).map((b) => ({ value: b.id, label: b.name })).sort((a, b) => a.label.localeCompare(b.label));
+    const biomesFor = (): { value: string; label: string }[] => (catalog?.biomes[memory.dim] ?? []).map((b) => ({ value: b.id, label: b.name })).sort(byName);
     let bSel = select(biomesFor(), memory.biome, (v) => (memory.biome = v));
     const bHolder = el('div', {}, bSel);
     const findB = async (tp: boolean): Promise<void> => {

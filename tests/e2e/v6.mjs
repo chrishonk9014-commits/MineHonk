@@ -96,6 +96,34 @@ const look = (yaw, pitch) => page.evaluate(([yaw, pitch]) => {
 }, [yaw, pitch]);
 await cmd('/gamemode creative');
 
+// The Admin Panel's Teleport tab lists the Expanded End with the End's biomes and structures (from the
+// Overworld they are searched from the arrival platform). Found only: a cheat visit would mark the End.
+await page.evaluate(() => window.minehonk.openAdmin());
+await page.locator('.admin-panel').waitFor();
+await page.locator('.admin-tab[data-tab="teleport"]').dispatchEvent('mousedown');
+await page.waitForTimeout(500);
+await page.locator('.admin-col').first().locator('select').first().selectOption('end');
+await page.waitForTimeout(200);
+const tpStructures = page.locator('.admin-col').first();
+const tpBiomes = page.locator('.admin-col').nth(1);
+const endStructures = await tpStructures.locator('select').nth(1).locator('option').allTextContents();
+const endBiomes = await tpBiomes.locator('select').first().locator('option').allTextContents();
+check(`End structures include the Expanded End's (${endStructures.join(', ')})`, ['End City', "Dragon's Nest", 'End Outpost (Expanded End)', 'Crystal Cathedral (Expanded End)', 'The Fallen City (Expanded End)', 'Void Citadel (Expanded End)'].every((n) => endStructures.includes(n)));
+check(`End biomes include the Expanded End's (${endBiomes.join(', ')})`, ['End Highlands', 'Chorus Forest (Expanded End)', 'End Highlands (Expanded End)', 'Void Wastes (Expanded End)'].every((n) => endBiomes.includes(n)));
+await tpStructures.locator('select').nth(1).selectOption('end_outpost');
+await tpStructures.getByRole('button', { name: 'Find nearest' }).click();
+await tpStructures.locator('.admin-result .admin-kv').first().waitFor({ timeout: 60000 });
+const foundOutpost = (await tpStructures.locator('.admin-result').textContent()).replace(/\s+/g, ' ');
+check(`Teleport tab finds an End Outpost: ${foundOutpost}`, /End Outpost/.test(foundOutpost) && /The End/.test(foundOutpost) && /blocks/.test(foundOutpost));
+await tpBiomes.locator('select').first().selectOption('chorus_forest');
+await tpBiomes.getByRole('button', { name: 'Find nearest' }).first().click();
+await tpBiomes.locator('.admin-result .admin-kv').first().waitFor({ timeout: 60000 });
+const foundForest = (await tpBiomes.locator('.admin-result').first().textContent()).replace(/\s+/g, ' ');
+check(`Teleport tab finds a Chorus Forest: ${foundForest}`, /Chorus Forest \(Expanded End\)/.test(foundForest) && /The End/.test(foundForest));
+await page.screenshot({ path: `${OUT}/v6-admin-teleport-end.png` });
+await page.keyboard.press('Escape');
+await page.waitForTimeout(300);
+
 // The main island: the Expansion Portal, dormant
 const tp = await adminTp('tp_portal');
 check('teleported to the Expansion Portal', tp.ok);

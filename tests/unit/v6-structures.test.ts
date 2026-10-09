@@ -39,6 +39,7 @@ import { blocks, STATE_BLOCK, STATE_SOLID, S } from '../../src/common/registry/b
 import { stackOf, isAdminStack } from '../../src/common/game/itemstack';
 import { Mob } from '../../src/server/entity/Mob';
 import { hashChunks } from './v3-regression.test';
+import { structureName, type AdminCatalog, type LocateResult } from '../../src/common/game/admin';
 import { SENTINEL_BOLT_TICKS, SENTINEL_PUNCH_TICKS, BULWARK_POUND_TICKS, TELEGRAPH_TICKS_CROWD } from '../../src/common/endExpansion/combat';
 
 const blockId = (s: number): string => blocks[STATE_BLOCK[s]!]!.id;
@@ -921,6 +922,75 @@ describe('saves, old worlds and the Admin Panel', () => {
     expect(p!.endLore.size).toBe(0);
     expect(p!.endArtifacts.size).toBe(0);
   }, 600000);
+
+  it("the Teleport tab's End lists hold the Expanded End's biomes and places, found from anywhere", async () => {
+    const { server } = await makeServer({ seed: 'v6-structures', cheats: true });
+    const { player: p, conn } = await join(server, 'P0');
+    let req = 2000;
+    type Reply = { ok: boolean; text: string; data?: unknown };
+    const admin = async (action: Record<string, unknown>, done: (m: Reply) => boolean = () => true): Promise<Reply> => {
+      const r = req++;
+      server.handle(conn, { t: 'admin', req: r, action });
+      const got = (): Reply[] => conn.received.filter((m) => m.t === 'admin_result' && (m as { req: number }).req === r) as never;
+      await settle(server, 3000, () => got().some(done));
+      return got().pop() ?? { ok: false, text: 'no reply' };
+    };
+    const cat = (await admin({ a: 'catalog' })).data as AdminCatalog;
+    expect(cat.structures.end).toEqual(expect.arrayContaining(['end_city', 'end_outpost', 'crystal_cathedral', 'fallen_city', 'dragon_nest', 'void_citadel']));
+    expect(cat.biomes.end!.find((b) => b.id === 'chorus_forest')?.name).toBe('Chorus Forest (Expanded End)');
+    expect(cat.biomes.end!.find((b) => b.id === 'highlands')?.name).toBe('End Highlands (Expanded End)');
+    expect(cat.biomes.end!.find((b) => b.id === 'end_highlands')?.name).toBe('End Highlands');
+    expect(structureName('fallen_city')).toBe('The Fallen City');
+    expect(structureName('dragon_nest')).toBe("Dragon's Nest");
+    // From the Overworld they are searched from the arrival platform, thousands of blocks out
+    expect(p.dim.id).toBe('overworld');
+    const outpost = await admin({ a: 'locate_structure', dim: 'end', structure: 'end_outpost' });
+    expect(outpost.ok, outpost.text).toBe(true);
+    const o = outpost.data as LocateResult;
+    expect([o.dim, o.name, inExpansion(o.x, o.z)]).toEqual(['end', 'End Outpost', true]);
+    const biome = await admin({ a: 'locate_biome', dim: 'end', biome: 'highlands' });
+    expect(biome.ok, biome.text).toBe(true);
+    const b = biome.data as LocateResult;
+    expect([b.dim, b.name, inExpansion(b.x, b.z)]).toEqual(['end', 'End Highlands (Expanded End)', true]);
+    const nest = await admin({ a: 'locate_structure', dim: 'end', structure: 'dragon_nest' });
+    expect(nest.ok, nest.text).toBe(true);
+    expect(Math.hypot((nest.data as LocateResult).x, (nest.data as LocateResult).z)).toBeLessThan(200);
+    const citadel = await admin({ a: 'locate_structure', dim: 'end', structure: 'void_citadel' });
+    if (server.citadel?.plan) expect(inExpansion((citadel.data as LocateResult).x, (citadel.data as LocateResult).z)).toBe(true);
+    else expect(citadel.text).toMatch(/no site yet/);
+    // The main End's own biomes are still searched as before
+    expect((await admin({ a: 'locate_biome', dim: 'end', biome: 'end_highlands' })).ok).toBe(true);
+    // Teleporting there from the Overworld: a cheat arrival in the Expanded End
+    const tp = await admin({ a: 'tp_biome', dim: 'end', biome: 'chorus_forest' }, (m) => !m.ok || !!(m.data as { teleported?: boolean } | undefined)?.teleported);
+    expect(tp.ok, tp.text).toBe(true);
+    expect(tp.text).toMatch(/Chorus Forest \(Expanded End\)/);
+    expect([p.dim.id, inExpansion(p.x, p.z)]).toEqual(['end', true]);
+    // Out there, searches start from the player
+    const near = await admin({ a: 'locate_structure', dim: 'end', structure: 'end_outpost' });
+    expect(near.ok, near.text).toBe(true);
+    const g = server.dim('end').generator as EndGenerator;
+    const it2 = g.expansionSteps('end_outpost', Math.floor(p.x), Math.floor(p.z));
+    let r2 = it2.next();
+    while (!r2.done) r2 = it2.next();
+    expect([(near.data as LocateResult).x, (near.data as LocateResult).z]).toEqual([r2.value!.x, r2.value!.z]);
+    expect(p.achievements.size).toBe(0);
+  }, 600000);
+
+  it("worlds made before the End Expansion don't list it in the Teleport tab", async () => {
+    const { server } = await makeServerAt(5, { seed: 'v6-old-5', cheats: true });
+    const { conn } = await join(server, 'P0');
+    server.handle(conn, { t: 'admin', req: 1, action: { a: 'catalog' } });
+    server.handle(conn, { t: 'admin', req: 2, action: { a: 'locate_biome', dim: 'end', biome: 'chorus_forest' } });
+    server.handle(conn, { t: 'admin', req: 3, action: { a: 'locate_structure', dim: 'end', structure: 'end_outpost' } });
+    tick(server, 4);
+    const reply = (r: number): { ok: boolean; text: string; data?: unknown } => conn.received.filter((m) => m.t === 'admin_result' && (m as { req: number }).req === r).pop() as never;
+    const cat = reply(1).data as AdminCatalog;
+    expect(cat.biomes.end!.some((b) => b.id === 'chorus_forest')).toBe(false);
+    expect(cat.structures.end).not.toContain('end_outpost');
+    expect(cat.structures.end).not.toContain('void_citadel');
+    expect(reply(2)).toMatchObject({ ok: false, text: expect.stringMatching(/before the End Expansion/) });
+    expect(reply(3).ok).toBe(false);
+  }, 120000);
 });
 
 void itemById;

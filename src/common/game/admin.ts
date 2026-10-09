@@ -3,7 +3,7 @@
  * strict validation of their arguments. The server re-checks authorisation
  * for every request; the client only uses this to build the panel.
  */
-import { EXPANSION_STRUCTURE_IDS } from '../endExpansion/structures';
+import { EXPANSION_STRUCTURE_IDS, expansionStructureName } from '../endExpansion/structures';
 import type { DimensionId } from '../data/biomes';
 import { GAME_MODES, DIFFICULTIES, type GameMode, type Difficulty } from './gamemode';
 import { EXPANSION_BIOME_IDS } from '../endExpansion/biomes';
@@ -153,7 +153,16 @@ export const CITADEL_SPOTS = ['entrance', '1', '2', '3', '4', '5', '6', 'arena']
 export type V6Op = (typeof V6_OPS)[number];
 
 export function structureName(id: string): string {
+  if (id === 'dragon_nest' || EXPANSION_STRUCTURE_IDS.includes(id)) return expansionStructureName(id);
   return STRUCTURE_NAMES[id] ?? id.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+/** V6: how the Admin Panel's End lists mark the Expanded End's biomes and places. */
+export const EXPANDED_END_SUFFIX = ' (Expanded End)';
+
+/** V6: the places of the Expanded End in the Admin Panel's End structure list. */
+export function inExpandedEnd(structure: string): boolean {
+  return structure === 'void_citadel' || EXPANSION_STRUCTURE_IDS.includes(structure);
 }
 
 export const TIME_PRESETS: Record<string, number> = { sunrise: 23000, day: 1000, noon: 6000, sunset: 12000, night: 13000, midnight: 18000 };

@@ -543,6 +543,10 @@ Citadel and the End Guardian at its bottom. Design notes:
   - give the rare End loot (Guardian Core, Lance, Eclipse Veil, shards, Star
     Chart Pieces, the head).
 
+  The Teleport tab's End lists hold them too: every Expanded End biome and
+  structure (marked "(Expanded End)"), the Dragon's Nest and the Void
+  Citadel, to find or teleport to from anywhere.
+
   As always, nothing done there counts towards advancements.
 - **Old worlds**: phase 3 structures appear only in worlds created from now
   on, in newly explored chunks. Older worlds load unchanged, and still get the

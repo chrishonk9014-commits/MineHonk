@@ -318,7 +318,21 @@ if (section('core')) {
   const broken = await dig(under);
   if (!broken) console.log('dig debug', JSON.stringify({ under, joiner: await joiner.page.evaluate(() => { const b = window.minehonk.game.player.body; return [b.x, b.y, b.z, b.onGround]; }), hostView: await hostOf.page.evaluate(() => [...window.minehonk.game.entities.values()].filter((e) => e.type === 'player').map((e) => [e.x, e.y, e.z])) }));
   check(`the joiner breaks a block and the host sees it go (state ${before})`, before !== 0 && broken);
-  const picked = await until(() => joiner.page.evaluate(() => window.minehonk.game.invSlots.some((s) => s && s.count > 0)), 10000);
+  const hasItem = () => joiner.page.evaluate(() => window.minehonk.game.invSlots.some((s) => s && s.count > 0));
+  let picked = await until(hasItem, 3000);
+  // Standing on the edge of the hole: step towards the drop, as a player would
+  for (let i = 0; i < 4 && !picked; i++) {
+    await joiner.page.evaluate(() => {
+      const g = window.minehonk.game;
+      const b = g.player.body;
+      const item = [...g.entities.values()].filter((e) => e.type === 'item').sort((a, c) => Math.hypot(a.x - b.x, a.z - b.z) - Math.hypot(c.x - b.x, c.z - b.z))[0];
+      if (item) g.player.yaw = Math.atan2(-(item.x - b.x), -(item.z - b.z));
+    });
+    await joiner.page.keyboard.down('KeyW');
+    await wait(250);
+    await joiner.page.keyboard.up('KeyW');
+    picked = await until(hasItem, 2000);
+  }
   if (!picked) console.log('pickup debug', JSON.stringify(await joiner.page.evaluate(() => { const g = window.minehonk.game; const b = g.player.body; return { body: [b.x, b.y, b.z, b.onGround], items: [...g.entities.values()].filter((e) => e.type === 'item').map((e) => [e.x, e.y, e.z]), gm: g.player.gamemode }; })));
   check('the joiner picks up what dropped', picked);
 

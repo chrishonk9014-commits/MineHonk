@@ -22,6 +22,8 @@
     "test:e2e:v4": "node tests/e2e/v4.mjs",
     "test:e2e:v5": "node tests/e2e/v5.mjs",
     "test:e2e:v6": "node tests/e2e/v6.mjs",
+    "test:e2e:updatelog": "node tests/e2e/update-log.mjs",
+    "update-log:images": "node tools/update-log/build-images.mjs",
     "bench": "node tests/perf/bench.mjs"
   },
   "engines": {

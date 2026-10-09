@@ -316,6 +316,11 @@ Void Storms and the End Eclipse, new moves for the Ender Dragon, the Void
 Citadel and the End Guardian at its bottom. Design notes:
 [docs/END_EXPANSION.md](docs/END_EXPANSION.md).
 
+In the game, **Options > Update Log** walks through all of V6 and the new
+browser multiplayer, with screenshots, item icons, recipes and step-by-step
+examples (`src/client/ui/updateLogV6.ts`; its pictures are made by the scripts
+in `tools/update-log/`).
+
 - **The Expansion Portal** stands on the main End island, apart from the exit
   portal: an upright frame of its own.
   - It is dark until the Ender Dragon has been defeated, then it comes alive.

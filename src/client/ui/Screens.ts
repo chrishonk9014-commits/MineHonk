@@ -11,6 +11,7 @@ import { ACHIEVEMENTS } from '../../common/data/achievements';
 import { itemById } from '../../common/registry/items';
 import type { ItemIcons } from '../render/ItemIcons';
 import { LIMITS } from '../../common/net/protocol';
+import { updateLogScreen } from './UpdateLogScreen';
 
 export interface Screen {
   root: HTMLElement;
@@ -378,6 +379,7 @@ export function optionsScreen(host: ScreenHost, inGame: boolean): Screen {
     el('div', { class: 'spacer' }),
     el('div', { class: 'row' }, button('Video Settings...', wrapClick(host, () => host.push(videoScreen(host, inGame))), 'btn half'), button('Music & Sounds...', wrapClick(host, () => host.push(soundScreen(host, inGame))), 'btn half')),
     el('div', { class: 'row' }, button('Controls...', wrapClick(host, () => host.push(controlsScreen(host, inGame))), 'btn half'), button('Accessibility...', wrapClick(host, () => host.push(accessibilityScreen(host, inGame))), 'btn half')),
+    button('Update Log...', wrapClick(host, () => host.push(updateLogScreen(host, inGame))), 'btn wide ul-open'),
     el('div', { class: 'spacer' }),
     button('Done', wrapClick(host, () => host.pop())),
   );

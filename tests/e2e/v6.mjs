@@ -51,6 +51,35 @@ await new Promise((r) => server.stdout.on('data', (d) => String(d).includes(Stri
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium', args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
 const errors = [];
+// UPDATE_LOG_SHOTS=1: each screenshot also gets a clean copy in tests/e2e/out/clean (no hotbar,
+// crosshair, hand, debug text, chat or quest tracker; titles, banners, boss bars and windows stay),
+// for the Update Log's pictures (tools/update-log/build-images.mjs)
+if (process.env.UPDATE_LOG_SHOTS) {
+  const CLEAN = path.join(OUT, 'clean');
+  fs.mkdirSync(CLEAN, { recursive: true });
+  const shoot = page.screenshot.bind(page);
+  const HIDE = ['.hotbar', '.crosshair', '.debug', '.debug-right', '.quest-tracker', '.cheats-indicator', '.chat', '.xpbar', '.xplevel', '.stat-row', '.item-name', '.wings-meters', '.hp-label', '.toast', '.subtitles', '.title-screen'];
+  page.screenshot = async (opts = {}) => {
+    if (opts.path) {
+      const hud = await page.evaluate((hide) => {
+        if (!document.getElementById('clean-shot')) document.head.append(Object.assign(document.createElement('style'), { id: 'clean-shot', textContent: hide.map((c) => `body.clean-shot ${c}`).join(',') + '{visibility:hidden!important}' }));
+        document.body.classList.add('clean-shot');
+        const g = window.minehonk?.game;
+        const was = g?.hudHidden ?? false;
+        if (g) g.hudHidden = true;
+        return was;
+      }, HIDE);
+      await page.waitForTimeout(300);
+      await shoot({ ...opts, path: path.join(CLEAN, path.basename(opts.path)) });
+      await page.evaluate((was) => {
+        document.body.classList.remove('clean-shot');
+        const g = window.minehonk?.game;
+        if (g) g.hudHidden = was;
+      }, hud);
+    }
+    return shoot(opts);
+  };
+}
 page.on('pageerror', (e) => {
   errors.push(String(e));
   console.log('[pageerror]', e);

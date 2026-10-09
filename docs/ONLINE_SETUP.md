@@ -81,12 +81,16 @@ Names must be exactly as written (capital letters, underscores).
      and press the green **Run workflow** button; or
    - if there is already a red ✗ run in the list (it ran before the secrets
      existed), open it and press **Re-run all jobs**.
-4. Wait about a minute for the green ✓. Open the run: the summary says
-   **MineHonk hub is online** with its address.
+4. Wait a few minutes for two green ✓: **Deploy the hub to Cloudflare** and
+   **Update the game website**. The summary says **MineHonk hub is online**
+   with its address, and that the website was updated.
+5. Open the game (your GitHub Pages address, for example
+   `https://<your-name>.github.io/MineHonk/`), press **Multiplayer**, and
+   create an account. If the page was already open, refresh it.
 
 That's it. From now on the workflow runs by itself whenever the hub's code
-changes, and it never touches your players' data. Running it again by hand is
-always safe.
+changes, rebuilds the website with the hub's address, and never touches your
+players' data. Running it again by hand is always safe.
 
 ## Optional: Cloudflare TURN (more direct connections)
 

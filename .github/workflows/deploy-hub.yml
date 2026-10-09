@@ -38,6 +38,8 @@ jobs:
     name: Deploy the hub to Cloudflare
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    outputs:
+      url: ${{ steps.check.outputs.url }}
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -171,6 +173,7 @@ jobs:
           command: deploy
 
       - name: Check that the hub answers
+        id: check
         env:
           URL1: ${{ steps.deploy.outputs.deployment-url }}
           URL2: ${{ steps.deploy_turn.outputs.deployment-url }}
@@ -194,6 +197,7 @@ jobs:
             exit 1
           fi
           cat health.json; echo
+          echo "url=$url" >> "$GITHUB_OUTPUT"
           echo "::notice title=MineHonk hub is online::$url"
           {
             echo "## MineHonk hub is online"
@@ -205,7 +209,7 @@ jobs:
             echo
             echo '```'
             echo
-            echo "The game on GitHub Pages uses this address (hub/deployed-url.txt)."
+            echo "Next, the game website is rebuilt with this address."
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: What went wrong?
@@ -221,4 +225,61 @@ jobs:
             echo "- **Account ID**: CLOUDFLARE_ACCOUNT_ID must be the 32-character Account ID from the dashboard's Workers & Pages page."
             echo
             echo "Guide: docs/ONLINE_SETUP.md. After fixing, open this run and press **Re-run all jobs**."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # The game on GitHub Pages learns the hub's address when it is built: rebuild
+  # and publish it (the gh-pages branch), so one run puts everything online.
+  site:
+    name: Update the game website
+    needs: deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+        run: npm ci
+
+      - name: Build the game with the hub's address
+        env:
+          PAGES_BASE: /${{ github.event.repository.name }}/
+          VITE_HUB_URL: ${{ needs.deploy.outputs.url }}
+        run: |
+          npx vite build
+          find dist -name '*.map' -delete
+          touch dist/.nojekyll
+          grep -rl "$VITE_HUB_URL" dist/assets > /dev/null || { echo "::error::The build does not contain the hub's address"; exit 1; }
+
+      - name: Publish (gh-pages branch)
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git fetch --depth=1 origin gh-pages; then
+            git worktree add site FETCH_HEAD
+            cd site
+            git switch -c site-update
+          else
+            git worktree add --detach site
+            cd site
+            git checkout -q --orphan site-update
+          fi
+          find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+          cp -a ../dist/. .
+          git add -A
+          if git diff --cached --quiet; then echo "The website is already up to date"; exit 0; fi
+          git commit -q -m "Deploy: ${GITHUB_SHA::7} with the online hub (${{ needs.deploy.outputs.url }})"
+          git push origin HEAD:gh-pages
+          {
+            echo "## The game website was updated"
+            echo
+            echo "It uses the hub at ${{ needs.deploy.outputs.url }}. GitHub Pages publishes it within a minute or two."
           } >> "$GITHUB_STEP_SUMMARY"

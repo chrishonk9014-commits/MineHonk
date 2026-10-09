@@ -452,12 +452,14 @@ if (section('core')) {
         const y = fy + dy;
         if (g.world.getState(x, y, z) !== 0 && g.world.getState(x, y + 1, z) === 0 && g.world.getState(x, y + 2, z) === 0) {
           g.send({ t: 'use_on', x, y, z, face: 1, hx: 0.5, hy: 1, hz: 0.5, hand: 0, yaw: g.player.yaw, pitch: g.player.pitch, seq: 1 });
-          return { x, y: y + 1, z };
+          // On top, or in place of a replaceable block (snow, grass) that was clicked
+          return { x, y: y + 1, z, base: y };
         }
       }
     return null;
   });
-  const placed = placeAt && (await until(async () => (await stateAt(hostOf, placeAt)) !== 0, 8000));
+  const dirtState = await hostOf.page.evaluate(() => window.minehonkState('dirt'));
+  const placed = placeAt && (await until(async () => (await stateAt(hostOf, placeAt)) !== 0 || (await stateAt(hostOf, { ...placeAt, y: placeAt.base })) === dirtState, 8000));
   if (!placed)
     console.log('place debug', JSON.stringify(await joiner.page.evaluate(() => {
       const g = window.minehonk.game;

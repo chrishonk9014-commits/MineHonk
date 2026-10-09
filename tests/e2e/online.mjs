@@ -295,9 +295,17 @@ if (section('core')) {
   const apart = await walkAway(joiner, hostOf);
   check(`the joiner walks away from the host (${apart.toFixed(1)} blocks)`, apart > 3);
   await joiner.page.waitForFunction(() => window.minehonk.game.player.body.onGround, null, { timeout: 30000 });
+  // The full block the joiner stands on (at the edge of a dip, that is not the one under their centre)
   const under = await joiner.page.evaluate(() => {
-    const b = window.minehonk.game.player.body;
-    return { x: Math.floor(b.x), y: Math.round(b.y) - 1, z: Math.floor(b.z) };
+    const g = window.minehonk.game;
+    const b = g.player.body;
+    const y = Math.round(b.y) - 1;
+    const types = new Map([...window.minehonkRegistry.blockById.values()].map((t) => [t.num, t]));
+    const cube = (x, z) => types.get(window.minehonkRegistry.blockOfState(g.world.getState(x, y, z)))?.def.model === 'cube';
+    const cols = [[Math.floor(b.x), Math.floor(b.z)]];
+    for (const dx of [-0.29, 0.29]) for (const dz of [-0.29, 0.29]) cols.push([Math.floor(b.x + dx), Math.floor(b.z + dz)]);
+    const [x, z] = cols.find(([x, z]) => cube(x, z)) ?? cols[0];
+    return { x, y, z };
   });
   // Start digging, hold, finish (a finish that comes too soon is refused, so wait longer each time)
   const dig = async (b) => {

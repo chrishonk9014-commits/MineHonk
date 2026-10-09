@@ -633,8 +633,13 @@ if (section('public') && farm) {
   check('the public list shows Cheats ON', (await row.locator('.badge.cheats').count()) > 0);
   await top(carol).locator('input[placeholder="Search worlds or hosts"]').fill('zzz');
   check('search hides worlds that do not match', (await top(carol).locator('.public-world').count()) === 0);
-  await top(carol).locator('input[placeholder="Search worlds or hosts"]').fill('farm');
-  check('search finds it', (await top(carol).locator('.public-world').count()) === 1);
+  // Typed key by key, as a person would: the box keeps the focus and every letter
+  const searchBox = top(carol).locator('input[placeholder="Search worlds or hosts"]');
+  await searchBox.fill('');
+  await searchBox.click();
+  await carol.page.keyboard.type('farm', { delay: 60 });
+  const typed = await carol.page.evaluate(() => [document.activeElement?.getAttribute('placeholder'), document.activeElement?.value]);
+  check('search finds it, typed letter by letter', (await top(carol).locator('.public-world').count()) === 1 && typed[0] === 'Search worlds or hosts' && typed[1] === 'farm', JSON.stringify(typed));
   await carol.page.screenshot({ path: `${OUT}/online-public.png` });
   await row.locator('.join-btn').click();
   await inGame(carol);

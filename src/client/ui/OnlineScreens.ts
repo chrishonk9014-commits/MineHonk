@@ -230,6 +230,8 @@ export function onlineScreen(host: ScreenHost, ctx: OnlineContext, start: Tab = 
   const friendsTab = async (quiet = false): Promise<void> => {
     const r = quiet ? await api.friends().catch(() => null) : await busy([], s, () => api.friends());
     if (!r || tab !== 'friends') return;
+    // A background refresh that changes nothing leaves the list (and what is being clicked) alone
+    if (quiet && JSON.stringify(r) === JSON.stringify(friendsData)) return;
     friendsData = r;
     incoming = r.incoming.length;
     renderTabs();
@@ -244,6 +246,8 @@ export function onlineScreen(host: ScreenHost, ctx: OnlineContext, start: Tab = 
       renderFriends();
     }
   };
+  let draft = '';
+  let draftField: HTMLInputElement | null = null;
   const renderFriends = (): void => {
     const f = friendsData;
     clear(content);
@@ -281,7 +285,12 @@ export function onlineScreen(host: ScreenHost, ctx: OnlineContext, start: Tab = 
       list.append(el('div', { class: 'list-header' }, 'Blocked'));
       for (const b of f.blocked) list.append(el('div', { class: 'list-item' }, el('div', { style: { flex: '1' } }, b.name), button('Unblock', () => void act(() => api.unblockPlayer(b.uuid)), 'btn tiny')));
     }
-    const name = field('Player name', { max: 16 });
+    // What was being typed survives a refresh
+    const typing = document.activeElement === draftField;
+    const name = field('Player name', { max: 16, value: draft });
+    draftField = name;
+    name.addEventListener('input', () => (draft = name.value));
+    if (typing) setTimeout(() => name.focus(), 0);
     const add = button('Add Friend', () => void addFriend(), 'btn quarter');
     const addFriend = async (): Promise<void> => {
       const n = name.value.trim();
@@ -289,6 +298,7 @@ export function onlineScreen(host: ScreenHost, ctx: OnlineContext, start: Tab = 
       const r = await busy([add], s, () => api.requestFriend(n));
       if (r) {
         name.value = '';
+        draft = '';
         setStatus(s, r.result === 'accepted' ? `You and ${n} are now friends` : `Friend request sent to ${n}`);
         friendsData = r;
         renderFriends();
@@ -309,15 +319,22 @@ export function onlineScreen(host: ScreenHost, ctx: OnlineContext, start: Tab = 
   const publicTab = async (quiet = false): Promise<void> => {
     const r = quiet ? await api.worlds().catch(() => null) : await busy([], s, () => api.worlds());
     if (!r || tab !== 'public') return;
+    if (quiet && JSON.stringify(r.public) === JSON.stringify(publicWorlds)) return;
     publicWorlds = r.public;
     renderPublic();
   };
+  // The search row stays put while typing; only the list under it changes
+  const publicList = el('div', { class: 'list' });
+  const publicRow = el('div', { class: 'row' }, search, button('Refresh', wrapClick(host, () => void publicTab()), 'btn quarter'));
   const renderPublic = (): void => {
     if (tab !== 'public') return;
-    clear(content);
+    if (publicRow.parentElement !== content) {
+      clear(content);
+      content.append(publicRow, publicList);
+    }
+    clear(publicList);
     const q = search.value.trim().toLowerCase();
     const shown = publicWorlds.filter((w) => !q || w.name.toLowerCase().includes(q) || w.ownerName.toLowerCase().includes(q));
-    const list = el('div', { class: 'list' });
     for (const w of shown) {
       const item = el(
         'div',
@@ -332,10 +349,9 @@ export function onlineScreen(host: ScreenHost, ctx: OnlineContext, start: Tab = 
         button('Join', () => void joinWorld(w.id), 'btn tiny join-btn', w.players >= w.maxPlayers),
       );
       item.addEventListener('dblclick', () => void joinWorld(w.id));
-      list.append(item);
+      publicList.append(item);
     }
-    if (!shown.length) list.append(el('div', { class: 'muted', style: { padding: 'calc(var(--s) * 8)', textAlign: 'center' } }, publicWorlds.length ? 'No world matches your search.' : 'No public worlds are online right now.'));
-    content.append(el('div', { class: 'row' }, search, button('Refresh', wrapClick(host, () => void publicTab()), 'btn quarter')), list);
+    if (!shown.length) publicList.append(el('div', { class: 'muted', style: { padding: 'calc(var(--s) * 8)', textAlign: 'center' } }, publicWorlds.length ? 'No world matches your search.' : 'No public worlds are online right now.'));
   };
 
   body.append(
@@ -384,14 +400,20 @@ export function hostingPanelScreen(host: ScreenHost, session: HostSession, actio
   const info = el('div', { class: 'muted' });
   const list = el('div', { class: 'list' });
   const s = status();
+  let shown = '';
   const render = (): void => {
     const d = session.details;
     code.textContent = d.joinCode ?? '—';
     const t = session.transports();
     info.textContent = `${session.options.name} · ${VIS_LABEL[session.options.visibility]} · ${session.players}/${session.options.maxPlayers} players${t.relay ? ` · ${t.relay} relayed` : ''}${session.options.cheats ? ' · Cheats ON' : ''}`;
+    // Rebuild the list only when it changes (a button replaced under the pointer loses the click)
+    const players = actions.players();
+    const key = JSON.stringify(players.map((p) => [p.uuid, p.name, p.role]));
+    if (key === shown) return;
+    shown = key;
     clear(list);
     list.append(el('div', { class: 'list-header' }, 'Players'));
-    for (const p of actions.players()) {
+    for (const p of players) {
       const role = p.role ?? 'builder';
       const row = el('div', { class: 'list-item' }, el('div', { style: { flex: '1' } }, p.name, el('div', { class: 'meta' }, ROLE_LABEL[role])));
       if (role !== 'owner') {

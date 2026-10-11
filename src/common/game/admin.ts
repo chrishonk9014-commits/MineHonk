@@ -11,7 +11,7 @@ import { expansionGiveSets } from '../endExpansion/resources';
 import { END_QUEST_IDS } from '../endExpansion/quests';
 import { RARE_END_LOOT } from '../endExpansion/guardian';
 import { DRAGON_TESTS } from '../endExpansion/dragon';
-import { HAUNT_OPS, HAUNT_MIN_MINUTES, HAUNT_MAX_MINUTES, type HauntOp } from './haunting';
+import { HAUNT_OPS, HAUNT_MIN_MINUTES, HAUNT_MAX_MINUTES, HAUNT_ENDINGS, type HauntOp, type HauntEnding } from './haunting';
 
 export const ADMIN_DIMENSIONS: DimensionId[] = ['overworld', 'nether', 'end', 'farlands', 'computer'];
 
@@ -206,7 +206,7 @@ export type AdminAction =
   /** V6: the End Expansion (tp_biome names one of the Expanded End's biomes). */
   | { a: 'v6'; op: V6Op; biome?: string; set?: string; structure?: string; quest?: string; spot?: string; test?: string }
   /** The Haunting (every world): Herobrine over `minutes`; `erase` deletes the world at the end (its owner only). */
-  | { a: 'haunt'; op: HauntOp; minutes?: number; erase?: boolean };
+  | { a: 'haunt'; op: HauntOp; minutes?: number; erase?: boolean; ending?: HauntEnding };
 
 export type AdminActionName = AdminAction['a'];
 
@@ -295,7 +295,8 @@ export function validateAdmin(raw: unknown): AdminAction | null {
       if (!HAUNT_OPS.includes(m.op as HauntOp)) return null;
       if (m.op !== 'start') return { a: 'haunt', op: m.op as HauntOp };
       if (!isInt(m.minutes) || m.minutes < HAUNT_MIN_MINUTES || m.minutes > HAUNT_MAX_MINUTES || typeof m.erase !== 'boolean') return null;
-      return { a: 'haunt', op: 'start', minutes: m.minutes, erase: m.erase };
+      if (m.ending !== undefined && !HAUNT_ENDINGS.includes(m.ending as HauntEnding)) return null;
+      return { a: 'haunt', op: 'start', minutes: m.minutes, erase: m.erase, ...(m.ending !== undefined ? { ending: m.ending as HauntEnding } : {}) };
     }
     case 'v6':
       if (!V6_OPS.includes(m.op as V6Op)) return null;

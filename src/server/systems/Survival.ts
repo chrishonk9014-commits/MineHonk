@@ -551,7 +551,8 @@ export class Survival {
     p.send({ t: 'death_pos', pos: p.lastDeath });
     const level = this.server.level;
     const score = p.xpTotal;
-    if (!level.rules.keepInventory) {
+    // While the world is haunted nobody loses their things (his monsters are there to scare, not to rob)
+    if (!level.rules.keepInventory && !this.server.haunting?.active) {
       // V6: a Void Pack (and all it holds) survives a death in the void, and only that
       this.server.interaction.dropAll(p, info.source === 'void' ? (st) => itemIdOf(st) === 'void_pack' : undefined);
       const lvl = p.xpLevel().level;

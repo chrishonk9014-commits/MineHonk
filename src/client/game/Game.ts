@@ -44,6 +44,7 @@ import * as THREE from 'three';
 import { GlitchHud } from '../ui/GlitchHud';
 import { DigitalHud } from '../ui/DigitalHud';
 import { Jumpscare } from '../ui/Jumpscare';
+import { HauntScene } from '../ui/HauntScene';
 import { TouchControls } from '../ui/TouchControls';
 import { EndingCard } from '../ui/EndingCard';
 import { guideEntry } from '../../common/engineering/guide';
@@ -56,7 +57,7 @@ export interface GameHost {
   openAdmin(): void;
   openDeath(message: string, hardcore: boolean, score: number): void;
   closeScreens(): void;
-  exit(reason: string | null, kick?: { ban?: FakeBan; erase?: boolean }): void;
+  exit(reason: string | null, kick?: { ban?: FakeBan; erase?: boolean; corrupted?: boolean }): void;
   setLoading(text: string | null, detail?: string): void;
   openAchievements(): void;
   openEngineeringBook(entry?: string): void;
@@ -119,6 +120,10 @@ export class Game {
   private haunt = 0;
   private hauntTarget = 0;
   private readonly jumpscare: Jumpscare;
+  /** The lair ending's cutscene: what lies over the view, and the step the camera follows (the drag's path). */
+  private readonly hauntScene: HauntScene;
+  private sceneCam: { step: string; start: number; ticks: number; from: [number, number, number]; to: [number, number, number] } | null = null;
+  private sceneY = NaN;
   /** V5.5: movement reversed until this tick (PLAYER CONTROL OVERRIDE). */
   private reverseControlsUntil = 0;
   /** On-screen controls for phones and tablets. */
@@ -273,6 +278,7 @@ export class Game {
     this.glitchHud = new GlitchHud(this.root, settings);
     this.digitalHud = new DigitalHud(this.root, settings);
     this.jumpscare = new Jumpscare(this.root, settings, audio);
+    this.hauntScene = new HauntScene(this.root, settings, audio);
     this.chat.glitchFx = settings.glitchFx;
     this.endingCard = new EndingCard(this.root, settings);
     ui.append(this.root);
@@ -326,6 +332,78 @@ export class Game {
   private darknessAmount(): number {
     // The Haunting closes in like a steady Darkness
     return Math.max(this.effectDarkness(), this.haunt * 0.75);
+  }
+
+  /** The floor under (x, z) near height y (the top of the solid block below open space), or null. */
+  private groundAt(x: number, z: number, y: number): number | null {
+    const bx = Math.floor(x);
+    const bz = Math.floor(z);
+    for (let yy = Math.floor(y) + 2; yy >= Math.floor(y) - 4; yy--) if (STATE_SOLID[this.world.getState(bx, yy - 1, bz)] && !STATE_SOLID[this.world.getState(bx, yy, bz)]) return yy;
+    return null;
+  }
+
+  /** A step of the Haunting's lair ending ('end': back to the game). */
+  private playScene(step: string, ticks: number, from: [number, number, number], to: [number, number, number], strength = 1): void {
+    if (step === 'end') {
+      this.sceneCam = null;
+      this.hauntScene.clear();
+      this.hud.visible = !this.hudHidden;
+      return;
+    }
+    // The cutscene has the screen
+    if (!this.hauntScene.active) {
+      this.closeScreenLocal();
+      if (this.chat.open) this.chat.close();
+    }
+    this.hauntScene.show(step, ticks);
+    this.hud.visible = false;
+    const prev = this.sceneCam;
+    // A drag with nowhere to go (strength 0): still on your feet, facing him, as when he grabbed you
+    const still = step === 'drag' && strength === 0;
+    const moves = (step === 'drag' && !still) || step === 'grab';
+    this.sceneCam = { step: still ? 'grab' : step, start: still ? (prev?.start ?? this.tickNo) : this.tickNo, ticks, from: moves ? from : (prev?.from ?? from), to: moves ? to : (prev?.to ?? to) };
+    if (step === 'drag') this.sceneY = NaN;
+    if (step === 'shock' && !this.settings.reduceMotion) this.shake = 1;
+  }
+
+  /** The camera during the lair ending: along the ground looking up at him while he drags you, then sitting in his chair. */
+  private sceneCamera(fs: FrameState, alpha: number): void {
+    const c = this.sceneCam!;
+    fs.thirdPerson = 0;
+    fs.showHand = false;
+    fs.target = null;
+    fs.crack = [];
+    fs.bobAmount = 0;
+    const calm = this.settings.reduceMotion;
+    const t = this.tickNo + alpha;
+    if (c.step === 'grab') {
+      // Turned to face him as he takes hold
+      const k = Math.min(1, Math.max(0, (t - c.start) / 8));
+      const [x1, y1, z1] = c.to;
+      const want = Math.atan2(-(x1 - fs.x), -(z1 - fs.z));
+      let d = want - fs.yaw;
+      d = Math.atan2(Math.sin(d), Math.cos(d));
+      fs.yaw += d * k;
+      fs.pitch += (-Math.atan2(y1 - fs.y, Math.hypot(x1 - fs.x, z1 - fs.z)) - fs.pitch) * k;
+    } else if (c.step === 'drag') {
+      const k = Math.min(1, Math.max(0, (t - c.start) / c.ticks));
+      const e = k * k * (3 - 2 * k);
+      const [x0, y0, z0] = c.from;
+      const [x1, y1, z1] = c.to;
+      fs.x = x0 + (x1 - x0) * e;
+      fs.z = z0 + (z1 - z0) * e;
+      // Along the ground itself, a hand's width above it
+      const yl = y0 + (y1 - y0) * e;
+      const ground = this.groundAt(fs.x, fs.z, yl) ?? yl;
+      this.sceneY = Number.isNaN(this.sceneY) ? ground : this.sceneY + (ground - this.sceneY) * 0.25;
+      fs.y = this.sceneY + 0.35;
+      // On your back, looking up at him as he pulls; bumping over the ground
+      fs.yaw = Math.atan2(-(x1 - x0), -(z1 - z0)) + (calm ? 0 : Math.sin(t * 0.37) * 0.05);
+      fs.pitch = -0.38 + (calm ? 0 : Math.sin(t * 0.61) * 0.06);
+    } else {
+      // Wired into the chair
+      fs.y -= 0.55;
+    }
   }
 
   private effectDarkness(): number {
@@ -466,7 +544,7 @@ export class Game {
       }
       case 'kick':
         this.running = false;
-        this.host.exit(m.reason, { ban: m.ban, erase: m.erase });
+        this.host.exit(m.reason, { ban: m.ban, erase: m.erase, corrupted: m.corrupted });
         break;
       case 'chunk':
         this.world.loadChunk(m.data);
@@ -684,7 +762,8 @@ export class Game {
         this.player.yaw = m.yaw;
         this.loadingTerrain = true;
         this.loadingSince = performance.now();
-        this.host.setLoading(m.dimension === 'nether' ? 'Entering the Nether...' : m.dimension === 'end' ? 'Entering the End...' : m.dimension === 'farlands' ? 'Entering the Farlands...' : m.dimension === 'computer' ? 'Connecting...' : 'Returning...');
+        // Dragged into the computer by the Haunting: the screen is already black, no loading text
+        if (!this.hauntScene.active) this.host.setLoading(m.dimension === 'nether' ? 'Entering the Nether...' : m.dimension === 'end' ? 'Entering the End...' : m.dimension === 'farlands' ? 'Entering the Farlands...' : m.dimension === 'computer' ? 'Connecting...' : 'Returning...');
         break;
       case 'boss':
         this.hud.setBoss(m.id, m.action, m.title, m.progress, m.color);
@@ -972,7 +1051,8 @@ export class Game {
     // Discrete actions
     for (const a of this.input.consume()) this.onAction(a);
     // Movement input
-    const blocking = this.uiBlocking;
+    // The Haunting's lair ending holds you still (you can still look around once you wake)
+    const blocking = this.uiBlocking || this.hauntScene.active;
     const inp = this.input;
     let forward = 0;
     let strafe = 0;
@@ -1364,6 +1444,9 @@ export class Game {
       // The Haunting
       case 'haunt':
         this.hauntTarget = Math.max(0, Math.min(1, m.strength ?? 0));
+        break;
+      case 'scene':
+        this.playScene(m.text ?? '', m.ticks ?? 20, [m.x ?? 0, m.y ?? 0, m.z ?? 0], [m.x1 ?? 0, m.y1 ?? 0, m.z1 ?? 0]);
         break;
       case 'jumpscare':
         this.jumpscare.play(m.ticks ?? 60);
@@ -1924,6 +2007,7 @@ export class Game {
       nausea: this.effectLevel('nausea') > 0 && !this.settings.reduceMotion ? 1 : 0,
       portalColor: this.portalKind === 'far_portal' ? 0x2ad7c2 : this.portalKind === 'expansion_portal' ? 0x9ad8ff : 0x8a2be2,
     };
+    if (this.sceneCam) this.sceneCamera(fs, alpha);
     // Lines (fishing, leads) end at the local player's hand: lower right of the view
     const game = this;
     this.renderer.entities.local ??= {

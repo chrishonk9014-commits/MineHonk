@@ -2,9 +2,12 @@
  * The Haunting in the browser: the Admin Panel's Haunting tab, a two-minute
  * haunting in a single player world from the first sighting to the end
  * (his figure, the signs he leaves, "Herobrine joined", "YOU ARE NOT SAFE"
- * in glitched red, the dark closing in, the chase, the jumpscare, the fake
- * ban screen and the world deleted), then a skipped-through haunting that
- * keeps the world. Screenshots: tests/e2e/out/haunting-*.png.
+ * in glitched red, talking to him and getting an answer, the dark closing
+ * in, the chase, the jumpscare, the fake ban screen and the world deleted),
+ * then a skipped-through haunting that keeps the world, then the lair ending
+ * (dragged along the ground, pulled into the computer, wired into a chair in
+ * his hall, shocked, SERVER MEMORY CORRUPTED, back to the title).
+ * Screenshots: tests/e2e/out/haunting-*.png.
  *
  *   npx vite build && node tests/e2e/haunting.mjs
  */
@@ -82,6 +85,9 @@ await openHauntTab();
 const tabText = await page.locator('.admin-body').innerText();
 check('the Admin Panel has a Haunting tab with its stages', /Herobrine haunts this world/.test(tabText) && /He is watching/.test(tabText) && /The end/.test(tabText));
 check('it offers to delete the world at the end (the owner may)', (await page.locator('.haunt-finale').textContent()) === 'At the end: Delete the world' && !(await page.locator('.haunt-finale').isDisabled()));
+check('the ending is left to chance unless chosen', (await page.locator('.haunt-ending').textContent()) === 'Ending: Random' && /one time in four/.test(await page.locator('.haunt-ending-help').textContent()));
+await page.locator('.haunt-ending').click();
+check('the ending can be the ban screen', (await page.locator('.haunt-ending').textContent()) === 'Ending: The ban screen');
 await page.locator('.haunt-minutes').fill('2');
 await page.locator('.haunt-minutes').dispatchEvent('change');
 await page.screenshot({ path: `${OUT}/haunting-tab.png` });
@@ -103,6 +109,9 @@ let joined = false;
 let warned = false;
 let darkMax = 0;
 let jumpscared = false;
+let asked = 0;
+let answer = null;
+const OWN_LINES = ['stop', 'YOU ARE NOT SAFE', 'I HAVE BEEN WATCHING YOU', 'I SEE YOU, TESTER', 'THIS WORLD IS MINE', 'YOU SHOULD NOT HAVE COME HERE', 'THERE IS NO ESCAPE', 'TURN AROUND', 'FOUND YOU'];
 for (;;) {
   const el = (Date.now() - t0) / 1000;
   const state = await page.evaluate(() => {
@@ -130,6 +139,17 @@ for (;;) {
   }
   const chat = await chatText();
   if (!joined && /Herobrine joined the world/.test(chat)) joined = true;
+  // From "He speaks" on (70% of two minutes), talking to him gets an answer
+  if (!answer && el > 90 && el < 108 && asked < 4 && Math.floor(el) % 4 === 0) {
+    asked++;
+    await page.evaluate(() => window.minehonk.game.send({ t: 'chat', text: 'herobrine, who are you?' }));
+    for (let k = 0; k < 4 && !answer; k++) {
+      await page.waitForTimeout(1500);
+      const lines = await page.evaluate(() => [...document.querySelectorAll('.chat .line.chat-herobrine')].map((e) => e.textContent.replace(/^<Herobrine>\s*/, '').trim()));
+      answer = lines.find((l) => !OWN_LINES.includes(l) && !/^I SEE YOU, /.test(l) && /^[A-Z0-9 .,'?!-]+$/.test(l)) ?? null;
+    }
+    if (answer) await page.screenshot({ path: `${OUT}/haunting-answer.png` });
+  }
   if (!warned && /YOU ARE NOT SAFE/.test(chat)) {
     warned = true;
     await page.waitForTimeout(500);
@@ -167,6 +187,7 @@ check(`his figure showed itself (${sightings} looks; ${[...shots].join(', ')})`,
 check(`he left signs around (${[...sawBlocks].join(', ')})`, sawBlocks.size > 0);
 check('"Herobrine joined the world"', joined);
 check('"YOU ARE NOT SAFE" in glitched red', warned && (await page.locator('.chat .line.chat-herobrine').count().catch(() => 0)) >= 0);
+check(`he answers when spoken to (${answer})`, !!answer);
 check(`the dark closed in (${darkMax.toFixed(2)})`, darkMax > 0.5);
 check('the jumpscare', jumpscared);
 
@@ -206,6 +227,62 @@ await page.locator('.fake-ban button', { hasText: 'Back to Title Screen' }).clic
 await page.getByText('Singleplayer').click();
 await page.waitForTimeout(800);
 check('the kept world is still there', (await page.locator('.screen:not(.hidden)').innerText()).includes('Kept'));
+await page.keyboard.press('Escape');
+
+// ------------------------------------------------------------------ the lair ending
+await newWorld('Lair');
+// Open, level ground around (so he can drag you along it)
+await page.evaluate(() => {
+  const send = (t) => window.minehonk.game.send({ t: 'chat', text: t });
+  send('/fill ~-12 ~ ~-12 ~12 ~6 ~12 air');
+  send('/fill ~-12 ~-1 ~-12 ~12 ~-1 ~12 grass_block');
+  send('/time set 13000');
+});
+await page.waitForTimeout(1500);
+await openHauntTab();
+// (The panel remembers the last choices)
+while ((await page.locator('.haunt-finale').textContent()) !== 'At the end: Keep the world') await page.locator('.haunt-finale').click();
+while ((await page.locator('.haunt-ending').textContent()) !== 'Ending: Server memory corrupted') await page.locator('.haunt-ending').click();
+check('the ending can be his lair inside the computer', /SERVER MEMORY CORRUPTED/.test(await page.locator('.haunt-ending-help').textContent()));
+await page.locator('.haunt-minutes').fill('5');
+await page.locator('.haunt-minutes').dispatchEvent('change');
+await page.locator('.haunt-start').click();
+await page.waitForTimeout(800);
+for (let i = 0; i < 4; i++) {
+  await page.locator('.admin-body button', { hasText: 'Skip to the next stage' }).click();
+  await page.waitForTimeout(500);
+}
+await page.keyboard.press('Escape');
+const seen = [];
+const lairShots = new Set();
+let lairDim = null;
+const t1 = Date.now();
+while (Date.now() - t1 < 90000) {
+  const st = await page.evaluate(() => ({ step: document.querySelector('.haunt-scene')?.dataset.step ?? '', dim: window.minehonk?.game?.dimension ?? null, title: !window.minehonk?.game })).catch(() => ({ step: '', dim: null, title: true }));
+  if (st.title) break;
+  if (st.step && seen[seen.length - 1] !== st.step) seen.push(st.step);
+  if (st.dim === 'computer') lairDim = 'computer';
+  const shot = async (name, wait = 0) => {
+    if (lairShots.has(name)) return;
+    lairShots.add(name);
+    if (wait) await page.waitForTimeout(wait);
+    await page.screenshot({ path: `${OUT}/haunting-lair-${name}.png` });
+  };
+  if (st.step === 'grab') await shot('grab', 450);
+  else if (st.step === 'drag') await shot('drag', 1800);
+  else if (st.step === 'wake') await shot('wake', 3200);
+  else if (st.step === 'shock') await shot('shock', 60);
+  else if (st.step === 'die') await shot('die', 900);
+  else if (st.step === 'corrupt') await shot('corrupt', 3500);
+  await page.waitForTimeout(120);
+}
+check(`the lair ending played (${seen.join(' > ')})`, ['drag', 'wake', 'shock', 'die', 'corrupt'].every((s) => seen.includes(s)));
+check('they were pulled inside the computer', lairDim === 'computer');
+await page.getByText('Singleplayer').waitFor({ timeout: 30000 });
+check('back to the title with no ban screen', (await page.locator('.fake-ban').count()) === 0);
+await page.getByText('Singleplayer').click();
+await page.waitForTimeout(800);
+check('the world (kept) is still there', (await page.locator('.screen:not(.hidden)').innerText()).includes('Lair'));
 
 check(`no page errors (${errors.join(' | ').slice(0, 300)})`, errors.length === 0);
 await browser.close();

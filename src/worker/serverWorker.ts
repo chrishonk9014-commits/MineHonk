@@ -13,6 +13,11 @@ import { initItems } from '../common/registry/items';
 import { installGameplay } from '../server/gameplay';
 import { BrowserHost, type HostConfig, type HostOptionsPatch } from './hosting';
 import type { HostSettingsPush } from '../common/net/hubProtocol';
+import { askHub } from '../common/game/herobrineVoice';
+
+declare const __HUB_URL__: string;
+/** The cloud hub this build talks to ('' when none). */
+const HUB_URL = typeof __HUB_URL__ === 'string' ? __HUB_URL__ : '';
 
 initItems();
 
@@ -71,6 +76,8 @@ self.onmessage = async (ev: MessageEvent<In>) => {
           autosaveTicks: 20 * 60,
         });
         installGameplay(server);
+        // The Haunting: Herobrine answers through the cloud hub when it can (his scripted lines otherwise)
+        if (HUB_URL) server.herobrineVoice = (req) => askHub(HUB_URL, req);
         server.start();
         post({ type: 'started', level: server.level });
         const p = await server.connect(conn, { ...m.identity, isHost: true }, m.hello);

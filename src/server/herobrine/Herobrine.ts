@@ -597,7 +597,8 @@ export class HerobrineSystem {
     const w = this.w;
     const L = this.computerWorld().layout();
     for (const p of s.players.values()) {
-      if (p.dim !== cw || p.dead) {
+      // The Haunting brought them here (its corrupted ending): not part of this story
+      if (p.dim !== cw || p.dead || s.haunting?.holds(p)) {
         this.strays.delete(p);
         continue;
       }

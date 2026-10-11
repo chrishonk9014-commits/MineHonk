@@ -104,6 +104,12 @@ export class GameServer {
   herobrine: import('./herobrine/Herobrine').HerobrineSystem | null = null;
   /** The Haunting (Admin Panel, every world). */
   haunting: import('./herobrine/Haunting').HauntingSystem | null = null;
+  /**
+   * The Haunting: where Herobrine's answers come from when players talk to him
+   * (the cloud hub, or Claude with a dedicated server's own key). Null: only
+   * his scripted lines. Resolves to null when there is no answer.
+   */
+  herobrineVoice: ((req: import('../common/game/herobrineVoice').VoiceRequest) => Promise<string | null>) | null = null;
   /** Work scheduled for a later tick (see `later`). */
   private readonly scheduled: { at: number; fn: () => void }[] = [];
   /** Hook for the hosting layer to forward player reports (e.g. to platform moderation). */
@@ -728,7 +734,10 @@ export class GameServer {
       return;
     }
     this.log(`<${p.name}> ${filtered}`);
-    for (const o of this.players.values()) o.send({ t: 'chat', text: filtered, kind: 'chat', from: p.name });
+    // The Haunting may have glitched a player's name
+    const from = this.haunting?.chatName(p) ?? p.name;
+    for (const o of this.players.values()) o.send({ t: 'chat', text: filtered, kind: 'chat', from });
+    this.haunting?.onChat(p, filtered);
   }
 
   broadcastChat(text: string, kind: ChatKind = 'system'): void {

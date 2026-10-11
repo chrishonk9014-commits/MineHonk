@@ -20,6 +20,8 @@ import { ChatFilter } from '../../src/server/moderation/ChatFilter';
 import { normalizeJoinCode, type AccountInfo, type FriendsResponse, type WorldSummary } from '../../src/common/net/multiplayer';
 import { GAME_MODES } from '../../src/common/game/gamemode';
 import type { HostSettingsPush } from '../../src/common/net/hubProtocol';
+import { parseVoiceRequest } from '../../src/common/game/herobrineVoice';
+import { speakWithClaude, voiceClient, HEROBRINE_MODEL, HEROBRINE_DAILY_LIMIT } from '../../src/hub/herobrineVoice';
 import type { HostedEntry, Presence } from './lobby';
 
 export { LobbyDO } from './lobby';
@@ -41,6 +43,9 @@ const apiLimiter = new RateLimiter(240, 60_000);
 const friendLimiter = new RateLimiter(20, 60_000);
 const ticketLimiter = new RateLimiter(30, 60_000);
 const socketLimiter = new RateLimiter(30, 60_000);
+// Herobrine's answers cost money: a few a minute per address is plenty for a conversation
+const voiceLimiter = new RateLimiter(6, 60_000);
+const voiceHourLimiter = new RateLimiter(40, 3_600_000);
 
 class HttpError extends Error {
   constructor(
@@ -286,6 +291,31 @@ async function ticket(hub: Hub, account: AccountInfo, worldId: string, compat: s
   return { ticket: t, host: hosted.host, hostName: hosted.hostName, relayOnly: relay, iceServers: await iceServers(hub.env), world: await hub.worlds.summary(e, account.uuid, role) };
 }
 
+// ------------------------------------------------------------------ Herobrine's voice
+
+/**
+ * The Haunting: one line from Claude for something a player said to him.
+ * Needs no account (single player worlds are not signed in), so it is held
+ * to this site, a few answers a minute per address and a daily limit for
+ * everyone; anything else gets `text: null` and the game uses his scripted
+ * lines.
+ */
+async function herobrine(req: Request, env: Env, ip: string, b: Record<string, unknown>): Promise<unknown> {
+  if (!allowedOrigin(req.headers.get('Origin'), env)) throw new HttpError(403, 'Not allowed from this site');
+  if (!env.ANTHROPIC_API_KEY) return { text: null, reason: 'off' };
+  const r = parseVoiceRequest(b);
+  if (!r) throw new HttpError(400, 'Bad request');
+  if (!voiceLimiter.take(ip) || !voiceHourLimiter.take(ip)) return { text: null, reason: 'busy' };
+  const limit = Math.max(0, Number(env.HEROBRINE_DAILY_LIMIT ?? HEROBRINE_DAILY_LIMIT) || 0);
+  const day = new Date().toISOString().slice(0, 10);
+  const row = await env.DB.prepare('INSERT INTO herobrine_usage (day, n) VALUES (?, 1) ON CONFLICT(day) DO UPDATE SET n = n + 1 RETURNING n').bind(day).first<{ n: number }>();
+  if (!row || row.n > limit) return { text: null, reason: 'limit' };
+  const line = await speakWithClaude(voiceClient(env.ANTHROPIC_API_KEY), r, env.HEROBRINE_MODEL || HEROBRINE_MODEL);
+  // The same filter as world names and chat: anything it would mask is not said at all
+  if (!line || filter.mask(line).changed) return { text: null, reason: 'unsaid' };
+  return { text: line };
+}
+
 // ------------------------------------------------------------------ WebSockets
 
 /** Browsers cannot send headers with a WebSocket: the session or ticket rides in the subprotocol list. */
@@ -366,6 +396,7 @@ async function api(req: Request, url: URL, env: Env): Promise<unknown | Response
 
   if (route === 'GET /health') return { ok: true, name: 'MineHonk', protocol: 1, kind: 'cloud', auth: 'stretched-v1' };
   if (route === 'GET /hub-key') return { alg: 'ES256', jwk: (await ticketKey(env)).publicJwk };
+  if (route === 'POST /herobrine') return herobrine(req, env, ip, b);
   if (route === 'POST /register' || route === 'POST /login') {
     if (!authLimiter.take(ip)) throw new HttpError(429, 'Too many attempts. Wait a minute.');
     if (route === 'POST /register') return hub.accounts.register(str(b.name), str(b.password), (n) => !filter.mask(n).changed);

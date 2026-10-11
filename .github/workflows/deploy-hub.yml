@@ -5,6 +5,7 @@
 # One-time setup (on websites, about 5 minutes): docs/ONLINE_SETUP.md
 #   1. a free Cloudflare account
 #   2. repository secrets CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID
+#   (optional) ANTHROPIC_API_KEY: Herobrine answers players through Claude in the Haunting
 # Then: Actions > Deploy online hub > Run workflow (or push a change to the hub).
 #
 # Safe to run again and again: the database is created only the first time,
@@ -20,6 +21,8 @@ on:
       - 'src/common/net/**'
       - 'src/common/game/gamemode.ts'
       - 'src/server/moderation/ChatFilter.ts'
+      - 'src/common/game/herobrineVoice.ts'
+      - 'package-lock.json'
       - '.github/workflows/deploy-hub.yml'
 
 concurrency:
@@ -45,6 +48,7 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       TURN_KEY_ID: ${{ secrets.TURN_KEY_ID }}
       TURN_KEY_API_TOKEN: ${{ secrets.TURN_KEY_API_TOKEN }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
     steps:
       - name: Check the Cloudflare secrets
         run: |
@@ -66,6 +70,17 @@ jobs:
           fi
 
       - uses: actions/checkout@v4
+
+      # The hub is bundled from the repository's code and packages (the Anthropic SDK among them)
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+        run: npm ci
 
       # ---------------------------------------------------------------- the account
       - name: Check the Cloudflare token
@@ -154,42 +169,39 @@ jobs:
           command: d1 migrations apply ${{ env.DB_NAME }} --remote
 
       # ---------------------------------------------------------------- the Worker
+      # The optional secrets that are set go up with the hub: the Cloudflare TURN
+      # key (players behind strict networks connect directly more often) and the
+      # Anthropic API key (Herobrine answers players through Claude in the Haunting)
+      - name: Which optional secrets are set
+        id: secrets
+        run: |
+          {
+            echo 'list<<EOF'
+            if [ -n "$TURN_KEY_ID" ] && [ -n "$TURN_KEY_API_TOKEN" ]; then printf 'TURN_KEY_ID\nTURN_KEY_API_TOKEN\n'; fi
+            if [ -n "$ANTHROPIC_API_KEY" ]; then echo ANTHROPIC_API_KEY; fi
+            echo EOF
+          } >> "$GITHUB_OUTPUT"
+          if [ -n "$ANTHROPIC_API_KEY" ]; then echo "Herobrine's voice: on (Claude)"; else echo "Herobrine's voice: his scripted lines (no ANTHROPIC_API_KEY secret)"; fi
+
       - name: Deploy the hub
         id: deploy
-        if: env.TURN_KEY_ID == ''
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           wranglerVersion: ${{ env.WRANGLER_VERSION }}
           workingDirectory: hub
-          command: deploy
-
-      # With the optional Cloudflare TURN key, players behind strict networks connect directly more often
-      - name: Deploy the hub (with TURN)
-        id: deploy_turn
-        if: env.TURN_KEY_ID != ''
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          wranglerVersion: ${{ env.WRANGLER_VERSION }}
-          workingDirectory: hub
-          secrets: |
-            TURN_KEY_ID
-            TURN_KEY_API_TOKEN
+          secrets: ${{ steps.secrets.outputs.list }}
           command: deploy
 
       - name: Check that the hub answers
         id: check
         env:
           URL1: ${{ steps.deploy.outputs.deployment-url }}
-          URL2: ${{ steps.deploy_turn.outputs.deployment-url }}
           OUT1: ${{ steps.deploy.outputs.command-output }}
-          OUT2: ${{ steps.deploy_turn.outputs.command-output }}
         run: |
-          url="${URL1:-$URL2}"
-          if [ -z "$url" ]; then url=$(printf '%s\n%s' "$OUT1" "$OUT2" | grep -o 'https://[A-Za-z0-9.-]*workers\.dev' | head -n 1); fi
+          url="$URL1"
+          if [ -z "$url" ]; then url=$(printf '%s\n' "$OUT1" | grep -o 'https://[A-Za-z0-9.-]*workers\.dev' | head -n 1); fi
           if [ -z "$url" ]; then
             echo "::error title=No address::The deploy did not report the hub's address."
             exit 1
@@ -211,6 +223,8 @@ jobs:
             echo "## MineHonk hub is online"
             echo
             echo "Address: **$url**"
+            echo
+            if [ -n "$ANTHROPIC_API_KEY" ]; then echo "Herobrine's voice (the Haunting): **Claude**, up to the daily limit in hub/wrangler.toml"; else echo "Herobrine's voice (the Haunting): his scripted lines. Add the ANTHROPIC_API_KEY secret to have him answer through Claude (docs/ONLINE_SETUP.md)."; fi
             echo
             echo '```'
             cat health.json

@@ -69,6 +69,8 @@ it.
 | `MAX_PLAYERS`  | `16`    | Players per world                                          |
 | `TRUST_PROXY`  | off     | `1` behind a reverse proxy (client IP from X-Forwarded-For) |
 | `CORS_ORIGINS` | none    | Comma-separated sites that may call the API                |
+| `ANTHROPIC_API_KEY` | none | Herobrine answers players through Claude in the Haunting (billed to this key) |
+| `HEROBRINE_MODEL` | `claude-haiku-5-5` | The Claude model he answers with                |
 
 Put it behind HTTPS (for example, a reverse proxy) for anything other than a
 LAN. Operators can add words to the chat filter in
@@ -84,6 +86,8 @@ also connect their platform's moderation service through
 - **Inventory** E, **drop** Q, **swap hands** F, **chat** T, **commands** /
 - **Player list** Tab, **achievements** L, **debug info** F3, **camera** F5, **hide HUD** F1, **screenshot** F2
 - **Admin Panel** F8 (worlds with cheats on, owner and operators only)
+- Redstone torches glow red in the dark (and give off a few specks of red
+  dust), like the ones Herobrine leaves.
 - **Auto Optimize**: when the game lags badly for a few seconds (under 20
   frames a second, or stuttering), it lowers one setting at a time, least
   noticeable first, and says what it changed. Options > Video Settings can
@@ -606,28 +610,52 @@ show a **Cheats ON** badge in the Friends and Public lists and when joining.
   tick time, entities and memory.
 - **Haunting**: Herobrine haunts the world, the way the old creepypastas tell
   it. Choose how long it lasts, from the first sighting to the end (30 minutes
-  unless changed, 1 to 180), and press Start. Nobody is told in chat.
+  unless changed, 1 to 180), and how it ends, then press Start. Nobody is told
+  in chat.
   - *He is watching*: a white-eyed figure far off in the fog, gone when you
     look again, and a redstone torch nobody placed.
   - *Signs*: cobblestone crosses floating in the air, 2x2 tunnels that lead
     nowhere, trees stripped of their leaves, sand pyramids in the water, signs
-    (*STOP*, *I SEE YOU*), torches going out, *Herobrine joined the world*.
-  - *Closer*: he walks towards you and is gone. The music stops, the dark
-    closes in, a shrine appears, and he says **YOU ARE NOT SAFE** in glitched
-    red text.
-  - *He speaks*: more lines in chat (one with your name), and he stands right
-    behind you.
-  - *The end*: he chases everyone at once. Each player gets a jumpscare, then
-    everyone is kicked with a fake ban screen (*Banned by: Herobrine*). The
-    ban is not real: nobody is actually banned.
+    (*STOP*, *I SEE YOU*), torches going out, fake *[Admin] Herobrine used:*
+    messages, *Herobrine joined the world*.
+  - *Closer*: he walks towards you and is gone. The dark closes in, a shrine
+    appears, and he says **YOU ARE NOT SAFE** in glitched red text. Players
+    start to glitch: controls reversed for a few seconds, pulled back as if
+    lagging, the hotbar shuffled, their name torn up in chat, the world tearing
+    on screen. Glitched zombies and skeletons come out of the dark.
+  - *He speaks*: more lines in chat (one with your name), and **he answers
+    when you talk to him**. He turns the time to midnight, calls thunder and
+    lightning, moves players a few blocks while they blink, turns torches into
+    redstone torches, and sends wither skeletons, a warden and, near the end,
+    a Glitch Beast. He stands right behind you.
+  - *The end*, one of two (**Ending**: Random, the ban screen, or server
+    memory corrupted; Random picks the lair one time in four):
+    - *The ban screen*: he chases everyone at once. Each player gets a
+      jumpscare, then everyone is kicked with a fake ban screen (*Banned by:
+      Herobrine*). The ban is not real: nobody is actually banned.
+    - *Server memory corrupted*: he grabs everyone and drags them along the
+      ground, pulls them into the computer, and they wake up wired into chairs
+      in his hall (the cave of the Digital Corruption update). Three shocks,
+      a death screen, **SERVER MEMORY CORRUPTED**, then the title screen.
+
+  Talking to him: from *He speaks* on, he answers some of what players say
+  in chat (nearly always when it is said to him). On the online version he
+  answers through Claude when the hub has an Anthropic key (see
+  [docs/ONLINE_SETUP.md](docs/ONLINE_SETUP.md)), and with his scripted
+  lines otherwise. A dedicated Node server can use its own key
+  (`ANTHROPIC_API_KEY`, and optionally `HEROBRINE_MODEL`). His answers go
+  through the chat filter.
 
   Only the world owner can choose **At the end: Delete the world** (it asks
-  for a second click). The owner's game then deletes the world, from this
-  browser and from the cloud hub if it was hosted. Otherwise the world is kept.
-  Dedicated Node servers never delete their world files. While it runs, the
-  tab shows the stage and time left and can **Skip to the next stage** or
-  **Stop**, which removes him and puts back every block he placed or took.
-  The haunting is saved with the world and pauses while nobody is online.
+  for a second click). The owner's game then deletes the world, after either
+  ending, from this browser and from the cloud hub if it was hosted.
+  Otherwise the world is kept. Dedicated Node servers never delete their
+  world files. While it runs, the tab shows the stage and time left and can
+  **Skip to the next stage** or **Stop**. Stop removes him and his monsters,
+  puts back every block he placed or took and the time and weather, and
+  brings anyone in his lair back. Nobody loses their things to a death while
+  the world is haunted, and his monsters drop nothing. The haunting is saved
+  with the world and pauses while nobody is online.
 
 A **CHEATS ENABLED** badge is shown while cheats are on. Admin actions never
 award or progress advancements, directly or through what follows from them.
@@ -656,7 +684,7 @@ npm run test:e2e:v1       # Recipe Book, Admin Panel, cheat-free advancements
 npm run test:e2e:render   # culling never changes a pixel
 npm run test:e2e:v4       # the World Update: Error Biome, Glitched Structure, admin tab
 npm run test:e2e:v6       # the End Expansion: the portal, travel, every biome, the mobs, ores and armor, every structure, the Constructs and the Dragon's Nest (screenshots)
-npm run test:e2e:haunting # the Haunting: two minutes from the first sighting to the fake ban and the deleted world (screenshots)
+npm run test:e2e:haunting # the Haunting: a two-minute haunting to the fake ban and the deleted world, talking to him, and the lair ending (screenshots)
 ```
 
 ### Performance tools

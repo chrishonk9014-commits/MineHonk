@@ -18,6 +18,7 @@ import { AtlasLookup, type AtlasMeta } from './atlasInfo';
 import type { Settings } from '../settings';
 import { selectionShape } from '../../common/physics/shapes';
 import { BeaconBeams } from './BeaconBeams';
+import { TorchGlow } from './TorchGlow';
 import { SignText } from './SignText';
 import { GlitchFX } from './GlitchFX';
 import { WorldFX } from './WorldFX';
@@ -89,6 +90,7 @@ export class WorldRenderer {
   readonly weather: Weather;
   readonly hand: HandRenderer;
   readonly beams: BeaconBeams;
+  readonly torchGlow: TorchGlow;
   readonly signs: SignText;
   /** Glitch screen effects and world corruption (V3). */
   readonly glitch: GlitchFX;
@@ -130,10 +132,11 @@ export class WorldRenderer {
     this.weather = new Weather(world);
     this.hand = new HandRenderer(assets.icons, (n) => this.blockTexture(n));
     this.beams = new BeaconBeams(world);
+    this.torchGlow = new TorchGlow(world);
     this.signs = new SignText(world);
     this.glitch = new GlitchFX(settings);
     this.skyScene.add(this.sky.group);
-    this.scene.add(this.sky.cloudGroup, this.sky.eventGroup, this.chunks.group, this.entities.group, this.particles.mesh, this.weather.mesh, this.beams.group, this.signs.group, this.glitch.group, this.worldFx.group);
+    this.scene.add(this.sky.cloudGroup, this.sky.eventGroup, this.chunks.group, this.entities.group, this.particles.mesh, this.weather.mesh, this.beams.group, this.torchGlow.mesh, this.signs.group, this.glitch.group, this.worldFx.group);
 
     const selMat = new THREE.LineBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.45 });
     this.selection = new THREE.LineSegments(new THREE.BufferGeometry(), selMat);
@@ -403,6 +406,7 @@ export class WorldRenderer {
     this.glitch.updateWorld(this.chunks.group, this.sky.group, cam, dt);
     this.worldFx.update(f.time / 20);
     this.beams.update(cam.position.x, cam.position.z, f.time);
+    this.torchGlow.update(cam.position.x, cam.position.y, cam.position.z, f.time, this.lightAt(f.x, f.y + 1.6, f.z), this.particles, dt);
     this.signs.update(cam.position.x, cam.position.y, cam.position.z, (x, y, z) => this.lightAt(x, y, z));
     this.updateSelection(f.target);
     this.updateCracks(f.crack);
@@ -449,6 +453,7 @@ export class WorldRenderer {
     this.worldFx.clear();
     this.chunks.dispose();
     this.beams.dispose();
+    this.torchGlow.dispose();
     this.signs.dispose();
     this.sky.dispose();
     this.entities.clear();

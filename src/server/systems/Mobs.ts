@@ -1333,7 +1333,8 @@ export class MobSystem {
     }
     const weapon = killer ? killer.inventory.get(killer.selectedSlot) : null;
     const looting = enchantLevel(weapon, 'looting');
-    if (!m.baby && s.level.rules.doMobLoot) {
+    // The Haunting's monsters leave nothing behind
+    if (!m.baby && s.level.rules.doMobLoot && !m.data.hauntMob) {
       const drops = rollLoot('mob/' + (m.type === 'sheep' || m.type === 'glitched_sheep' ? m.type : m.type), { rng: m.rng, looting, killedByPlayer: byPlayer, onFire: m.fireTicks > 0, difficulty: s.level.difficulty });
       if ((m.type === 'sheep' || m.type === 'glitched_sheep') && !m.data.sheared) drops.push(stackOf(`${String(m.data.color ?? 'white')}_wool`, 1));
       if (m.held && m.rng.next() < 0.085 + looting * 0.01) drops.push({ ...cloneStack(m.held), damage: Math.floor(m.rng.next() * (items[m.held.id]!.def.durability ?? 0) * 0.8) || undefined });
@@ -1350,7 +1351,7 @@ export class MobSystem {
         break;
       }
     }
-    if (byPlayer && !m.baby) {
+    if (byPlayer && !m.baby && !m.data.hauntMob) {
       const xp = m.def.xp ?? (m.def.category === 'monster' ? 5 : m.def.category === 'boss' ? 500 : 1 + m.rng.int(3));
       // A sculk catalyst nearby drinks the experience and spreads sculk instead
       if (!s.sculk?.onDeath(m.dim, m.x, m.y, m.z, xp)) s.mining.dropXp(m.dim, m.x, m.y + 0.5, m.z, xp, m.admin);

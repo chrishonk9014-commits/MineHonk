@@ -650,9 +650,10 @@ export class App implements GameHost, S.ScreenHost {
   /**
    * Saves (integrated server), tears the game down and returns to the title.
    * `kick` (the Haunting's end): a fake ban screen instead of "Disconnected",
-   * and with `erase` the world is deleted (only ever this browser's own world).
+   * or (`corrupted`, the lair ending) straight to the title; with `erase` the
+   * world is deleted (only ever this browser's own world).
    */
-  async quitToTitle(reason: string | null = null, kick: { ban?: FakeBan; erase?: boolean } = {}): Promise<void> {
+  async quitToTitle(reason: string | null = null, kick: { ban?: FakeBan; erase?: boolean; corrupted?: boolean } = {}): Promise<void> {
     if (this.quitting) return;
     this.quitting = true;
     this.clearStack();
@@ -661,8 +662,9 @@ export class App implements GameHost, S.ScreenHost {
     const worldId = this.worldId;
     const hubId = this.hostSession?.details?.id ?? null;
     // Everyone else's ban goes out before the host's world closes under them
-    if (kick.ban && this.hostSession) await new Promise((r) => setTimeout(r, 1500));
-    this.setLoading(kick.ban ? '' : conn instanceof WorkerConnection ? 'Saving world...' : 'Disconnecting...');
+    const haunted = !!kick.ban || !!kick.corrupted;
+    if (haunted && this.hostSession) await new Promise((r) => setTimeout(r, 1500));
+    this.setLoading(haunted ? '' : conn instanceof WorkerConnection ? 'Saving world...' : 'Disconnecting...');
     // Everyone else leaves a hosted world with the host
     this.stopHosting('The host left the game');
     this.pendingHost = null;
@@ -690,7 +692,8 @@ export class App implements GameHost, S.ScreenHost {
     gl?.clear(gl.COLOR_BUFFER_BIT);
     this.showTitle();
     if (kick.ban) this.push(S.fakeBanScreen(this, kick.ban));
-    else if (reason) this.push(S.messageScreen(this, 'Disconnected', reason));
+    // The lair ending already said it: SERVER MEMORY CORRUPTED, then the title
+    else if (reason && !kick.corrupted) this.push(S.messageScreen(this, 'Disconnected', reason));
     this.quitting = false;
   }
 
@@ -860,7 +863,7 @@ export class App implements GameHost, S.ScreenHost {
     this.setPaused(false);
   }
 
-  exit(reason: string | null, kick?: { ban?: FakeBan; erase?: boolean }): void {
+  exit(reason: string | null, kick?: { ban?: FakeBan; erase?: boolean; corrupted?: boolean }): void {
     void this.quitToTitle(reason, kick);
   }
 

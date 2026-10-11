@@ -216,6 +216,10 @@ export class Particles {
         case 'explosion':
           this.add({ x: x + ox * 2, y: y + oy * 2, z: z + oz * 2, maxLife: 8 + Math.random() * 6, size: 1.2 + Math.random(), r: 0.95, g: 0.95, b: 0.9, a: 0.9, fade: true, grow: 0.08, emissive: true });
           break;
+        case 'redstone_dust':
+          // Specks drifting up from a redstone torch
+          this.add({ x: x + ox * 0.3, y: y + oy * 0.3, z: z + oz * 0.3, vy: 0.008 + Math.random() * 0.01, vx: ox * 0.004, vz: oz * 0.004, maxLife: 22 + Math.random() * 18, size: 0.07 + Math.random() * 0.04, r: 1, g: 0.08 + Math.random() * 0.1, b: 0.04, emissive: true, fade: true });
+          break;
         case 'flame':
         case 'soul_flame':
           this.add({ x: x + ox * 0.2, y: y + oy * 0.2, z: z + oz * 0.2, vy: 0.01, maxLife: 15 + Math.random() * 10, size: 0.1, r: kind === 'flame' ? 1 : 0.4, g: kind === 'flame' ? 0.6 : 0.9, b: kind === 'flame' ? 0.15 : 1, emissive: true, fade: true });

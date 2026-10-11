@@ -107,6 +107,38 @@ includes 1,000 GB of TURN traffic a month for free.
    - `TURN_KEY_API_TOKEN` = the API Token
 4. Run **Deploy online hub** again (step 6).
 
+## Optional: Herobrine's voice (Claude)
+
+In the Haunting (Admin Panel), players can talk to Herobrine once he starts
+speaking. Without this step he answers with his scripted lines. With it, the
+hub asks Claude for each answer, in character, from what he knows about the
+player (their name, what they hold, where they are). The game falls back to
+his scripted lines whenever Claude can't answer.
+
+**Cost.** This is billed separately from any Claude.ai subscription and never
+uses its weekly limits. You pay for what Herobrine actually says, from credit
+you add in advance. With the model the hub uses (`claude-haiku-5-5`), one
+answer costs about $0.0002, so less than a cent for a whole haunting. The hub
+stops at 200 answers a day across everyone (about 4 cents a day at most), then
+uses the scripted lines until the next day.
+
+1. Open the Claude Console at **platform.claude.com** and sign in (your
+   Claude.ai email works; it is a separate account).
+2. Under **Billing**, add some credit (a few dollars lasts a very long time).
+   You can also set a monthly spend limit there.
+3. Open **API Keys** → **Create Key**, name it `MineHonk hub`, and copy it.
+   The Console shows it only once.
+4. In GitHub (**Settings → Secrets and variables → Actions**) add:
+   - `ANTHROPIC_API_KEY` = the key
+5. Run **Deploy online hub** again (step 6). The summary says
+   **Herobrine's voice: Claude**.
+
+The key stays on Cloudflare: players never see it. To change the model or the
+daily limit, edit `HEROBRINE_MODEL` and `HEROBRINE_DAILY_LIMIT` in
+`hub/wrangler.toml`. For example, `claude-sonnet-5-5` costs about $0.005 an
+answer and `claude-opus-5-5` about $0.01. To turn it off, delete the secret
+and run the deploy again, or revoke the key in the Console.
+
 ## If something goes wrong
 
 The failed run's summary lists the usual fixes. The common ones:

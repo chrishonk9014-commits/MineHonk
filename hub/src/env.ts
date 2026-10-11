@@ -14,4 +14,10 @@ export interface Env {
   TURN_KEY_API_TOKEN?: string;
   /** Overrides the public STUN servers (comma-separated), or "none". */
   STUN_URLS?: string;
+  /** Optional: Herobrine answers players through Claude (a GitHub secret, see the setup guide). */
+  ANTHROPIC_API_KEY?: string;
+  /** Which Claude model he speaks with (wrangler.toml). */
+  HEROBRINE_MODEL?: string;
+  /** How many answers a day, across everyone, before he falls back to his scripted lines (wrangler.toml). */
+  HEROBRINE_DAILY_LIMIT?: string;
 }

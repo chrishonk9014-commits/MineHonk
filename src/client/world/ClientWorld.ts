@@ -17,11 +17,15 @@ export interface ChunkListener {
   onLightChanged(cx: number, sy: number, cz: number, faces: number): void;
 }
 
+/** Something else that follows chunks and block changes (beside the renderer). */
+export type ChunkObserver = Pick<ChunkListener, 'onChunkLoaded' | 'onChunkUnloaded' | 'onBlockChanged'>;
+
 export class ClientWorld implements BlockAccess {
   readonly chunks = new Map<number, Chunk>();
   dimension: DimensionId = 'overworld';
   hasSky = true;
   listener: ChunkListener | null = null;
+  readonly observers: ChunkObserver[] = [];
   private lastChunk: Chunk | undefined;
   private lastKey = NaN;
 
@@ -70,6 +74,7 @@ export class ClientWorld implements BlockAccess {
     this.chunks.set(chunkIndex(c.cx, c.cz), c);
     this.lastKey = NaN;
     this.listener?.onChunkLoaded(c);
+    for (const o of this.observers) o.onChunkLoaded(c);
     return c;
   }
 
@@ -77,6 +82,7 @@ export class ClientWorld implements BlockAccess {
     if (this.chunks.delete(chunkIndex(cx, cz))) {
       this.lastKey = NaN;
       this.listener?.onChunkUnloaded(cx, cz);
+      for (const o of this.observers) o.onChunkUnloaded(cx, cz);
     }
   }
 
@@ -87,6 +93,7 @@ export class ClientWorld implements BlockAccess {
     if (old === state) return;
     c.set(x & 15, y, z & 15, state);
     this.listener?.onBlockChanged(x, y, z, old, state);
+    for (const o of this.observers) o.onBlockChanged(x, y, z, old, state);
   }
 
   setLightSection(cx: number, cz: number, sy: number, data: Uint8Array): void {

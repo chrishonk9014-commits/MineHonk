@@ -13,6 +13,7 @@ import { promises as fs } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import { GameServer } from '../server/GameServer';
 import { installGameplay } from '../server/gameplay';
+import { speakWithClaude, voiceClient, HEROBRINE_MODEL } from '../hub/herobrineVoice';
 import type { Connection } from '../server/net/Connection';
 import type { LevelData } from '../server/world/LevelData';
 import type { C2S } from '../common/net/protocol';
@@ -222,6 +223,12 @@ export class Worlds {
         });
         this.applyEntry(server.level, e);
         installGameplay(server);
+        // The Haunting: with its own Anthropic key, Herobrine answers players through Claude
+        const voiceKey = process.env.ANTHROPIC_API_KEY;
+        if (voiceKey) {
+          const client = voiceClient(voiceKey);
+          server.herobrineVoice = (req) => speakWithClaude(client, req, process.env.HEROBRINE_MODEL || HEROBRINE_MODEL);
+        }
         const run: Running = { server, storage, emptySince: Date.now() };
         server.onPlayerLeft = (pl) => {
           if (this.presence.get(pl.uuid) === id) this.presence.delete(pl.uuid);

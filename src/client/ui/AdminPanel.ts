@@ -11,7 +11,7 @@ import type { ItemStack } from '../../common/game/itemstack';
 import { POTIONS } from '../../common/data/potions';
 import { ENCHANTMENTS } from '../../common/data/enchantments';
 import { MOB_DEFS } from '../../common/data/mobs';
-import { HAUNT_STAGES, HAUNT_DEFAULT_MINUTES, HAUNT_MIN_MINUTES, HAUNT_MAX_MINUTES, type HauntStatus } from '../../common/game/haunting';
+import { HAUNT_STAGES, HAUNT_DEFAULT_MINUTES, HAUNT_MIN_MINUTES, HAUNT_MAX_MINUTES, HAUNT_ENDINGS, HAUNT_ENDING_NAMES, type HauntStatus, type HauntEnding } from '../../common/game/haunting';
 import { structureName, inExpandedEnd, EXPANDED_END_SUFFIX, TIME_PRESETS, ADMIN_DIMENSIONS, type AdminAction, type AdminCatalog, type LocateResult, type V4Op, type V5Op, type V55Op, type V6Op } from '../../common/game/admin';
 import { EXPANSION_BIOMES } from '../../common/endExpansion/biomes';
 import { END_QUESTS } from '../../common/endExpansion/quests';
@@ -53,10 +53,11 @@ const DIM_NAMES: Record<string, string> = { overworld: 'Overworld', nether: 'Net
 const MOB_CATEGORY_NAMES: Record<string, string> = { monster: 'Hostile', creature: 'Animals', water: 'Water', ambient: 'Ambient', npc: 'Villagers', boss: 'Bosses' };
 
 /** Remembered between openings during a session. */
-const memory: { tab: Tab; itemQuery: string; itemTab: string; mobQuery: string; mobCat: string; dim: DimensionId; structure: string; biome: string; cave: string; count: number; hauntMinutes: number; hauntErase: boolean } = {
+const memory: { tab: Tab; itemQuery: string; itemTab: string; mobQuery: string; mobCat: string; dim: DimensionId; structure: string; biome: string; cave: string; count: number; hauntMinutes: number; hauntErase: boolean; hauntEnding: HauntEnding } = {
   tab: 'items',
   hauntMinutes: HAUNT_DEFAULT_MINUTES,
   hauntErase: true,
+  hauntEnding: 'random',
   itemQuery: '',
   itemTab: 'all',
   mobQuery: '',
@@ -923,6 +924,7 @@ export function adminScreen(host: AdminHost): Screen {
         ? [
             ['Stage', st ? st.name : '-'],
             ['Time', `${mmss(d.elapsed)} / ${mmss(d.total)}`],
+            ['Ending', HAUNT_ENDING_NAMES[d.ending]],
             ['At the end', d.erase ? 'The world is deleted' : 'The world is kept (a fake deletion)'],
             ['Blocks he changed', String(d.changes)],
           ]
@@ -967,13 +969,13 @@ export function adminScreen(host: AdminHost): Screen {
           return;
         }
         armed = false;
-        void send({ a: 'haunt', op: 'start', minutes: memory.hauntMinutes, erase: memory.hauntErase }).then((r) => showState(r.data as HauntStatus));
+        void send({ a: 'haunt', op: 'start', minutes: memory.hauntMinutes, erase: memory.hauntErase, ending: memory.hauntEnding }).then((r) => showState(r.data as HauntStatus));
       }, 'btn haunt-start');
       const updateWarn = (): void => {
         armed = false;
         start.textContent = 'Start the haunting';
         warn.className = 'small haunt-warn ' + (memory.hauntErase ? 'error-text' : 'muted');
-        warn.textContent = memory.hauntErase ? 'The world is permanently deleted at the end, for everyone. This cannot be undone.' : 'At the end everyone is thrown out with a fake ban, but the world is kept.';
+        warn.textContent = memory.hauntErase ? 'The world is permanently deleted at the end, for everyone. This cannot be undone.' : 'At the end everyone is thrown out (a fake ban, or SERVER MEMORY CORRUPTED), but the world is kept.';
       };
       const finale = el('button', { class: 'btn haunt-finale', disabled: !d.canErase }) as HTMLButtonElement;
       const label = (): string => `At the end: ${memory.hauntErase ? 'Delete the world' : 'Keep the world'}`;
@@ -985,10 +987,31 @@ export function adminScreen(host: AdminHost): Screen {
         finale.textContent = label();
         updateWarn();
       });
+      // How it ends: the fake ban, his lair inside the computer, or either (the lair one time in four)
+      const ending = el('button', { class: 'btn haunt-ending' }) as HTMLButtonElement;
+      const endingLabel = (): string => `Ending: ${HAUNT_ENDING_NAMES[memory.hauntEnding]}`;
+      const endingHelp = el('div', { class: 'muted small haunt-ending-help' });
+      const updateEnding = (): void => {
+        ending.textContent = endingLabel();
+        endingHelp.textContent =
+          memory.hauntEnding === 'random'
+            ? 'Usually the jumpscare and the fake ban; one time in four he drags everyone into his lair inside the computer instead.'
+            : memory.hauntEnding === 'ban'
+              ? 'He chases everyone down: a jumpscare, then a fake ban screen.'
+              : 'He drags everyone into his lair inside the computer: wired into chairs, shocked, SERVER MEMORY CORRUPTED, back to the title.';
+      };
+      ending.addEventListener('click', (e) => {
+        e.stopPropagation();
+        memory.hauntEnding = HAUNT_ENDINGS[(HAUNT_ENDINGS.indexOf(memory.hauntEnding) + 1) % HAUNT_ENDINGS.length]!;
+        updateEnding();
+      });
+      updateEnding();
       updateWarn();
       controls.append(
         label_('How long, from the first sighting to the end (minutes)'),
         el('div', { class: 'row' }, minutes, presets),
+        ending,
+        endingHelp,
         finale,
         ...(d.canErase ? [] : [el('div', { class: 'muted small' }, "Only the world's owner can choose to have the world deleted.")]),
         warn,

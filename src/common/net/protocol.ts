@@ -115,7 +115,7 @@ export interface EntitySpawn {
 export type S2C =
   | { t: 'welcome'; entityId: number; name: string; uuid: string; dimension: DimensionId; gamemode: GameMode; world: WorldInfo; x: number; y: number; z: number; yaw: number; pitch: number; time: number; dayTime: number; abilities: AbilitiesMsg; spawn: [number, number, number] }
   /** `ban`: the Haunting's fake ban screen (`deleted`: the world is gone); `erase`: the world's owner deletes it. */
-  | { t: 'kick'; reason: string; ban?: FakeBan; erase?: boolean }
+  | { t: 'kick'; reason: string; ban?: FakeBan; erase?: boolean; /** The Haunting's lair ending: straight back to the title (it already said SERVER MEMORY CORRUPTED). */ corrupted?: boolean }
   | { t: 'chunk'; data: Uint8Array }
   | { t: 'unload_chunk'; cx: number; cz: number }
   | { t: 'block'; x: number; y: number; z: number; state: number }
@@ -307,7 +307,13 @@ export type FxKind =
   /** How far the dark has closed in (strength 0..1; eased on the client). */
   | 'haunt'
   /** He reached you: his face fills the screen with a scream, then black (ticks). */
-  | 'jumpscare';
+  | 'jumpscare'
+  /**
+   * The Haunting's lair ending: a cutscene step (text = grab, drag, black,
+   * wake, shock, die, corrupt, or end to stop), for ticks. The drag runs the
+   * camera along the ground from (x, y, z) to (x1, y1, z1).
+   */
+  | 'scene';
 export type WindowKind =
   | 'player'
   | 'crafting'

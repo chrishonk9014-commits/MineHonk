@@ -3566,6 +3566,214 @@ body {
   height: auto;
   min-height: calc(var(--s) * 20);
 }
-.btn.haunt-finale {
+.btn.haunt-finale,
+.btn.haunt-ending {
   margin-top: calc(var(--s) * 3);
+}
+
+/* The Haunting's lair ending */
+.haunt-scene {
+  position: absolute;
+  inset: 0;
+  z-index: 58;
+  pointer-events: none;
+  overflow: hidden;
+}
+.haunt-scene > div {
+  position: absolute;
+  inset: 0;
+}
+.hs-black {
+  background: #000;
+  opacity: 0;
+  transition: opacity 0.6s;
+}
+.haunt-scene.is-black .hs-black {
+  opacity: 1;
+}
+.hs-vignette {
+  opacity: 0;
+}
+.hs-vignette.grab {
+  background: radial-gradient(ellipse at center, transparent 30%, rgba(120, 0, 0, 0.85) 100%);
+  animation: hs-pulse 0.5s ease-out 2;
+}
+.hs-vignette.drag {
+  background: radial-gradient(ellipse at center, transparent 20%, rgba(0, 0, 0, 0.97) 85%);
+  animation: hs-close var(--drag-ms, 4500ms) ease-in forwards;
+}
+.hs-vignette.lair {
+  background: radial-gradient(ellipse at center, transparent 45%, rgba(0, 0, 0, 0.8) 100%);
+  opacity: 1;
+}
+@keyframes hs-pulse {
+  0% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0.5;
+  }
+}
+@keyframes hs-close {
+  0% {
+    opacity: 0.3;
+    transform: scale(1.6);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+/* Eyelids: shut, a blink, then open on his hall */
+.hs-lids {
+  display: none;
+}
+.hs-lids.open {
+  display: block;
+}
+.hs-lid {
+  position: absolute;
+  left: -5%;
+  width: 110%;
+  height: 52%;
+  background: #000;
+  border-radius: 0 0 50% 50% / 0 0 30% 30%;
+}
+.hs-lid.top {
+  top: 0;
+  transform-origin: top;
+  animation: hs-lid-top 3s ease-in-out forwards;
+}
+.hs-lid.bottom {
+  bottom: 0;
+  border-radius: 50% 50% 0 0 / 30% 30% 0 0;
+  transform-origin: bottom;
+  animation: hs-lid-bottom 3s ease-in-out forwards;
+}
+@keyframes hs-lid-top {
+  0%, 10% {
+    transform: scaleY(1);
+  }
+  35% {
+    transform: scaleY(0.55);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+  80% {
+    transform: scaleY(0.35);
+  }
+  100% {
+    transform: scaleY(0);
+  }
+}
+@keyframes hs-lid-bottom {
+  0%, 10% {
+    transform: scaleY(1);
+  }
+  35% {
+    transform: scaleY(0.55);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+  80% {
+    transform: scaleY(0.35);
+  }
+  100% {
+    transform: scaleY(0);
+  }
+}
+/* A shock: one white-blue flash (a dim tint with Reduce Motion) */
+.hs-flash {
+  opacity: 0;
+  background: radial-gradient(ellipse at center, rgba(220, 245, 255, 0.95), rgba(80, 180, 255, 0.7));
+}
+.hs-flash.go {
+  animation: hs-flash 0.6s ease-out forwards;
+}
+.haunt-scene.calm .hs-flash {
+  background: rgba(80, 160, 255, 0.35);
+}
+@keyframes hs-flash {
+  0% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+/* Death, the way the game shows it, but nothing to press */
+.hs-die {
+  display: none;
+  background: rgba(120, 0, 0, 0.55);
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: calc(var(--s) * 10);
+  font-family: 'MineHonk Pixel', monospace;
+  color: #fff;
+  text-shadow: calc(var(--s) * 2) calc(var(--s) * 2) 0 #3f3f3f;
+}
+.hs-die.go {
+  display: flex;
+  animation: hs-fade-in 1.2s ease-out forwards;
+}
+.hs-die-title {
+  font-size: calc(var(--s) * 24);
+}
+.hs-die-sub {
+  font-size: calc(var(--s) * 8);
+  color: #ddd;
+}
+@keyframes hs-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+/* SERVER MEMORY CORRUPTED */
+.hs-corrupt {
+  display: none;
+  background: #000;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: calc(var(--s) * 14);
+  font-family: 'MineHonk Pixel', monospace;
+}
+.hs-corrupt.go {
+  display: flex;
+}
+.hs-corrupt-title {
+  position: relative;
+  font-size: calc(var(--s) * 18);
+  color: #ff2a2a;
+  letter-spacing: calc(var(--s) * 1);
+  text-align: center;
+  text-shadow: calc(var(--s) * -1.5) 0 rgba(0, 255, 255, 0.7), calc(var(--s) * 1.5) 0 rgba(255, 0, 80, 0.7);
+  animation: hb-jitter 0.18s steps(2) infinite;
+  padding: 0 calc(var(--s) * 8);
+}
+.haunt-scene.calm .hs-corrupt-title {
+  animation: none;
+}
+.hs-dump {
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: calc(var(--s) * 6);
+  color: #b8b8b8;
+  line-height: 1.5;
+  min-height: 12em;
+  width: min(90%, calc(var(--s) * 260));
+}
+.hs-dump > div:last-child::after {
+  content: '_';
+  animation: hs-blink 0.6s steps(2) infinite;
+}
+@keyframes hs-blink {
+  50% {
+    opacity: 0;
+  }
 }

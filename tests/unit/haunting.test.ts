@@ -28,9 +28,9 @@ describe('the Haunting', () => {
   it('runs the whole timeline: sightings, signs, the dark, his words, the chase, the jumpscare and the fake ban', async () => {
     const { server } = await makeServer({ seed: 'haunting', cheats: true });
     const { conn, player } = await join(server, 'Steve', 'uuid-steve', 4);
-    const r = admin(server, conn, { a: 'haunt', op: 'start', minutes: 1, erase: true });
+    const r = admin(server, conn, { a: 'haunt', op: 'start', minutes: 1, erase: true, ending: 'ban' });
     expect(r.ok, r.text).toBe(true);
-    expect(r.data).toMatchObject({ active: true, stage: 'watching', total: 60, erase: true, canErase: true });
+    expect(r.data).toMatchObject({ active: true, stage: 'watching', total: 60, erase: true, canErase: true, ending: 'ban' });
     expect(conn.received.some((m) => m.t === 'chat' && /\[Admin\]/.test((m as { text: string }).text))).toBe(false);
     const seen = new Set<number>();
     const kinds = new Set<string>();
@@ -61,8 +61,9 @@ describe('the Haunting', () => {
     // Somebody nobody invited
     expect(said(/^Herobrine joined the world$/, 'join')).toBe(true);
     expect(said(/^Herobrine left the world$/, 'leave')).toBe(true);
-    // The music stops, the dark closes in, he vanishes, he reaches you
-    for (const k of ['silence', 'haunt', 'afterimage', 'glitch', 'jumpscare']) expect(kinds.has(k), k).toBe(true);
+    // The dark closes in, he vanishes, he reaches you; the sound never cuts out
+    for (const k of ['haunt', 'afterimage', 'glitch', 'jumpscare']) expect(kinds.has(k), k).toBe(true);
+    expect(kinds.has('silence')).toBe(false);
     expect(maxDark).toBeGreaterThan(0.8);
     // The end: thrown out with a fake ban, the world to be deleted by its owner's client
     const kick = conn.last('kick')!;
@@ -99,13 +100,15 @@ describe('the Haunting', () => {
     expect(validateAdmin({ a: 'haunt', op: 'start', minutes: 181, erase: false })).toBeNull();
     expect(validateAdmin({ a: 'haunt', op: 'start', minutes: 5 })).toBeNull();
     expect(validateAdmin({ a: 'haunt', op: 'start', minutes: 5, erase: true })).toEqual({ a: 'haunt', op: 'start', minutes: 5, erase: true });
+    expect(validateAdmin({ a: 'haunt', op: 'start', minutes: 5, erase: false, ending: 'corrupted' })).toEqual({ a: 'haunt', op: 'start', minutes: 5, erase: false, ending: 'corrupted' });
+    expect(validateAdmin({ a: 'haunt', op: 'start', minutes: 5, erase: false, ending: 'nope' })).toBeNull();
     // A builder gets nothing at all
     const builder = await join(server, 'Bob', 'uuid-bob');
     expect(admin(server, builder.conn, { a: 'haunt', op: 'stop' }).ok).toBe(false);
     expect(server.level.flags.haunt).toBeTruthy();
     // When the end comes, only the owner's client is told to delete the world
     const st = server.level.flags.haunt as { total: number };
-    server.level.flags.haunt = { ...st, erase: true, t: Math.ceil(st.total * 0.965) };
+    server.level.flags.haunt = { ...st, erase: true, ending: 'ban', t: Math.ceil(st.total * 0.965) };
     for (let i = 0; i < 900 && !owner.conn.closed; i++) {
       tick(server, 1);
       if (i % 50 === 0) await new Promise((res) => setTimeout(res, 0));
@@ -115,7 +118,7 @@ describe('the Haunting', () => {
     expect(builder.conn.last('kick')).toMatchObject({ ban: HAUNT_BAN, erase: false });
   }, 300000);
 
-  it('Stop puts back every block he changed, and the music and the light', async () => {
+  it('Stop puts back every block he changed, and the light', async () => {
     const { server } = await makeServer({ seed: 'haunting-stop', cheats: true });
     const { conn, player } = await join(server, 'Steve', 'uuid-steve', 4);
     // Four minutes, from "closer" on: the signs come thick and fast
@@ -144,7 +147,6 @@ describe('the Haunting', () => {
     for (const [x, y, z, prev] of firstPrev.values()) expect(dim.getState(x, y, z), `${x},${y},${z}`).toBe(prev);
     expect(server.level.flags.haunt).toBeUndefined();
     expect(figures(server)).toEqual([]);
-    expect(conn.of('fx').some((m) => m.kind === 'unsilence')).toBe(true);
     expect(conn.last('fx')).toMatchObject({ kind: 'haunt', strength: 0 });
   }, 300000);
 

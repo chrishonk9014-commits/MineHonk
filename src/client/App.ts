@@ -27,7 +27,7 @@ import { el, clear } from './ui/dom';
 import * as S from './ui/Screens';
 import { listWorlds, deleteWorld, updateWorld, exportWorld, importWorld } from '../server/storage/IndexedDBStorage';
 import type { NewWorldOptions } from '../server/world/LevelData';
-import { PROTOCOL_VERSION } from '../common/net/protocol';
+import { PROTOCOL_VERSION, type FakeBan } from '../common/net/protocol';
 import { registryHash } from '../common/registry/hash';
 import { normalizeGodHearts, type GameMode } from '../common/game/gamemode';
 import { randomSeedString } from '../common/math/rng';
@@ -647,15 +647,22 @@ export class App implements GameHost, S.ScreenHost {
     this.settingsChanged(false);
   }
 
-  /** Saves (integrated server), tears the game down and returns to the title. */
-  async quitToTitle(reason: string | null = null): Promise<void> {
+  /**
+   * Saves (integrated server), tears the game down and returns to the title.
+   * `kick` (the Haunting's end): a fake ban screen instead of "Disconnected",
+   * and with `erase` the world is deleted (only ever this browser's own world).
+   */
+  async quitToTitle(reason: string | null = null, kick: { ban?: FakeBan; erase?: boolean } = {}): Promise<void> {
     if (this.quitting) return;
     this.quitting = true;
     this.clearStack();
     const game = this.game;
     const conn = this.conn;
     const worldId = this.worldId;
-    this.setLoading(conn instanceof WorkerConnection ? 'Saving world...' : 'Disconnecting...');
+    const hubId = this.hostSession?.details?.id ?? null;
+    // Everyone else's ban goes out before the host's world closes under them
+    if (kick.ban && this.hostSession) await new Promise((r) => setTimeout(r, 1500));
+    this.setLoading(kick.ban ? '' : conn instanceof WorkerConnection ? 'Saving world...' : 'Disconnecting...');
     // Everyone else leaves a hosted world with the host
     this.stopHosting('The host left the game');
     this.pendingHost = null;
@@ -670,6 +677,10 @@ export class App implements GameHost, S.ScreenHost {
     if (conn instanceof WorkerConnection) {
       await conn.stop();
       if (worldId && icon) await updateWorld(worldId, { icon }).catch(() => {});
+      if (kick.erase && worldId) {
+        await deleteWorld(worldId).catch(() => {});
+        if (hubId) void this.cloudApi?.deleteWorld(hubId).catch(() => {});
+      }
     } else conn?.close();
     this.conn = null;
     this.worldId = null;
@@ -678,7 +689,8 @@ export class App implements GameHost, S.ScreenHost {
     gl?.clearColor(0, 0, 0, 1);
     gl?.clear(gl.COLOR_BUFFER_BIT);
     this.showTitle();
-    if (reason) this.push(S.messageScreen(this, 'Disconnected', reason));
+    if (kick.ban) this.push(S.fakeBanScreen(this, kick.ban));
+    else if (reason) this.push(S.messageScreen(this, 'Disconnected', reason));
     this.quitting = false;
   }
 
@@ -848,8 +860,8 @@ export class App implements GameHost, S.ScreenHost {
     this.setPaused(false);
   }
 
-  exit(reason: string | null): void {
-    void this.quitToTitle(reason);
+  exit(reason: string | null, kick?: { ban?: FakeBan; erase?: boolean }): void {
+    void this.quitToTitle(reason, kick);
   }
 
   setLoading(text: string | null, detail?: string): void {

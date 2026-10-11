@@ -11,6 +11,7 @@ import type { ItemStack } from '../../common/game/itemstack';
 import { POTIONS } from '../../common/data/potions';
 import { ENCHANTMENTS } from '../../common/data/enchantments';
 import { MOB_DEFS } from '../../common/data/mobs';
+import { HAUNT_STAGES, HAUNT_DEFAULT_MINUTES, HAUNT_MIN_MINUTES, HAUNT_MAX_MINUTES, type HauntStatus } from '../../common/game/haunting';
 import { structureName, inExpandedEnd, EXPANDED_END_SUFFIX, TIME_PRESETS, ADMIN_DIMENSIONS, type AdminAction, type AdminCatalog, type LocateResult, type V4Op, type V5Op, type V55Op, type V6Op } from '../../common/game/admin';
 import { EXPANSION_BIOMES } from '../../common/endExpansion/biomes';
 import { END_QUESTS } from '../../common/endExpansion/quests';
@@ -33,7 +34,7 @@ export interface AdminHost {
   cheats(): boolean;
 }
 
-type Tab = 'items' | 'mobs' | 'teleport' | 'player' | 'world' | 'endgame' | 'v4' | 'v5' | 'v55' | 'v6' | 'perf';
+type Tab = 'items' | 'mobs' | 'teleport' | 'player' | 'world' | 'endgame' | 'v4' | 'v5' | 'v55' | 'v6' | 'haunt' | 'perf';
 const TABS: { id: Tab; name: string; icon: string }[] = [
   { id: 'items', name: 'Give Items', icon: 'chest' },
   { id: 'mobs', name: 'Spawn Mobs', icon: 'spawn_egg_zombie' },
@@ -45,14 +46,17 @@ const TABS: { id: Tab; name: string; icon: string }[] = [
   { id: 'v5', name: 'Engineering', icon: 'crusher' },
   { id: 'v55', name: 'Digital Corruption', icon: 'corrupted_flash_drive' },
   { id: 'v6', name: 'End Expansion', icon: 'end_stone_bricks' },
+  { id: 'haunt', name: 'Haunting', icon: 'redstone_torch' },
   { id: 'perf', name: 'Performance', icon: 'redstone' },
 ];
 const DIM_NAMES: Record<string, string> = { overworld: 'Overworld', nether: 'Nether', end: 'The End', farlands: 'Farlands', computer: 'Inside the Computer' };
 const MOB_CATEGORY_NAMES: Record<string, string> = { monster: 'Hostile', creature: 'Animals', water: 'Water', ambient: 'Ambient', npc: 'Villagers', boss: 'Bosses' };
 
 /** Remembered between openings during a session. */
-const memory: { tab: Tab; itemQuery: string; itemTab: string; mobQuery: string; mobCat: string; dim: DimensionId; structure: string; biome: string; cave: string; count: number } = {
+const memory: { tab: Tab; itemQuery: string; itemTab: string; mobQuery: string; mobCat: string; dim: DimensionId; structure: string; biome: string; cave: string; count: number; hauntMinutes: number; hauntErase: boolean } = {
   tab: 'items',
+  hauntMinutes: HAUNT_DEFAULT_MINUTES,
+  hauntErase: true,
   itemQuery: '',
   itemTab: 'all',
   mobQuery: '',
@@ -902,6 +906,122 @@ export function adminScreen(host: AdminHost): Screen {
     );
   };
 
+  // ------------------------------------------------------------------ the Haunting (every world)
+  const renderHaunt = (): HTMLElement => {
+    const state = el('div', { class: 'admin-stats' });
+    const controls = el('div', {});
+    const mmss = (sec: number): string => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
+    let last: HauntStatus | null = null;
+    let armed = false;
+    const showState = (d: HauntStatus | undefined): void => {
+      if (!d) return;
+      const changed = !last || last.active !== d.active || last.canErase !== d.canErase;
+      last = d;
+      clear(state);
+      const st = HAUNT_STAGES.find((x) => x.id === d.stage);
+      const rows: [string, string][] = d.active
+        ? [
+            ['Stage', st ? st.name : '-'],
+            ['Time', `${mmss(d.elapsed)} / ${mmss(d.total)}`],
+            ['At the end', d.erase ? 'The world is deleted' : 'The world is kept (a fake deletion)'],
+            ['Blocks he changed', String(d.changes)],
+          ]
+        : [['Stage', 'Not haunted'], ...(d.changes ? ([['Blocks he changed', String(d.changes)]] as [string, string][]) : [])];
+      for (const [k, v] of rows) state.append(el('div', { class: 'row' }, el('span', { class: 'muted' }, k), el('span', {}, v)));
+      if (st && d.active) state.append(el('div', { class: 'muted small' }, st.what));
+      if (changed) renderControls();
+    };
+    const op = (o: 'status' | 'stop' | 'skip'): void => void send({ a: 'haunt', op: o }).then((r) => showState(r.data as HauntStatus));
+    const renderControls = (): void => {
+      clear(controls);
+      const d = last;
+      if (!d) return;
+      if (d.active) {
+        controls.append(
+          el('div', { class: 'admin-chips' }, btn('Skip to the next stage', () => op('skip'), 'btn chip'), btn('Stop (puts everything back)', () => op('stop'), 'btn chip')),
+          el('div', { class: 'muted small' }, 'Stop ends it at once and puts back every block he placed or took.'),
+        );
+        return;
+      }
+      if (!d.canErase) memory.hauntErase = false;
+      const minutes = field({ type: 'number', min: HAUNT_MIN_MINUTES, max: HAUNT_MAX_MINUTES, value: String(memory.hauntMinutes), class: 'field admin-num haunt-minutes' });
+      minutes.addEventListener('change', () => {
+        memory.hauntMinutes = Math.max(HAUNT_MIN_MINUTES, Math.min(HAUNT_MAX_MINUTES, Math.round(Number(minutes.value) || HAUNT_DEFAULT_MINUTES)));
+        minutes.value = String(memory.hauntMinutes);
+      });
+      const presets = el(
+        'div',
+        { class: 'admin-chips' },
+        ...[5, 10, 15, 30, 60].map((m) =>
+          btn(`${m} min`, () => {
+            memory.hauntMinutes = m;
+            minutes.value = String(m);
+          }, 'btn chip'),
+        ),
+      );
+      const warn = el('div', { class: 'small haunt-warn' });
+      const start = btn('Start the haunting', () => {
+        if (memory.hauntErase && !armed) {
+          armed = true;
+          start.textContent = 'Click again to start: the world will be deleted at the end';
+          return;
+        }
+        armed = false;
+        void send({ a: 'haunt', op: 'start', minutes: memory.hauntMinutes, erase: memory.hauntErase }).then((r) => showState(r.data as HauntStatus));
+      }, 'btn haunt-start');
+      const updateWarn = (): void => {
+        armed = false;
+        start.textContent = 'Start the haunting';
+        warn.className = 'small haunt-warn ' + (memory.hauntErase ? 'error-text' : 'muted');
+        warn.textContent = memory.hauntErase ? 'The world is permanently deleted at the end, for everyone. This cannot be undone.' : 'At the end everyone is thrown out with a fake ban, but the world is kept.';
+      };
+      const finale = el('button', { class: 'btn haunt-finale', disabled: !d.canErase }) as HTMLButtonElement;
+      const label = (): string => `At the end: ${memory.hauntErase ? 'Delete the world' : 'Keep the world'}`;
+      finale.textContent = label();
+      finale.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (!d.canErase) return;
+        memory.hauntErase = !memory.hauntErase;
+        finale.textContent = label();
+        updateWarn();
+      });
+      updateWarn();
+      controls.append(
+        label_('How long, from the first sighting to the end (minutes)'),
+        el('div', { class: 'row' }, minutes, presets),
+        finale,
+        ...(d.canErase ? [] : [el('div', { class: 'muted small' }, "Only the world's owner can choose to have the world deleted.")]),
+        warn,
+        start,
+      );
+    };
+    const label_ = (t: string): HTMLElement => el('div', { class: 'label' }, t);
+    op('status');
+    // The status follows along while the tab is open
+    perfTimer = setInterval(() => {
+      if (destroyed || !root.isConnected) {
+        if (perfTimer) clearInterval(perfTimer);
+        return;
+      }
+      void host.request({ a: 'haunt', op: 'status' }).then((r) => !destroyed && showState(r.data as HauntStatus));
+    }, 1000);
+    return el(
+      'div',
+      { class: 'admin-cols' },
+      el(
+        'div',
+        { class: 'admin-col' },
+        el(
+          'div',
+          { class: 'muted small' },
+          'Herobrine haunts this world, the way the old stories tell it: a figure far off in the fog, redstone torches nobody placed, cobblestone crosses in the air, 2x2 tunnels, leafless trees. He comes closer, speaks, and at the end he comes for everyone: a jumpscare, then everyone is thrown out with a fake ban screen. Everyone in the world sees it, and nobody is told it was started.',
+        ),
+        section('The Haunting', controls),
+      ),
+      el('div', { class: 'admin-col' }, section('Status', state), section('What happens', ...HAUNT_STAGES.map((x) => el('div', { class: 'small' }, el('span', { class: 'yellow' }, `${x.name}: `), x.what)))),
+    );
+  };
+
   // ------------------------------------------------------------------ performance
   const renderPerf = (): HTMLElement => {
     const box = el('div', { class: 'admin-cols' });
@@ -934,7 +1054,7 @@ export function adminScreen(host: AdminHost): Screen {
     for (const c of tabs.children) c.classList.toggle('active', (c as HTMLElement).dataset.tab === t);
     clear(body);
     hideTooltip();
-    const view = t === 'items' ? renderItems() : t === 'mobs' ? renderMobs() : t === 'teleport' ? renderTeleport() : t === 'player' ? renderPlayer() : t === 'world' ? renderWorld() : t === 'endgame' ? renderEndgame() : t === 'v4' ? renderV4() : t === 'v5' ? renderV5() : t === 'v55' ? renderV55() : t === 'v6' ? renderV6() : renderPerf();
+    const view = t === 'items' ? renderItems() : t === 'mobs' ? renderMobs() : t === 'teleport' ? renderTeleport() : t === 'player' ? renderPlayer() : t === 'world' ? renderWorld() : t === 'endgame' ? renderEndgame() : t === 'v4' ? renderV4() : t === 'v5' ? renderV5() : t === 'v55' ? renderV55() : t === 'v6' ? renderV6() : t === 'haunt' ? renderHaunt() : renderPerf();
     body.append(view);
   };
   for (const t of TABS) {

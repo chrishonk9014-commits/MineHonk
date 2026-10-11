@@ -6,7 +6,7 @@
  */
 import { CAVE_BIOMES } from '../../common/gen/caves/caveBiomes';
 import type { ClientConnection } from '../net/ClientConnection';
-import type { C2S, S2C, PlayerStats, WorldInfo, AbilitiesMsg, WindowKind } from '../../common/net/protocol';
+import type { C2S, S2C, PlayerStats, WorldInfo, AbilitiesMsg, WindowKind, FakeBan } from '../../common/net/protocol';
 import { ClientWorld } from '../world/ClientWorld';
 import { LocalPlayer } from './LocalPlayer';
 import { BlockInteraction } from './BlockInteraction';
@@ -43,6 +43,7 @@ import { Navigator, type Instrument } from '../ui/Navigator';
 import * as THREE from 'three';
 import { GlitchHud } from '../ui/GlitchHud';
 import { DigitalHud } from '../ui/DigitalHud';
+import { Jumpscare } from '../ui/Jumpscare';
 import { TouchControls } from '../ui/TouchControls';
 import { EndingCard } from '../ui/EndingCard';
 import { guideEntry } from '../../common/engineering/guide';
@@ -55,7 +56,7 @@ export interface GameHost {
   openAdmin(): void;
   openDeath(message: string, hardcore: boolean, score: number): void;
   closeScreens(): void;
-  exit(reason: string | null): void;
+  exit(reason: string | null, kick?: { ban?: FakeBan; erase?: boolean }): void;
   setLoading(text: string | null, detail?: string): void;
   openAchievements(): void;
   openEngineeringBook(entry?: string): void;
@@ -114,6 +115,10 @@ export class Game {
   private readonly glitchHud: GlitchHud;
   /** V5.5: Herobrine's words and the computer world's screen effects. */
   private readonly digitalHud: DigitalHud;
+  /** The Haunting: how far the dark has closed in (eased towards the server's word), and its jumpscare. */
+  private haunt = 0;
+  private hauntTarget = 0;
+  private readonly jumpscare: Jumpscare;
   /** V5.5: movement reversed until this tick (PLAYER CONTROL OVERRIDE). */
   private reverseControlsUntil = 0;
   /** On-screen controls for phones and tablets. */
@@ -267,6 +272,8 @@ export class Game {
     );
     this.glitchHud = new GlitchHud(this.root, settings);
     this.digitalHud = new DigitalHud(this.root, settings);
+    this.jumpscare = new Jumpscare(this.root, settings, audio);
+    this.chat.glitchFx = settings.glitchFx;
     this.endingCard = new EndingCard(this.root, settings);
     ui.append(this.root);
     this.chat.onSend = (text) => this.send({ t: 'chat', text });
@@ -317,6 +324,11 @@ export class Game {
    * an accessibility setting; with Reduce Motion it holds steady.
    */
   private darknessAmount(): number {
+    // The Haunting closes in like a steady Darkness
+    return Math.max(this.effectDarkness(), this.haunt * 0.75);
+  }
+
+  private effectDarkness(): number {
     if (this.effectLevel('blindness') > 0) return 1;
     if (this.effectLevel('darkness') <= 0) return 0;
     const k = Math.max(0, Math.min(1, this.settings.darknessPulse ?? 1));
@@ -454,7 +466,7 @@ export class Game {
       }
       case 'kick':
         this.running = false;
-        this.host.exit(m.reason);
+        this.host.exit(m.reason, { ban: m.ban, erase: m.erase });
         break;
       case 'chunk':
         this.world.loadChunk(m.data);
@@ -1069,6 +1081,7 @@ export class Game {
     if (this.flash > 0) this.flash = Math.max(0, this.flash - 0.1);
     if (this.hurtTilt > 0) this.hurtTilt = Math.max(0, this.hurtTilt - 0.12);
     if (this.shake > 0) this.shake = Math.max(0, this.shake - 0.05);
+    if (this.haunt !== this.hauntTarget) this.haunt = Math.abs(this.hauntTarget - this.haunt) < 0.005 ? this.hauntTarget : this.haunt + (this.hauntTarget - this.haunt) * 0.03;
     this.tickPortalFx();
     this.ambience();
     if (this.tickNo % 100 === 0) {
@@ -1347,6 +1360,14 @@ export class Game {
         break;
       case 'dragon_storm':
         this.endEvents.onDragonStorm((m.strength ?? 0) > 0);
+        break;
+      // The Haunting
+      case 'haunt':
+        this.hauntTarget = Math.max(0, Math.min(1, m.strength ?? 0));
+        break;
+      case 'jumpscare':
+        this.jumpscare.play(m.ticks ?? 60);
+        if (!this.settings.reduceMotion) this.shake = 1;
         break;
       case 'pulse':
         wf.pulse(m.x ?? 0, m.y ?? 0, m.z ?? 0, m.r ?? 20, secs, now);
@@ -2128,6 +2149,7 @@ export class Game {
 
   applySettings(rebuildChunks = false): void {
     this.autoOptimizer.hold(performance.now(), rebuildChunks ? 8000 : 4000);
+    this.chat.glitchFx = this.settings.glitchFx;
     this.renderer.resize();
     if (rebuildChunks) this.renderer.chunks.rebuildAll();
     this.audio.applyVolumes();

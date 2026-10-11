@@ -114,7 +114,8 @@ export interface EntitySpawn {
 
 export type S2C =
   | { t: 'welcome'; entityId: number; name: string; uuid: string; dimension: DimensionId; gamemode: GameMode; world: WorldInfo; x: number; y: number; z: number; yaw: number; pitch: number; time: number; dayTime: number; abilities: AbilitiesMsg; spawn: [number, number, number] }
-  | { t: 'kick'; reason: string }
+  /** `ban`: the Haunting's fake ban screen (`deleted`: the world is gone); `erase`: the world's owner deletes it. */
+  | { t: 'kick'; reason: string; ban?: FakeBan; erase?: boolean }
   | { t: 'chunk'; data: Uint8Array }
   | { t: 'unload_chunk'; cx: number; cz: number }
   | { t: 'block'; x: number; y: number; z: number; state: number }
@@ -227,7 +228,16 @@ export interface AbilitiesMsg {
 }
 
 export type EntityAnim = 'swing' | 'hurt' | 'death' | 'crit' | 'eat' | 'magic_crit' | 'wake' | 'sleep' | 'totem' | 'teleport' | 'attack' | 'roar';
-export type ChatKind = 'chat' | 'system' | 'join' | 'leave' | 'death' | 'announce' | 'error' | 'achievement' | 'whisper';
+/** The Haunting's fake ban screen. */
+export interface FakeBan {
+  title: string;
+  reason: string;
+  by: string;
+  expires: string;
+  deleted?: boolean;
+}
+
+export type ChatKind = 'chat' | 'system' | 'join' | 'leave' | 'death' | 'announce' | 'error' | 'achievement' | 'whisper' | 'herobrine';
 
 /**
  * Screen/world effect kinds (V3).
@@ -292,7 +302,12 @@ export type FxKind =
   /** A ring of light racing outwards along the ground from (x,y,z) to radius r over ticks. */
   | 'shockwave'
   /** The Dragon's cosmetic storm over the main island (strength 1 on, 0 off). */
-  | 'dragon_storm';
+  | 'dragon_storm'
+  // The Haunting (Admin Panel)
+  /** How far the dark has closed in (strength 0..1; eased on the client). */
+  | 'haunt'
+  /** He reached you: his face fills the screen with a scream, then black (ticks). */
+  | 'jumpscare';
 export type WindowKind =
   | 'player'
   | 'crafting'

@@ -754,6 +754,17 @@ const EFFECTS: Record<string, { dur: number; recipe: Recipe }> = {
       s.noise({ dur: 4.5, gain: 0.12, attack: 2.5, decay: 2, bp: [400, 3] });
     },
   },
+  /** The Haunting's jumpscare: a scream, harsh and loud, broken up. */
+  'herobrine.scream': {
+    dur: 1.6,
+    recipe: (s) => {
+      s.voice({ dur: 1.4, gain: 1, f0: 620, f1: 240, formants: [900, 2700], rough: 0.95, vibrato: 0.09 });
+      s.voice({ dur: 1.2, gain: 0.7, f0: 930, f1: 410, formants: [1300, 3300], rough: 0.8, vibrato: 0.12 });
+      s.noise({ dur: 1.3, gain: 0.65, attack: 0.005, decay: 0.5, bp: [1900, 1.4] });
+      s.tone({ dur: 0.9, gain: 0.45, f0: 1600, f1: 220, wave: 'saw', lp: 5000, decay: 0.4, vibrato: 0.1, vibratoRate: 22 });
+      s.crush(5, 3);
+    },
+  },
   'herobrine.whisper': { dur: 1.4, recipe: (s) => (s.noise({ dur: 1.3, gain: 0.35, attack: 0.3, decay: 0.6, bp: [2200, 3] }), s.noise({ start: 0.2, dur: 0.8, gain: 0.2, attack: 0.2, decay: 0.4, bp: [1100, 4] })) },
   'herobrine.strike': { dur: 0.6, recipe: (s) => (s.tone({ dur: 0.12, gain: 0.5, f0: 2400, f1: 300, wave: 'square', decay: 0.05 }), s.knock({ start: 0.08, f: 110, gain: 0.8, decay: 0.05 }), s.crush(4, 4)) },
   'herobrine.charge': { dur: 1.5, recipe: (s) => (s.tone({ dur: 1.4, gain: 0.45, f0: 90, f1: 700, wave: 'square', lp: 1800, attack: 0.5, decay: 0.3, vibrato: 0.05, vibratoRate: 12 }), s.crush(4, 3)) },

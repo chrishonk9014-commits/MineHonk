@@ -604,6 +604,30 @@ show a **Cheats ON** badge in the Friends and Public lists and when joining.
   chunks.
 - **Performance**: client FPS, frame time, chunks and meshes, server TPS,
   tick time, entities and memory.
+- **Haunting**: Herobrine haunts the world, the way the old creepypastas tell
+  it. Choose how long it lasts, from the first sighting to the end (30 minutes
+  unless changed, 1 to 180), and press Start. Nobody is told in chat.
+  - *He is watching*: a white-eyed figure far off in the fog, gone when you
+    look again, and a redstone torch nobody placed.
+  - *Signs*: cobblestone crosses floating in the air, 2x2 tunnels that lead
+    nowhere, trees stripped of their leaves, sand pyramids in the water, signs
+    (*STOP*, *I SEE YOU*), torches going out, *Herobrine joined the world*.
+  - *Closer*: he walks towards you and is gone. The music stops, the dark
+    closes in, a shrine appears, and he says **YOU ARE NOT SAFE** in glitched
+    red text.
+  - *He speaks*: more lines in chat (one with your name), and he stands right
+    behind you.
+  - *The end*: he chases everyone at once. Each player gets a jumpscare, then
+    everyone is kicked with a fake ban screen (*Banned by: Herobrine*). The
+    ban is not real: nobody is actually banned.
+
+  Only the world owner can choose **At the end: Delete the world** (it asks
+  for a second click). The owner's game then deletes the world, from this
+  browser and from the cloud hub if it was hosted. Otherwise the world is kept.
+  Dedicated Node servers never delete their world files. While it runs, the
+  tab shows the stage and time left and can **Skip to the next stage** or
+  **Stop**, which removes him and puts back every block he placed or took.
+  The haunting is saved with the world and pauses while nobody is online.
 
 A **CHEATS ENABLED** badge is shown while cheats are on. Admin actions never
 award or progress advancements, directly or through what follows from them.
@@ -632,6 +656,7 @@ npm run test:e2e:v1       # Recipe Book, Admin Panel, cheat-free advancements
 npm run test:e2e:render   # culling never changes a pixel
 npm run test:e2e:v4       # the World Update: Error Biome, Glitched Structure, admin tab
 npm run test:e2e:v6       # the End Expansion: the portal, travel, every biome, the mobs, ores and armor, every structure, the Constructs and the Dragon's Nest (screenshots)
+npm run test:e2e:haunting # the Haunting: two minutes from the first sighting to the fake ban and the deleted world (screenshots)
 ```
 
 ### Performance tools

@@ -23,6 +23,7 @@ import { StructureQuests } from './systems/StructureQuests';
 import { TempleTrials } from './systems/TempleTrials';
 import { Engineering } from './engineering/Engineering';
 import { HerobrineSystem } from './herobrine/Herobrine';
+import { HauntingSystem } from './herobrine/Haunting';
 import { EndExpansionSystem } from './systems/EndExpansion';
 import { EndMobsSystem } from './systems/EndMobs';
 import { ConstructsSystem } from './systems/Constructs';
@@ -143,6 +144,9 @@ export function installGameplay(server: GameServer): void {
   // V5.5: the Herobrine story (after the dragon fight and the computers it hooks into)
   const herobrine = new HerobrineSystem(server);
   server.herobrine = herobrine;
+  // The Haunting (Admin Panel, every world)
+  const haunting = new HauntingSystem(server);
+  server.haunting = haunting;
   mobs.onBossDeath = (m, killer, info) => {
     if (m.type === 'ender_dragon') end.fight.onDeath(m, killer, info);
     else if (m.type === 'the_error') errorBoss.onDeath(m, killer, info);
@@ -191,6 +195,7 @@ export function installGameplay(server: GameServer): void {
     temples.tick();
     engineering.tick();
     herobrine.tick();
+    haunting.tick();
     far.tick();
     gadgets.tick();
     mounts.tick();

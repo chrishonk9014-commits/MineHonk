@@ -3461,3 +3461,111 @@ body {
   max-width: calc(var(--s) * 200);
   text-align: center;
 }
+
+/* ------------------------------------------------------------ The Haunting */
+.jumpscare {
+  position: absolute;
+  inset: 0;
+  z-index: 60;
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  pointer-events: none;
+}
+.jumpscare-face {
+  height: 115vh;
+  image-rendering: pixelated;
+  transform: scale(0.2);
+  filter: drop-shadow(0 0 4vh rgba(255, 255, 255, 0.25));
+}
+.jumpscare.go .jumpscare-face {
+  animation: js-rush 0.2s ease-in forwards, js-shake 0.05s steps(2) 0.2s 16;
+}
+.jumpscare.calm.go .jumpscare-face {
+  animation: js-rush 0.35s ease-out forwards;
+}
+.jumpscare.black .jumpscare-face {
+  opacity: 0;
+  transition: opacity 0.5s;
+}
+@keyframes js-rush {
+  from {
+    transform: scale(0.2);
+  }
+  to {
+    transform: scale(1.3);
+  }
+}
+@keyframes js-shake {
+  from {
+    transform: scale(1.3) translate(1.2%, -0.8%);
+  }
+  to {
+    transform: scale(1.3) translate(-1.2%, 0.8%);
+  }
+}
+.chat .line.chat-herobrine span:last-child {
+  color: #ff2a2a;
+  text-shadow: calc(var(--s) * 0.6) 0 #00e5ff, calc(var(--s) * -0.6) 0 #ff0040;
+  letter-spacing: 0.08em;
+  display: inline-block;
+  animation: hb-jitter 0.09s steps(2) 30;
+}
+.chat .line.chat-herobrine.calm span:last-child {
+  animation: none;
+  text-shadow: none;
+}
+@keyframes hb-jitter {
+  from {
+    transform: translate(calc(var(--s) * 0.8), 0);
+  }
+  to {
+    transform: translate(calc(var(--s) * -0.8), calc(var(--s) * 0.4));
+  }
+}
+.screen.fake-ban .title-text {
+  color: #a0a0a0;
+}
+.fake-ban-title {
+  color: #fff;
+  font-size: calc(var(--s) * 9);
+  text-shadow: var(--s) var(--s) 0 #3f3f3f;
+}
+.fake-ban-line {
+  text-shadow: var(--s) var(--s) 0 #2a2a2a;
+}
+.fake-ban-reason {
+  color: #ff5555;
+}
+.fake-ban-by {
+  color: #fff;
+}
+.fake-ban-deleted {
+  color: #ff5555;
+  margin-top: calc(var(--s) * 6);
+}
+.fake-ban-note {
+  color: #6a6a6a;
+  font-size: calc(var(--s) * 6);
+  margin-top: calc(var(--s) * 8);
+  opacity: 0;
+  transition: opacity 2s;
+}
+.fake-ban-note.shown {
+  opacity: 1;
+}
+.haunt-warn {
+  max-width: calc(var(--s) * 200);
+  margin: calc(var(--s) * 2) 0;
+}
+.btn.haunt-start {
+  margin-top: calc(var(--s) * 2);
+  white-space: normal;
+  height: auto;
+  min-height: calc(var(--s) * 20);
+}
+.btn.haunt-finale {
+  margin-top: calc(var(--s) * 3);
+}

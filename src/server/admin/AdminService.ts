@@ -464,6 +464,9 @@ export class AdminService {
       case 'v55':
         if (!this.server.herobrine || !this.server.engineering) return { ok: false, text: 'The Herobrine story is not running.' };
         return herobrineAdmin(this.server.herobrine, { moveTo: (pl, dim, x, y, z) => this.moveTo(pl, dim, x, y, z), give: (pl, id, n) => this.giveMarked(pl, id, n), safeSpot: (dim, x, y, z) => this.safeSpot(dim, x, y, z, false) }, p, a.op);
+      case 'haunt':
+        if (!this.server.haunting) return { ok: false, text: 'The haunting is not available.' };
+        return this.server.haunting.admin(p, a.op, a.minutes, a.erase);
       case 'v6':
         if (!this.server.endExpansion) return { ok: false, text: 'The End Expansion is not running.' };
         return expansionAdmin(

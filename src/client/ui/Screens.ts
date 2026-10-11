@@ -10,7 +10,7 @@ import { GAME_MODE_INFO, GOD_HEART_PRESETS, normalizeGodHearts, type GameMode, t
 import { ACHIEVEMENTS } from '../../common/data/achievements';
 import { itemById } from '../../common/registry/items';
 import type { ItemIcons } from '../render/ItemIcons';
-import { LIMITS } from '../../common/net/protocol';
+import { LIMITS, type FakeBan } from '../../common/net/protocol';
 import { updateLogScreen } from './UpdateLogScreen';
 import { undoCount, undoAutoOptimize } from '../game/AutoOptimizer';
 
@@ -263,6 +263,30 @@ export function messageScreen(host: ScreenHost, title: string, text: string, onO
   const { root, body } = titled(title);
   body.append(el('div', { class: 'muted', style: { maxWidth: 'calc(var(--s) * 300)', textAlign: 'center', whiteSpace: 'pre-wrap' } }, text), el('div', { class: 'spacer' }), button('Back', wrapClick(host, () => (host.pop(), onOk?.()))));
   return { root };
+}
+
+/**
+ * The Haunting's last word: a ban screen like the real thing (it bans
+ * nobody). A quiet line under it, after a while, says it was only the
+ * haunting, so nobody worries about being banned for real.
+ */
+export function fakeBanScreen(host: ScreenHost, ban: FakeBan): Screen {
+  const { root, body } = titled('Connection Lost', 'screen dirt center fake-ban');
+  const line = (label: string, value: string, cls = ''): HTMLElement => el('div', { class: 'fake-ban-line' }, el('span', { class: 'muted' }, label), el('span', { class: cls }, value));
+  const note = el('div', { class: 'fake-ban-note' }, 'It was only the Haunting. You are not really banned.');
+  body.append(
+    el('div', { class: 'fake-ban-title' }, ban.title),
+    el('div', { class: 'spacer' }),
+    line('Reason: ', ban.reason, 'fake-ban-reason'),
+    line('Banned by: ', ban.by, 'fake-ban-by'),
+    line('Your ban expires: ', ban.expires),
+    ban.deleted ? el('div', { class: 'fake-ban-deleted' }, 'This world has been deleted.') : el('div', {}),
+    el('div', { class: 'spacer' }),
+    button('Back to Title Screen', wrapClick(host, () => host.pop())),
+    note,
+  );
+  setTimeout(() => note.classList.add('shown'), 8000);
+  return { root, escapable: false };
 }
 
 // ---------------------------------------------------------------------------

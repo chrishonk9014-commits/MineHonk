@@ -102,6 +102,8 @@ export class GameServer {
   engineering: import('./engineering/Engineering').Engineering | null = null;
   /** V5.5 - the Herobrine story (installed by gameplay). */
   herobrine: import('./herobrine/Herobrine').HerobrineSystem | null = null;
+  /** The Haunting (Admin Panel, every world). */
+  haunting: import('./herobrine/Haunting').HauntingSystem | null = null;
   /** Work scheduled for a later tick (see `later`). */
   private readonly scheduled: { at: number; fn: () => void }[] = [];
   /** Hook for the hosting layer to forward player reports (e.g. to platform moderation). */
@@ -520,8 +522,9 @@ export class GameServer {
     await this.removePlayer(p, true);
   }
 
-  kick(p: ServerPlayer, reason: string): void {
-    p.send({ t: 'kick', reason });
+  /** `extra`: the Haunting's fake ban screen, and (for the world's owner) deleting the world. */
+  kick(p: ServerPlayer, reason: string, extra: Omit<Extract<S2C, { t: 'kick' }>, 't' | 'reason'> = {}): void {
+    p.send({ t: 'kick', reason, ...extra });
     p.conn.close(reason);
     void this.removePlayer(p, true);
   }

@@ -11,6 +11,7 @@ import { expansionGiveSets } from '../endExpansion/resources';
 import { END_QUEST_IDS } from '../endExpansion/quests';
 import { RARE_END_LOOT } from '../endExpansion/guardian';
 import { DRAGON_TESTS } from '../endExpansion/dragon';
+import { HAUNT_OPS, HAUNT_MIN_MINUTES, HAUNT_MAX_MINUTES, type HauntOp } from './haunting';
 
 export const ADMIN_DIMENSIONS: DimensionId[] = ['overworld', 'nether', 'end', 'farlands', 'computer'];
 
@@ -203,7 +204,9 @@ export type AdminAction =
   /** V5.5: the Herobrine story (all cheats: never advancements). */
   | { a: 'v55'; op: V55Op }
   /** V6: the End Expansion (tp_biome names one of the Expanded End's biomes). */
-  | { a: 'v6'; op: V6Op; biome?: string; set?: string; structure?: string; quest?: string; spot?: string; test?: string };
+  | { a: 'v6'; op: V6Op; biome?: string; set?: string; structure?: string; quest?: string; spot?: string; test?: string }
+  /** The Haunting (every world): Herobrine over `minutes`; `erase` deletes the world at the end (its owner only). */
+  | { a: 'haunt'; op: HauntOp; minutes?: number; erase?: boolean };
 
 export type AdminActionName = AdminAction['a'];
 
@@ -214,6 +217,8 @@ export type AdminActionName = AdminAction['a'];
 export function describeAdmin(a: AdminAction): string | null {
   const who = (t?: string): string => (t ? ` on ${t}` : '');
   switch (a.a) {
+    // A haunting announced in chat would spoil it
+    case 'haunt':
     case 'catalog':
     case 'perf':
     case 'locate_structure':
@@ -286,6 +291,12 @@ export function validateAdmin(raw: unknown): AdminAction | null {
     case 'v55':
       if (!V55_OPS.includes(m.op as V55Op)) return null;
       return { a: 'v55', op: m.op as V55Op };
+    case 'haunt': {
+      if (!HAUNT_OPS.includes(m.op as HauntOp)) return null;
+      if (m.op !== 'start') return { a: 'haunt', op: m.op as HauntOp };
+      if (!isInt(m.minutes) || m.minutes < HAUNT_MIN_MINUTES || m.minutes > HAUNT_MAX_MINUTES || typeof m.erase !== 'boolean') return null;
+      return { a: 'haunt', op: 'start', minutes: m.minutes, erase: m.erase };
+    }
     case 'v6':
       if (!V6_OPS.includes(m.op as V6Op)) return null;
       if (m.op === 'tp_biome') return typeof m.biome === 'string' && EXPANSION_BIOME_IDS.includes(m.biome) ? { a: 'v6', op: 'tp_biome', biome: m.biome } : null;

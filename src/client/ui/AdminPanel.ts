@@ -11,7 +11,7 @@ import type { ItemStack } from '../../common/game/itemstack';
 import { POTIONS } from '../../common/data/potions';
 import { ENCHANTMENTS } from '../../common/data/enchantments';
 import { MOB_DEFS } from '../../common/data/mobs';
-import { HAUNT_STAGES, HAUNT_DEFAULT_MINUTES, HAUNT_MIN_MINUTES, HAUNT_MAX_MINUTES, HAUNT_ENDINGS, HAUNT_ENDING_NAMES, type HauntStatus, type HauntEnding } from '../../common/game/haunting';
+import { HAUNT_STAGES, HAUNT_DEFAULT_MINUTES, HAUNT_MIN_MINUTES, HAUNT_MAX_MINUTES, HAUNT_ENDINGS, HAUNT_ENDING_NAMES, HAUNT_TALK_AT, type HauntStatus, type HauntEnding } from '../../common/game/haunting';
 import { structureName, inExpandedEnd, EXPANDED_END_SUFFIX, TIME_PRESETS, ADMIN_DIMENSIONS, type AdminAction, type AdminCatalog, type LocateResult, type V4Op, type V5Op, type V55Op, type V6Op } from '../../common/game/admin';
 import { EXPANSION_BIOMES } from '../../common/endExpansion/biomes';
 import { END_QUESTS } from '../../common/endExpansion/quests';
@@ -925,6 +925,8 @@ export function adminScreen(host: AdminHost): Screen {
             ['Stage', st ? st.name : '-'],
             ['Time', `${mmss(d.elapsed)} / ${mmss(d.total)}`],
             ['Ending', HAUNT_ENDING_NAMES[d.ending]],
+            // He only answers in chat from "He speaks" on
+            ['Talks back', d.elapsed >= Math.floor(d.total * HAUNT_TALK_AT) ? 'Yes: talk to him in chat' : `From "He speaks", in ${mmss(Math.floor(d.total * HAUNT_TALK_AT) - d.elapsed)}`],
             ['At the end', d.erase ? 'The world is deleted' : 'The world is kept (a fake deletion)'],
             ['Blocks he changed', String(d.changes)],
           ]

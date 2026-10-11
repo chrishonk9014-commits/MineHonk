@@ -97,6 +97,7 @@ await page.locator('.haunt-start').click();
 await page.waitForTimeout(1200);
 const statusText = await page.locator('.admin-body').innerText();
 check(`it starts (${statusText.match(/Time\s+\S+/)?.[0] ?? ''})`, /He is watching/.test(statusText) && /The world is deleted/.test(statusText));
+check('the tab says when he starts talking back', /Talks back\s+From "He speaks", in 1:2\d/.test(statusText));
 check('nobody is told in chat', !/\[Admin\]/.test(await chatText()));
 await page.keyboard.press('Escape');
 

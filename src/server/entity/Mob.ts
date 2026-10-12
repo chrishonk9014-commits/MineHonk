@@ -3,6 +3,7 @@
  * uses the shared player physics with synthetic input (ground mobs), or a
  * simple velocity model for flyers and swimmers.
  */
+import { ECLIPSE } from '../../common/endExpansion/events';
 import { LivingEntity, type HurtInfo } from './Living';
 import type { Entity } from './Entity';
 import type { MobDef } from '../../common/data/mobs';
@@ -16,6 +17,10 @@ import type { EntitySpawn } from '../../common/net/protocol';
 import { Pathfinder, type PathNode, type PathOptions } from '../ai/Pathfinder';
 import type { Goal } from '../ai/goals';
 import type { ServerPlayer } from '../player/ServerPlayer';
+import type { Dimension } from '../world/Dimension';
+import { collisionShape } from '../../common/physics/shapes';
+import { isConstruct } from '../../common/endExpansion/structures';
+import { isExpansionMob } from '../../common/endExpansion/mobs';
 
 export type Target = LivingEntity | ServerPlayer;
 
@@ -373,9 +378,36 @@ export class Mob extends LivingEntity {
       if (tx === null) this.yaw = approachAngle(this.yaw, this.headYaw, 0.3);
       this.lookAt = null;
     }
+    // V6: mobs that treat void edges as walls stop short of them, on the ground and in their own jumps
+    // (not when thrown by a hit, nor going over on purpose: a void slip or a leap that was checked);
+    // a path that keeps pushing at the edge is given up like any stuck path
+    const guard = !!def.edgeGuard && (b.onGround || this.dim.server.tickNo - this.lastHurtTick > 20) && !this.data.slipping && this.data.leapUntil === undefined;
+    if (guard && this.edgeAhead(forward)) forward = 0;
+    const fromX = b.x;
+    const fromY = b.y;
+    const fromZ = b.z;
+    const fromGround = b.onGround;
+    const fromFall = b.fallDistance;
+    const supported = guard && !this.footprintOverVoid();
     const slow = this.effectSlow();
     const res = stepMovement(this.dim, b, { forward, strafe: 0, jump, sneak: false, sprint: false, yaw: this.yaw }, { flying: false, noClip: false, walkSpeed: def.speed * speed * (this.baby && def.brain === 'zombie' ? 1.5 : 1) * slow, flySpeed: 0 }, this.eyeHeight);
     void res;
+    // ...and never takes a step that leaves nothing at all under its feet
+    if (supported && this.footprintOverVoid()) {
+      const dy = b.y - fromY;
+      this.setPos(fromX, fromY, fromZ);
+      b.onGround = fromGround;
+      b.fallDistance = fromFall;
+      b.vx = 0;
+      b.vz = 0;
+      if (fromGround) b.vy = 0;
+      else {
+        // In the air: only the sideways part is undone. It keeps falling where it was, over ground,
+        // rather than hanging at the edge while its fall adds up
+        moveBody(this.dim, b, 0, dy, 0);
+        if (!b.onGround && b.y < fromY) b.fallDistance += fromY - b.y;
+      }
+    }
     // Spider climbing
     if (def.brain === 'spider' && b.collidedH) b.vy = 0.2;
     // Fall damage
@@ -387,6 +419,37 @@ export class Mob extends LivingEntity {
       b.vy *= 0.6;
       b.fallDistance = 0;
     }
+  }
+
+  /**
+   * Whether walking on (or the way it is already sliding) would take the mob
+   * over a void edge: a column with no ground within a few blocks below its
+   * feet. Stops the slide as well.
+   */
+  private edgeAhead(forward: number): boolean {
+    const b = this.body;
+    const reach = this.def.width / 2 + 0.45;
+    if (forward > 0 && overVoid(this.dim, this.x - Math.sin(this.yaw) * reach, this.y, this.z - Math.cos(this.yaw) * reach)) return true;
+    const sp = Math.hypot(b.vx, b.vz);
+    if (sp > 0.01 && overVoid(this.dim, this.x + (b.vx / sp) * reach, this.y, this.z + (b.vz / sp) * reach)) {
+      b.vx = 0;
+      b.vz = 0;
+    }
+    return false;
+  }
+
+  /** True when every column under the mob's footprint (a hair inside its edges) is open void. */
+  private footprintOverVoid(): boolean {
+    const h = Math.max(0.05, this.body.width / 2 - 0.05);
+    for (const [dx, dz] of [
+      [0, 0],
+      [-h, -h],
+      [h, -h],
+      [-h, h],
+      [h, h],
+    ] as const)
+      if (!overVoid(this.dim, this.body.x + dx, this.body.y, this.body.z + dz)) return false;
+    return true;
   }
 
   private effectSlow(): number {
@@ -436,6 +499,26 @@ export class Mob extends LivingEntity {
     if (this.def.fireImmune && (src === 'fire' || src === 'lava' || src === 'in_fire' || src === 'magma')) return 0;
     // Emerging or burrowing Wardens (and other scripted moments) can't be hurt
     if (this.data.untouchable && src !== 'void' && src !== 'kill') return 0;
+    // The Error shrugs off most of a hit unless its core is exposed
+    if (this.type === 'the_error') {
+      amount = this.dim.server.errorBoss?.scaleDamage(this, amount, info) ?? amount;
+      if (amount <= 0) return 0;
+    }
+    // V6 phase 3: a Bulwark behind its shield takes half (and any hit wakes it)
+    if (isConstruct(this.type)) amount = this.dim.server.constructs?.scaleDamage(this, amount, info) ?? amount;
+    // V6 phase 5: the End Guardian (its shield, its exposed core, its untouchable moments); eclipsed Void Stalkers
+    if (this.type === 'end_guardian') {
+      amount = this.dim.server.guardian?.scaleDamage(this, amount, info) ?? amount;
+      if (amount <= 0) return 0;
+    }
+    if (this.data.eclipsed && this.type === 'void_stalker') amount *= ECLIPSE.stalkerDamageTaken;
+    // V6 phase 4: vehicles break into their item (no death, no loot)
+    if (this.def.vehicle) return this.dim.server.endTransport?.vehicleHurt(this, amount, info) ?? 0;
+    // Herobrine: can't be hurt between moments of his fights, and never dies the first time
+    if (this.type === 'herobrine') {
+      amount = this.dim.server.herobrine?.scaleDamage(this, amount, info) ?? amount;
+      if (amount <= 0) return 0;
+    }
     if (this.invulnerableTicks > 10 && src !== 'void' && src !== 'kill') {
       const last = (this.data.lastHurtAmount as number) ?? 0;
       if (amount <= last) return 0;
@@ -447,7 +530,8 @@ export class Mob extends LivingEntity {
       this.invulnerableTicks = 20;
     }
     const bypass = src === 'fall' || src === 'drown' || src === 'void' || src === 'suffocate' || src === 'fire' || src === 'magic' || src === 'kill' || src === 'starve';
-    if (!bypass && this.armor > 0) amount *= 1 - Math.min(20, Math.max(this.armor / 5, this.armor - amount / 2)) / 25;
+    const armor = Math.max(0, this.armor - (info.armorPierce ?? 0));
+    if (!bypass && armor > 0) amount *= 1 - Math.min(20, Math.max(armor / 5, armor - amount / 2)) / 25;
     if (amount <= 0) return 0;
     const server = this.dim.server;
     this.hurtTime = 10;
@@ -478,6 +562,8 @@ export class Mob extends LivingEntity {
     if (this.type !== 'warden') server.sculk?.vibrate(this.dim, this.x, this.y + 1, this.z, this, 'hit');
     this.metaDirty = this.metaDirty || this.def.category === 'boss';
     if (this.health <= 0) this.die(info);
+    // V6: the Expanded End's mobs react to hits (Endlings blink away, mites call the swarm...)
+    else if (isExpansionMob(this.type)) server.endMobs?.onHurt(this, info);
     return before - this.health;
   }
 
@@ -503,7 +589,7 @@ export class Mob extends LivingEntity {
     if (this.owner) m.tame = true;
     if (this.fuse >= 0) m.fuse = this.fuse;
     if (this.angryAt || this.target) m.angry = true;
-    for (const k of ['color', 'sheared', 'size', 'profession', 'variant', 'charged', 'carried', 'phase', 'open', 'saddle', 'leashPos', 'puff', 'dancing', 'playDead', 'rolling', 'eating', 'trusting', 'tongue', 'emerge', 'dig', 'angerLevel', 'sonic', 'listen', 'sniff']) if (this.data[k] !== undefined) m[k] = this.data[k];
+    for (const k of ['tele', 'slip', 'stun', 'shield', 'awake', 'color', 'sheared', 'size', 'profession', 'variant', 'charged', 'carried', 'phase', 'open', 'saddle', 'leashPos', 'puff', 'dancing', 'playDead', 'rolling', 'eating', 'trusting', 'tongue', 'emerge', 'dig', 'angerLevel', 'sonic', 'listen', 'sniff', 'voidbound', 'errorPhase', 'errorAnim', 'clone', 'malware', 'hbAnim', 'hbKind', 'apparition', 'lit', 'eclipsed', 'state', 'attack', 'inhale', 'rear']) if (this.data[k] !== undefined) m[k] = this.data[k];
     if (this.data.glowTicks) m.glowing = true;
     if (this.data.leash && this.metaHolder) m.leash = this.metaHolder;
     if (this.rider) m.rider = this.rider.id;
@@ -586,6 +672,19 @@ export class Mob extends LivingEntity {
   override isFarlands(): boolean {
     return !!this.def.farlands;
   }
+}
+
+/**
+ * True when a column offers nothing to stand on within a few blocks below
+ * `y` (open void, or a chunk that is not loaded): a wall for mobs with an edge guard.
+ */
+export function overVoid(dim: Dimension, x: number, y: number, z: number): boolean {
+  const bx = Math.floor(x);
+  const bz = Math.floor(z);
+  if (!dim.isLoaded(bx, bz)) return true;
+  const top = Math.floor(y + 0.5);
+  for (let yy = top; yy >= top - 6; yy--) if (collisionShape(dim.getState(bx, yy, bz)).length) return false;
+  return true;
 }
 
 /** Horizontal distance within which mobs get full-rate AI. */

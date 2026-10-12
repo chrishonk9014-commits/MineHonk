@@ -1,0 +1,307 @@
+# Puts the MineHonk online hub (accounts, friends, join codes, the public world
+# list, WebRTC signaling and the relay) on Cloudflare's free plan. Nothing to
+# install and no terminal: it runs here on GitHub.
+#
+# One-time setup (on websites, about 5 minutes): docs/ONLINE_SETUP.md
+#   1. a free Cloudflare account
+#   2. repository secrets CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID
+#   (optional) ANTHROPIC_API_KEY: Herobrine answers players through Claude in the Haunting
+# Then: Actions > Deploy online hub > Run workflow (or push a change to the hub).
+#
+# Safe to run again and again: the database is created only the first time,
+# and only new migrations are applied.
+name: Deploy online hub
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'hub/**'
+      - 'src/hub/**'
+      - 'src/common/net/**'
+      - 'src/common/game/gamemode.ts'
+      - 'src/server/moderation/ChatFilter.ts'
+      - 'src/common/game/herobrineVoice.ts'
+      - 'package-lock.json'
+      - '.github/workflows/deploy-hub.yml'
+
+concurrency:
+  group: deploy-hub
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  WRANGLER_VERSION: '4.149.0'
+  DB_NAME: minehonk-hub
+
+jobs:
+  deploy:
+    name: Deploy the hub to Cloudflare
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      url: ${{ steps.check.outputs.url }}
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      TURN_KEY_ID: ${{ secrets.TURN_KEY_ID }}
+      TURN_KEY_API_TOKEN: ${{ secrets.TURN_KEY_API_TOKEN }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    steps:
+      - name: Check the Cloudflare secrets
+        run: |
+          missing=""
+          [ -z "$CLOUDFLARE_API_TOKEN" ] && missing="$missing CLOUDFLARE_API_TOKEN"
+          [ -z "$CLOUDFLARE_ACCOUNT_ID" ] && missing="$missing CLOUDFLARE_ACCOUNT_ID"
+          if [ -n "$missing" ]; then
+            {
+              echo "## Cloudflare is not set up yet"
+              echo
+              echo "Add these repository secrets:**$missing**"
+              echo
+              echo "GitHub: **Settings > Secrets and variables > Actions > New repository secret**."
+              echo "Step-by-step guide: [docs/ONLINE_SETUP.md](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/blob/${GITHUB_SHA}/docs/ONLINE_SETUP.md)."
+              echo "Then open this run again and press **Re-run all jobs**."
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::error title=Cloudflare is not set up yet::Add the repository secrets$missing (Settings > Secrets and variables > Actions), then re-run. Guide: docs/ONLINE_SETUP.md"
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+
+      # The hub is bundled from the repository's code and packages (the Anthropic SDK among them)
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+        run: npm ci
+
+      # ---------------------------------------------------------------- the account
+      - name: Check the Cloudflare token
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          wranglerVersion: ${{ env.WRANGLER_VERSION }}
+          workingDirectory: hub
+          command: whoami
+
+      # ---------------------------------------------------------------- the database
+      - name: Look for the hub database
+        id: list
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          wranglerVersion: ${{ env.WRANGLER_VERSION }}
+          workingDirectory: hub
+          command: d1 list --json
+
+      - name: Is it there?
+        id: found
+        env:
+          LIST: ${{ steps.list.outputs.command-output }}
+        run: |
+          id=$(node -e '
+            const out = process.env.LIST || "";
+            const list = JSON.parse(out.slice(out.indexOf("[")) || "[]");
+            const db = list.find((d) => d.name === process.env.DB_NAME);
+            process.stdout.write(db ? db.uuid : "");
+          ')
+          echo "id=$id" >> "$GITHUB_OUTPUT"
+          if [ -n "$id" ]; then echo "Found the database $DB_NAME ($id)"; else echo "No database yet: creating it"; fi
+
+      - name: Create the hub database (first deploy only)
+        if: steps.found.outputs.id == ''
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          wranglerVersion: ${{ env.WRANGLER_VERSION }}
+          workingDirectory: hub
+          command: d1 create ${{ env.DB_NAME }}
+
+      - name: Look for it again
+        id: list2
+        if: steps.found.outputs.id == ''
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          wranglerVersion: ${{ env.WRANGLER_VERSION }}
+          workingDirectory: hub
+          command: d1 list --json
+
+      - name: Point the hub at its database
+        env:
+          FOUND: ${{ steps.found.outputs.id }}
+          LIST: ${{ steps.list2.outputs.command-output }}
+        run: |
+          id="$FOUND"
+          if [ -z "$id" ]; then
+            id=$(node -e '
+              const out = process.env.LIST || "";
+              const list = JSON.parse(out.slice(out.indexOf("[")) || "[]");
+              const db = list.find((d) => d.name === process.env.DB_NAME);
+              process.stdout.write(db ? db.uuid : "");
+            ')
+          fi
+          if [ -z "$id" ]; then
+            echo "::error title=No database::Could not create or find the D1 database $DB_NAME. Check that the API token was made from the 'Edit Cloudflare Workers' template and has D1 Edit."
+            exit 1
+          fi
+          sed -i "s/^database_id = .*/database_id = \"$id\"/" hub/wrangler.toml
+          grep -n "database_id" hub/wrangler.toml
+
+      - name: Apply database migrations
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          wranglerVersion: ${{ env.WRANGLER_VERSION }}
+          workingDirectory: hub
+          command: d1 migrations apply ${{ env.DB_NAME }} --remote
+
+      # ---------------------------------------------------------------- the Worker
+      # The optional secrets that are set go up with the hub: the Cloudflare TURN
+      # key (players behind strict networks connect directly more often) and the
+      # Anthropic API key (Herobrine answers players through Claude in the Haunting)
+      - name: Which optional secrets are set
+        id: secrets
+        run: |
+          {
+            echo 'list<<EOF'
+            if [ -n "$TURN_KEY_ID" ] && [ -n "$TURN_KEY_API_TOKEN" ]; then printf 'TURN_KEY_ID\nTURN_KEY_API_TOKEN\n'; fi
+            if [ -n "$ANTHROPIC_API_KEY" ]; then echo ANTHROPIC_API_KEY; fi
+            echo EOF
+          } >> "$GITHUB_OUTPUT"
+          if [ -n "$ANTHROPIC_API_KEY" ]; then echo "Herobrine's voice: on (Claude)"; else echo "Herobrine's voice: his scripted lines (no ANTHROPIC_API_KEY secret)"; fi
+
+      - name: Deploy the hub
+        id: deploy
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          wranglerVersion: ${{ env.WRANGLER_VERSION }}
+          workingDirectory: hub
+          secrets: ${{ steps.secrets.outputs.list }}
+          command: deploy
+
+      - name: Check that the hub answers
+        id: check
+        env:
+          URL1: ${{ steps.deploy.outputs.deployment-url }}
+          OUT1: ${{ steps.deploy.outputs.command-output }}
+        run: |
+          url="$URL1"
+          if [ -z "$url" ]; then url=$(printf '%s\n' "$OUT1" | grep -o 'https://[A-Za-z0-9.-]*workers\.dev' | head -n 1); fi
+          if [ -z "$url" ]; then
+            echo "::error title=No address::The deploy did not report the hub's address."
+            exit 1
+          fi
+          url="${url%/}"
+          ok=""
+          for i in 1 2 3 4 5 6 7 8 9 10; do
+            if curl -fsS "$url/api/health" -o health.json; then ok=1; break; fi
+            sleep 3
+          done
+          if [ -z "$ok" ]; then
+            echo "::error title=The hub does not answer::$url/api/health did not respond."
+            exit 1
+          fi
+          cat health.json; echo
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "::notice title=MineHonk hub is online::$url"
+          {
+            echo "## MineHonk hub is online"
+            echo
+            echo "Address: **$url**"
+            echo
+            if [ -n "$ANTHROPIC_API_KEY" ]; then echo "Herobrine's voice (the Haunting): **Claude**, up to the daily limit in hub/wrangler.toml"; else echo "Herobrine's voice (the Haunting): his scripted lines. Add the ANTHROPIC_API_KEY secret to have him answer through Claude (docs/ONLINE_SETUP.md)."; fi
+            echo
+            echo '```'
+            cat health.json
+            echo
+            echo '```'
+            echo
+            echo "Next, the game website is rebuilt with this address."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: What went wrong?
+        if: failure()
+        run: |
+          {
+            echo "## The hub was not deployed"
+            echo
+            echo "Common fixes:"
+            echo
+            echo "- **\"You need to register a workers.dev subdomain\"**: in the Cloudflare dashboard open **Workers & Pages** once and pick a subdomain, then re-run."
+            echo "- **Authentication error / 10000**: the API token is wrong or expired. Make a new one from the **Edit Cloudflare Workers** template and update the CLOUDFLARE_API_TOKEN secret."
+            echo "- **Account ID**: CLOUDFLARE_ACCOUNT_ID must be the 32-character Account ID from the dashboard's Workers & Pages page."
+            echo
+            echo "Guide: docs/ONLINE_SETUP.md. After fixing, open this run and press **Re-run all jobs**."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # The game on GitHub Pages learns the hub's address when it is built: rebuild
+  # and publish it (the gh-pages branch), so one run puts everything online.
+  site:
+    name: Update the game website
+    needs: deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+        run: npm ci
+
+      - name: Build the game with the hub's address
+        env:
+          PAGES_BASE: /${{ github.event.repository.name }}/
+          VITE_HUB_URL: ${{ needs.deploy.outputs.url }}
+        run: |
+          npx vite build
+          find dist -name '*.map' -delete
+          touch dist/.nojekyll
+          grep -rl "$VITE_HUB_URL" dist/assets > /dev/null || { echo "::error::The build does not contain the hub's address"; exit 1; }
+
+      - name: Publish (gh-pages branch)
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git fetch --depth=1 origin gh-pages; then
+            git worktree add site FETCH_HEAD
+            cd site
+            git switch -c site-update
+          else
+            git worktree add --detach site
+            cd site
+            git checkout -q --orphan site-update
+          fi
+          find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+          cp -a ../dist/. .
+          git add -A
+          if git diff --cached --quiet; then echo "The website is already up to date"; exit 0; fi
+          git commit -q -m "Deploy: ${GITHUB_SHA::7} with the online hub (${{ needs.deploy.outputs.url }})"
+          git push origin HEAD:gh-pages
+          {
+            echo "## The game website was updated"
+            echo
+            echo "It uses the hub at ${{ needs.deploy.outputs.url }}. GitHub Pages publishes it within a minute or two."
+          } >> "$GITHUB_STEP_SUMMARY"

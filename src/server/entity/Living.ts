@@ -12,6 +12,8 @@ export interface HurtInfo {
   disableShield?: number;
   /** Goes through a raised shield (at half strength). */
   pierceShield?: boolean;
+  /** V6 phase 3: armor points the blow ignores (the Ancient Blade). */
+  armorPierce?: number;
 }
 
 export abstract class LivingEntity extends Entity {

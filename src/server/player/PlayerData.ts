@@ -5,10 +5,11 @@ import type { DimensionId } from '../../common/data/biomes';
 import { stackOf } from '../../common/game/itemstack';
 import { maxHealthFor, GAME_MODES, type GameMode } from '../../common/game/gamemode';
 import { loadAdminState } from '../admin/adminState';
+import { PHASE1_BIOME_IDS } from '../../common/endExpansion/biomes';
 
 export const PLAYER_DATA_VERSION = 1;
 
-const DIMS: DimensionId[] = ['overworld', 'nether', 'end', 'farlands'];
+const DIMS: DimensionId[] = ['overworld', 'nether', 'end', 'farlands', 'computer'];
 
 export class PlayerData {
   constructor(private readonly server: GameServer) {}
@@ -58,9 +59,24 @@ export class PlayerData {
     }
     (p as { fireTicks?: number }).fireTicks = num(raw.fire, 0);
     if (Array.isArray(raw.caveBiomes)) for (const b of raw.caveBiomes) if (typeof b === 'number' && b > 0 && b < 16) p.visitedCaveBiomes.add(b);
+    // V6: the Expanded End's biomes this player has been to
+    // (V6 phase 2 renamed the Expanded End's biomes: a phase 1 save lists them under their old ids)
+    if (Array.isArray(raw.endBiomes)) for (const b of raw.endBiomes) if (typeof b === 'string' && b.length < 64) p.visitedEndBiomes.add(PHASE1_BIOME_IDS[b] ?? b);
+    if (Array.isArray(raw.endKills)) for (const k of raw.endKills) if (typeof k === 'string' && k.length < 64) p.expansionKills.add(k);
+    for (const [key, set] of [['endFound', p.endFound], ['endTitles', p.endTitles], ['endLore', p.endLore], ['endArtifacts', p.endArtifacts], ['recipes', p.recipes], ['endRewards', p.endRewards]] as const) {
+      const arr = (raw as Record<string, unknown>)[key];
+      if (Array.isArray(arr)) for (const k of arr) if (typeof k === 'string' && k.length < 96) set.add(k);
+    }
     if (typeof raw.wardenWarning === 'number' && raw.wardenWarning >= 0 && raw.wardenWarning <= 4) p.wardenWarning = Math.floor(raw.wardenWarning);
     const ld = raw.lastDeath as Record<string, unknown> | undefined;
     if (ld && DIMS.includes(ld.dim as DimensionId) && [ld.x, ld.y, ld.z].every((v) => typeof v === 'number' && Number.isFinite(v))) p.lastDeath = { dim: ld.dim as DimensionId, x: ld.x as number, y: ld.y as number, z: ld.z as number };
+    if (Array.isArray(raw.endings)) for (const e of raw.endings) if (typeof e === 'string' && e.length < 64) p.endings.add(e);
+    if (typeof raw.pendingEnding === 'string' && raw.pendingEnding.length < 64) p.pendingEnding = raw.pendingEnding;
+    const ee = raw.endEntry as Record<string, unknown> | undefined;
+    if (ee && [ee.x, ee.y, ee.z].every((v) => typeof v === 'number' && Number.isFinite(v))) p.endEntry = { x: ee.x as number, y: ee.y as number, z: ee.z as number };
+    p.freezeTicks = Math.max(0, Math.min(140, Math.floor(num(raw.freeze, 0))));
+    if (typeof raw.endQuest === 'string' && raw.endQuest.length < 64) p.endQuest = raw.endQuest;
+    p.recoverCooldown = Math.max(0, Math.min(6000, Math.floor(num(raw.recoverCooldown, 0))));
     p.cheat = loadAdminState(raw.cheat);
     this.server.interaction.survival.updateArmor(p);
     return { found: true, dim };
@@ -92,6 +108,20 @@ export class PlayerData {
       lastDeath: p.lastDeath ?? undefined,
       wardenWarning: p.wardenWarning || undefined,
       caveBiomes: p.visitedCaveBiomes.size ? [...p.visitedCaveBiomes] : undefined,
+      endBiomes: p.visitedEndBiomes.size ? [...p.visitedEndBiomes] : undefined,
+      endKills: p.expansionKills.size ? [...p.expansionKills] : undefined,
+      endFound: p.endFound.size ? [...p.endFound] : undefined,
+      endTitles: p.endTitles.size ? [...p.endTitles] : undefined,
+      endLore: p.endLore.size ? [...p.endLore] : undefined,
+      endArtifacts: p.endArtifacts.size ? [...p.endArtifacts] : undefined,
+      recipes: p.recipes.size ? [...p.recipes] : undefined,
+      endRewards: p.endRewards.size ? [...p.endRewards] : undefined,
+      recoverCooldown: p.recoverCooldown || undefined,
+      endQuest: p.endQuest ?? undefined,
+      endings: p.endings.size ? [...p.endings] : undefined,
+      pendingEnding: p.pendingEnding ?? undefined,
+      endEntry: p.endEntry ?? undefined,
+      freeze: p.freezeTicks || undefined,
       fire: (p as { fireTicks?: number }).fireTicks ?? 0,
       cheat: p.cheat,
       savedAt: Date.now(),

@@ -126,6 +126,50 @@ export class SynthCtx {
     }
   }
 
+  /**
+   * V6: a sustained tone for ambient beds: constant level (no decay) with a
+   * slow swell, and an optional second voice detuned by `beat` Hz.
+   */
+  drone(opts: { f: number; gain: number; wave?: 'sine' | 'tri' | 'saw'; beat?: number; swell?: number; lp?: number }): void {
+    const { sr, data } = this;
+    const lp = opts.lp ? onePoleCoef(opts.lp, sr) : 1;
+    const swell = opts.swell ?? 0;
+    const fs = [opts.f, ...(opts.beat ? [opts.f + opts.beat] : [])];
+    for (const f of fs) {
+      let ph = this.rng.next();
+      let l = 0;
+      for (let i = 0; i < data.length; i++) {
+        ph += f / sr;
+        ph -= Math.floor(ph);
+        const w = opts.wave ?? 'sine';
+        const v = w === 'tri' ? 1 - Math.abs(ph * 4 - 2) : w === 'saw' ? ph * 2 - 1 : Math.sin(ph * Math.PI * 2);
+        l += (v - l) * lp;
+        // The swell completes whole cycles over the buffer so the loop stays smooth
+        const env = swell ? 1 - swell * 0.5 * (1 - Math.cos((i / data.length) * Math.PI * 4)) : 1;
+        data[i]! += l * env * (opts.gain / fs.length);
+      }
+    }
+  }
+
+  /** V6: sustained filtered noise for ambient beds (wind, hiss, rumble), with a slow swell. */
+  wash(opts: { gain: number; lp?: number; hp?: number; bp?: [number, number]; swell?: number }): void {
+    const { sr, data, rng } = this;
+    const lp = opts.lp ? onePoleCoef(opts.lp, sr) : 1;
+    const hp = opts.hp ? onePoleCoef(opts.hp, sr) : 0;
+    const bp = opts.bp ? new Biquad('bandpass', opts.bp[0], opts.bp[1], sr) : null;
+    const swell = opts.swell ?? 0;
+    let l = 0;
+    let h = 0;
+    for (let i = 0; i < data.length; i++) {
+      l += (rng.next() * 2 - 1 - l) * lp;
+      h += (l - h) * hp;
+      let out = l - (hp ? h : 0);
+      if (bp) out = bp.process(out);
+      const env = 1 - swell * 0.5 * (1 - Math.cos((i / data.length) * Math.PI * 6));
+      data[i]! += out * env * opts.gain;
+    }
+  }
+
   /** Reduces bit depth / sample rate (glitch effects). */
   crush(bits: number, hold: number): void {
     const q = Math.pow(2, bits - 1);
@@ -332,6 +376,9 @@ const EFFECTS: Record<string, { dur: number; recipe: Recipe }> = {
   'door.close': { dur: 0.35, recipe: (s) => s.knock({ f: 150, gain: 1, decay: 0.06 }) },
   'chest.open': { dur: 0.6, recipe: (s) => (s.voice({ dur: 0.45, gain: 0.3, f0: 70, f1: 120, formants: [700, 1900], rough: 0.5 }), s.knock({ start: 0.4, f: 220, gain: 0.5, decay: 0.04 })) },
   'chest.close': { dur: 0.35, recipe: (s) => s.knock({ f: 170, gain: 1, decay: 0.05 }) },
+  // V5 engineering
+  'machine.done': { dur: 0.3, recipe: (s) => (s.tone({ dur: 0.12, gain: 0.35, f0: 880, f1: 880, wave: 'sine', decay: 0.08 }), s.tone({ start: 0.1, dur: 0.18, gain: 0.3, f0: 1320, f1: 1320, wave: 'sine', decay: 0.12 })) },
+  'machine.switch': { dur: 0.15, recipe: (s) => (s.knock({ f: 900, gain: 0.6, decay: 0.02 }), s.tone({ dur: 0.08, gain: 0.25, f0: 500, f1: 300, wave: 'square', decay: 0.03, lp: 2000 })) },
   'bucket.fill': {
     dur: 0.5,
     recipe: (s) => {
@@ -509,6 +556,99 @@ const EFFECTS: Record<string, { dur: number; recipe: Recipe }> = {
       s.tone({ dur: 5.5, gain: 0.3, f0: 49, f1: 44, wave: 'saw', attack: 1.5, decay: 3, lp: 300 });
     },
   },
+  // V3: the hidden endgame
+  'enderman.voidbound': {
+    dur: 2.6,
+    recipe: (s) => {
+      s.noise({ dur: 2.3, gain: 0.55, attack: 1.2, decay: 0.8, bp: [520, 1.5] });
+      s.tone({ start: 0.2, dur: 2.2, gain: 0.35, f0: 55, f1: 220, wave: 'saw', lp: 900, attack: 1.2, decay: 0.8 });
+      s.voice({ start: 0.95, dur: 1.5, gain: 0.8, f0: 190, f1: 85, formants: [620, 1450], rough: 0.7, vibrato: 0.12 });
+      s.crush(5, 3);
+    },
+  },
+  'voidbound.strike': { dur: 0.5, recipe: (s) => (s.knock({ f: 130, gain: 0.9, decay: 0.05 }), s.tone({ dur: 0.35, gain: 0.4, f0: 1500, f1: 180, wave: 'square', decay: 0.1 }), s.crush(4, 4)) },
+  /** Harsh digital static (WORLD INTEGRITY FAILURE, glitch hits). */
+  'glitch.static': {
+    dur: 1.3,
+    recipe: (s) => {
+      s.noise({ dur: 1.25, gain: 0.8, attack: 0.005, decay: 0.5, hp: 400 });
+      for (let i = 0; i < 7; i++) s.tone({ start: s.rng.next() * 1.1, dur: 0.05 + s.rng.next() * 0.08, gain: 0.4, f0: 200 + s.rng.next() * 3000, wave: 'square', decay: 0.03 });
+      s.crush(3, 8);
+    },
+  },
+  /** The warning before one of The Error's big attacks. */
+  'glitch.warn': {
+    dur: 1,
+    recipe: (s) => {
+      for (let i = 0; i < 3; i++) s.tone({ start: i * 0.28, dur: 0.18, gain: 0.45, f0: 740, f1: 700, wave: 'square', lp: 2500, decay: 0.08 });
+      s.crush(5, 2);
+    },
+  },
+  /** A low, uneasy hum around a glitched portal. */
+  'glitch.hum': {
+    dur: 3.2,
+    recipe: (s) => {
+      s.tone({ dur: 3.1, gain: 0.35, f0: 47, f1: 51, wave: 'saw', lp: 260, attack: 0.8, decay: 1.6, vibrato: 0.03, vibratoRate: 2 });
+      for (let i = 0; i < 5; i++) s.knock({ start: 0.3 + s.rng.next() * 2.6, f: 1800 + s.rng.next() * 1800, gain: 0.12, decay: 0.008, noise: 0.6 });
+      s.crush(6, 2);
+    },
+  },
+  'glitch.portal_on': {
+    dur: 3.2,
+    recipe: (s) => {
+      [110, 165, 220, 330].forEach((f, i) => s.tone({ start: i * 0.25, dur: 2.8 - i * 0.25, gain: 0.3, f0: f, f1: f * 1.02, wave: 'saw', lp: 1400, attack: 0.4, decay: 1.4, vibrato: 0.04, vibratoRate: 7 }));
+      s.noise({ dur: 3, gain: 0.35, attack: 1.2, decay: 1.4, bp: [1800, 1] });
+      s.crush(4, 3);
+    },
+  },
+  'farlands.entry': {
+    dur: 3,
+    recipe: (s) => {
+      s.noise({ dur: 2.9, gain: 0.6, attack: 1.6, decay: 1, hp: 300 });
+      s.tone({ dur: 2.8, gain: 0.4, f0: 40, f1: 400, wave: 'square', lp: 1200, attack: 1.4, decay: 1 });
+      s.crush(3, 6);
+    },
+  },
+  // The Error
+  'error.roar': {
+    dur: 2.6,
+    recipe: (s) => {
+      s.voice({ dur: 2.4, gain: 1, f0: 70, f1: 40, formants: [300, 900], rough: 0.9, vibrato: 0.1 });
+      s.noise({ dur: 2.3, gain: 0.5, attack: 0.1, decay: 1.2, lp: 900 });
+      s.crush(3, 6);
+    },
+  },
+  'error.charge': { dur: 1.7, recipe: (s) => (s.tone({ dur: 1.6, gain: 0.55, f0: 70, f1: 900, wave: 'square', lp: 2400, attack: 0.4, decay: 0.2, vibrato: 0.08, vibratoRate: 16 }), s.noise({ dur: 1.5, gain: 0.3, attack: 1, decay: 0.3, bp: [1600, 1] }), s.crush(4, 3)) },
+  'error.laser': {
+    dur: 1.6,
+    recipe: (s) => {
+      s.tone({ dur: 1.5, gain: 0.8, f0: 90, f1: 60, wave: 'saw', lp: 1800, attack: 0.02, decay: 0.6 });
+      s.tone({ dur: 1.5, gain: 0.4, f0: 181, f1: 121, wave: 'square', lp: 2200, attack: 0.02, decay: 0.6 });
+      s.noise({ dur: 1.5, gain: 0.6, attack: 0.01, decay: 0.7, lp: 3000 });
+      s.crush(3, 5);
+    },
+  },
+  'error.teleport': { dur: 0.8, recipe: (s) => (s.tone({ dur: 0.35, gain: 0.5, f0: 200, f1: 2400, wave: 'square', decay: 0.1 }), s.noise({ start: 0.25, dur: 0.5, gain: 0.5, decay: 0.2, hp: 800 }), s.crush(3, 6)) },
+  'error.pulse': { dur: 1.4, recipe: (s) => (s.knock({ f: 55, gain: 1, decay: 0.35 }), s.noise({ dur: 1.3, gain: 0.6, attack: 0.01, decay: 0.8, lp: 600 }), s.tone({ dur: 1.2, gain: 0.4, f0: 120, f1: 30, wave: 'saw', lp: 500, decay: 0.6 }), s.crush(5, 2)) },
+  'error.meteor': { dur: 1.1, recipe: (s) => (s.tone({ dur: 0.7, gain: 0.35, f0: 1800, f1: 300, wave: 'sine', decay: 0.4 }), s.knock({ start: 0.7, f: 70, gain: 1, decay: 0.2 }), s.noise({ start: 0.7, dur: 0.4, gain: 0.6, decay: 0.15, lp: 1500 }), s.crush(4, 3)) },
+  'error.zone': { dur: 1.2, recipe: (s) => (s.noise({ dur: 1.1, gain: 0.4, attack: 0.3, decay: 0.5, bp: [900, 3] }), s.tone({ dur: 1, gain: 0.3, f0: 330, f1: 310, wave: 'square', lp: 1400, attack: 0.2, decay: 0.5 }), s.crush(5, 3)) },
+  'error.phase': {
+    dur: 3,
+    recipe: (s) => {
+      s.voice({ dur: 2.2, gain: 0.9, f0: 60, f1: 120, formants: [350, 1100], rough: 0.9, vibrato: 0.2 });
+      s.noise({ dur: 2.8, gain: 0.5, attack: 0.05, decay: 1.5, hp: 200 });
+      s.crush(3, 8);
+    },
+  },
+  'error.death': {
+    dur: 6,
+    recipe: (s) => {
+      s.voice({ dur: 3, gain: 1, f0: 140, f1: 30, formants: [420, 1200], rough: 1, vibrato: 0.25 });
+      s.noise({ dur: 5.8, gain: 0.7, attack: 0.3, decay: 3, lp: 1800 });
+      for (let i = 0; i < 12; i++) s.tone({ start: 2 + s.rng.next() * 3.5, dur: 0.1, gain: 0.4, f0: 100 + s.rng.next() * 2500, wave: 'square', decay: 0.05 });
+      s.crush(3, 10);
+    },
+  },
   // Cave biome ambience: one-shots scattered around the listener
   'cave.drip': { dur: 0.7, recipe: (s) => (s.tone({ dur: 0.09, gain: 0.5, f0: 1400 + s.rng.next() * 900, f1: 2600, wave: 'sine', decay: 0.03 }), s.bell({ start: 0.08, f: 900 + s.rng.next() * 500, ratios: [1, 2.4], gain: 0.12, decay: 0.25, dur: 0.6 })) },
   'cave.rumble': { dur: 3.5, recipe: (s) => (s.noise({ dur: 3.3, gain: 0.55, attack: 0.8, decay: 2, lp: 160, hp: 20 }), s.knock({ start: 0.4 + s.rng.next(), f: 70, gain: 0.4, decay: 0.2 })) },
@@ -536,10 +676,458 @@ const EFFECTS: Record<string, { dur: number; recipe: Recipe }> = {
   'block.chime': { dur: 1.5, recipe: (s) => s.bell({ f: 1200 + s.rng.next() * 800, ratios: [1, 2.76, 5.4], gain: 0.3, decay: 0.5, dur: 1.4 }) },
   'firework.launch': { dur: 0.8, recipe: (s) => s.noise({ dur: 0.75, gain: 0.7, attack: 0.02, decay: 0.3, hp: 1500, lp: 8000 }) },
   'firework.blast': { dur: 1.5, recipe: (s) => (s.noise({ dur: 1.4, gain: 1, decay: 0.3, lp: 1200 }), s.noise({ start: 0.3, dur: 1, gain: 0.3, decay: 0.3, hp: 3000, grain: 2 })) },
+  // V5.5: computers
+  /** The start-up chime: a fan spinning up, then three rising notes. */
+  'computer.boot': {
+    dur: 1.6,
+    recipe: (s) => {
+      s.noise({ dur: 1.5, gain: 0.15, attack: 0.5, decay: 0.8, bp: [900, 2] });
+      [523, 659, 988].forEach((f, i) => s.tone({ start: 0.35 + i * 0.16, dur: 0.6, gain: 0.25, f0: f, wave: 'tri', decay: 0.3, lp: 3000 }));
+    },
+  },
+  'computer.alert': { dur: 0.8, recipe: (s) => [0, 0.22, 0.44].forEach((t) => s.tone({ start: t, dur: 0.14, gain: 0.35, f0: 1320, wave: 'square', lp: 2600, decay: 0.07 })) },
+  /** A computer breaking up: stuttering beeps over crackle. */
+  'computer.glitch': {
+    dur: 0.7,
+    recipe: (s) => {
+      for (let i = 0; i < 6; i++) s.tone({ start: i * 0.09 + s.rng.next() * 0.03, dur: 0.05, gain: 0.35, f0: 300 + s.rng.next() * 2800, wave: 'square', decay: 0.03 });
+      s.noise({ dur: 0.65, gain: 0.25, decay: 0.3, hp: 1200, grain: 3 });
+      s.crush(4, 5);
+    },
+  },
+  /** Falling into the screen: a rising sweep that tears into static. */
+  'computer.enter': {
+    dur: 2.4,
+    recipe: (s) => {
+      s.tone({ dur: 1.8, gain: 0.5, f0: 60, f1: 2400, wave: 'saw', lp: 4000, attack: 0.6, decay: 1.2, vibrato: 0.04, vibratoRate: 9 });
+      s.noise({ start: 1.2, dur: 1.1, gain: 0.6, attack: 0.3, decay: 0.4, hp: 600 });
+      s.crush(3, 6);
+    },
+  },
+  /** The digital world switching off: a falling whine and a click. */
+  'computer.shutdown': {
+    dur: 3,
+    recipe: (s) => {
+      s.tone({ dur: 2.6, gain: 0.5, f0: 1800, f1: 40, wave: 'sine', decay: 1.6 });
+      s.noise({ dur: 2, gain: 0.3, attack: 0.05, decay: 0.9, lp: 1500 });
+      s.knock({ start: 2.6, f: 300, gain: 0.5, decay: 0.03 });
+    },
+  },
+  'computer.ambient': {
+    dur: 6,
+    recipe: (s) => {
+      const r = s.rng;
+      s.tone({ dur: 5.8, gain: 0.25, f0: 60, f1: 60.5, wave: 'saw', lp: 220, attack: 1.5, decay: 3, vibrato: 0.005, vibratoRate: 0.5 });
+      for (let i = 0; i < 5; i++) s.tone({ start: r.next() * 5, dur: 0.04, gain: 0.12, f0: 1500 + r.next() * 3000, wave: 'square', decay: 0.02 });
+      s.noise({ dur: 5.8, gain: 0.08, attack: 2, decay: 3, bp: [3000, 4] });
+    },
+  },
+  // V5.5: the dragon's malware and the Corrupted Flash Drive
+  'malware.spit': { dur: 1.2, recipe: (s) => (s.noise({ dur: 0.9, gain: 0.7, attack: 0.02, decay: 0.35, bp: [700, 1.5] }), s.tone({ dur: 1, gain: 0.35, f0: 900, f1: 120, wave: 'square', lp: 2000, decay: 0.4 }), s.crush(3, 7)) },
+  'malware.burst': { dur: 1.4, recipe: (s) => (s.noise({ dur: 1.3, gain: 0.6, attack: 0.005, decay: 0.6, hp: 300, grain: 4 }), s.tone({ dur: 0.8, gain: 0.3, f0: 2200, f1: 200, wave: 'square', decay: 0.3 }), s.crush(3, 8)) },
+  'drive.corrupt': {
+    dur: 1.6,
+    recipe: (s) => {
+      s.tone({ dur: 0.5, gain: 0.4, f0: 880, f1: 1760, wave: 'square', decay: 0.2, lp: 3000 });
+      for (let i = 0; i < 10; i++) s.tone({ start: 0.4 + i * 0.08, dur: 0.06, gain: 0.3, f0: 200 + s.rng.next() * 3000, wave: 'square', decay: 0.04 });
+      s.noise({ start: 0.4, dur: 1.1, gain: 0.4, decay: 0.5, hp: 800 });
+      s.crush(3, 6);
+    },
+  },
+  'book.page': { dur: 0.4, recipe: (s) => s.noise({ dur: 0.35, gain: 0.4, attack: 0.05, decay: 0.1, bp: [2400, 1] }) },
+  // V5.5: Herobrine
+  /** Coming out of the screen: a deep, rising tone through static, then nothing. */
+  'herobrine.emerge': {
+    dur: 3.5,
+    recipe: (s) => {
+      s.noise({ dur: 2.6, gain: 0.6, attack: 0.4, decay: 1.4, hp: 200, grain: 2 });
+      s.tone({ dur: 3, gain: 0.5, f0: 30, f1: 110, wave: 'saw', lp: 700, attack: 1.4, decay: 1, vibrato: 0.03, vibratoRate: 3 });
+      s.crush(3, 6);
+    },
+  },
+  /** Something is near: a slow, cold drone. */
+  'herobrine.presence': {
+    dur: 5,
+    recipe: (s) => {
+      s.tone({ dur: 4.8, gain: 0.45, f0: 55, f1: 52, wave: 'tri', attack: 2, decay: 2.5, vibrato: 0.01, vibratoRate: 0.4 });
+      s.tone({ dur: 4.6, gain: 0.25, f0: 77.8, f1: 73.4, wave: 'sine', attack: 2.2, decay: 2.4 });
+      s.noise({ dur: 4.5, gain: 0.12, attack: 2.5, decay: 2, bp: [400, 3] });
+    },
+  },
+  /** The Haunting's jumpscare: a scream, harsh and loud, broken up. */
+  'herobrine.scream': {
+    dur: 1.6,
+    recipe: (s) => {
+      s.voice({ dur: 1.4, gain: 1, f0: 620, f1: 240, formants: [900, 2700], rough: 0.95, vibrato: 0.09 });
+      s.voice({ dur: 1.2, gain: 0.7, f0: 930, f1: 410, formants: [1300, 3300], rough: 0.8, vibrato: 0.12 });
+      s.noise({ dur: 1.3, gain: 0.65, attack: 0.005, decay: 0.5, bp: [1900, 1.4] });
+      s.tone({ dur: 0.9, gain: 0.45, f0: 1600, f1: 220, wave: 'saw', lp: 5000, decay: 0.4, vibrato: 0.1, vibratoRate: 22 });
+      s.crush(5, 3);
+    },
+  },
+  'herobrine.whisper': { dur: 1.4, recipe: (s) => (s.noise({ dur: 1.3, gain: 0.35, attack: 0.3, decay: 0.6, bp: [2200, 3] }), s.noise({ start: 0.2, dur: 0.8, gain: 0.2, attack: 0.2, decay: 0.4, bp: [1100, 4] })) },
+  'herobrine.strike': { dur: 0.6, recipe: (s) => (s.tone({ dur: 0.12, gain: 0.5, f0: 2400, f1: 300, wave: 'square', decay: 0.05 }), s.knock({ start: 0.08, f: 110, gain: 0.8, decay: 0.05 }), s.crush(4, 4)) },
+  'herobrine.charge': { dur: 1.5, recipe: (s) => (s.tone({ dur: 1.4, gain: 0.45, f0: 90, f1: 700, wave: 'square', lp: 1800, attack: 0.5, decay: 0.3, vibrato: 0.05, vibratoRate: 12 }), s.crush(4, 3)) },
+  'herobrine.slam': { dur: 1.2, recipe: (s) => (s.knock({ f: 60, gain: 1, decay: 0.3 }), s.noise({ dur: 1.1, gain: 0.5, attack: 0.01, decay: 0.6, lp: 700 }), s.crush(5, 2)) },
+  'herobrine.bolt': { dur: 0.5, recipe: (s) => (s.tone({ dur: 0.4, gain: 0.45, f0: 1600, f1: 400, wave: 'saw', lp: 4000, decay: 0.15 }), s.noise({ dur: 0.3, gain: 0.3, decay: 0.1, hp: 2000 })) },
+  'herobrine.teleport': { dur: 0.7, recipe: (s) => (s.tone({ dur: 0.3, gain: 0.4, f0: 300, f1: 3000, wave: 'square', decay: 0.1 }), s.noise({ start: 0.2, dur: 0.45, gain: 0.4, decay: 0.15, hp: 1500 }), s.crush(3, 5)) },
+  'herobrine.retreat': {
+    dur: 3,
+    recipe: (s) => {
+      s.tone({ dur: 2.6, gain: 0.5, f0: 900, f1: 40, wave: 'saw', lp: 2000, attack: 0.1, decay: 1.4 });
+      s.noise({ dur: 2.5, gain: 0.4, attack: 0.05, decay: 1.2, hp: 400, grain: 3 });
+      s.crush(3, 6);
+    },
+  },
+  'herobrine.unplug': { dur: 1.2, recipe: (s) => (s.knock({ f: 180, gain: 0.7, decay: 0.04 }), s.tone({ start: 0.05, dur: 1, gain: 0.4, f0: 1200, f1: 60, wave: 'square', lp: 2500, decay: 0.4 }), s.crush(4, 4)) },
+  'herobrine.phase': {
+    dur: 3,
+    recipe: (s) => {
+      for (let i = 0; i < 16; i++) s.tone({ start: i * 0.1, dur: 0.07, gain: 0.3, f0: 400 + s.rng.next() * 2500, wave: 'square', decay: 0.04 });
+      s.tone({ dur: 2.8, gain: 0.45, f0: 50, f1: 160, wave: 'saw', lp: 900, attack: 0.6, decay: 1.4 });
+      s.crush(3, 8);
+    },
+  },
+  'herobrine.death': {
+    dur: 7,
+    recipe: (s) => {
+      s.tone({ dur: 6.5, gain: 0.5, f0: 220, f1: 25, wave: 'saw', lp: 1500, attack: 0.05, decay: 3.5 });
+      s.noise({ dur: 6.8, gain: 0.6, attack: 0.2, decay: 3.5, hp: 150, grain: 2 });
+      for (let i = 0; i < 20; i++) s.tone({ start: s.rng.next() * 6, dur: 0.08, gain: 0.3, f0: 100 + s.rng.next() * 3000, wave: 'square', decay: 0.04 });
+      s.crush(3, 10);
+    },
+  },
+  /** Tesla coils: a crackling zap, and the rising hum before it. */
+  'tesla.zap': {
+    dur: 0.8,
+    recipe: (s) => {
+      s.noise({ dur: 0.7, gain: 0.9, attack: 0.002, decay: 0.15, hp: 1500, grain: 2 });
+      s.tone({ dur: 0.5, gain: 0.35, f0: 120, wave: 'saw', lp: 3000, decay: 0.15, vibrato: 0.2, vibratoRate: 60 });
+    },
+  },
+  'tesla.charge': { dur: 1.6, recipe: (s) => (s.tone({ dur: 1.5, gain: 0.4, f0: 100, f1: 400, wave: 'saw', lp: 2200, attack: 1, decay: 0.3, vibrato: 0.15, vibratoRate: 50 }), s.noise({ dur: 1.5, gain: 0.25, attack: 1, decay: 0.3, hp: 3000, grain: 3 })) },
+  // V6 phase 2: the Expanded End's mobs. Wind-ups are clearly audible (they telegraph an attack).
+  /** Endling: a quick bright chirp (scattering from a stalker) and the soft pop of its blink. */
+  'mob.endling.chirp': { dur: 0.3, recipe: (s) => (s.tone({ dur: 0.09, gain: 0.35, f0: 1500, f1: 2300, decay: 0.05 }), s.tone({ start: 0.11, dur: 0.12, gain: 0.3, f0: 1900, f1: 2700, decay: 0.07 })) },
+  'mob.endling.blink': { dur: 0.35, recipe: (s) => (s.tone({ dur: 0.3, gain: 0.25, f0: 900, f1: 1800, wave: 'tri', decay: 0.15 }), s.noise({ dur: 0.2, gain: 0.12, hp: 3000, decay: 0.1 })) },
+  /** Void Stalker: a growl rising through the crouch, the leap, the slip, the void taking it, and the climb back. */
+  'mob.void_stalker.windup': { dur: 1.3, recipe: (s) => (s.voice({ dur: 1.2, gain: 0.8, f0: 60, f1: 110, formants: [300, 1000], rough: 0.85 }), s.noise({ dur: 1.2, gain: 0.15, attack: 1, decay: 0.2, lp: 900 })) },
+  'mob.void_stalker.leap': { dur: 0.4, recipe: (s) => (s.noise({ dur: 0.35, gain: 0.5, attack: 0.01, decay: 0.2, bp: [700, 2] }), s.voice({ dur: 0.3, gain: 0.6, f0: 130, f1: 80, formants: [400, 1300], rough: 0.9 })) },
+  'mob.void_stalker.slip': { dur: 0.8, recipe: (s) => s.voice({ dur: 0.7, gain: 0.7, f0: 160, f1: 70, formants: [350, 1200], rough: 0.6 }) },
+  'mob.void_stalker.vanish': { dur: 1.6, recipe: (s) => (s.tone({ dur: 1.5, gain: 0.5, f0: 220, f1: 40, wave: 'saw', lp: 900, decay: 0.8 }), s.noise({ dur: 1.4, gain: 0.3, decay: 0.8, lp: 600 })) },
+  'mob.void_stalker.rise': { dur: 1.7, recipe: (s) => (s.tone({ dur: 1.6, gain: 0.55, f0: 38, f1: 120, wave: 'saw', lp: 500, attack: 1.2, decay: 0.2 }), s.noise({ dur: 1.6, gain: 0.25, attack: 1.2, decay: 0.2, lp: 400 })) },
+  'mob.void_stalker.emerge': { dur: 0.6, recipe: (s) => (s.noise({ dur: 0.5, gain: 0.5, decay: 0.3, lp: 1200 }), s.voice({ dur: 0.45, gain: 0.7, f0: 95, f1: 70, formants: [320, 1100], rough: 0.85 })) },
+  /** Chorus Beast: rearing up, the slam, winding up a throw, the throw, the splat, and settling down. */
+  'mob.chorus_beast.rear': { dur: 1.5, recipe: (s) => (s.voice({ dur: 1.4, gain: 1, f0: 45, f1: 75, formants: [240, 600], rough: 0.6 }), s.noise({ dur: 1.4, gain: 0.2, attack: 1.2, decay: 0.1, lp: 300 })) },
+  'mob.chorus_beast.slam': { dur: 1.2, recipe: (s) => (s.noise({ dur: 1.1, gain: 1, attack: 0.005, decay: 0.4, lp: 280 }), s.tone({ dur: 0.9, gain: 0.8, f0: 70, f1: 28, decay: 0.5 }), s.noise({ dur: 0.4, gain: 0.35, decay: 0.15, bp: [1400, 2] })) },
+  'mob.chorus_beast.windup': { dur: 1.2, recipe: (s) => (s.voice({ dur: 1.1, gain: 0.8, f0: 55, f1: 90, formants: [260, 700], rough: 0.5 }), s.tone({ dur: 1.1, gain: 0.25, f0: 300, f1: 900, wave: 'tri', attack: 0.9, decay: 0.1 })) },
+  'mob.chorus_beast.throw': { dur: 0.5, recipe: (s) => (s.noise({ dur: 0.4, gain: 0.5, decay: 0.2, bp: [500, 2] }), s.voice({ dur: 0.35, gain: 0.7, f0: 80, f1: 60, formants: [260, 640], rough: 0.6 })) },
+  'mob.chorus_beast.splat': { dur: 0.5, recipe: (s) => (s.noise({ dur: 0.35, gain: 0.6, decay: 0.15, lp: 1800 }), s.tone({ dur: 0.4, gain: 0.3, f0: 600, f1: 1400, wave: 'tri', decay: 0.2 })) },
+  'mob.chorus_beast.calm': { dur: 1.6, recipe: (s) => s.voice({ dur: 1.5, gain: 0.7, f0: 70, f1: 50, formants: [260, 620], rough: 0.25, vibrato: 0.03 }) },
+  /** End Crystal Mite: a glassy shiver before it bites, and a tinkle as it burrows into a cluster. */
+  'mob.end_crystal_mite.windup': { dur: 1.2, recipe: (s) => { for (let i = 0; i < 10; i++) s.bell({ start: i * 0.1, f: 2400 + s.rng.next() * 900, ratios: [1, 2.76], gain: 0.12 + i * 0.015, decay: 0.08, dur: 0.15 }); } },
+  'mob.end_crystal_mite.burrow': { dur: 0.6, recipe: (s) => { for (let i = 0; i < 5; i++) s.bell({ start: i * 0.08, f: 3200 - i * 300, ratios: [1, 2.76], gain: 0.2, decay: 0.12, dur: 0.2 }); } },
+  /** End Phantom: the screech before its dive, the rush of the dive, and the crack when it is stunned. */
+  'mob.end_phantom.screech': { dur: 1.6, recipe: (s) => (s.voice({ dur: 1.5, gain: 0.9, f0: 900, f1: 1400, formants: [1600, 3400], rough: 0.4, vibrato: 0.05 }), s.noise({ dur: 1.4, gain: 0.2, attack: 0.3, decay: 0.3, hp: 4000 })) },
+  'mob.end_phantom.dive': { dur: 1.2, recipe: (s) => s.noise({ dur: 1.1, gain: 0.7, attack: 0.15, decay: 0.5, bp: [900, 1.5] }) },
+  // V6 phase 3: the Guardian Constructs: stone grinding on stone, crystal charging, heavy blows
+  'mob.guardian_sentinel.windup': { dur: 1.3, recipe: (s) => (s.tone({ dur: 1.2, gain: 0.4, f0: 300, f1: 1400, wave: 'saw', lp: 2400, attack: 1, decay: 0.15 }), s.noise({ dur: 1.2, gain: 0.25, attack: 0.8, decay: 0.2, bp: [600, 3] })) },
+  'mob.guardian_sentinel.punch': { dur: 0.6, recipe: (s) => (s.knock({ f: 90, gain: 1, decay: 0.25, noise: 0.6 }), s.noise({ dur: 0.4, gain: 0.5, decay: 0.15, lp: 900 })) },
+  'mob.guardian_sentinel.charge': { dur: 1.6, recipe: (s) => (s.tone({ dur: 1.5, gain: 0.35, f0: 600, f1: 2600, wave: 'sine', attack: 1.3, decay: 0.15, vibrato: 0.02, vibratoRate: 14 }), s.bell({ start: 1.2, f: 1800, ratios: [1, 2.4], gain: 0.25, decay: 0.2, dur: 0.3 })) },
+  'mob.guardian_sentinel.bolt': { dur: 0.6, recipe: (s) => (s.tone({ dur: 0.5, gain: 0.6, f0: 2400, f1: 500, wave: 'saw', lp: 4000, decay: 0.3 }), s.noise({ dur: 0.3, gain: 0.35, decay: 0.12, hp: 2500 })) },
+  'mob.guardian_sentinel.hit': { dur: 0.5, recipe: (s) => { for (let i = 0; i < 4; i++) s.bell({ start: i * 0.04, f: 2600 + s.rng.next() * 1200, ratios: [1, 2.76], gain: 0.25, decay: 0.1, dur: 0.2 }); } },
+  'mob.guardian_bulwark.wake': { dur: 2, recipe: (s) => (s.noise({ dur: 1.8, gain: 0.7, attack: 0.6, decay: 0.6, lp: 400 }), s.tone({ dur: 1.8, gain: 0.4, f0: 32, f1: 70, wave: 'saw', lp: 300, attack: 1, decay: 0.5 }), s.bell({ start: 1.4, f: 700, ratios: [1, 1.5, 2.01], gain: 0.3, decay: 0.4, dur: 0.6 })) },
+  'mob.guardian_bulwark.sleep': { dur: 1.4, recipe: (s) => (s.noise({ dur: 1.3, gain: 0.5, decay: 0.6, lp: 350 }), s.tone({ dur: 1.2, gain: 0.3, f0: 70, f1: 30, wave: 'saw', lp: 300, decay: 0.6 })) },
+  'mob.guardian_bulwark.windup': { dur: 1.8, recipe: (s) => (s.noise({ dur: 1.7, gain: 0.5, attack: 1.4, decay: 0.2, bp: [300, 2] }), s.tone({ dur: 1.7, gain: 0.35, f0: 40, f1: 120, wave: 'saw', lp: 600, attack: 1.4, decay: 0.2 })) },
+  'mob.guardian_bulwark.pound': { dur: 1.5, recipe: (s) => (s.noise({ dur: 1.4, gain: 1, attack: 0.003, decay: 0.5, lp: 250 }), s.tone({ dur: 1.1, gain: 0.9, f0: 60, f1: 22, decay: 0.6 }), s.knock({ f: 140, gain: 0.8, decay: 0.3, noise: 0.8 })) },
+  'mob.guardian_bulwark.shield': { dur: 1.2, recipe: (s) => (s.bell({ f: 900, ratios: [1, 1.5, 2.5], gain: 0.35, decay: 0.6, dur: 1.1 }), s.tone({ dur: 1.1, gain: 0.15, f0: 450, wave: 'sine', vibrato: 0.04, vibratoRate: 7, decay: 0.5 })) },
+  // V6 phase 3: the ancient civilization and its weapons
+  'block.glyph': { dur: 0.8, recipe: (s) => (s.noise({ dur: 0.5, gain: 0.25, decay: 0.3, bp: [1800, 3] }), s.bell({ f: 540, ratios: [1, 1.19, 1.5], gain: 0.2, decay: 0.5, dur: 0.7 })) },
+  'block.dormant': { dur: 0.6, recipe: (s) => (s.knock({ f: 120, gain: 0.5, decay: 0.15, noise: 0.4 }), s.tone({ dur: 0.5, gain: 0.12, f0: 80, f1: 60, wave: 'saw', lp: 300, decay: 0.3 })) },
+  'block.dead_portal': { dur: 1.2, recipe: (s) => (s.noise({ dur: 1.1, gain: 0.25, attack: 0.3, decay: 0.6, lp: 500 }), s.tone({ dur: 1, gain: 0.12, f0: 180, f1: 90, wave: 'tri', decay: 0.6 })) },
+  'shardstaff.fire': { dur: 0.6, recipe: (s) => (s.bell({ f: 1600, ratios: [1, 2.4, 3.1], gain: 0.4, decay: 0.25, dur: 0.5 }), s.noise({ dur: 0.3, gain: 0.25, decay: 0.12, hp: 3000 })) },
+  'shardstaff.hit': { dur: 0.5, recipe: (s) => { for (let i = 0; i < 5; i++) s.bell({ start: i * 0.03, f: 2200 + s.rng.next() * 1600, ratios: [1, 2.76], gain: 0.2, decay: 0.1, dur: 0.18 }); } },
+  // V6 phase 4: the End's machines at work (each hums now and then while working)
+  'machine.crystal_generator': { dur: 1.4, recipe: (s) => (s.tone({ dur: 1.3, gain: 0.18, f0: 110, f1: 112, wave: 'saw', lp: 600, attack: 0.3, decay: 0.5 }), s.bell({ start: 0.2, f: 1320, ratios: [1, 2.01], gain: 0.08, decay: 0.5, dur: 0.9 }), s.noise({ dur: 1.2, gain: 0.08, attack: 0.3, decay: 0.5, bp: [2400, 4] })) },
+  'machine.void_collector': { dur: 2, recipe: (s) => (s.tone({ dur: 1.9, gain: 0.2, f0: 48, f1: 52, wave: 'sine', attack: 0.7, decay: 0.8, vibrato: 0.03, vibratoRate: 1.5 }), s.noise({ dur: 1.8, gain: 0.08, attack: 0.8, decay: 0.8, lp: 300 })) },
+  'machine.restored_ancient_core': { dur: 1.8, recipe: (s) => (s.tone({ dur: 1.7, gain: 0.18, f0: 73, f1: 73, wave: 'tri', attack: 0.5, decay: 0.7 }), s.tone({ dur: 1.7, gain: 0.1, f0: 110, f1: 110, wave: 'sine', attack: 0.6, decay: 0.7, vibrato: 0.01, vibratoRate: 3 }), s.bell({ start: 0.6, f: 440, ratios: [1, 1.5], gain: 0.05, decay: 0.8, dur: 1 })) },
+  'machine.end_processor': { dur: 0.9, recipe: (s) => (s.knock({ f: 160, gain: 0.35, decay: 0.08, noise: 0.5 }), s.knock({ start: 0.3, f: 150, gain: 0.3, decay: 0.08, noise: 0.5 }), s.noise({ dur: 0.8, gain: 0.12, decay: 0.3, bp: [700, 2] }), s.tone({ dur: 0.8, gain: 0.08, f0: 330, f1: 340, wave: 'square', lp: 900, decay: 0.3 })) },
+  'machine.crystal_grower': { dur: 1.6, recipe: (s) => { for (let i = 0; i < 3; i++) s.bell({ start: i * 0.4, f: 1600 + i * 240, ratios: [1, 2.4], gain: 0.06, decay: 0.4, dur: 0.6 }); } },
+  'machine.ender_bridge_projector': { dur: 1.4, recipe: (s) => (s.tone({ dur: 1.3, gain: 0.12, f0: 880, f1: 886, wave: 'sine', attack: 0.4, decay: 0.6, vibrato: 0.01, vibratoRate: 5 }), s.noise({ dur: 1.2, gain: 0.05, attack: 0.4, decay: 0.5, hp: 4000 })) },
+  'machine.teleport_node': { dur: 1.6, recipe: (s) => (s.tone({ dur: 1.5, gain: 0.12, f0: 220, f1: 220, wave: 'sine', attack: 0.5, decay: 0.6, vibrato: 0.02, vibratoRate: 2 }), s.tone({ dur: 1.5, gain: 0.06, f0: 330, f1: 330, wave: 'sine', attack: 0.6, decay: 0.6 })) },
+  'machine.restored_ancient_lens': { dur: 2, recipe: (s) => (s.bell({ f: 660, ratios: [1, 1.5, 2], gain: 0.07, decay: 1, dur: 1.8 }), s.tone({ dur: 1.9, gain: 0.06, f0: 990, f1: 990, wave: 'sine', attack: 0.8, decay: 0.8 })) },
+  // V6 phase 4: transport
+  'block.bridge_on': { dur: 0.8, recipe: (s) => (s.tone({ dur: 0.7, gain: 0.3, f0: 300, f1: 1200, wave: 'sine', attack: 0.05, decay: 0.4 }), s.noise({ dur: 0.6, gain: 0.15, decay: 0.3, hp: 3000 })) },
+  'block.bridge_off': { dur: 0.8, recipe: (s) => (s.tone({ dur: 0.7, gain: 0.3, f0: 1200, f1: 200, wave: 'sine', decay: 0.4 }), s.noise({ dur: 0.6, gain: 0.12, decay: 0.3, hp: 2500 })) },
+  'block.bridge_flicker': { dur: 1.2, recipe: (s) => { for (let i = 0; i < 6; i++) s.tone({ start: i * 0.18, dur: 0.08, gain: 0.25, f0: 900, f1: 700, wave: 'square', lp: 2500, decay: 0.05 }); } },
+  'block.node_warmup': { dur: 2.2, recipe: (s) => (s.tone({ dur: 2.1, gain: 0.3, f0: 180, f1: 900, wave: 'sine', attack: 1.6, decay: 0.3, vibrato: 0.03, vibratoRate: 8 }), s.noise({ dur: 2, gain: 0.15, attack: 1.5, decay: 0.3, bp: [1200, 3] })) },
+  'block.node_go': { dur: 1, recipe: (s) => (s.noise({ dur: 0.9, gain: 0.5, attack: 0.01, decay: 0.5, bp: [800, 1.5] }), s.tone({ dur: 0.8, gain: 0.35, f0: 1200, f1: 240, wave: 'sine', decay: 0.5 })) },
+  'block.node_fail': { dur: 0.6, recipe: (s) => (s.tone({ dur: 0.25, gain: 0.3, f0: 330, f1: 330, wave: 'square', lp: 1200, decay: 0.1 }), s.tone({ start: 0.25, dur: 0.3, gain: 0.3, f0: 220, f1: 220, wave: 'square', lp: 1200, decay: 0.15 })) },
+  'block.gateway_go': { dur: 1.4, recipe: (s) => (s.noise({ dur: 1.3, gain: 0.45, attack: 0.05, decay: 0.7, lp: 900 }), s.bell({ f: 330, ratios: [1, 1.5, 2.25], gain: 0.25, decay: 0.8, dur: 1.2 })) },
+  'block.gateway_open': { dur: 2.4, recipe: (s) => (s.noise({ dur: 2.2, gain: 0.4, attack: 0.8, decay: 0.8, lp: 700 }), s.bell({ start: 0.6, f: 262, ratios: [1, 1.5, 2, 3], gain: 0.3, decay: 1.2, dur: 1.8 }), s.tone({ dur: 2.2, gain: 0.2, f0: 55, f1: 65, wave: 'saw', lp: 400, attack: 1, decay: 0.8 })) },
+  'block.portal_repair': { dur: 0.9, recipe: (s) => (s.knock({ f: 220, gain: 0.6, decay: 0.12, noise: 0.5 }), s.knock({ start: 0.25, f: 260, gain: 0.5, decay: 0.12, noise: 0.5 }), s.bell({ start: 0.45, f: 520, ratios: [1, 1.5], gain: 0.15, decay: 0.4, dur: 0.4 })) },
+  'block.vehicle_place': { dur: 0.3, recipe: (s) => s.knock({ f: 260, gain: 0.6, decay: 0.1, noise: 0.4 }) },
+  'block.vehicle_hit': { dur: 0.3, recipe: (s) => s.knock({ f: 340, gain: 0.5, decay: 0.08, noise: 0.6 }) },
+  'block.cart_board': { dur: 0.3, recipe: (s) => s.knock({ f: 200, gain: 0.5, decay: 0.1, noise: 0.3 }) },
+  'block.cart_roll': { dur: 0.6, recipe: (s) => (s.noise({ dur: 0.55, gain: 0.25, attack: 0.05, decay: 0.2, bp: [500, 2] }), s.knock({ start: 0.2, f: 300, gain: 0.15, decay: 0.03 })) },
+  'block.skiff_board': { dur: 0.6, recipe: (s) => (s.knock({ f: 180, gain: 0.5, decay: 0.12, noise: 0.4 }), s.tone({ dur: 0.5, gain: 0.12, f0: 140, f1: 120, wave: 'sine', decay: 0.3 })) },
+  'block.skiff_fuel': { dur: 0.5, recipe: (s) => (s.bell({ f: 1200, ratios: [1, 2.4], gain: 0.2, decay: 0.2, dur: 0.4 }), s.tone({ dur: 0.4, gain: 0.15, f0: 400, f1: 700, wave: 'sine', decay: 0.2 })) },
+  'block.skiff_hum': { dur: 1.6, recipe: (s) => (s.tone({ dur: 1.5, gain: 0.16, f0: 62, f1: 64, wave: 'saw', lp: 380, attack: 0.4, decay: 0.6 }), s.noise({ dur: 1.4, gain: 0.06, attack: 0.4, decay: 0.6, lp: 600 })) },
+  'ui.learn': { dur: 1, recipe: (s) => (s.bell({ f: 660, ratios: [1, 2], gain: 0.25, decay: 0.3, dur: 0.4 }), s.bell({ start: 0.15, f: 880, ratios: [1, 2], gain: 0.25, decay: 0.3, dur: 0.4 }), s.bell({ start: 0.3, f: 1320, ratios: [1, 2], gain: 0.25, decay: 0.5, dur: 0.6 })) },
+  // V6 phase 4: the quests and the ancient machines waking
+  'block.lens_repair': { dur: 0.9, recipe: (s) => (s.bell({ f: 1400, ratios: [1, 2.76], gain: 0.25, decay: 0.3, dur: 0.6 }), s.noise({ dur: 0.4, gain: 0.15, decay: 0.2, hp: 3000 })) },
+  'block.lens_wake': { dur: 2.4, recipe: (s) => (s.tone({ dur: 2.2, gain: 0.25, f0: 220, f1: 880, wave: 'sine', attack: 1.4, decay: 0.6 }), s.bell({ start: 1.4, f: 880, ratios: [1, 1.5, 2, 3], gain: 0.3, decay: 0.8, dur: 1 })) },
+  'block.core_wake': { dur: 2.4, recipe: (s) => (s.noise({ dur: 2, gain: 0.4, attack: 0.8, decay: 0.8, lp: 500 }), s.tone({ dur: 2.2, gain: 0.35, f0: 36, f1: 73, wave: 'saw', lp: 500, attack: 1.2, decay: 0.8 }), s.bell({ start: 1.6, f: 440, ratios: [1, 1.5, 2.01], gain: 0.25, decay: 0.6, dur: 0.8 })) },
+  'block.crystal_grow': { dur: 0.8, recipe: (s) => { for (let i = 0; i < 4; i++) s.bell({ start: i * 0.08, f: 1800 + i * 300, ratios: [1, 2.4], gain: 0.15, decay: 0.2, dur: 0.4 }); } },
+  'block.crystal_place': { dur: 0.6, recipe: (s) => (s.knock({ f: 700, gain: 0.4, decay: 0.05 }), s.bell({ f: 1500, ratios: [1, 2.4], gain: 0.2, decay: 0.3, dur: 0.5 })) },
+  'block.crystal_light': { dur: 1, recipe: (s) => (s.bell({ f: 784, ratios: [1, 2, 3], gain: 0.35, decay: 0.6, dur: 0.9 }), s.tone({ dur: 0.9, gain: 0.12, f0: 392, f1: 392, wave: 'sine', decay: 0.5 })) },
+  'block.vault_open': { dur: 2.2, recipe: (s) => (s.noise({ dur: 2, gain: 0.6, attack: 0.1, decay: 1, lp: 350 }), s.tone({ dur: 2, gain: 0.3, f0: 45, f1: 35, wave: 'saw', lp: 300, decay: 1 }), s.bell({ start: 1.2, f: 523, ratios: [1, 1.5, 2], gain: 0.2, decay: 0.6, dur: 0.9 })) },
+  'block.reliquary': { dur: 0.9, recipe: (s) => (s.knock({ f: 180, gain: 0.5, decay: 0.15, noise: 0.5 }), s.bell({ start: 0.25, f: 990, ratios: [1, 2.76], gain: 0.2, decay: 0.4, dur: 0.6 })) },
+  'block.telescope': { dur: 1.2, recipe: (s) => (s.knock({ f: 400, gain: 0.3, decay: 0.05 }), s.tone({ start: 0.1, dur: 1, gain: 0.12, f0: 660, f1: 1320, wave: 'sine', attack: 0.4, decay: 0.4 })) },
+  'item.silent_bell': { dur: 3.5, recipe: (s) => (s.bell({ f: 196, ratios: [1, 2.01, 2.76, 4.07], gain: 0.5, decay: 2.5, dur: 3.4 }), s.bell({ start: 0.02, f: 392, ratios: [1, 1.5], gain: 0.15, decay: 1.5, dur: 2 })) },
+  'quest.complete': { dur: 2, recipe: (s) => (s.bell({ f: 523, ratios: [1, 2], gain: 0.25, decay: 0.6, dur: 0.8 }), s.bell({ start: 0.2, f: 659, ratios: [1, 2], gain: 0.25, decay: 0.6, dur: 0.8 }), s.bell({ start: 0.4, f: 784, ratios: [1, 2, 3], gain: 0.3, decay: 1, dur: 1.4 })) },
+  // V6 phase 4: Elytra upgrades
+  'elytra.burst': { dur: 0.7, recipe: (s) => (s.noise({ dur: 0.6, gain: 0.6, attack: 0.01, decay: 0.3, bp: [1200, 1] }), s.tone({ dur: 0.5, gain: 0.25, f0: 300, f1: 900, wave: 'saw', lp: 2000, decay: 0.3 })) },
+  'elytra.blink': { dur: 0.7, recipe: (s) => (s.tone({ dur: 0.3, gain: 0.35, f0: 1800, f1: 300, wave: 'sine', decay: 0.2 }), s.noise({ start: 0.05, dur: 0.5, gain: 0.3, decay: 0.3, bp: [2400, 3] })) },
+  'elytra.recover': { dur: 1.6, recipe: (s) => (s.noise({ dur: 1.4, gain: 0.5, attack: 0.05, decay: 0.8, lp: 700 }), s.tone({ dur: 1.4, gain: 0.3, f0: 80, f1: 400, wave: 'sine', attack: 0.3, decay: 0.8 }), s.bell({ start: 0.8, f: 660, ratios: [1, 1.5], gain: 0.2, decay: 0.5, dur: 0.7 })) },
+  /** A giant structure found: a slow chord rising out of the dark, once. */
+  'music.discovery': {
+    dur: 6,
+    recipe: (s) => {
+      s.tone({ dur: 5.5, gain: 0.18, f0: 55, wave: 'saw', lp: 400, attack: 1.5, decay: 2.5 });
+      for (const [i, f] of [220, 277.2, 329.6, 415.3].entries()) s.tone({ start: 0.4 + i * 0.5, dur: 5 - i * 0.5, gain: 0.12, f0: f, wave: 'tri', attack: 1, decay: 2.2, vibrato: 0.01, vibratoRate: 5 });
+      s.bell({ start: 2.6, f: 880, ratios: [1, 1.5, 2.01], gain: 0.2, decay: 1.6, dur: 3 });
+    },
+  },
+  // V6 phase 5: Void Storms and the End Eclipse
+  'storm.rumble': { dur: 3.2, recipe: (s) => (s.noise({ dur: 3, gain: 0.9, attack: 0.8, decay: 1.6, lp: 140 }), s.tone({ dur: 3, gain: 0.35, f0: 34, f1: 28, wave: 'saw', lp: 120, attack: 0.8, decay: 1.6 })) },
+  'storm.break': { dur: 2.4, recipe: (s) => (s.noise({ dur: 2.2, gain: 1, attack: 0.02, decay: 1.4, lp: 600 }), s.tone({ dur: 2, gain: 0.4, f0: 90, f1: 30, wave: 'saw', lp: 400, decay: 1.2 }), s.bell({ start: 0.3, f: 220, ratios: [1, 1.41, 2.76], gain: 0.25, decay: 1.2, dur: 1.8 })) },
+  'storm.end': { dur: 3, recipe: (s) => (s.noise({ dur: 2.6, gain: 0.4, attack: 0.2, decay: 2, lp: 900, hp: 200 }), s.bell({ start: 0.6, f: 660, ratios: [1, 1.5, 2], gain: 0.2, decay: 1.4, dur: 2.2 })) },
+  'storm.debris': { dur: 1.2, recipe: (s) => (s.noise({ dur: 1, gain: 0.9, attack: 0.003, decay: 0.4, lp: 1200 }), s.knock({ f: 120, gain: 0.9, decay: 0.25, noise: 0.8 }), s.bell({ start: 0.05, f: 1400, ratios: [1, 2.76], gain: 0.25, decay: 0.3, dur: 0.6 })) },
+  'storm.remnant': { dur: 2.6, recipe: (s) => (s.noise({ dur: 2.2, gain: 0.5, attack: 0.6, decay: 1, lp: 500 }), s.tone({ dur: 2.4, gain: 0.25, f0: 110, f1: 165, wave: 'tri', attack: 1, decay: 1.2 }), s.bell({ start: 1.2, f: 523, ratios: [1, 1.5, 2.01], gain: 0.2, decay: 0.8, dur: 1.2 })) },
+  'storm.fade': { dur: 2, recipe: (s) => (s.tone({ dur: 1.8, gain: 0.3, f0: 660, f1: 220, wave: 'sine', vibrato: 0.05, vibratoRate: 11, decay: 1 }), s.noise({ dur: 1.6, gain: 0.25, decay: 1, bp: [1500, 3] })) },
+  'eclipse.monolith': { dur: 3, recipe: (s) => (s.noise({ dur: 2.6, gain: 0.6, attack: 0.8, decay: 1.4, lp: 300 }), s.tone({ dur: 2.8, gain: 0.3, f0: 41, f1: 55, wave: 'saw', lp: 260, attack: 1, decay: 1.4 }), s.bell({ start: 1.6, f: 392, ratios: [1, 1.5, 2.01, 3], gain: 0.25, decay: 1, dur: 1.4 })) },
+  /** The End Eclipse begins: a dark sting, a low swell under a cold bell. */
+  'music.eclipse': {
+    dur: 7,
+    recipe: (s) => {
+      s.tone({ dur: 6.5, gain: 0.22, f0: 41, wave: 'saw', lp: 260, attack: 2, decay: 3 });
+      for (const [i, f] of [146.8, 174.6, 207.7, 261.6].entries()) s.tone({ start: 0.6 + i * 0.6, dur: 5.6 - i * 0.6, gain: 0.1, f0: f, wave: 'tri', attack: 1.2, decay: 2.6, vibrato: 0.012, vibratoRate: 4 });
+      s.bell({ start: 3.2, f: 1046, ratios: [1, 2.01, 2.76], gain: 0.22, decay: 2, dur: 3.5 });
+    },
+  },
+  /** The Void Citadel found: a descending, hollow chord. */
+  'music.citadel': {
+    dur: 7,
+    recipe: (s) => {
+      s.tone({ dur: 6.5, gain: 0.2, f0: 49, wave: 'saw', lp: 320, attack: 1.4, decay: 3 });
+      for (const [i, f] of [392, 349.2, 311.1, 261.6].entries()) s.tone({ start: 0.4 + i * 0.7, dur: 5.4 - i * 0.6, gain: 0.11, f0: f, wave: 'tri', attack: 0.8, decay: 2.4, vibrato: 0.008, vibratoRate: 5 });
+      s.bell({ start: 3.6, f: 523.3, ratios: [1, 1.5, 2.01], gain: 0.2, decay: 1.8, dur: 3 });
+    },
+  },
+  /** The End Guardian falls: a rising, bright resolution. */
+  'music.guardian_victory': {
+    dur: 6,
+    recipe: (s) => {
+      for (const [i, f] of [261.6, 329.6, 392, 523.3].entries()) s.bell({ start: i * 0.35, f, ratios: [1, 2, 3], gain: 0.25, decay: 1.4, dur: 2.4 });
+      s.tone({ start: 1.4, dur: 4.4, gain: 0.16, f0: 130.8, wave: 'tri', attack: 0.6, decay: 2.6 });
+      s.tone({ start: 1.4, dur: 4.4, gain: 0.1, f0: 196, wave: 'tri', attack: 0.6, decay: 2.6 });
+    },
+  },
+  // The Void Citadel
+  'citadel.door': { dur: 2.6, recipe: (s) => (s.noise({ dur: 2.4, gain: 0.7, attack: 0.1, decay: 1.4, lp: 300 }), s.tone({ dur: 2.2, gain: 0.35, f0: 55, f1: 41, wave: 'saw', lp: 260, decay: 1.2 }), s.bell({ start: 1.8, f: 440, ratios: [1, 1.5, 2.01], gain: 0.2, decay: 0.6, dur: 0.8 })) },
+  'citadel.glyph': { dur: 0.7, recipe: (s) => (s.knock({ f: 300, gain: 0.4, decay: 0.08, noise: 0.3 }), s.bell({ start: 0.05, f: 784, ratios: [1, 2.01, 3], gain: 0.25, decay: 0.4, dur: 0.6 })) },
+  'citadel.wrong': { dur: 0.9, recipe: (s) => (s.tone({ dur: 0.8, gain: 0.35, f0: 180, f1: 90, wave: 'square', lp: 900, decay: 0.4 }), s.noise({ dur: 0.5, gain: 0.3, decay: 0.2, lp: 700 })) },
+  'citadel.sequence': { dur: 0.6, recipe: (s) => s.bell({ f: 1046, ratios: [1, 2.4, 3.9], gain: 0.3, decay: 0.35, dur: 0.55 }) },
+  'citadel.crystal': { dur: 0.6, recipe: (s) => (s.knock({ f: 700, gain: 0.3, decay: 0.04 }), s.bell({ f: 1318, ratios: [1, 2.4], gain: 0.25, decay: 0.3, dur: 0.5 })) },
+  // The End Guardian
+  'guardian.altar': { dur: 1.2, recipe: (s) => (s.knock({ f: 220, gain: 0.5, decay: 0.12, noise: 0.4 }), s.bell({ start: 0.1, f: 659, ratios: [1, 1.5, 2.01], gain: 0.3, decay: 0.7, dur: 1 })) },
+  'guardian.awaken': { dur: 4, recipe: (s) => (s.noise({ dur: 3.6, gain: 0.9, attack: 1.2, decay: 1.6, lp: 300 }), s.tone({ dur: 3.6, gain: 0.5, f0: 27, f1: 55, wave: 'saw', lp: 300, attack: 1.6, decay: 1.4 }), s.bell({ start: 2.4, f: 330, ratios: [1, 1.5, 2.01, 3], gain: 0.35, decay: 1.2, dur: 1.5 })) },
+  'guardian.phase': { dur: 2.6, recipe: (s) => (s.noise({ dur: 2.2, gain: 0.7, attack: 0.2, decay: 1.2, lp: 500 }), s.tone({ dur: 2.2, gain: 0.4, f0: 55, f1: 110, wave: 'saw', lp: 500, attack: 0.4, decay: 1.2 }), s.bell({ start: 1, f: 440, ratios: [1, 1.41, 2.01], gain: 0.3, decay: 1, dur: 1.5 })) },
+  'guardian.charge': { dur: 1.8, recipe: (s) => (s.tone({ dur: 1.6, gain: 0.4, f0: 400, f1: 2200, wave: 'sine', attack: 1.4, decay: 0.15, vibrato: 0.02, vibratoRate: 16 }), s.noise({ dur: 1.5, gain: 0.2, attack: 1.2, decay: 0.2, bp: [2400, 4] })) },
+  'guardian.lance': { dur: 0.9, recipe: (s) => (s.tone({ dur: 0.7, gain: 0.6, f0: 2600, f1: 400, wave: 'saw', lp: 5000, decay: 0.4 }), s.noise({ dur: 0.5, gain: 0.4, decay: 0.2, hp: 2000 }), s.bell({ f: 1760, ratios: [1, 2.4], gain: 0.2, decay: 0.3, dur: 0.6 })) },
+  'guardian.fracture': { dur: 1.6, recipe: (s) => (s.noise({ dur: 1.4, gain: 1, attack: 0.005, decay: 0.6, lp: 400 }), s.knock({ f: 90, gain: 0.8, decay: 0.3, noise: 0.9 }), s.tone({ dur: 1.2, gain: 0.5, f0: 50, f1: 25, decay: 0.6 })) },
+  'guardian.shield': { dur: 1.4, recipe: (s) => (s.bell({ f: 660, ratios: [1, 1.5, 2.5, 3.4], gain: 0.35, decay: 0.8, dur: 1.3 }), s.tone({ dur: 1.3, gain: 0.18, f0: 330, wave: 'sine', vibrato: 0.04, vibratoRate: 6, decay: 0.6 })) },
+  'guardian.shield_down': { dur: 1.2, recipe: (s) => { for (let i = 0; i < 6; i++) s.bell({ start: i * 0.06, f: 2000 - i * 220, ratios: [1, 2.76], gain: 0.25, decay: 0.2, dur: 0.4 }); s.noise({ dur: 0.8, gain: 0.4, decay: 0.4, hp: 1500 }); } },
+  'guardian.pylon_break': { dur: 1, recipe: (s) => { for (let i = 0; i < 5; i++) s.bell({ start: i * 0.05, f: 1800 + s.rng.next() * 1400, ratios: [1, 2.76], gain: 0.3, decay: 0.15, dur: 0.3 }); s.knock({ f: 160, gain: 0.6, decay: 0.2, noise: 0.7 }); } },
+  'guardian.death': { dur: 5, recipe: (s) => { s.noise({ dur: 4.6, gain: 1, attack: 0.05, decay: 2.4, lp: 600 }); s.tone({ dur: 4.4, gain: 0.5, f0: 110, f1: 20, wave: 'saw', lp: 500, decay: 2.4 }); for (let i = 0; i < 8; i++) s.knock({ start: 0.3 + i * 0.35, f: 70 + s.rng.next() * 120, gain: 0.6, decay: 0.2, noise: 0.8 }); s.bell({ start: 2.6, f: 523, ratios: [1, 1.5, 2.01], gain: 0.25, decay: 1.6, dur: 2.2 }); } },
+  // The Dragon's new moves
+  'dragon.roar': { dur: 3, recipe: (s) => (s.voice({ dur: 2.8, gain: 1, f0: 70, f1: 45, formants: [380, 1100], rough: 0.85, vibrato: 0.03 }), s.noise({ dur: 2.6, gain: 0.6, attack: 0.1, decay: 1.6, lp: 700 }), s.tone({ dur: 2.6, gain: 0.4, f0: 36, f1: 28, wave: 'saw', lp: 220, decay: 1.6 })) },
+  'dragon.inhale': { dur: 1.7, recipe: (s) => (s.noise({ dur: 1.6, gain: 0.7, attack: 1.4, decay: 0.15, bp: [500, 1.5] }), s.tone({ dur: 1.6, gain: 0.25, f0: 90, f1: 260, wave: 'saw', lp: 900, attack: 1.4, decay: 0.15 })) },
+  'dragon.breath_wave': { dur: 2, recipe: (s) => (s.noise({ dur: 1.8, gain: 1, attack: 0.02, decay: 1.2, bp: [900, 0.8] }), s.voice({ dur: 1.2, gain: 0.6, f0: 80, f1: 60, formants: [400, 1200], rough: 0.7 })) },
+  'dragon.gust': { dur: 1.6, recipe: (s) => (s.noise({ dur: 1.4, gain: 1, attack: 0.05, decay: 0.9, lp: 900 }), s.noise({ start: 0.1, dur: 1.2, gain: 0.4, decay: 0.8, bp: [300, 1] })) },
+  'dragon.edge': { dur: 2.4, recipe: (s) => (s.noise({ dur: 2.2, gain: 1, attack: 0.003, decay: 1.2, lp: 500 }), s.knock({ f: 70, gain: 1, decay: 0.4, noise: 0.9 }), s.tone({ dur: 1.8, gain: 0.6, f0: 55, f1: 22, decay: 1 }), s.knock({ start: 0.5, f: 120, gain: 0.5, decay: 0.3, noise: 0.9 })) },
+  'crystal.fury': { dur: 1.6, recipe: (s) => { for (let i = 0; i < 6; i++) s.bell({ start: i * 0.1, f: 880 * Math.pow(1.122, i), ratios: [1, 2.4, 3.9], gain: 0.25, decay: 0.6, dur: 1 }); } },
+  'crystal.charge': { dur: 1.6, recipe: (s) => s.tone({ dur: 1.5, gain: 0.35, f0: 500, f1: 2400, wave: 'sine', attack: 1.4, decay: 0.1, vibrato: 0.03, vibratoRate: 18 }) },
+  'crystal.fire': { dur: 0.7, recipe: (s) => (s.tone({ dur: 0.5, gain: 0.5, f0: 3000, f1: 600, wave: 'saw', lp: 5000, decay: 0.3 }), s.noise({ dur: 0.3, gain: 0.3, decay: 0.1, hp: 3000 })) },
+  'elytra.veil': { dur: 1.4, recipe: (s) => (s.tone({ dur: 1.2, gain: 0.3, f0: 880, f1: 220, wave: 'sine', vibrato: 0.05, vibratoRate: 9, decay: 0.7 }), s.noise({ dur: 1.1, gain: 0.25, decay: 0.7, bp: [1800, 4] })) },
+  // Phase 5 beds: the storm, the eclipse, the ancient halls, each Citadel floor and each of the Guardian's phases
+  /** A Void Storm: a howling, pitch-bent wind over a low throb. */
+  'bed.void_storm': {
+    dur: 9,
+    recipe: (s) => {
+      s.wash({ gain: 0.9, lp: 1100, hp: 90, swell: 0.9 });
+      s.wash({ gain: 0.3, bp: [600, 3], swell: 1 });
+      s.drone({ f: 36, gain: 0.32, wave: 'saw', lp: 160, beat: 0.6, swell: 0.7 });
+    },
+  },
+  /** The End Eclipse: still air, a cold high tone and a slow pulse far below. */
+  'bed.end_eclipse': {
+    dur: 10,
+    recipe: (s) => {
+      s.drone({ f: 1046, gain: 0.03, beat: 0.2 });
+      s.drone({ f: 41, gain: 0.25, wave: 'saw', lp: 140, beat: 0.12, swell: 0.4 });
+      s.wash({ gain: 0.12, lp: 600, hp: 80, swell: 0.3 });
+      for (let i = 0; i < 3; i++) s.bell({ start: 1 + i * 3 + s.rng.next(), f: [523, 622, 784][s.rng.int(3)]!, ratios: [1, 2.01], gain: 0.04, decay: 1.6, dur: 2.4 });
+    },
+  },
+  /** The ancient halls (the Citadel's entrance and landings): a hollow, resonant hush. */
+  'bed.ancient': {
+    dur: 10,
+    recipe: (s) => {
+      s.wash({ gain: 0.35, lp: 420, hp: 60, swell: 0.4 });
+      s.drone({ f: 65.4, gain: 0.14, wave: 'tri', beat: 0.2, lp: 500 });
+      s.drone({ f: 98, gain: 0.08, beat: 0.15 });
+    },
+  },
+  'bed.citadel_combat': {
+    dur: 8,
+    recipe: (s) => {
+      s.drone({ f: 49, gain: 0.3, wave: 'saw', lp: 300, beat: 1.4, swell: 0.3 });
+      for (let i = 0; i < 16; i++) s.knock({ start: i * 0.5, f: i % 4 === 0 ? 70 : 110, gain: i % 4 === 0 ? 0.35 : 0.15, decay: 0.12, noise: 0.5 });
+    },
+  },
+  'bed.citadel_glyph': {
+    dur: 10,
+    recipe: (s) => {
+      s.drone({ f: 110, gain: 0.08, wave: 'tri', beat: 0.3 });
+      for (let i = 0; i < 6; i++) s.bell({ start: 0.6 + i * 1.5 + s.rng.next() * 0.4, f: [392, 440, 523, 587, 659][s.rng.int(5)]!, ratios: [1, 2.01, 3], gain: 0.05, decay: 0.9, dur: 1.4 });
+      s.wash({ gain: 0.15, lp: 500, swell: 0.3 });
+    },
+  },
+  'bed.citadel_crystal': {
+    dur: 9,
+    recipe: (s) => {
+      s.drone({ f: 784, gain: 0.04, beat: 0.8 });
+      for (let i = 0; i < 10; i++) s.bell({ start: s.rng.next() * 8, f: [1318, 1568, 1760, 2093][s.rng.int(4)]!, ratios: [1, 2.4], gain: 0.035, decay: 0.5, dur: 0.8 });
+      s.wash({ gain: 0.1, hp: 2000, lp: 7000, swell: 0.4 });
+    },
+  },
+  'bed.citadel_parkour': {
+    dur: 9,
+    recipe: (s) => {
+      s.wash({ gain: 0.6, lp: 900, hp: 150, swell: 0.8 });
+      s.drone({ f: 220, gain: 0.05, beat: 2, lp: 1200 });
+    },
+  },
+  'bed.citadel_engineering': {
+    dur: 8,
+    recipe: (s) => {
+      s.drone({ f: 60, gain: 0.18, wave: 'saw', lp: 400, beat: 4 });
+      s.drone({ f: 120, gain: 0.06, beat: 0.5 });
+      for (let i = 0; i < 8; i++) s.tone({ start: i, dur: 0.06, gain: 0.05, f0: 2400, f1: 2400, wave: 'square', lp: 4000, decay: 0.03 });
+    },
+  },
+  'bed.citadel_arena': {
+    dur: 10,
+    recipe: (s) => {
+      s.wash({ gain: 0.4, lp: 300, hp: 40, swell: 0.5 });
+      s.drone({ f: 41, gain: 0.3, wave: 'saw', lp: 180, beat: 0.25, swell: 0.5 });
+      s.bell({ start: 4, f: 329.6, ratios: [1, 1.5, 2.01], gain: 0.05, decay: 2, dur: 4 });
+    },
+  },
+  /** The Guardian, phase by phase: the layer thickens and quickens. */
+  'bed.guardian_1': {
+    dur: 8,
+    recipe: (s) => {
+      s.drone({ f: 41, gain: 0.32, wave: 'saw', lp: 220, beat: 0.5, swell: 0.4 });
+      for (let i = 0; i < 8; i++) s.knock({ start: i, f: 60, gain: 0.35, decay: 0.2, noise: 0.6 });
+    },
+  },
+  'bed.guardian_2': {
+    dur: 8,
+    recipe: (s) => {
+      s.drone({ f: 46, gain: 0.32, wave: 'saw', lp: 300, beat: 0.8, swell: 0.4 });
+      s.drone({ f: 92.5, gain: 0.08, wave: 'tri', beat: 0.4 });
+      for (let i = 0; i < 16; i++) s.knock({ start: i * 0.5, f: i % 2 ? 90 : 60, gain: i % 2 ? 0.15 : 0.35, decay: 0.15, noise: 0.6 });
+    },
+  },
+  'bed.guardian_3': {
+    dur: 8,
+    recipe: (s) => {
+      s.drone({ f: 55, gain: 0.34, wave: 'saw', lp: 420, beat: 1.4, swell: 0.3 });
+      s.drone({ f: 110, gain: 0.1, wave: 'tri', beat: 0.7 });
+      for (let i = 0; i < 24; i++) s.knock({ start: i / 3, f: i % 3 === 0 ? 60 : 120, gain: i % 3 === 0 ? 0.4 : 0.15, decay: 0.12, noise: 0.6 });
+      s.bell({ start: 4, f: 880, ratios: [1, 1.41], gain: 0.05, decay: 1, dur: 2 });
+    },
+  },
+  'mob.end_phantom.stun': { dur: 0.6, recipe: (s) => (s.noise({ dur: 0.15, gain: 0.7, decay: 0.05, hp: 2000 }), s.voice({ dur: 0.5, gain: 0.6, f0: 1100, f1: 500, formants: [1500, 3000], rough: 0.3 })) },
+  // V6: the Expanded End's ambient beds (looped by AudioEngine.setBed, one per biome)
+  /** End Barrens: soft, open wind over a faint low tone. */
+  'bed.end_barrens': {
+    dur: 9,
+    recipe: (s) => {
+      s.wash({ gain: 0.5, lp: 900, hp: 120, swell: 0.6 });
+      s.drone({ f: 110, gain: 0.06, beat: 0.3 });
+    },
+  },
+  /** Shattered End: a deep hum with wind whistling between the spires. */
+  'bed.shattered_end': {
+    dur: 9,
+    recipe: (s) => {
+      s.drone({ f: 55, gain: 0.35, wave: 'saw', lp: 300, beat: 0.4, swell: 0.3 });
+      s.wash({ gain: 0.25, bp: [1800, 8], swell: 0.8 });
+    },
+  },
+  /** Astral End: an airy chord with soft chimes now and then. */
+  'bed.astral_end': {
+    dur: 10,
+    recipe: (s) => {
+      s.drone({ f: 220, gain: 0.14, wave: 'tri', beat: 0.5, lp: 1800 });
+      s.drone({ f: 330, gain: 0.09, beat: 0.25 });
+      s.wash({ gain: 0.15, lp: 1500, hp: 400, swell: 0.5 });
+      for (let i = 0; i < 4; i++) s.bell({ start: 0.5 + i * 2.2 + s.rng.next() * 0.8, f: [880, 990, 1320, 1480][s.rng.int(4)]!, ratios: [1, 2.76], gain: 0.05, decay: 0.8, dur: 1.4 });
+    },
+  },
+  /** End Highlands: a cave rumble with distant drips. */
+  'bed.highlands': {
+    dur: 9,
+    recipe: (s) => {
+      s.wash({ gain: 0.8, lp: 120, swell: 0.4 });
+      s.drone({ f: 41, gain: 0.3, swell: 0.3 });
+      for (let i = 0; i < 5; i++) s.tone({ start: 0.6 + i * 1.6 + s.rng.next(), dur: 0.08, gain: 0.08, f0: 1500 + s.rng.next() * 900, f1: 2600, decay: 0.03 });
+    },
+  },
+  /** End Crystal Fields: a high shimmer of small bells over a thin tone. */
+  'bed.end_crystal_fields': {
+    dur: 9,
+    recipe: (s) => {
+      s.drone({ f: 660, gain: 0.05, beat: 1.2 });
+      for (let i = 0; i < 14; i++) s.bell({ start: s.rng.next() * 8, f: [1568, 1760, 2093, 2349, 2637][s.rng.int(5)]!, ratios: [1, 2.76, 5.4], gain: 0.04, decay: 0.6, dur: 1 });
+      s.wash({ gain: 0.08, hp: 3000, lp: 9000, swell: 0.5 });
+    },
+  },
+  /** Chorus Forest: a soft rustle through the stalks, a warm low tone and a hollow knock now and then. */
+  'bed.chorus_forest': {
+    dur: 9,
+    recipe: (s) => {
+      s.wash({ gain: 0.22, hp: 300, lp: 1400, swell: 0.7 });
+      s.drone({ f: 98, gain: 0.08, wave: 'tri', beat: 0.3, lp: 900 });
+      for (let i = 0; i < 3; i++) s.tone({ start: 1 + i * 2.6 + s.rng.next(), dur: 0.12, gain: 0.07, f0: 260 + s.rng.next() * 80, f1: 180, decay: 0.06 });
+    },
+  },
+  /** Void Wastes: a dark, slowly swelling hush over a very low tone. */
+  'bed.void_wastes': {
+    dur: 9,
+    recipe: (s) => {
+      s.wash({ gain: 0.45, lp: 500, hp: 60, swell: 0.5 });
+      s.drone({ f: 41, gain: 0.26, wave: 'saw', lp: 160, beat: 0.15, swell: 0.6 });
+    },
+  },
 };
 
 /** Parameters for generic creature voices, keyed by mob type. */
-const VOICES: Record<string, { f: number; formants: [number, number]; rough: number; dur: number; gain?: number; crush?: boolean; bell?: boolean }> = {
+const VOICES: Record<string, { f: number; formants: [number, number]; rough: number; dur: number; gain?: number; crush?: boolean; bell?: boolean; mech?: boolean }> = {
   zombie: { f: 95, formants: [450, 900], rough: 0.25, dur: 0.9 },
   husk: { f: 80, formants: [400, 800], rough: 0.35, dur: 1 },
   drowned: { f: 90, formants: [350, 700], rough: 0.3, dur: 0.9 },
@@ -580,6 +1168,20 @@ const VOICES: Record<string, { f: number; formants: [number, number]; rough: num
   tropical_fish: { f: 600, formants: [1200, 2400], rough: 0.05, dur: 0.15, gain: 0.3 },
   pufferfish: { f: 400, formants: [900, 1800], rough: 0.2, dur: 0.2, gain: 0.4 },
   player: { f: 240, formants: [650, 1100], rough: 0.08, dur: 0.2 },
+  herobrine: { f: 150, formants: [480, 1250], rough: 0.5, dur: 0.6, crush: true },
+  // V6 phase 2: the Expanded End (Endlings chirp, stalkers rasp, beasts rumble, mites tick, phantoms keen)
+  endling: { f: 1250, formants: [2200, 3600], rough: 0.04, dur: 0.18, gain: 0.55 },
+  void_stalker: { f: 75, formants: [320, 1100], rough: 0.8, dur: 1.1, gain: 0.85 },
+  chorus_beast: { f: 52, formants: [260, 640], rough: 0.55, dur: 1.5, gain: 1 },
+  end_crystal_mite: { f: 1800, formants: [2800, 4800], rough: 0.6, dur: 0.15, bell: true, gain: 0.5 },
+  end_phantom: { f: 680, formants: [1400, 3000], rough: 0.25, dur: 1.1, gain: 0.7 },
+  // V6 phase 3: the Guardian Constructs have no voice, only machinery
+  guardian_sentinel: { f: 90, formants: [300, 900], rough: 0.5, dur: 0.8, gain: 0.7, mech: true },
+  guardian_bulwark: { f: 45, formants: [200, 600], rough: 0.6, dur: 1.2, gain: 0.9, mech: true },
+  // V6 phase 5: the End Guardian (machinery, grander) and its pieces
+  end_guardian: { f: 32, formants: [180, 520], rough: 0.7, dur: 1.6, gain: 1, mech: true },
+  guardian_pylon: { f: 700, formants: [1400, 2800], rough: 0.2, dur: 0.6, bell: true, gain: 0.6 },
+  void_orb: { f: 1100, formants: [2000, 3600], rough: 0.3, dur: 0.3, bell: true, gain: 0.4 },
 };
 
 function mobSound(type: string, kind: string): { dur: number; recipe: Recipe } {
@@ -593,7 +1195,13 @@ function mobSound(type: string, kind: string): { dur: number; recipe: Recipe } {
       const r = s.rng;
       const f = v.f * (0.9 + r.next() * 0.2) * (hurt ? 1.3 : 1);
       const f1 = death ? f * 0.5 : hurt ? f * 0.8 : f * (0.85 + r.next() * 0.3);
-      if (v.bell) s.bell({ f: f * 2, ratios: [1, 1.5, 2.01], gain: 0.5, decay: dur * 0.4, dur });
+      if (v.mech) {
+        // Stone grinding on stone, a crystal hum, and a clank (a crumble when it falls)
+        s.noise({ dur, gain: (v.gain ?? 0.8) * 0.6, attack: 0.05, decay: dur * 0.5, bp: [f * 4, 2.5] });
+        s.tone({ dur, gain: 0.15, f0: f * 6, f1: f * (death ? 2 : 6), wave: 'sine', vibrato: 0.03, vibratoRate: 9, decay: dur * 0.5 });
+        s.knock({ f: f * 1.5, gain: hurt ? 0.8 : 0.4, decay: 0.15, noise: 0.5 });
+        if (death) for (let i = 0; i < 5; i++) s.knock({ start: 0.15 + i * 0.12, f: f * (1 + r.next()), gain: 0.4, decay: 0.12, noise: 0.7 });
+      } else if (v.bell) s.bell({ f: f * 2, ratios: [1, 1.5, 2.01], gain: 0.5, decay: dur * 0.4, dur });
       else s.voice({ dur, gain: v.gain ?? 0.9, f0: f, f1, formants: v.formants, rough: v.rough, vibrato: death ? 0.04 : 0 });
       if (hurt) s.noise({ dur: 0.08, gain: 0.3, decay: 0.02, lp: 2500 });
       if (v.crush) s.crush(4, 4);

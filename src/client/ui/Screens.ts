@@ -10,7 +10,9 @@ import { GAME_MODE_INFO, GOD_HEART_PRESETS, normalizeGodHearts, type GameMode, t
 import { ACHIEVEMENTS } from '../../common/data/achievements';
 import { itemById } from '../../common/registry/items';
 import type { ItemIcons } from '../render/ItemIcons';
-import { LIMITS } from '../../common/net/protocol';
+import { LIMITS, type FakeBan } from '../../common/net/protocol';
+import { updateLogScreen } from './UpdateLogScreen';
+import { undoCount, undoAutoOptimize } from '../game/AutoOptimizer';
 
 export interface Screen {
   root: HTMLElement;
@@ -47,8 +49,35 @@ export function wrapClick(host: ScreenHost, f: () => void): () => void {
 // Title
 // ---------------------------------------------------------------------------
 const SPLASHES = [
+  'The End Expansion!',
+  'Look up during the eclipse!',
+  'It hangs upside down!',
+  'Jump or duck!',
+  'The Digital Corruption Update!',
+  'Do not plug it in!',
+  'Removed Herobrine!',
+  '478868574082066804',
+  'Now with computers!',
+  'HonkOS 5.5!',
+  'Feed it to the dragon?',
+  'Keyboard not found. Press F1!',
+  'He is never where you saw him.',
+  'The Engineering Update!',
+  'Now with conveyor belts!',
+  'Measured in EU/t!',
+  'Redstone, but better!',
+  'Read the Engineering Book!',
+  'Mind the hazard stripes!',
+  'Automate everything!',
   'Now with more honk!',
-  'The Caves Update!',
+  'Last one standing wins!',
+  'The keycard is outside!',
+  'Bedrock-sealed bunkers!',
+  'Bow before the pyramid!',
+  'What is that chunk?',
+  'Now with bunkers!',
+  'Villages, planned!',
+  'ERROR DEFEATED?',
   'Deeper than ever!',
   'Listen. Something is listening back.',
   'Bring a torch!',
@@ -66,7 +95,7 @@ const SPLASHES = [
 ];
 
 export function titleScreen(host: ScreenHost, actions: { singleplayer: () => void; multiplayer: () => void; options: () => void; profile: () => void }, profile: Profile): Screen {
-  const logo = el('div', { class: 'logo' }, 'MINEHONK', el('div', { class: 'splash' }, SPLASHES[Math.floor(Math.random() * SPLASHES.length)]!));
+  const logo = el('div', { class: 'logo' }, 'MINEHONK', el('div', { class: 'logo-edition' }, 'V6 - The End Expansion'), el('div', { class: 'splash' }, SPLASHES[Math.floor(Math.random() * SPLASHES.length)]!));
   const body = el(
     'div',
     { class: 'stack', style: { marginTop: 'calc(var(--s) * 40)' } },
@@ -74,7 +103,7 @@ export function titleScreen(host: ScreenHost, actions: { singleplayer: () => voi
     button('Multiplayer', wrapClick(host, actions.multiplayer)),
     el('div', { class: 'row' }, button('Options...', wrapClick(host, actions.options), 'btn half'), button(`Profile: ${profile.name}`, wrapClick(host, actions.profile), 'btn half')),
   );
-  const footer = el('div', { class: 'footer' }, el('span', {}, 'MineHonk 2.0 — The Caves Update'), el('span', {}, 'Original game — all art & sound generated'));
+  const footer = el('div', { class: 'footer' }, el('span', {}, 'MineHonk V6 - The End Expansion'), el('span', {}, 'Original game — all art & sound generated'));
   return { root: el('div', { class: 'screen dirt title-screen' }, logo, body, footer), escapable: false };
 }
 
@@ -236,6 +265,30 @@ export function messageScreen(host: ScreenHost, title: string, text: string, onO
   return { root };
 }
 
+/**
+ * The Haunting's last word: a ban screen like the real thing (it bans
+ * nobody). A quiet line under it, after a while, says it was only the
+ * haunting, so nobody worries about being banned for real.
+ */
+export function fakeBanScreen(host: ScreenHost, ban: FakeBan): Screen {
+  const { root, body } = titled('Connection Lost', 'screen dirt center fake-ban');
+  const line = (label: string, value: string, cls = ''): HTMLElement => el('div', { class: 'fake-ban-line' }, el('span', { class: 'muted' }, label), el('span', { class: cls }, value));
+  const note = el('div', { class: 'fake-ban-note' }, 'It was only the Haunting. You are not really banned.');
+  body.append(
+    el('div', { class: 'fake-ban-title' }, ban.title),
+    el('div', { class: 'spacer' }),
+    line('Reason: ', ban.reason, 'fake-ban-reason'),
+    line('Banned by: ', ban.by, 'fake-ban-by'),
+    line('Your ban expires: ', ban.expires),
+    ban.deleted ? el('div', { class: 'fake-ban-deleted' }, 'This world has been deleted.') : el('div', {}),
+    el('div', { class: 'spacer' }),
+    button('Back to Title Screen', wrapClick(host, () => host.pop())),
+    note,
+  );
+  setTimeout(() => note.classList.add('shown'), 8000);
+  return { root, escapable: false };
+}
+
 // ---------------------------------------------------------------------------
 // Create world
 // ---------------------------------------------------------------------------
@@ -351,6 +404,7 @@ export function optionsScreen(host: ScreenHost, inGame: boolean): Screen {
     el('div', { class: 'spacer' }),
     el('div', { class: 'row' }, button('Video Settings...', wrapClick(host, () => host.push(videoScreen(host, inGame))), 'btn half'), button('Music & Sounds...', wrapClick(host, () => host.push(soundScreen(host, inGame))), 'btn half')),
     el('div', { class: 'row' }, button('Controls...', wrapClick(host, () => host.push(controlsScreen(host, inGame))), 'btn half'), button('Accessibility...', wrapClick(host, () => host.push(accessibilityScreen(host, inGame))), 'btn half')),
+    button('Update Log...', wrapClick(host, () => host.push(updateLogScreen(host, inGame))), 'btn wide ul-open'),
     el('div', { class: 'spacer' }),
     button('Done', wrapClick(host, () => host.pop())),
   );
@@ -371,7 +425,20 @@ function videoScreen(host: ScreenHost, inGame: boolean): Screen {
     el('div', { class: 'row' }, cycle((v: boolean) => `Smooth Lighting: ${onOff(v)}`, [true, false], s.smoothLighting, (v) => ((s.smoothLighting = v), change(true))), cycle((v: boolean) => `Leaves: ${v ? 'Fancy' : 'Fast'}`, [true, false], s.fancyLeaves, (v) => ((s.fancyLeaves = v), change(true)))),
     el('div', { class: 'row' }, cycle((v: boolean) => `Clouds: ${onOff(v)}`, [true, false], s.clouds, (v) => ((s.clouds = v), change())), cycle((v: boolean) => `View Bobbing: ${onOff(v)}`, [true, false], s.viewBobbing, (v) => ((s.viewBobbing = v), change()))),
     el('div', { class: 'row' }, slider((v) => `Max Framerate: ${v === 0 ? 'Unlimited' : v + ' fps'}`, s.maxFps, 0, 240, 10, (v) => ((s.maxFps = v), change())), slider((v) => `Resolution: ${Math.round(v * 100)}%`, s.resolutionScale, 0.25, 1, 0.05, (v) => ((s.resolutionScale = v), change()))),
-    el('div', { class: 'row' }, cycle((v: boolean) => `Show FPS: ${onOff(v)}`, [false, true], s.showFps, (v) => ((s.showFps = v), change()))),
+    el('div', { class: 'row' }, cycle((v: boolean) => `Show FPS: ${onOff(v)}`, [false, true], s.showFps, (v) => ((s.showFps = v), change())), cycle((v: boolean) => `Auto Optimize: ${onOff(v)}`, [true, false], s.autoOptimize, (v) => ((s.autoOptimize = v), change()))),
+    el('div', { class: 'label auto-opt-help' }, 'Auto Optimize lowers settings by itself when the game lags badly.'),
+    ...(undoCount(s)
+      ? [
+          button(
+            `Undo Auto Optimize (${undoCount(s)} setting${undoCount(s) > 1 ? 's' : ''})`,
+            wrapClick(host, () => {
+              change(undoAutoOptimize(s));
+              host.replace(videoScreen(host, inGame));
+            }),
+            'btn wide auto-opt-undo',
+          ),
+        ]
+      : []),
     el('div', { class: 'label', style: { marginTop: 'calc(var(--s) * 4)' } }, 'Render distance presets'),
     el(
       'div',
@@ -509,6 +576,7 @@ function accessibilityScreen(host: ScreenHost, inGame: boolean): Screen {
     el('div', { class: 'row' }, cycle((v: boolean) => `Subtitles: ${onOff(v)}`, [false, true], s.subtitles, (v) => ((s.subtitles = v), change())), slider((v) => `Chat Opacity: ${Math.round(v * 100)}%`, s.chatOpacity, 0.1, 1, 0.05, (v) => ((s.chatOpacity = v), change()))),
     el('div', { class: 'row' }, cycle((v: boolean) => `Toggle Sprint: ${onOff(v)}`, [false, true], s.toggleSprint, (v) => ((s.toggleSprint = v), change())), cycle((v: boolean) => `Toggle Sneak: ${onOff(v)}`, [false, true], s.toggleSneak, (v) => ((s.toggleSneak = v), change()))),
     el('div', { class: 'row' }, slider((v) => `Darkness Effect Pulsing: ${Math.round(v * 100)}%`, s.darknessPulse, 0, 1, 0.05, (v) => ((s.darknessPulse = v), change()))),
+    el('div', { class: 'row' }, cycle((v: string) => `Glitch Effects: ${v === 'full' ? 'Full' : v === 'reduced' ? 'Reduced' : 'Off'}`, ['full', 'reduced', 'off'], s.glitchFx, (v) => ((s.glitchFx = v as 'full' | 'reduced' | 'off'), change()))),
     el('div', { class: 'spacer' }),
     button('Done', wrapClick(host, () => host.pop())),
   );
@@ -520,7 +588,7 @@ function accessibilityScreen(host: ScreenHost, inGame: boolean): Screen {
 // ---------------------------------------------------------------------------
 export function pauseScreen(
   host: ScreenHost,
-  actions: { resume: () => void; options: () => void; achievements: () => void; stats: () => void; quit: () => void; invite?: () => void; admin?: () => void; cheats?: { on: boolean; toggle: () => void } },
+  actions: { resume: () => void; options: () => void; achievements: () => void; stats: () => void; quit: () => void; invite?: () => void; admin?: () => void; cheats?: { on: boolean; toggle: () => void }; online?: { label: string; open: () => void } },
   local: boolean,
 ): Screen {
   const { root, body } = titled('Game Menu', 'screen dim center');
@@ -540,6 +608,8 @@ export function pauseScreen(
       ),
     );
   }
+  // Browser hosting: "Open to Multiplayer" in single player, the hosting panel while online
+  if (actions.online) body.append(button(actions.online.label, wrapClick(host, actions.online.open)));
   body.append(button(local ? 'Save and Quit to Title' : 'Disconnect', wrapClick(host, actions.quit)));
   return { root };
 }
@@ -561,8 +631,8 @@ export function deathScreen(host: ScreenHost, message: string, hardcore: boolean
 
 export function achievementsScreen(host: ScreenHost, unlocked: Set<string> | null): Screen & { update: (u: Set<string>) => void } {
   const { root, body } = titled('Advancements', 'screen dim');
-  const cats = ['story', 'caves', 'nether', 'end', 'adventure', 'husbandry', 'farlands'] as const;
-  const names: Record<(typeof cats)[number], string> = { story: 'MineHonk', caves: 'Caves', nether: 'Nether', end: 'The End', adventure: 'Adventure', husbandry: 'Husbandry', farlands: 'Farlands' };
+  const cats = ['story', 'world', 'engineering', 'digital', 'caves', 'nether', 'end', 'adventure', 'husbandry', 'farlands'] as const;
+  const names: Record<(typeof cats)[number], string> = { story: 'MineHonk', world: 'World', engineering: 'Engineering', digital: 'Digital', caves: 'Caves', nether: 'Nether', end: 'The End', adventure: 'Adventure', husbandry: 'Husbandry', farlands: 'Farlands' };
   let cat: (typeof cats)[number] = 'story';
   const tabs = el('div', { class: 'row' });
   const list = el('div', { class: 'list adv-list' });

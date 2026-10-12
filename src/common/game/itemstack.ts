@@ -14,6 +14,8 @@ export interface ItemTag {
   color?: number;
   /** Written/extra free-form data (e.g. compass target). */
   data?: Record<string, unknown>;
+  /** V6 phase 3: the lore fragment a lore book holds (see endExpansion/lore.ts). */
+  lore?: string;
   /** Created by cheats (Admin Panel or commands): never counts towards advancements. */
   admin?: boolean;
 }
@@ -31,6 +33,13 @@ export function stackOf(id: string, count = 1, extra?: Partial<ItemStack>): Item
   const it = itemById.get(id);
   if (!it) throw new Error(`Unknown item ${id}`);
   return { id: it.num, count, ...extra };
+}
+
+/** A stack's durability: its item's, or twice that on a Reinforced Elytra (V6 phase 4). */
+export function maxDurability(s: ItemStack): number {
+  const d = items[s.id]?.def.durability ?? 0;
+  const up = s.tag?.data?.upgrades;
+  return d && Array.isArray(up) && up.includes('reinforced') ? d * 2 : d;
 }
 
 export function maxStack(s: ItemStack): number {

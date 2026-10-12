@@ -23,6 +23,7 @@ export function canHarvest(state: number, tool: ItemStack | null): boolean {
   if (!def.requiresTool) return true;
   const t = tool ? items[tool.id]?.def.tool : undefined;
   if (!t || t.type !== def.tool) return false;
+  if (def.harvestMaterial && t.material !== def.harvestMaterial) return false;
   return t.tier >= (def.harvestLevel ?? 0);
 }
 

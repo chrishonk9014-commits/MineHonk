@@ -8,10 +8,12 @@
 import type { GameServer } from '../GameServer';
 import type { ServerPlayer } from '../player/ServerPlayer';
 import { Inventory, ARMOR_START, OFFHAND } from '../player/Inventory';
-import { type ItemStack, type Slot, canStack, cloneStack, maxStack, isEmpty, sameItem, toSaved, fromSaved, type SavedStack, itemIdOf, isAdminStack, markAdmin } from '../../common/game/itemstack';
+import { type ItemStack, type Slot, canStack, cloneStack, maxStack, isEmpty, sameItem, toSaved, fromSaved, type SavedStack, itemIdOf, isAdminStack, markAdmin, maxDurability } from '../../common/game/itemstack';
+import { elytraSmith, elytraUpgrades, moduleUpgrade, ELYTRA } from '../../common/endExpansion/elytra';
+import { LOCKED_RECIPES } from '../../common/endExpansion/transport';
 import { items, itemById } from '../../common/registry/items';
 import type { C2S, WindowKind } from '../../common/net/protocol';
-import { matchCrafting, craftingRemainder, smeltingFor, fuelTicks, stonecutterOptions, smithingResult } from '../../common/game/crafting';
+import { matchCrafting, craftingRemainder, smeltingFor, fuelTicks, stonecutterOptions, smithingResult, engRecipes, type CompiledRecipe } from '../../common/game/crafting';
 import type { Dimension } from '../world/Dimension';
 import { getProp, blocks, STATE_BLOCK, withProp } from '../../common/registry/blocks';
 import { FACE_DX, FACE_DZ } from '../../common/world/constants';
@@ -29,6 +31,10 @@ export interface WSlot {
   onTake?(p: ServerPlayer, taken: ItemStack): void;
   /** Group for shift-click routing. */
   group: 'container' | 'main' | 'hotbar' | 'armor' | 'offhand' | 'craft' | 'result' | 'fuel' | 'input';
+  /** V5 filter / target slots: clicking puts a copy of the cursor item (one) there, never the item itself. */
+  ghost?: boolean;
+  /** V5.5: while true nothing goes in or comes out (a computer Herobrine has taken over). */
+  locked?(): boolean;
 }
 
 export class Window {
@@ -42,6 +48,10 @@ export class Window {
   onClose?: (p: ServerPlayer) => void;
   /** Recompute outputs after any change. */
   refresh?: () => void;
+  /** Crafting grid of crafting windows (the Engineering Book fills it). */
+  craftGrid?: Inventory;
+  /** V6: the player inventory slot holding an open Void Pack (nothing may move it). */
+  lockedInv?: number;
 
   constructor(
     readonly id: number,
@@ -84,6 +94,13 @@ export class Containers {
   private readonly activeFurnaces = new Map<string, { dim: Dimension; x: number; y: number; z: number }>();
   private readonly windows = new Map<ServerPlayer, Window>();
   private readonly playerCraft = new Map<ServerPlayer, Inventory>();
+  /**
+   * What a creative player last picked up out of a slot, as the server has it. The creative
+   * inventory moves items by sending them back whole, and the client can't send item data
+   * (an Elytra's upgrades, a Void Pack's contents), so a stack put down again gets its data
+   * from this copy.
+   */
+  private readonly creativeHand = new WeakMap<ServerPlayer, ItemStack>();
 
   constructor(private readonly server: GameServer) {}
 
@@ -120,10 +137,14 @@ export class Containers {
   }
 
   /** Adds result + grid slots for a crafting window. */
-  private addCrafting(w: Window, p: ServerPlayer, grid: Inventory, gw: number): void {
+  private addCrafting(w: Window, p: ServerPlayer, grid: Inventory, gw: number, list?: CompiledRecipe[]): void {
     const result: { stack: Slot } = { stack: null };
+    w.craftGrid = grid;
     const refresh = (): void => {
-      const r = matchCrafting(grid.slots, gw, gw);
+      let r = matchCrafting(grid.slots, gw, gw, list);
+      // V6 phase 4: a recipe learned from a blueprint (the Void Skiff) needs learning first
+      const lock = r ? LOCKED_RECIPES[items[r.result]!.id] : undefined;
+      if (r && lock && !p.recipes.has(items[r.result]!.id) && p.gamemode !== 'creative') r = null;
       // Anything crafted from cheat items (or in a cheat context) is cheat-made
       const cheat = !!r && (grid.slots.some((s) => isAdminStack(s)) || this.server.admin.inContext(p));
       result.stack = r ? { id: r.result, count: r.count, ...(cheat ? { tag: { admin: true } } : {}) } : null;
@@ -203,6 +224,25 @@ export class Containers {
     this.open(p, w);
   }
 
+  /** V5: the Engineering Crafting Table (its own recipes; the Engineering Book fills its grid). */
+  openEngineeringTable(p: ServerPlayer, dim: Dimension, x: number, y: number, z: number): void {
+    const w = new Window(this.newId(), 'eng_crafting', 'Engineering Crafting Table', 10);
+    const grid = new Inventory(9);
+    this.addCrafting(w, p, grid, 3, engRecipes());
+    this.addPlayerInventory(w, p);
+    w.pos = { dim, x, y, z };
+    w.onClose = (pl) => {
+      for (let i = 0; i < 9; i++) {
+        const st = grid.get(i);
+        if (st) {
+          const rem = pl.inventory.add(st);
+          if (rem) this.server.interaction.dropStack(pl, rem);
+        }
+      }
+    };
+    this.open(p, w);
+  }
+
   private keyOf(dim: Dimension, x: number, y: number, z: number): string {
     return `${dim.id}:${x},${y},${z}`;
   }
@@ -217,6 +257,10 @@ export class Containers {
     if (!be || typeof be.loot !== 'string') return;
     const rng = new Random(Number(be.lootSeed ?? 0) >>> 0);
     const stacks = rollLoot(be.loot, { rng, difficulty: this.server.level.difficulty });
+    // V6 phase 3: Ancient Maps are tied to the giant structure nearest the chest
+    this.server.endStructures?.markMaps(dim, x, z, stacks);
+    // V6 phase 5: the first looting of a giant structure's vault holds a Citadel Star Chart Piece
+    this.server.citadel?.onLootRolled(dim, x, y, z, be.loot, stacks);
     // Loot first opened under a cheat (e.g. after a cheat teleport) is cheat-made
     if (cheat || this.server.admin.blockMarked(dim, x, y, z)) for (const st of stacks) markAdmin(st);
     // Spread stacks over random slots, splitting some stacks like a hand-packed chest
@@ -258,7 +302,7 @@ export class Containers {
   }
 
   /** Writes a live inventory back into its block entity. */
-  private persist(dim: Dimension, x: number, y: number, z: number, inv: Inventory, extra?: Record<string, unknown>): void {
+  persist(dim: Dimension, x: number, y: number, z: number, inv: Inventory, extra?: Record<string, unknown>): void {
     const be = (dim.getBlockEntity(x, y, z) ?? { type: 'chest' }) as Record<string, unknown> & { type: string };
     be.items = inv.slots.map(toSaved);
     if (extra) Object.assign(be, extra);
@@ -409,10 +453,16 @@ export class Containers {
     const w = new Window(this.newId(), 'smithing', 'Upgrade Gear', 3);
     const inv = new Inventory(2);
     const out: { stack: Slot } = { stack: null };
+    // V6 phase 4: an Elytra takes upgrade modules (and shears take the newest off)
+    let wings: ReturnType<typeof elytraSmith> = null;
     const refresh = (): void => {
       const base = inv.get(0);
-      const r = smithingResult(base, inv.get(1));
-      out.stack = r !== null && base ? { ...cloneStack(base), id: r, count: 1 } : null;
+      const add = inv.get(1);
+      wings = elytraSmith(base, add, itemIdOf);
+      // An Elytra with a module that can't go on (a duplicate, or no slot left) or shears with nothing to take off: nothing
+      const elytraWork = !!base && !!add && itemIdOf(base) === 'elytra' && (!!moduleUpgrade(itemIdOf(add)) || itemIdOf(add) === 'shears' || itemIdOf(add) === 'guardian_core');
+      const r = wings || elytraWork ? null : smithingResult(base, add);
+      out.stack = wings ? cloneStack(wings.result) : r !== null && base ? { ...cloneStack(base), id: r, count: 1 } : null;
       if (out.stack && (isAdminStack(inv.get(1)) || this.server.admin.inContext(p))) out.stack = markAdmin(out.stack);
     };
     w.refresh = refresh;
@@ -428,9 +478,20 @@ export class Containers {
       onTake: (pl, taken) => {
         inv.set(0, null);
         const a = inv.get(1);
-        if (a) inv.set(1, a.count > 1 ? { ...a, count: a.count - 1 } : null);
+        const w = wings;
+        // Shears only wear a little taking a module off; anything else is used up
+        if (a && w?.kind === 'remove') {
+          const dmg = (a.damage ?? 0) + 1;
+          inv.set(1, dmg >= maxDurability(a) ? null : { ...a, damage: dmg });
+        } else if (a) inv.set(1, a.count > 1 ? { ...a, count: a.count - 1 } : null);
         this.server.playSound(dim, 'smithing', x + 0.5, y + 0.5, z + 0.5, 1, 1);
         this.server.interaction.onCrafted(pl, taken);
+        if (w?.kind === 'add' && !isAdminStack(taken) && !this.server.admin.inContext(pl)) {
+          this.server.interaction.grant(pl, 'elytra_upgrade');
+          if (elytraUpgrades(taken).length >= ELYTRA.slots) this.server.interaction.grant(pl, 'elytra_full');
+          // V6 phase 5: all four slots (the Guardian Core's) filled
+          if (elytraUpgrades(taken).length >= ELYTRA.maxSlots) this.server.interaction.grant(pl, 'elytra_four_slots');
+        }
         refresh();
       },
     });
@@ -449,6 +510,38 @@ export class Containers {
   }
 
   /** Opens a generic window built by another system (enchanting, anvil, brewing, merchant). */
+  /**
+   * V6: a Void Pack's nine slots. The contents live on the pack itself
+   * (written back at every change), and the pack can't be moved, or put in
+   * a pack, while it is open.
+   */
+  openVoidPack(p: ServerPlayer, slot: number): void {
+    const pack = p.inventory.get(slot);
+    if (!pack || itemIdOf(pack) !== 'void_pack') return;
+    const inv = new Inventory(9);
+    const saved = Array.isArray(pack.tag?.data?.items) ? (pack.tag!.data!.items as (SavedStack | null)[]) : [];
+    for (let i = 0; i < 9; i++) inv.set(i, fromSaved(saved[i] ?? null));
+    const store = (): void => {
+      const cur = p.inventory.get(slot);
+      if (!cur || itemIdOf(cur) !== 'void_pack') return;
+      const list = inv.slots.map((st) => toSaved(st));
+      while (list.length && !list[list.length - 1]) list.pop();
+      const data = { ...(cur.tag?.data ?? {}) };
+      if (list.length) data.items = list;
+      else delete data.items;
+      const tag = { ...(cur.tag ?? {}), data };
+      if (!Object.keys(data).length) delete (tag as { data?: unknown }).data;
+      p.inventory.set(slot, { ...cur, tag: Object.keys(tag).length ? tag : undefined });
+    };
+    const w = new Window(this.newId(), 'chest', 'Void Pack', 9);
+    const bagOk = (st: ItemStack): boolean => itemIdOf(st) !== 'void_pack' && itemIdOf(st) !== 'shulker_box';
+    for (let i = 0; i < 9; i++) w.slots.push(invSlot(inv, i, 'container', bagOk, 64, store));
+    for (let i = 9; i < 36; i++) w.slots.push({ ...invSlot(p.inventory, i, 'main'), locked: () => i === slot });
+    for (let i = 0; i < 9; i++) w.slots.push({ ...invSlot(p.inventory, i, 'hotbar'), locked: () => i === slot });
+    w.lockedInv = slot;
+    this.open(p, w);
+  }
+
   openCustom(p: ServerPlayer, w: Window): void {
     this.addPlayerInventory(w, p);
     this.open(p, w);
@@ -571,6 +664,12 @@ export class Containers {
     }
     if (slotIndex < 0 || slotIndex >= w.slots.length) return;
     const slot = w.slots[slotIndex]!;
+    if (slot.locked?.()) return;
+    if (slot.ghost) {
+      // Filter slots hold a copy of what was clicked in (or nothing); real items never move
+      if (mode === 'pickup' || mode === 'quick' || mode === 'drop') slot.set(mode !== 'drop' && p.cursor ? { ...cloneStack(p.cursor), count: 1 } : null);
+      return;
+    }
     switch (mode) {
       case 'pickup':
         if (slot.output) this.takeOutput(p, w, slot, false);
@@ -582,7 +681,7 @@ export class Containers {
         break;
       case 'swap': {
         const hotbarIdx = button === 40 ? OFFHAND : button;
-        if (hotbarIdx < 0 || (hotbarIdx > 8 && hotbarIdx !== OFFHAND)) return;
+        if (hotbarIdx < 0 || (hotbarIdx > 8 && hotbarIdx !== OFFHAND) || hotbarIdx === w.lockedInv) return;
         const hs = p.inventory.get(hotbarIdx);
         const cur = slot.get();
         if (slot.output) {
@@ -615,7 +714,7 @@ export class Containers {
         const target = p.cursor;
         for (let pass = 0; pass < 2; pass++) {
           for (const s of w.slots) {
-            if (s.output) continue;
+            if (s.output || s.ghost || s.locked?.()) continue;
             const v = s.get();
             if (!v || !canStack(v, target)) continue;
             if (pass === 0 && v.count === maxStack(v)) continue;
@@ -798,6 +897,16 @@ export class Containers {
     const s = w.slots[slot];
     if (!s || s.output) return;
     if (item && !s.mayPlace(item)) return;
+    const was = s.get();
+    if (!item && was) this.creativeHand.set(p, cloneStack(was)!);
+    if (item) {
+      // The same stack put back down: its data comes from the server's copy, never the client's
+      const held = this.creativeHand.get(p);
+      if (held?.tag?.data && held.id === item.id && item.count <= held.count && (item.damage ?? 0) === (held.damage ?? 0)) {
+        item = { ...item, tag: { ...(item.tag ?? {}), data: structuredClone(held.tag.data) } };
+        if (item.count >= held.count) this.creativeHand.delete(p);
+      }
+    }
     s.set(item);
     this.syncInventory(p);
   }

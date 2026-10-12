@@ -1,4 +1,5 @@
 /** Small 3D player doll shown in the inventory; it turns to follow the mouse. */
+import { armorOverlay, type ArmorOverlay } from './entities/armorOverlay';
 import * as THREE from 'three';
 import { BoxModel, humanoidDef } from './entities/BoxModel';
 import { playerSkin } from './entities/skins';
@@ -9,6 +10,9 @@ class PreviewRenderer {
   private readonly scene = new THREE.Scene();
   private readonly camera = new THREE.OrthographicCamera(-0.75, 0.75, 2.1, -0.05, 0.1, 10);
   private readonly model: BoxModel;
+  private readonly armor: ArmorOverlay;
+  /** The local player's worn armor materials, head to feet. */
+  wornArmor: (() => string[]) | null = null;
   private host: HTMLElement | null = null;
   private raf = 0;
   private mouse = { x: 0, y: 0 };
@@ -19,6 +23,7 @@ class PreviewRenderer {
     this.renderer.setClearColor(0x000000, 0);
     this.model = new BoxModel(humanoidDef(), playerSkin(null));
     this.model.setBrightness(1);
+    this.armor = armorOverlay(this.model);
     this.scene.add(this.model.root);
     // Orthographic frustum bounds are relative to the camera, so keep it at y=0
     this.camera.position.set(0, 0, 5);
@@ -79,6 +84,7 @@ class PreviewRenderer {
     this.model.root.rotation.y = dx * 0.6;
     const head = this.model.part('head');
     if (head) head.rotation.set(dy * 0.5, dx * 0.4, 0);
+    this.armor.set(this.wornArmor?.());
     this.renderer.render(this.scene, this.camera);
   }
 }
@@ -86,12 +92,13 @@ class PreviewRenderer {
 let instance: PreviewRenderer | null = null;
 
 /** Shows the player doll inside `host`. Returns a detach function. */
-export function attachPlayerPreview(host: HTMLElement, name: string | null = null): () => void {
+export function attachPlayerPreview(host: HTMLElement, name: string | null = null, wornArmor: (() => string[]) | null = null): () => void {
   try {
     instance ??= new PreviewRenderer();
   } catch {
     return () => {};
   }
   instance.setSkin(name);
+  instance.wornArmor = wornArmor;
   return instance.attach(host);
 }

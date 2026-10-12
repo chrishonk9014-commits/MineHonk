@@ -44,6 +44,8 @@ export interface ServerOptions {
   /** Whether a given identity may join (multiplayer permission hook). */
   canJoin?: (id: Identity, level: LevelData) => string | null;
   maxPlayers?: number;
+  /** Send slow, unimportant movement (loot) less often to players on the network. */
+  spareBandwidth?: boolean;
 }
 
 export class GameServer {
@@ -57,6 +59,25 @@ export class GameServer {
   workstations: import('./systems/Workstations').Workstations | null = null;
   portals: import('./systems/Portals').Portals | null = null;
   theEnd: import('./systems/TheEnd').EndSystem | null = null;
+  /** V6: the Expansion Portal and the Expanded End. */
+  endExpansion: import('./systems/EndExpansion').EndExpansionSystem | null = null;
+  /** V6 phase 2: the Expanded End's mobs. */
+  endMobs: import('./systems/EndMobs').EndMobsSystem | null = null;
+  /** V6 phase 3: the Guardian Constructs. */
+  constructs: import('./systems/Constructs').ConstructsSystem | null = null;
+  /** V6 phase 3: the Expanded End's structures, the ancient civilization and the Dragon's Nest. */
+  endStructures: import('./systems/EndStructures').EndStructuresSystem | null = null;
+  /** V6 phase 4: Teleportation Nodes, Ancient Gateways, minecarts and the Void Skiff. */
+  endTransport: import('./systems/EndTransport').EndTransportSystem | null = null;
+  /** V6 phase 4: the five End quests. */
+  endQuests: import('./systems/EndQuests').EndQuestsSystem | null = null;
+  /** V6 phase 4: Elytra upgrades. */
+  elytra: import('./systems/ElytraUpgrades').ElytraUpgrades | null = null;
+  /** V6 phase 5 hook: the End's weather events (a Void Storm quadruples Void Collectors). */
+  /** V6 phase 5: the End's events, the Void Citadel and the End Guardian. */
+  endEvents: import('./systems/EndEvents').EndEventsSystem | null = null;
+  citadel: import('./systems/EndCitadel').EndCitadelSystem | null = null;
+  guardian: import('./systems/EndGuardian').EndGuardianSystem | null = null;
   farlands: import('./systems/Farlands').FarlandsSystem | null = null;
   /** Fireworks, fishing, compasses, jukeboxes, beacons (installed by gameplay). */
   gadgets: import('./systems/Gadgets').Gadgets | null = null;
@@ -66,6 +87,31 @@ export class GameServer {
   power: import('./systems/Power').Power | null = null;
   sculk: import('./systems/Sculk').Sculk | null = null;
   warden: import('./systems/Warden').WardenSystem | null = null;
+  /** Endings and the world's endgame state (V3, installed by gameplay). */
+  endings: import('./systems/Endings').EndingsSystem | null = null;
+  /** The mysterious potion, Voidbound Endermen and the secret ending (V3, installed by gameplay). */
+  endgame: import('./systems/Endgame').EndgameSystem | null = null;
+  /** The Error, the Farlands boss (V3, installed by gameplay). */
+  errorBoss: import('./systems/ErrorBoss').ErrorBossSystem | null = null;
+  /** V4: the Glitched Structures' five-stage fights. */
+  glitchedQuest: import('./systems/GlitchedQuest').GlitchedQuestSystem | null = null;
+  /** V4: puzzles and the bunker quest. */
+  structureQuests: import('./systems/StructureQuests').StructureQuests | null = null;
+  templeTrials: import('./systems/TempleTrials').TempleTrials | null = null;
+  /** V5: machines, power, transport, fluids and control rooms. */
+  engineering: import('./engineering/Engineering').Engineering | null = null;
+  /** V5.5 - the Herobrine story (installed by gameplay). */
+  herobrine: import('./herobrine/Herobrine').HerobrineSystem | null = null;
+  /** The Haunting (Admin Panel, every world). */
+  haunting: import('./herobrine/Haunting').HauntingSystem | null = null;
+  /**
+   * The Haunting: where Herobrine's answers come from when players talk to him
+   * (the cloud hub, or Claude with a dedicated server's own key). Null: only
+   * his scripted lines. Resolves to null when there is no answer.
+   */
+  herobrineVoice: ((req: import('../common/game/herobrineVoice').VoiceRequest) => Promise<string | null>) | null = null;
+  /** Work scheduled for a later tick (see `later`). */
+  private readonly scheduled: { at: number; fn: () => void }[] = [];
   /** Hook for the hosting layer to forward player reports (e.g. to platform moderation). */
   onReport?: (from: ServerPlayer, target: ServerPlayer, reason: string) => void;
   readonly interaction: Interaction;
@@ -100,6 +146,7 @@ export class GameServer {
       autosaveTicks: opts.autosaveTicks ?? 20 * 60 * 2,
       log: opts.log ?? ((m) => console.log(m)),
       maxPlayers: opts.maxPlayers ?? 16,
+      spareBandwidth: opts.spareBandwidth ?? false,
       filterChat: opts.filterChat,
       canJoin: opts.canJoin,
     };
@@ -110,7 +157,7 @@ export class GameServer {
     this.commands = new Commands(this);
     this.playerData = new PlayerData(this);
     this.admin = new AdminService(this);
-    for (const id of ['overworld', 'nether', 'end', 'farlands'] as DimensionId[]) {
+    for (const id of ['overworld', 'nether', 'end', 'farlands', 'computer'] as DimensionId[]) {
       this.dims.set(id, new Dimension(this, id, level.seedNum));
     }
   }
@@ -293,6 +340,7 @@ export class GameServer {
     });
     this.sendTime(p);
     p.send({ t: 'death_pos', pos: p.lastDeath });
+    if (p.recipes.size) p.send({ t: 'recipes', unlocked: [...p.recipes] });
     this.interaction.syncInventory(p);
     p.statsDirty = true;
     this.broadcastChat(`${p.name} joined the world`, 'join');
@@ -454,6 +502,21 @@ export class GameServer {
       case 'dismount':
         this.mounts?.dismount(p);
         break;
+      case 'eng_cfg':
+        this.engineering?.windows.handleCfg(p, m.window, m.key, m.value);
+        break;
+      case 'eng_fill':
+        this.engineering?.windows.fill(p, m.recipe, m.all);
+        break;
+      case 'pilot':
+        this.endTransport?.pilot(p, m.f, m.s, m.v);
+        break;
+      case 'elytra':
+        this.elytra?.action(p, m.a);
+        break;
+      case 'pc_cmd':
+        if (!this.engineering?.computers.handleCmd(p, m.window, m.cmd, m.arg)) this.herobrine?.terminalCmd(p, m.window, m.cmd);
+        break;
       case 'hello':
         break;
     }
@@ -465,8 +528,9 @@ export class GameServer {
     await this.removePlayer(p, true);
   }
 
-  kick(p: ServerPlayer, reason: string): void {
-    p.send({ t: 'kick', reason });
+  /** `extra`: the Haunting's fake ban screen, and (for the world's owner) deleting the world. */
+  kick(p: ServerPlayer, reason: string, extra: Omit<Extract<S2C, { t: 'kick' }>, 't' | 'reason'> = {}): void {
+    p.send({ t: 'kick', reason, ...extra });
     p.conn.close(reason);
     void this.removePlayer(p, true);
   }
@@ -474,6 +538,12 @@ export class GameServer {
   private async removePlayer(p: ServerPlayer, announce: boolean): Promise<void> {
     if (!this.players.has(p.conn.id)) return;
     this.players.delete(p.conn.id);
+    this.glitchedQuest?.onLeave(p);
+    this.structureQuests?.onLeave(p);
+    this.templeTrials?.onLeave(p);
+    this.endTransport?.onLeave(p);
+    this.endQuests?.onLeave(p);
+    this.elytra?.onLeave(p);
     this.mounts?.dismount(p, true);
     this.interaction.closeWindow(p, p.windowId, true);
     p.dim.removeEntity(p);
@@ -527,7 +597,8 @@ export class GameServer {
       if (!glide) p.glideSpeed = 0;
     }
     // Movement budget: generous limits (client runs the same physics).
-    const maxH = p.abilities.flying ? (p.gamemode === 'spectator' ? 4 : 2.2) : p.gliding ? (this.tickNo < p.boostUntil ? 3.4 : 2.6) : p.body.inWater ? 1.0 : 1.3;
+    // (V6 phase 4: Thrust wings glide faster; without it the factor is exactly 1)
+    const maxH = p.abilities.flying ? (p.gamemode === 'spectator' ? 4 : 2.2) : p.gliding ? (this.tickNo < p.boostUntil ? 3.4 : 2.6) * (this.elytra?.speedFactor(p) ?? 1) : p.body.inWater ? 1.0 : 1.3;
     const effSpeed = p.effects.get('speed');
     const limit = maxH * (1 + (effSpeed ? (effSpeed.amp + 1) * 0.3 : 0)) + (p.body.vy < -1 ? 0.5 : 0);
     const maxV = 5;
@@ -606,19 +677,20 @@ export class GameServer {
     return false;
   }
 
-  teleport(p: ServerPlayer, x: number, y: number, z: number, yaw?: number, pitch?: number): void {
+  /** Moves a player; `keep` (an Ender Blink) leaves their momentum and gliding alone. */
+  teleport(p: ServerPlayer, x: number, y: number, z: number, yaw?: number, pitch?: number, keep = false): void {
     p.setPos(x, y, z);
     p.lastValidX = x;
     p.lastValidY = y;
     p.lastValidZ = z;
-    p.body.vx = p.body.vy = p.body.vz = 0;
+    if (!keep) p.body.vx = p.body.vy = p.body.vz = 0;
     p.body.fallDistance = 0;
     if (yaw !== undefined) p.yaw = yaw;
     if (pitch !== undefined) p.pitch = pitch;
     p.teleportSeq = p.moveSeq + 1000000 + this.tickNo;
     p.awaitingTeleport = true;
     p.dim.updateBucket(p);
-    p.send({ t: 'teleport', x, y, z, yaw, pitch, seq: p.teleportSeq });
+    p.send({ t: 'teleport', x, y, z, yaw, pitch, seq: p.teleportSeq, ...(keep ? { keep: true } : {}) });
   }
 
   /** Finds a safe standing y at column x,z (loaded chunk required). */
@@ -662,15 +734,28 @@ export class GameServer {
       return;
     }
     this.log(`<${p.name}> ${filtered}`);
-    for (const o of this.players.values()) o.send({ t: 'chat', text: filtered, kind: 'chat', from: p.name });
+    // The Haunting may have glitched a player's name
+    const from = this.haunting?.chatName(p) ?? p.name;
+    for (const o of this.players.values()) o.send({ t: 'chat', text: filtered, kind: 'chat', from });
+    this.haunting?.onChat(p, filtered);
   }
 
   broadcastChat(text: string, kind: ChatKind = 'system'): void {
     for (const o of this.players.values()) o.send({ t: 'chat', text, kind });
   }
 
+  /**
+   * Multiplayer transparency: a cheat (Admin Panel or command) is announced
+   * to everyone else in the world, unless the owner turned it off.
+   */
+  announceAdmin(p: ServerPlayer, what: string): void {
+    if (this.level.announceAdmin === false || this.players.size < 2) return;
+    const text = `[Admin] ${p.name} used: ${what}`;
+    for (const o of this.players.values()) if (o !== p) o.send({ t: 'chat', text, kind: 'system' });
+  }
+
   sendPlayerList(): void {
-    const list = [...this.players.values()].map((p) => ({ name: p.name, uuid: p.uuid, ping: p.ping, mode: p.gamemode }));
+    const list = [...this.players.values()].map((p) => ({ name: p.name, uuid: p.uuid, ping: p.ping, mode: p.gamemode, role: this.roleOf(p) }));
     for (const o of this.players.values()) o.send({ t: 'player_list', players: list });
   }
 
@@ -709,19 +794,24 @@ export class GameServer {
     this.blockUpdates.onChunkReady(dim, c);
     this.mobs?.onChunkGenerated(dim, c);
     this.sculk?.onChunk(dim, c);
+    // V6 phase 5: generated machines (the Void Citadel's cores and sockets) run from the start
+    this.engineering?.onChunkLoaded(dim, c);
   }
 
   onChunkLoaded(dim: Dimension, c: Chunk, _entities: Record<string, unknown>[]): void {
     this.blockUpdates.onChunkReady(dim, c);
     this.mobs?.onChunkLoaded(dim, c);
     this.workstations?.onChunk(dim, c);
+    this.engineering?.onChunkLoaded(dim, c);
     this.gadgets?.onChunk(dim, c);
     this.sculk?.onChunk(dim, c);
   }
 
   onChunkUnloaded(dim: Dimension, c: Chunk): void {
+    this.blockUpdates.onChunkUnloaded(dim, c);
     this.mobs?.onChunkUnloaded(dim, c);
     this.sculk?.onChunkUnload(dim, c.cx, c.cz);
+    this.engineering?.onChunkUnloaded(dim, c);
     const k = chunkIndex(c.cx, c.cz);
     // Entities in unloaded chunks are removed (persistent ones were saved with the chunk).
     const b = dim.buckets.get(k);
@@ -759,6 +849,25 @@ export class GameServer {
 
   // ------------------------------------------------------------------ tick
 
+  /** Runs `fn` after `ticks` server ticks (not saved: only for short effects). */
+  later(ticks: number, fn: () => void): void {
+    this.scheduled.push({ at: this.tickNo + Math.max(1, Math.floor(ticks)), fn });
+  }
+
+  private runScheduled(): void {
+    if (!this.scheduled.length) return;
+    const due = this.scheduled.filter((s) => s.at <= this.tickNo);
+    if (!due.length) return;
+    for (let i = this.scheduled.length - 1; i >= 0; i--) if (this.scheduled[i]!.at <= this.tickNo) this.scheduled.splice(i, 1);
+    for (const s of due) {
+      try {
+        s.fn();
+      } catch (e) {
+        this.log(`[server] scheduled task failed: ${(e as Error).message}`);
+      }
+    }
+  }
+
   private tick(): void {
     this.tickNo++;
     const level = this.level;
@@ -774,6 +883,7 @@ export class GameServer {
     }
     this.interaction.weather.tick();
     if (this.tickNo % 100 === 0) this.sendTime();
+    this.runScheduled();
 
     for (const p of this.players.values()) {
       p.movesThisTick = 0;
@@ -830,11 +940,12 @@ export class GameServer {
   }
 
   private handlePendingSpawn(p: ServerPlayer): void {
-    const ps = p as { needsSafeSpawn?: boolean };
+    const ps = p as { needsSafeSpawn?: boolean; safeFrom?: number };
     if (!ps.needsSafeSpawn) return;
     if (!p.dim.isLoaded(p.x, p.z)) return;
-    const y = this.findSafeY(p.dim, p.x, p.z);
+    const y = this.findSafeY(p.dim, p.x, p.z, ps.safeFrom);
     ps.needsSafeSpawn = false;
+    delete ps.safeFrom;
     if (y !== null) this.teleport(p, Math.floor(p.x) + 0.5, y, Math.floor(p.z) + 0.5);
   }
 
@@ -887,12 +998,20 @@ export class GameServer {
   /** Entity visibility + movement replication. */
   private trackEntities(): void {
     const movers: Entity[] = [];
+    // Throttled entities that stopped before network players got their last position
+    const settled: Entity[] = [];
+    const spare = !!this.opts.spareBandwidth;
     for (const d of this.dims.values()) {
       for (const e of d.entities.values()) {
         const ls = e.lastSent;
-        if (ls.x !== e.x || ls.y !== e.y || ls.z !== e.z || ls.yaw !== e.yaw || ls.pitch !== e.pitch || ls.headYaw !== e.headYaw) movers.push(e);
+        if (ls.x !== e.x || ls.y !== e.y || ls.z !== e.z || ls.yaw !== e.yaw || ls.pitch !== e.pitch || ls.headYaw !== e.headYaw) {
+          movers.push(e);
+          if (spare && e.updateInterval() > 1) e.remoteStale = true;
+        } else if (e.remoteStale) settled.push(e);
       }
     }
+    // A throttled entity goes to network players on its own beat
+    const due = (e: Entity): boolean => (this.tickNo + e.id) % e.updateInterval() === 0;
     for (const p of this.players.values()) {
       const dim = p.dim;
       const visible = new Set<number>();
@@ -914,10 +1033,17 @@ export class GameServer {
         p.send({ t: 'despawn', ids: gone });
       }
       const list: number[] = [];
+      const network = spare && p.conn.remote !== 'local';
       for (const e of movers) {
         if (e === p || !p.tracked.has(e.id)) continue;
+        if (network && e.updateInterval() > 1 && !due(e)) continue;
         list.push(e.id, round3(e.x), round3(e.y), round3(e.z), round3(e.yaw), round3(e.pitch), round3(e.headYaw));
       }
+      if (network)
+        for (const e of settled) {
+          if (!p.tracked.has(e.id) || !due(e)) continue;
+          list.push(e.id, round3(e.x), round3(e.y), round3(e.z), round3(e.yaw), round3(e.pitch), round3(e.headYaw));
+        }
       if (list.length) p.send({ t: 'moves', list });
       for (const d of this.dims.values()) {
         if (d !== dim) continue;
@@ -935,6 +1061,7 @@ export class GameServer {
         }
       }
     }
+    if (spare) for (const e of [...movers, ...settled]) if (e.remoteStale && due(e)) e.remoteStale = false;
     for (const e of movers) {
       const ls = e.lastSent;
       ls.x = e.x;

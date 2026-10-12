@@ -2,7 +2,10 @@
  * Application shell: menu screen stack, world management and the game
  * lifecycle (start integrated server, join, save & quit).
  */
+import { LorePanel, GlyphPanel } from './ui/LorePage';
 import { adminScreen } from './ui/AdminPanel';
+import { EngineeringBookPanel } from './ui/EngineeringBook';
+import { GrimoirePanel } from './ui/Grimoire';
 import { encode, decode } from '@msgpack/msgpack';
 import { deflateSync, inflateSync } from 'fflate';
 import type { Settings, Profile } from './settings';
@@ -12,14 +15,19 @@ import type { GameAssets } from './render/WorldRenderer';
 import { Game, type GameHost } from './game/Game';
 import { WorkerConnection, SocketConnection, type ClientConnection } from './net/ClientConnection';
 import { HubApi } from './net/HubApi';
+import { HubLobby } from './net/HubLobby';
+import { HostSession, type HostOptions } from './net/HostSession';
+import { RemoteConnection } from './net/RemoteConnection';
+import { HUB_URL, compatKey } from './net/version';
 import * as MP from './ui/MultiplayerScreens';
+import * as ON from './ui/OnlineScreens';
 import { TitlePanorama } from './render/TitlePanorama';
 import type { WorldSummary as OnlineWorld } from '../common/net/multiplayer';
 import { el, clear } from './ui/dom';
 import * as S from './ui/Screens';
 import { listWorlds, deleteWorld, updateWorld, exportWorld, importWorld } from '../server/storage/IndexedDBStorage';
 import type { NewWorldOptions } from '../server/world/LevelData';
-import { PROTOCOL_VERSION } from '../common/net/protocol';
+import { PROTOCOL_VERSION, type FakeBan } from '../common/net/protocol';
 import { registryHash } from '../common/registry/hash';
 import { normalizeGodHearts, type GameMode } from '../common/game/gamemode';
 import { randomSeedString } from '../common/math/rng';
@@ -34,6 +42,16 @@ export class App implements GameHost, S.ScreenHost {
   private worldId: string | null = null;
   private progressScreen: { update: (x: never) => void; kind: 'ach' | 'stats' } | null = null;
   private quitting = false;
+  // Playing online through the cloud hub
+  private cloudApi: HubApi | null = null;
+  private lobby: HubLobby | null = null;
+  private hostSession: HostSession | null = null;
+  /** Hosting settings to apply once the world being opened has started. */
+  private pendingHost: HostOptions | null = null;
+  /** The hosted world joined as a guest (friends see "Playing ..."). */
+  private onlineWorld: string | null = null;
+  private hiddenAt = 0;
+  private readonly isTouch = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
 
   constructor(
     readonly canvas: HTMLCanvasElement,
@@ -56,6 +74,12 @@ export class App implements GameHost, S.ScreenHost {
       if (document.visibilityState === 'hidden') saveNow();
     });
     window.addEventListener('pagehide', saveNow);
+    // A hosted world lives in this tab: remind the host when they come back from elsewhere
+    document.addEventListener('visibilitychange', () => {
+      if (!this.hostSession) return;
+      if (document.visibilityState === 'hidden') this.hiddenAt = Date.now();
+      else if (this.hiddenAt && Date.now() - this.hiddenAt > 20_000) ON.notice(this.ui, 'Keep this tab open to keep your world online.');
+    });
     document.addEventListener('visibilitychange', () => {
       // Flush the world to storage when the tab is hidden (it may be closed)
       if (document.visibilityState === 'hidden' && this.conn instanceof WorkerConnection) void this.conn.save();
@@ -218,6 +242,13 @@ export class App implements GameHost, S.ScreenHost {
   private hub: HubApi | null = null;
 
   private async openMultiplayer(server = HubApi.savedServer()): Promise<void> {
+    // Playing online through the cloud hub, unless the player chose a server of their own
+    if (!server && HUB_URL) return this.openOnline();
+    return this.openSelfHosted(server);
+  }
+
+  /** A self-hosted MineHonk server (the Node dedicated server): its own accounts and worlds. */
+  private async openSelfHosted(server: string): Promise<void> {
     const api = new HubApi(server);
     this.hub = api;
     this.setLoading('Contacting server...');
@@ -259,6 +290,244 @@ export class App implements GameHost, S.ScreenHost {
     this.conn = conn;
     this.worldId = null;
     this.quitting = false;
+    this.startGame(conn);
+  }
+
+  // ------------------------------------------------------------------ playing online (cloud hub)
+
+  private cloud(): HubApi {
+    this.cloudApi ??= new HubApi(HUB_URL);
+    return this.cloudApi;
+  }
+
+  /** The lobby socket (presence, invites, signaling) while signed in. */
+  private ensureLobby(): HubLobby {
+    if (this.lobby) return this.lobby;
+    const lobby = new HubLobby(this.cloud());
+    this.lobby = lobby;
+    lobby.on((m) => {
+      if (m.t !== 'invite') return;
+      ON.inviteToast(this.ui, `${m.fromName} invited you to ${m.worldName}${m.cheats ? ' (Cheats ON)' : ''}`, () => void this.joinOnline(m.world).catch((e) => this.showOnlineError((e as Error).message)));
+    });
+    return lobby;
+  }
+
+  private showOnlineError(text: string): void {
+    if (this.game) this.game.chatMessage(text, 'error');
+    else this.push(S.messageScreen(this, 'Multiplayer', text));
+  }
+
+  private onlineContext(): ON.OnlineContext {
+    return {
+      api: this.cloud(),
+      isTouch: this.isTouch,
+      localWorlds: () => this.loadLocalWorlds(),
+      host: (worldId, options) => void this.hostFromMenu(worldId, options),
+      join: (worldId) => this.joinOnline(worldId),
+      serverAddress: () =>
+        this.push(
+          MP.serverScreen(this, HubApi.savedServer(), {
+            connect: (url) => {
+              HubApi.saveServer(url);
+              this.pop();
+              this.pop();
+              void this.openMultiplayer(url);
+            },
+          }),
+        ),
+      signOut: () => {
+        void this.cloud().logout();
+        this.lobby?.close();
+        this.lobby = null;
+        this.showTitle();
+      },
+      back: () => this.showTitle(),
+    };
+  }
+
+  /** Title > Multiplayer: sign in, then Host / Join / Friends / Public. */
+  private async openOnline(tab: 'host' | 'join' | 'friends' | 'public' = 'host'): Promise<void> {
+    const api = this.cloud();
+    this.setLoading('Contacting MineHonk online...');
+    const ok = await api.health();
+    this.setLoading(null);
+    if (!ok) {
+      this.push(
+        S.messageScreen(this, 'Multiplayer', 'MineHonk online cannot be reached right now. Check your connection and try again. (Players with their own server can use Server address... instead.)'),
+      );
+      return;
+    }
+    const open = (): void => {
+      this.ensureLobby();
+      this.replace(ON.onlineScreen(this, this.onlineContext(), tab));
+    };
+    if (await api.resume()) {
+      this.ensureLobby();
+      this.push(ON.onlineScreen(this, this.onlineContext(), tab));
+      return;
+    }
+    this.push(MP.signInScreen(this, api, open, { cloud: true }));
+  }
+
+  private async loadLocalWorlds(): Promise<S.WorldSummary[]> {
+    return (await listWorlds())
+      .map((w) => ({
+        id: String(w.id),
+        name: String(w.name ?? 'World'),
+        mode: (w.mode as GameMode) ?? 'survival',
+        godHearts: normalizeGodHearts(w.godHearts),
+        hardcore: !!w.hardcore,
+        lastPlayed: Number(w.lastPlayed ?? 0),
+        seed: String(w.seed ?? ''),
+        icon: typeof w.icon === 'string' ? w.icon : undefined,
+        cheats: !!w.cheats,
+      }))
+      .sort((a, b) => b.lastPlayed - a.lastPlayed);
+  }
+
+  /** Host tab: opens a single player world (or a new one) and puts it online. */
+  private async hostFromMenu(worldId: string | null, options: HostOptions): Promise<void> {
+    this.pendingHost = options;
+    if (worldId) {
+      await this.startWorld(worldId, null);
+      return;
+    }
+    const id = 'w' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    const mode = (options.mode as GameMode) ?? 'survival';
+    await this.startWorld(id, {
+      id,
+      name: options.name,
+      seed: randomSeedString(),
+      mode,
+      // (a Hardcore world is made hard, as in single player)
+      difficulty: 'normal',
+      godHearts: options.godHearts ?? 10,
+      cheats: mode === 'hardcore' ? false : options.cheats,
+      owner: this.profile.uuid,
+    });
+  }
+
+  /** Puts the running single player world online (the integrated server keeps running). */
+  private async beginHosting(options: HostOptions): Promise<void> {
+    const conn = this.conn;
+    if (!(conn instanceof WorkerConnection) || this.hostSession) return;
+    const api = this.cloud();
+    if (!api.account && !(await api.resume())) {
+      this.game?.chatMessage('Sign in under Multiplayer to host this world online.', 'error');
+      return;
+    }
+    try {
+      const session = await HostSession.start(api, this.ensureLobby(), conn, { ...options, hubId: conn.level?.hosting?.hubId, hostUuid: this.profile.uuid });
+      this.hostSession = session;
+      session.onError = (m) => this.game?.chatMessage(m, 'error');
+      session.onThrottled = () => {
+        if (document.visibilityState === 'visible') ON.notice(this.ui, 'Keep this tab open to keep your world online.');
+      };
+      const code = session.details.joinCode;
+      this.game?.chatMessage(`Your world is online${code ? `. Join code: ${code}` : ''}`, 'system');
+      if (this.isTouch) ON.notice(this.ui, 'Hosting works best on a computer.');
+    } catch (e) {
+      this.game?.chatMessage(`Could not go online: ${(e as Error).message}`, 'error');
+    }
+  }
+
+  /** Pause menu > Open to Multiplayer (single player, signed in or not). */
+  private async openToMultiplayer(): Promise<void> {
+    const api = this.cloud();
+    if (this.game?.worldInfo?.mode === 'spectator') {
+      this.push(S.messageScreen(this, 'Open to Multiplayer', "Spectator worlds can't be put online. Host a world in another game mode."));
+      return;
+    }
+    if (!(await api.health())) {
+      this.push(S.messageScreen(this, 'Open to Multiplayer', 'MineHonk online cannot be reached right now. Try again in a moment.'));
+      return;
+    }
+    const level = (this.conn as WorkerConnection).level ?? {};
+    const initial: HostOptions = {
+      name: this.game?.worldInfo?.name ?? level.name ?? 'My World',
+      visibility: 'friends',
+      maxPlayers: level.hosting?.maxPlayers ?? 8,
+      cheats: !!this.game?.worldInfo?.cheats,
+      pvp: !!this.game?.worldInfo?.pvp,
+      defaultRole: 'builder',
+      mode: this.game?.worldInfo?.mode ?? 'survival',
+    };
+    const settings = (): void =>
+      this.push(
+        ON.hostSettingsScreen(this, 'Open to Multiplayer', initial, this.isTouch, 'Start Hosting', async (o) => {
+          await this.beginHosting(o);
+          if (this.hostSession) {
+            this.clearStack();
+            this.openHostingPanel();
+          }
+        }),
+      );
+    if (api.account || (await api.resume())) settings();
+    else
+      this.push(
+        MP.signInScreen(
+          this,
+          api,
+          () => {
+            this.pop();
+            settings();
+          },
+          { cloud: true },
+        ),
+      );
+  }
+
+  private openHostingPanel(): void {
+    const session = this.hostSession;
+    if (!session) return;
+    this.push(
+      ON.hostingPanelScreen(this, session, {
+        players: () => this.game?.players.map((p) => ({ name: p.name, uuid: p.uuid, role: p.role })) ?? [],
+        command: (line) => this.game?.send({ t: 'chat', text: line }),
+        invite: () => this.push(ON.inviteScreen(this, this.cloud(), session.worldId)),
+        stop: () => {
+          this.stopHosting();
+          this.clearStack();
+          this.setPaused(false);
+          this.game?.resume();
+        },
+        isTouch: this.isTouch,
+      }),
+    );
+  }
+
+  private stopHosting(reason?: string): void {
+    this.hostSession?.stop(reason);
+    this.hostSession = null;
+  }
+
+  /** Joins a world hosted in someone's browser (by its hub id). */
+  private async joinOnline(worldId: string): Promise<void> {
+    const api = this.cloud();
+    const lobby = this.ensureLobby();
+    // Ask first: the hub says no (offline, full, banned, another version) before anything closes
+    const t = await api.ticket(worldId, compatKey());
+    if (this.game) await this.quitToTitle();
+    this.clearStack();
+    this.audio.music.stop();
+    this.setLoading(`Joining ${t.world.name}...`, `Hosted by ${t.hostName}${t.world.cheats ? ' · Cheats ON' : ''}`);
+    const hello = { t: 'hello' as const, version: PROTOCOL_VERSION, name: api.account?.name ?? this.profile.name, viewDistance: this.settings.renderDistance, registryHash: registryHash() };
+    const forceRelay = new URLSearchParams(location.search).has('relay');
+    const conn = new RemoteConnection(api, lobby, t, hello, { forceRelay });
+    // Connect first, then build the game: setting up the renderer on a slow
+    // device must not hold up the connection (what arrives meanwhile is kept)
+    try {
+      await conn.ready;
+    } catch (e) {
+      this.setLoading(null);
+      this.push(S.messageScreen(this, 'Multiplayer', (e as Error).message));
+      return;
+    }
+    this.conn = conn;
+    this.worldId = null;
+    this.quitting = false;
+    this.onlineWorld = worldId;
+    lobby.send({ t: 'playing', world: worldId });
     this.startGame(conn);
   }
 
@@ -363,6 +632,12 @@ export class App implements GameHost, S.ScreenHost {
     this.ui.append(this.screenLayer, this.loading.root, this.fpsEl);
     const origOnMessage = conn.onMessage;
     conn.onMessage = (m) => {
+      // Host tab: the world is up, now it goes online
+      if (m.t === 'welcome' && this.pendingHost) {
+        const o = this.pendingHost;
+        this.pendingHost = null;
+        setTimeout(() => void this.beginHosting(o), 0);
+      }
       if (m.t === 'progress' && this.progressScreen) {
         if (this.progressScreen.kind === 'ach') (this.progressScreen.update as (u: Set<string>) => void)(new Set(m.achievements));
         else (this.progressScreen.update as (s: Record<string, number>) => void)(m.stats);
@@ -372,15 +647,31 @@ export class App implements GameHost, S.ScreenHost {
     this.settingsChanged(false);
   }
 
-  /** Saves (integrated server), tears the game down and returns to the title. */
-  async quitToTitle(reason: string | null = null): Promise<void> {
+  /**
+   * Saves (integrated server), tears the game down and returns to the title.
+   * `kick` (the Haunting's end): a fake ban screen instead of "Disconnected",
+   * or (`corrupted`, the lair ending) straight to the title; with `erase` the
+   * world is deleted (only ever this browser's own world).
+   */
+  async quitToTitle(reason: string | null = null, kick: { ban?: FakeBan; erase?: boolean; corrupted?: boolean } = {}): Promise<void> {
     if (this.quitting) return;
     this.quitting = true;
     this.clearStack();
     const game = this.game;
     const conn = this.conn;
     const worldId = this.worldId;
-    this.setLoading(conn instanceof WorkerConnection ? 'Saving world...' : 'Disconnecting...');
+    const hubId = this.hostSession?.details?.id ?? null;
+    // Everyone else's ban goes out before the host's world closes under them
+    const haunted = !!kick.ban || !!kick.corrupted;
+    if (haunted && this.hostSession) await new Promise((r) => setTimeout(r, 1500));
+    this.setLoading(haunted ? '' : conn instanceof WorkerConnection ? 'Saving world...' : 'Disconnecting...');
+    // Everyone else leaves a hosted world with the host
+    this.stopHosting('The host left the game');
+    this.pendingHost = null;
+    if (this.onlineWorld) {
+      this.onlineWorld = null;
+      this.lobby?.send({ t: 'playing', world: null });
+    }
     let icon: string | null = null;
     if (game && !reason) icon = await Promise.race([game.requestThumbnail(64), new Promise<null>((r) => setTimeout(() => r(null), 500))]);
     game?.destroy();
@@ -388,6 +679,10 @@ export class App implements GameHost, S.ScreenHost {
     if (conn instanceof WorkerConnection) {
       await conn.stop();
       if (worldId && icon) await updateWorld(worldId, { icon }).catch(() => {});
+      if (kick.erase && worldId) {
+        await deleteWorld(worldId).catch(() => {});
+        if (hubId) void this.cloudApi?.deleteWorld(hubId).catch(() => {});
+      }
     } else conn?.close();
     this.conn = null;
     this.worldId = null;
@@ -396,7 +691,9 @@ export class App implements GameHost, S.ScreenHost {
     gl?.clearColor(0, 0, 0, 1);
     gl?.clear(gl.COLOR_BUFFER_BIT);
     this.showTitle();
-    if (reason) this.push(S.messageScreen(this, 'Disconnected', reason));
+    if (kick.ban) this.push(S.fakeBanScreen(this, kick.ban));
+    // The lair ending already said it: SERVER MEMORY CORRUPTED, then the title
+    else if (reason && !kick.corrupted) this.push(S.messageScreen(this, 'Disconnected', reason));
     this.quitting = false;
   }
 
@@ -442,11 +739,19 @@ export class App implements GameHost, S.ScreenHost {
                 },
               }
             : undefined,
-          invite: local
+          online:
+            local && this.hostSession
+              ? { label: 'Hosting...', open: () => this.openHostingPanel() }
+              : local && HUB_URL
+                ? { label: 'Open to Multiplayer', open: () => void this.openToMultiplayer() }
+                : undefined,
+          invite: this.hostSession
+            ? () => this.push(ON.inviteScreen(this, this.cloud(), this.hostSession!.worldId))
+            : local
             ? undefined
             : () => {
                 const code = this.game?.worldInfo?.joinCode;
-                this.push(S.messageScreen(this, 'Invite Friends', code ? `Join code: ${code}\n\nFriends can enter it under Multiplayer > Join by Code.` : 'Only the world owner and operators can share the join code. Friends of the owner can join friends-only worlds from their world list.'));
+                this.push(S.messageScreen(this, 'Invite Friends', code ? `Join code: ${code}\n\nFriends can enter it under Multiplayer > Join.` : 'Only the world owner and operators can share the join code. Friends of the owner can join friends-only worlds from their world list.'));
               },
         },
         local,
@@ -474,6 +779,65 @@ export class App implements GameHost, S.ScreenHost {
     this.push(screen);
   }
 
+  /** The Engineering Book on its own (from the item), optionally at an entry. */
+  openEngineeringBook(entry?: string): void {
+    const game = this.game;
+    if (!game || this.screenOpen) return;
+    const root = el('div', { class: 'screen dim eng-book-screen' });
+    const panel = new EngineeringBookPanel({ advancedTooltips: false, close: () => this.pop() });
+    panel.update(game.invSlots);
+    if (entry) panel.open(entry);
+    root.append(panel.root);
+    root.addEventListener('mousedown', (e) => {
+      if (e.target === root) this.pop();
+    });
+    this.push({ root, onClose: () => panel.destroy() });
+  }
+
+  /** V6 phase 3: a lore book's page. */
+  openLore(id: string): void {
+    const game = this.game;
+    if (!game || this.screenOpen) return;
+    const root = el('div', { class: 'screen dim grimoire-screen' });
+    const panel = new LorePanel(id, { close: () => this.pop() });
+    root.append(panel.root);
+    root.addEventListener('mousedown', (e) => {
+      if (e.target === root) this.pop();
+    });
+    game.audio.play('book.page', NaN, NaN, NaN, 0.6, 1, 'ui');
+    this.push({ root });
+  }
+
+  /** V6 phase 3: an Ender Glyph Stone's glyphs (and nothing else). */
+  showGlyphs(seed: number, face: number): void {
+    const game = this.game;
+    if (!game || this.screenOpen) return;
+    const root = el('div', { class: 'screen dim glyph-screen' });
+    const panel = new GlyphPanel(seed, face, { close: () => this.pop() });
+    root.append(panel.root);
+    root.addEventListener('mousedown', (e) => {
+      if (e.target === root) this.pop();
+    });
+    this.push({ root });
+  }
+
+  /** V5.5: the Witch's Grimoire, from the item. */
+  openGrimoire(): void {
+    const game = this.game;
+    if (!game || this.screenOpen) return;
+    const root = el('div', { class: 'screen dim grimoire-screen' });
+    const panel = new GrimoirePanel({ close: () => this.pop(), turn: () => game.audio.play('book.page', NaN, NaN, NaN, 0.6, 0.9 + Math.random() * 0.2, 'ui') });
+    root.append(panel.root);
+    root.addEventListener('mousedown', (e) => {
+      if (e.target === root) this.pop();
+    });
+    const key = (e: KeyboardEvent): void => {
+      if (panel.onKey(e)) e.preventDefault();
+    };
+    window.addEventListener('keydown', key);
+    this.push({ root, onClose: () => window.removeEventListener('keydown', key) });
+  }
+
   openAchievements(): void {
     if (!this.game) return;
     const s = S.achievementsScreen(this, null);
@@ -499,8 +863,8 @@ export class App implements GameHost, S.ScreenHost {
     this.setPaused(false);
   }
 
-  exit(reason: string | null): void {
-    void this.quitToTitle(reason);
+  exit(reason: string | null, kick?: { ban?: FakeBan; erase?: boolean; corrupted?: boolean }): void {
+    void this.quitToTitle(reason, kick);
   }
 
   setLoading(text: string | null, detail?: string): void {

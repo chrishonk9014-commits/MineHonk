@@ -17,6 +17,7 @@ const COLORS: Record<ChatKind, string> = {
   error: '#ff5555',
   achievement: '#ffffff',
   whisper: '#aaaaaa',
+  herobrine: '#ff3030',
 };
 
 export class Chat {
@@ -26,6 +27,8 @@ export class Chat {
   private readonly history: string[] = [];
   private histIndex = -1;
   open = false;
+  /** How Herobrine's words glitch (the Glitch Effects setting). */
+  glitchFx: 'full' | 'reduced' | 'off' = 'full';
   onSend: (text: string) => void = () => {};
   onClose: () => void = () => {};
 
@@ -70,6 +73,13 @@ export class Chat {
         line.append(body, a);
       } else line.append(body);
     } else line.append(body);
+    if (kind === 'herobrine') {
+      line.classList.add('chat-herobrine');
+      if (this.glitchFx !== 'off') {
+        if (this.glitchFx === 'reduced') line.classList.add('calm');
+        scramble(body, text, this.glitchFx === 'reduced' ? 700 : 1800);
+      }
+    }
     this.root.append(line);
     this.lines.push({ el: line, time: performance.now() });
     while (this.lines.length > 100) this.lines.shift()!.el.remove();
@@ -106,4 +116,23 @@ export class Chat {
       if (!this.open && i < this.lines.length - 10) l.el.style.display = 'none';
     }
   }
+}
+
+const GLYPHS = '#@%&?!*/\\|<>01$=+~^';
+
+/** Text that tears itself apart and settles into its words. */
+function scramble(node: HTMLElement, text: string, ms: number): void {
+  const t0 = performance.now();
+  const step = (): void => {
+    const k = (performance.now() - t0) / ms;
+    if (k >= 1) {
+      node.textContent = text;
+      return;
+    }
+    let out = '';
+    for (const ch of text) out += ch === ' ' || Math.random() < k * k ? ch : GLYPHS[Math.floor(Math.random() * GLYPHS.length)];
+    node.textContent = out;
+    setTimeout(step, 45);
+  };
+  step();
 }

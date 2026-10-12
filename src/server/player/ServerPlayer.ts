@@ -1,4 +1,6 @@
 /** Server-side player entity + connection session state. */
+import { elytraUpgrades } from '../../common/endExpansion/elytra';
+import { items } from '../../common/registry/items';
 import { newAdminState, type AdminPlayerState } from '../admin/adminState';
 import { Entity } from '../entity/Entity';
 import type { Connection, Identity } from '../net/Connection';
@@ -128,6 +130,35 @@ export class ServerPlayer extends Entity {
   /** Cave biome the player is in (0 = none) and every cave biome visited so far. */
   caveBiome = 0;
   visitedCaveBiomes = new Set<number>();
+  /** V6: Expanded End biomes visited (ids). */
+  visitedEndBiomes = new Set<string>();
+  /** V6 phase 2: kinds of Expanded End mob this player has killed (for "Hunter of the Expanded End"). */
+  expansionKills = new Set<string>();
+  /** V6 phase 3: Expanded End structure kinds found (variants and giants, never under a cheat). */
+  endFound = new Set<string>();
+  /** V6 phase 3: giant structures whose title this player has seen (type@x,z). */
+  endTitles = new Set<string>();
+  /** V6 phase 3: lore fragments and End Artifacts this player has held. */
+  endLore = new Set<string>();
+  endArtifacts = new Set<string>();
+  /** V6 phase 4: recipes learned from blueprints (the Void Skiff). */
+  readonly recipes = new Set<string>();
+  /** V6 phase 4: one-off End rewards this player has had (e.g. the Crystal Vault's Ender Blink). */
+  readonly endRewards = new Set<string>();
+  /** V6 phase 4: the End quest this player is following (its record key), shown in the quest tracker. */
+  endQuest: string | null = null;
+  /** V6 phase 4: ticks until the Elytra's Void Recovery works again (saved with the player). */
+  recoverCooldown = 0;
+  /** V6 phase 5: the Eclipse Veil hides them from mobs until this tick. */
+  veiledUntil = 0;
+  /** Endings this player has reached (V3). */
+  endings = new Set<string>();
+  /** An ending card waiting to be shown (after walking out through the End portal). */
+  pendingEnding: string | null = null;
+  /** Where this player stepped into the End portal (the secret ending returns them there). */
+  endEntry: { x: number; y: number; z: number } | null = null;
+  /** Freeze build-up from powder snow (ticks, 0-140). */
+  freezeTicks = 0;
 
   constructor(
     readonly conn: Connection,
@@ -200,6 +231,7 @@ export class ServerPlayer extends Entity {
       maxAir: this.maxAir,
       armor: this.armorCache,
       effects: [...this.effects.entries()].map(([id, e]) => ({ id, amp: e.amp, ticks: e.ticks })),
+      freeze: this.freezeTicks ? Math.round((this.freezeTicks / 140) * 20) / 20 : undefined,
     };
   }
 
@@ -207,9 +239,21 @@ export class ServerPlayer extends Entity {
     const m: Record<string, unknown> = { name: this.name, sneak: this.sneaking, held: this.heldItem()?.id ?? 0 };
     if (this.effects.has('glowing')) m.glowing = true;
     if (this.gliding) m.glide = true;
+    if (this.veiledUntil > this.dim.server.tickNo) m.veil = true;
     if (this.vehicle) m.riding = this.vehicle.id;
     const chest = this.inventory.get(38);
-    if (chest && chest.id === ELYTRA()) m.elytra = true;
+    if (chest && chest.id === ELYTRA()) {
+      m.elytra = true;
+      // V6 phase 4: what each upgrade adds to how the wings look
+      const ups = elytraUpgrades(chest);
+      if (ups.length) m.wings = ups;
+    }
+    // V6: worn armor, head to feet, by material (drawn on the player model)
+    const worn = [39, 38, 37, 36].map((i) => {
+      const a = items[this.inventory.get(i)?.id ?? -1]?.def.armor;
+      return a && a.material !== 'elytra' ? a.material : '';
+    });
+    if (worn.some(Boolean)) m.armor = worn;
     return m;
   }
 

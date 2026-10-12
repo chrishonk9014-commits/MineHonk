@@ -122,7 +122,8 @@ const SIDES: [number, number, string][] = [
   [1, 0, 'east'],
 ];
 
-export function caveDecorV2(v: DecorView, seed: number, cx: number, cz: number): void {
+/** `v3`: V3 worlds, whose frozen caves get powder snow pits, ice spikes and frozen waterfalls. */
+export function caveDecorV2(v: DecorView, seed: number, cx: number, cz: number, v3 = false): void {
   if (v.target.cx !== cx || v.target.cz !== cz) return;
   const b = states();
   const host = hostTable();
@@ -280,7 +281,16 @@ export function caveDecorV2(v: DecorView, seed: number, cx: number, cz: number):
         const wz = z + dz;
         if (!inside(wx, wz) || !host[P(wx, y, wz)] || !STATE_SOLID[P(wx, y + 1, wz)]) continue;
         const lava = biome === CaveBiome.Lava || biome === CaveBiome.DeepDark ? biome === CaveBiome.Lava : biome === CaveBiome.Deep && roll(seed, x, y, z, 0x1a7a) < 400;
-        if (biome === CaveBiome.DeepDark || biome === CaveBiome.Frozen) return;
+        if (biome === CaveBiome.Frozen && v3) {
+          // A frozen waterfall: blue ice where the spring was, a column of ice below
+          set(wx, y, wz, b.blueIce);
+          for (let yy = y; yy > 5; yy--) {
+            if (T(x, yy, z) !== b.caveAir) break;
+            set(x, yy, z, (yy + x + z) % 3 === 0 ? b.packedIce : b.ice);
+          }
+          return;
+        }
+        if (biome === CaveBiome.DeepDark || biome === CaveBiome.Frozen || biome === CaveBiome.Corrupted) return;
         set(wx, y, wz, lava ? b.lava : b.water);
         for (let yy = y; yy > 5; yy--) {
           const cur = T(x, yy, z);
@@ -344,7 +354,9 @@ export function caveDecorV2(v: DecorView, seed: number, cx: number, cz: number):
         if (floor && r < 15 && fb === b.magma) set(x, y - 1, z, b.obsidian);
         break;
       case CaveBiome.Frozen:
-        if (ceil && r < 100) hang(x, y, z, 1 + (r % 4), b.icicle);
+        if (v3 && floor && inside(x, z) && x - bx >= 2 && x - bx <= 13 && z - bz >= 2 && z - bz <= 13 && roll(seed, x, y, z, 0x9175) < 7 && powderPit(x, y, z)) break;
+        if (ceil && r < (v3 ? 140 : 100)) hang(x, y, z, 1 + (r % (v3 ? 6 : 4)), b.icicle);
+        else if (v3 && floor && r < 400 && r >= 385) grow(x, y, z, 2 + (r % 4), [b.ice, b.packedIce, b.packedIce, b.packedIce]);
         else if (floor && (fb === b.snowBlock || fb === b.packedIce) && r < 380) set(x, y, z, r < 120 ? b.snow2 : b.snow);
         break;
       case CaveBiome.DeepDark:
@@ -376,6 +388,35 @@ export function caveDecorV2(v: DecorView, seed: number, cx: number, cz: number):
         break;
     }
     void STATE_FLUID;
+  }
+
+  /**
+   * V3: a hidden pit of powder snow dug into a frozen floor, flush with it.
+   * Only dug where rock walls it in on every side (nothing leaks into caves
+   * below). Returns whether a pit was made.
+   */
+  function powderPit(x: number, y: number, z: number): boolean {
+    const r0 = roll(seed, x, y, z, 0x9176);
+    const r = r0 < 500 ? 1 : 2;
+    const depth = r0 % 10 === 0 ? 8 + (r0 % 4) : 3 + (r0 % 5);
+    const rr = r * r + 0.5;
+    for (let dz = -r - 1; dz <= r + 1; dz++)
+      for (let dx = -r - 1; dx <= r + 1; dx++) {
+        const d2 = dx * dx + dz * dz;
+        if (d2 > (r + 1) * (r + 1) + 0.5) continue;
+        for (let k = 1; k <= depth + 1; k++) {
+          const s = P(x + dx, y - k, z + dz);
+          if (!STATE_SOLID[s] || STATE_FLUID[s]) return false;
+        }
+        if (d2 <= rr && !STATE_SOLID[P(x + dx, y - 1, z + dz)]) return false;
+      }
+    for (let dz = -r; dz <= r; dz++)
+      for (let dx = -r; dx <= r; dx++) {
+        if (dx * dx + dz * dz > rr) continue;
+        for (let k = 1; k <= depth; k++) set(x + dx, y - k, z + dz, b.powderSnow);
+        if (T(x + dx, y, z + dz) !== b.caveAir) set(x + dx, y, z + dz, b.caveAir);
+      }
+    return true;
   }
 
   function corner(x: number, y: number, z: number): boolean {

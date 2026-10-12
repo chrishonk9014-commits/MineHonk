@@ -780,8 +780,14 @@ function b0(): ReturnType<typeof makeStates> {
   return states();
 }
 
+/**
+ * V4 hook: places a biome's own plant on a surface column and returns true
+ * when the column is done. V4 worlds also grow their cacti in a separate stage.
+ */
+export type PlantHook = (v: DecorView, seed: number, x: number, y: number, z: number, top: number, biome: ReturnType<typeof biomeOf>, r: number, r2: number) => boolean;
+
 /** Grass, flowers and biome-specific plants. Column-local: only for the target chunk. */
-export function vegetation(v: DecorView, seed: number, cx: number, cz: number): void {
+export function vegetation(v: DecorView, seed: number, cx: number, cz: number, v4?: PlantHook): void {
   if (v.target.cx !== cx || v.target.cz !== cz) return;
   const b = states();
   const bx = cx << 4;
@@ -814,8 +820,9 @@ export function vegetation(v: DecorView, seed: number, cx: number, cz: number): 
         oceanPlant(v, x, y, z, biome.id, r, r2, h);
         continue;
       }
+      if (v4 && v4(v, seed, x, y, z, top, biome, r, r2)) continue;
       if (top === b.sand || top === b.redSand) {
-        if (biome.category === 'desert' || biome.category === 'badlands') {
+        if (!v4 && (biome.category === 'desert' || biome.category === 'badlands')) {
           if (r < 0.004) {
             const hgt = 1 + (h % 3);
             let ok = true;

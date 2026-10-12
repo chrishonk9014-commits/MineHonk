@@ -177,6 +177,8 @@ export class Mining {
     p.addStat('blocks_mined');
     if (survival) {
       const drops = computeBlockDrops(state, tool, rng);
+      // Batteries keep their charge and tanks their contents
+      this.server.engineering?.decorateDrops(be, drops.items);
       if (cheat) for (const s of drops.items) markAdmin(s);
       for (const s of drops.items) this.dropItem(dim, x + 0.5, y + 0.3, z + 0.5, s);
       if (drops.xp > 0) this.dropXp(dim, x + 0.5, y + 0.5, z + 0.5, drops.xp, cheat);

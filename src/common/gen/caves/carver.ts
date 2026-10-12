@@ -40,6 +40,9 @@ export interface CarveStates {
   water: number;
   lava: number;
   caveAir: number;
+  /** V3 frozen caves fill with powder snow instead of lava or deep water. */
+  powder?: number;
+  ice?: number;
   solid(s: number): boolean;
 }
 
@@ -117,6 +120,7 @@ export class CaveCarver {
   constructor(
     readonly seed: number,
     readonly biomes: CaveBiomeSource,
+    readonly version = 2,
   ) {
     const r = (salt: number): Random => new Random(hashInts(seed, salt, 0xca4e2));
     this.cheese = new Octave3(r(1), 2, 72, 36);
@@ -212,6 +216,13 @@ export class CaveCarver {
       const width = 2.8 + rng.next() * 3.2;
       return { pts, floor: 18 + rng.int(15), width, minX: minX - width - 2, maxX: maxX + width + 2, minZ: minZ - width - 2, maxZ: maxZ + width + 2 };
     });
+  }
+
+  /** V3: most frozen aquifers are drifts of powder snow rather than icy lakes. */
+  private powderAquifer(wx: number, wz: number): boolean {
+    const ux = wx + this.warpX.sample(wx, wz) * 18;
+    const uz = wz + this.warpZ.sample(wx, wz) * 18;
+    return (hashInts(this.seed, Math.floor(ux / AQUIFER_REGION), Math.floor(uz / AQUIFER_REGION), 0x9d5) & 1023) < 620;
   }
 
   /** Flood level of an aquifer region (-1 when dry). */
@@ -451,7 +462,9 @@ export class CaveCarver {
           if ((up === st.water || up === st.lava) && !river) continue;
           // Fluids
           let fill = st.caveAir;
-          if (y <= LAVA_SEA) fill = st.lava;
+          // V3: powder snow is the frozen caves' hazard; lava stays out of them
+          const frozen3 = this.version >= 3 && st.powder !== undefined && biomes[((y >> 2) * 4 + (z >> 2)) * 4 + (x >> 2)] === CaveBiome.Frozen;
+          if (y <= LAVA_SEA) fill = frozen3 ? st.powder! : st.lava;
           else if (river) fill = y <= RIVER_LEVEL ? st.water : st.caveAir;
           else {
             if (!aqReady) {
@@ -461,13 +474,16 @@ export class CaveCarver {
             if (aq.barrier >= 0 && y <= aq.barrier) continue;
             const cb = biomes[((y >> 2) * 4 + (z >> 2)) * 4 + (x >> 2)]!;
             if (cb === CaveBiome.Lava && y <= LAVA_LAKE) fill = st.lava;
-            else if (aq.level >= 0 && y <= aq.level && y < top - 10) fill = cb === CaveBiome.Lava ? st.lava : cb === CaveBiome.Frozen && y === aq.level ? st.caveAir : st.water;
+            else if (aq.level >= 0 && y <= aq.level && y < top - 10) {
+              if (frozen3 && this.powderAquifer(wx, wz)) fill = st.powder!;
+              else fill = cb === CaveBiome.Lava ? st.lava : cb === CaveBiome.Frozen && y === aq.level ? st.caveAir : st.water;
+            }
             else {
               for (const m of megas) {
                 if (!m.lake) continue;
                 const floorY = Math.round(m.y - m.rv / 1.5) + 3;
                 if (y <= floorY && (wx - m.x) ** 2 + (wz - m.z) ** 2 < (m.rh * 0.8) ** 2) {
-                  fill = cb === CaveBiome.Lava || cb === CaveBiome.DeepDark ? st.lava : st.water;
+                  fill = frozen3 ? st.powder! : cb === CaveBiome.Lava || cb === CaveBiome.DeepDark ? st.lava : st.water;
                   break;
                 }
               }

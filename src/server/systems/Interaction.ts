@@ -10,7 +10,7 @@ import { Survival, type DamageInfo } from './Survival';
 import { Containers, type Window } from './Containers';
 import { Weather } from './Weather';
 import type { C2S } from '../../common/net/protocol';
-import { type ItemStack, type Slot, cloneStack, itemIdOf, stackOf, isAdminStack, markAdmin } from '../../common/game/itemstack';
+import { type ItemStack, type Slot, cloneStack, itemIdOf, stackOf, isAdminStack, markAdmin, maxDurability } from '../../common/game/itemstack';
 import { items, itemById } from '../../common/registry/items';
 import { blocks, STATE_BLOCK, getProp, withProp, S, stateOf, STATE_FLUID, STATE_SOLID, STATE_REPLACEABLE, blockHasTag } from '../../common/registry/blocks';
 import { computePlacement, canSurvive, chestPartnerUpdate } from '../../common/game/placement';
@@ -85,9 +85,8 @@ export class Interaction {
     if (!p.abilities.mayBuild && !(breaking && p.gamemode === 'adventure')) return false;
     if (this.server.roleOf(p) === 'visitor') return false;
     if (y < 0 || y > 255) return false;
-    void dim;
-    void x;
-    void z;
+    // V5.5: the computer Herobrine has can't be broken or built into
+    if (this.server.herobrine?.protects(dim, x, y, z)) return false;
     return true;
   }
 
@@ -160,6 +159,8 @@ export class Interaction {
     if (!(p.sneaking && stack)) {
       if (this.useBlock(p, x, y, z, state)) {
         p.send({ t: 'use_result', seq: m.seq, ok: true });
+        // A client holding a block may have guessed it would be placed (the block had no use it knew of)
+        if (stack && items[stack.id]!.def.block) this.resend(p, x, y, z, face);
         this.server.sculk?.vibrate(dim, x + 0.5, y + 0.5, z + 0.5, p, 'block_use');
         return;
       }
@@ -211,6 +212,7 @@ export class Interaction {
       const packed = pdef.id === 'shulker_box' && Array.isArray(stack.tag?.data?.items) ? (stack.tag!.data!.items as unknown[]).slice(0, 27) : null;
       dim.setBlockEntity(first.x, first.y, first.z, { type: pdef.entity, items: packed ? [...packed, ...new Array(27 - packed.length).fill(null)] : new Array(27).fill(null) });
     }
+    if (pdef.entity === 'eng') this.server.engineering?.onPlaced(p, dim, first.x, first.y, first.z, stack);
     if (pdef.entity === 'conduit') {
       dim.setBlockEntity(first.x, first.y, first.z, { type: 'conduit' });
       this.server.gadgets?.addConduit(dim, first.x, first.y, first.z);
@@ -267,6 +269,7 @@ export class Interaction {
         this.containers.openFurnace(p, dim, x, y, z, 'smoker');
         return true;
       case 'chest':
+        this.server.endEvents?.onChestOpened(p, dim, x, y, z);
         this.containers.openChest(p, dim, x, y, z);
         return true;
       case 'barrel':
@@ -718,7 +721,7 @@ export class Interaction {
     const c = p.inventory.get(ARMOR_START + 2);
     if (!c) return false;
     const it = items[c.id];
-    return it?.id === 'elytra' && (c.damage ?? 0) < (it.def.durability ?? 1) - 1;
+    return it?.id === 'elytra' && (c.damage ?? 0) < maxDurability(c) - 1;
   }
 
   /** Ends any item use in progress (shield knocked aside, dismounting...). */
@@ -823,7 +826,7 @@ export class Interaction {
     if (!isSurvivalLike(p.gamemode)) return;
     const s = p.inventory.get(slot);
     if (!s) return;
-    const dur = items[s.id]?.def.durability;
+    const dur = maxDurability(s);
     if (!dur) return;
     const unb = enchantLevel(s, 'unbreaking');
     let dmg = 0;
@@ -882,10 +885,11 @@ export class Interaction {
     this.containers.syncInventory(p, false);
   }
 
-  dropAll(p: ServerPlayer): void {
+  /** Drops a dead player's whole inventory (except what `keep` says stays). */
+  dropAll(p: ServerPlayer, keep?: (s: ItemStack) => boolean): void {
     for (let i = 0; i < p.inventory.size; i++) {
       const s = p.inventory.get(i);
-      if (!s) continue;
+      if (!s || keep?.(s)) continue;
       if (enchantLevel(s, 'vanishing_curse')) {
         p.inventory.set(i, null);
         continue;
@@ -1095,7 +1099,12 @@ export class Interaction {
     }
     if (p.dim.id !== dimId) this.server.changeDimension(p, dimId, pos[0], pos[1], pos[2]);
     else this.server.teleport(p, pos[0], pos[1], pos[2]);
-    if (p.spawnPoint) (p as { needsSafeSpawn?: boolean }).needsSafeSpawn = true;
+    if (p.spawnPoint) {
+      (p as { needsSafeSpawn?: boolean }).needsSafeSpawn = true;
+      // V6 phase 5: a Citadel Anchor is deep inside the tower: the safe spot is found from the anchor, not the sky
+      const b = p.spawnPoint.block;
+      if (b && dimId === 'end' && this.server.citadel?.covers(b[0], b[1], b[2])) (p as { safeFrom?: number }).safeFrom = b[1] + 2;
+    }
   }
 
   onDimensionEntered(p: ServerPlayer, dim: string): void {
@@ -1113,7 +1122,8 @@ export class Interaction {
     if (def.entity === 'furnace' || def.entity === 'chest' || def.entity === 'barrel') {
       this.containers.refreshViewers(dim, x, y, z);
     }
-    void p;
+    // V6: chorus broken near a Chorus Beast angers it; a mined End Crystal Cluster may let mites out
+    this.server.endMobs?.onBlockBroken(p, dim, x, y, z, def.id);
   }
 
   // ------------------------------------------------------------------ achievements
@@ -1139,8 +1149,11 @@ export class Interaction {
   }
 
   onBlockMined(p: ServerPlayer, blockId: string, drops: ItemStack[], cheat = false): void {
+    // V6 phase 5: Eclipse Shards (their list, and the advancement)
+    this.server.endEvents?.onMined(p, blockId, cheat);
     if (cheat) return;
     this.grant(p, 'mine_block');
+    if (blockId === 'end_crystal_cluster' && drops.length) this.grant(p, 'mine_crystal_cluster');
     const held = p.heldItem();
     if (held && items[held.id]!.def.tool?.type === 'pickaxe' && (blockId === 'stone' || blockId === 'cobblestone' || blockId === 'deepslate')) this.grant(p, 'stone_age');
     void drops;
@@ -1159,12 +1172,21 @@ export class Interaction {
     if (id.endsWith('_froglight')) this.grant(p, 'froglight');
     if (id === 'resonance_charm') this.grant(p, 'vault_reward');
     if (id === 'enchanted_book' && stack.tag?.stored?.silent_stride) this.grant(p, 'silent_stride');
+    this.expansionItem(p, id);
+  }
+
+  /** V6 phase 2: the Expanded End's resources (picked up, crafted or smelted). */
+  private expansionItem(p: ServerPlayer, id: string): void {
+    if (id === 'ender_scrap') this.grant(p, 'obtain_ender_scrap');
+    if (id === 'ender_alloy_ingot') this.grant(p, 'obtain_ender_alloy');
+    if (id === 'astral_dust') this.grant(p, 'obtain_astral_dust');
   }
 
   onCrafted(p: ServerPlayer, stack: ItemStack): void {
     if (isAdminStack(stack)) return;
     const id = itemIdOf(stack);
     if (id === 'crafting_table') this.grant(p, 'craft_table');
+    if (id === 'engineering_table') this.grant(p, 'engineering');
     if (id.endsWith('_pickaxe') || id.endsWith('_axe') || id.endsWith('_shovel') || id.endsWith('_sword') || id.endsWith('_hoe')) this.grant(p, 'craft_tool');
     if (id === 'stone_pickaxe') this.grant(p, 'upgrade_tools');
     if (id === 'iron_pickaxe') this.grant(p, 'iron_tools');
@@ -1177,12 +1199,15 @@ export class Interaction {
       const all = [36, 37, 38, 39].every((i) => items[p.inventory.get(i)?.id ?? 0]?.id.startsWith('netherite_'));
       if (all) this.grant(p, 'netherite_armor');
     }
+    this.expansionItem(p, id);
+    if (id.startsWith('ender_alloy_')) this.server.endMobs?.checkArmor(p);
   }
 
   onSmelted(p: ServerPlayer, stack: ItemStack): void {
     if (isAdminStack(stack)) return;
     const id = itemIdOf(stack);
     if (id === 'iron_ingot') this.grant(p, 'smelt_iron');
+    this.expansionItem(p, id);
   }
 
   checkXpAchievements(p: ServerPlayer, level: number): void {
@@ -1210,7 +1235,7 @@ export function lookDir(yaw: number, pitch: number): [number, number, number] {
 
 function strippedOf(id: string): string | null {
   if (id.startsWith('stripped_')) return null;
-  if (id.endsWith('_log') || id.endsWith('_wood') || id.endsWith('_stem') || id.endsWith('_hyphae')) return 'stripped_' + id;
+  if (id.endsWith('_log') || id.endsWith('_wood') || id.endsWith('_stem') || id.endsWith('_hyphae') || id === 'chorus_stalk') return 'stripped_' + id;
   return null;
 }
 

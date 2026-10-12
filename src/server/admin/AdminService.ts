@@ -14,24 +14,37 @@
  * of events started by a cheat stays advancement-neutral. Normal play is
  * untouched.
  */
+import { EXPANSION_BIOME_IDS, expansionBiomeIndex } from '../../common/endExpansion/biomes';
+import { EXPANSION_STRUCTURE_IDS } from '../../common/endExpansion/structures';
+import { inExpansion } from '../../common/endExpansion/region';
+import type { EndGenerator } from '../../common/gen/end';
 import type { GameServer } from '../GameServer';
 import type { ServerPlayer } from '../player/ServerPlayer';
 import type { Dimension } from '../world/Dimension';
 import type { Entity } from '../entity/Entity';
 import { Mob } from '../entity/Mob';
-import { validateAdmin, xpForLevel, structureName, ADMIN_DIMENSIONS, type AdminAction, type AdminCatalog, type LocateResult } from '../../common/game/admin';
-import { itemById, items } from '../../common/registry/items';
+import { validateAdmin, describeAdmin, xpForLevel, structureName, ADMIN_DIMENSIONS, EXPANDED_END_SUFFIX, type AdminAction, type AdminCatalog, type LocateResult, type V4Op } from '../../common/game/admin';
+import { GlitchedQuestSystem } from '../systems/GlitchedQuest';
+import { StructureQuests } from '../systems/StructureQuests';
+import { TempleTrials } from '../systems/TempleTrials';
+import type { Start } from '../../common/gen/structures/manager';
+import { itemById, items, itemOf } from '../../common/registry/items';
 import { markAdmin, isAdminStack, stackOf, type ItemStack, type Slot } from '../../common/game/itemstack';
 import { POTION_BY_ID } from '../../common/data/potions';
 import { ENCHANT_BY_ID } from '../../common/data/enchantments';
 import { MOB_DEFS, mobDef } from '../../common/data/mobs';
 import { biomes, biomeOf } from '../../common/registry/biomes';
 import { maxHealthFor } from '../../common/game/gamemode';
-import { STATE_SOLID, STATE_FLUID, STATE_BLOCK, blocks } from '../../common/registry/blocks';
+import { STATE_SOLID, STATE_FLUID, STATE_BLOCK, blocks, S, stateOf, withProp, hasProp } from '../../common/registry/blocks';
+import { rollLoot } from '../../common/game/loot';
+import { Random } from '../../common/math/rng';
 import { chunkIndex } from '../../common/world/constants';
 import type { DimensionId } from '../../common/data/biomes';
 import { ADMIN_ZONE_RADIUS, MAX_ADMIN_ZONES } from './adminState';
 import { CAVE_BIOMES } from '../../common/gen/caves/caveBiomes';
+import { engineeringAdmin } from '../engineering/admin';
+import { herobrineAdmin } from '../herobrine/admin';
+import { expansionAdmin } from './expansionAdmin';
 
 /** Work budget for searches per server tick (ms). */
 const SEARCH_BUDGET_MS = 6;
@@ -48,6 +61,10 @@ interface Search {
   teleport: boolean;
   steps: Generator<void, { x: number; y: number; z: number } | null>;
   started: number;
+  /** What the replies call it, when not the plain structure or biome name. */
+  label?: string;
+  /** Land on the surface around the spot rather than near the spot itself. */
+  surface?: boolean;
 }
 
 interface PendingTp {
@@ -277,6 +294,9 @@ export class AdminService {
     try {
       const out = this.run(() => this.execute(p, req, action));
       if (out) reply(out.ok, out.text, out.data);
+      // Everyone else in the world sees what cheats were used
+      const what = describeAdmin(action);
+      if (what && out?.ok !== false) this.server.announceAdmin(p, what);
       if (action.a !== 'catalog' && action.a !== 'perf' && !action.a.startsWith('locate')) this.server.log(`[admin] ${p.name}: ${JSON.stringify(action)}`);
     } catch (e) {
       reply(false, `Failed: ${(e as Error).message}`);
@@ -437,9 +457,213 @@ export class AdminService {
         return { ok: true, text: 'Resending nearby chunks.' };
       case 'perf':
         return { ok: true, text: '', data: this.perf() };
+      case 'endgame':
+        return this.endgame(p, a.op, a.id);
+      case 'v4':
+        return this.v4(p, a.op);
+      case 'v55':
+        if (!this.server.herobrine || !this.server.engineering) return { ok: false, text: 'The Herobrine story is not running.' };
+        return herobrineAdmin(this.server.herobrine, { moveTo: (pl, dim, x, y, z) => this.moveTo(pl, dim, x, y, z), give: (pl, id, n) => this.giveMarked(pl, id, n), safeSpot: (dim, x, y, z) => this.safeSpot(dim, x, y, z, false) }, p, a.op);
+      case 'haunt':
+        if (!this.server.haunting) return { ok: false, text: 'The haunting is not available.' };
+        return this.server.haunting.admin(p, a.op, a.minutes, a.erase, a.ending);
+      case 'v6':
+        if (!this.server.endExpansion) return { ok: false, text: 'The End Expansion is not running.' };
+        return expansionAdmin(
+          this.server.endExpansion,
+          {
+            queueTeleport: (pl, x, y, z, label, surface) => this.queueTeleport(pl, req, 'end', x, y, z, label, surface),
+            give: (pl, id, n) => void this.give(pl, id, n),
+            giveStack: (pl, st) => {
+              const rest = pl.inventory.add(markAdmin(st));
+              if (rest) this.server.interaction.dropStack(pl, rest);
+              this.server.interaction.syncInventory(pl);
+            },
+          },
+          p,
+          a.op,
+          a.biome,
+          a.set,
+          a.structure,
+          a.quest,
+          a.spot,
+          a.test,
+        );
+      case 'v5':
+        if (!this.server.engineering) return { ok: false, text: 'Engineering is not running.' };
+        return engineeringAdmin(this.server.engineering, { mark: (dim, x, y, z) => this.setBlockMark(dim, x, y, z, true), give: (pl, id, n) => this.giveMarked(pl, id, n) }, p, a.op);
       default:
         return { ok: false, text: 'Unknown action.' };
     }
+  }
+
+  /** Gives a cheat-marked stack (dropping what does not fit). */
+  private giveMarked(p: ServerPlayer, id: string, count: number): void {
+    const it = itemById.get(id);
+    if (!it) return;
+    let left = count;
+    while (left > 0) {
+      const n = Math.min(left, it.maxStack);
+      left -= n;
+      const rest = p.inventory.add(markAdmin({ id: it.num, count: n }));
+      if (rest) this.server.interaction.dropStack(p, rest);
+    }
+    this.server.interaction.syncInventory(p);
+  }
+
+  /** V4: the Glitched Structure's quest, bunkers, and a fluid test rig. Everything here is a cheat. */
+  private v4(p: ServerPlayer, op: V4Op): { ok: boolean; text: string; data?: unknown } {
+    const s = this.server;
+    if (s.level.generatorVersion < 4) return { ok: false, text: 'This world was created before the World Update (V4).' };
+    const gq = s.glitchedQuest;
+    const e = gq?.errorAt(p) ?? null;
+    const key = e ? GlitchedQuestSystem.key(p.dim, e) : null;
+    const status = (): Record<string, unknown> => {
+      const rec = key ? s.level.quests.glitch[key] : undefined;
+      const f = key ? gq?.fights.get(key) : undefined;
+      const bunker = this.bunkerHere(p);
+      const temple = s.templeTrials?.templeAt(p) ?? null;
+      const tq = temple?.quest?.kind === 'temple' ? temple.quest : null;
+      const trec = temple ? s.level.quests.temple[TempleTrials.key(temple)] : undefined;
+      const brec = bunker ? s.level.quests.bunker[StructureQuests.key(bunker)] : undefined;
+      return {
+        inErrorBiome: !!e,
+        glitch: e ? { stage: rec?.stage ?? 0, done: rec?.done ?? false, fighting: f ? f.stage : null, mobs: f?.mobs.length ?? 0 } : null,
+        bunker: bunker ? { stage: brec?.stage ?? 0, done: brec?.done ?? false, stages: bunker.quest?.kind === 'bunker' ? bunker.quest.generators.length + 2 : 4 } : null,
+        temple: temple && tq ? { name: tq.name, stage: trec?.stage ?? 0, done: trec?.done ?? false, stages: tq.missions.length + 1, run: s.templeTrials?.runs.get(TempleTrials.key(temple))?.kind ?? null } : null,
+      };
+    };
+    switch (op) {
+      case 'status':
+        return { ok: true, text: '', data: status() };
+      case 'glitch_start': {
+        if (!e || !gq || !key) return { ok: false, text: 'Stand in an Error Biome chunk first (Teleport: Glitched Structure).' };
+        const rec = gq.record(key);
+        if (rec.done) return { ok: false, text: 'This Glitched Structure is complete. Reset it first.' };
+        if (gq.fights.has(key)) return { ok: false, text: 'A stage is already in progress.' };
+        const f = gq.start(p.dim, e, rec.stage + 1, true);
+        return f ? { ok: true, text: `Stage ${f.stage} started (as a cheat).`, data: status() } : { ok: false, text: 'Could not start the stage.' };
+      }
+      case 'glitch_clear':
+        if (!key || !gq?.adminClear(key)) return { ok: false, text: 'No stage is in progress here.' };
+        return { ok: true, text: 'Stage cleared (as a cheat).', data: status() };
+      case 'glitch_reset':
+        if (!e || !gq) return { ok: false, text: 'Stand in an Error Biome chunk first.' };
+        gq.adminReset(p.dim, e);
+        return { ok: true, text: 'The Glitched Structure was reset: every firewall is shut again.', data: status() };
+      case 'glitch_reward': {
+        const loot = rollLoot('quest/glitched_reward', { rng: new Random() });
+        for (const st of loot) {
+          const rest = p.inventory.add(markAdmin(st));
+          if (rest) s.interaction.dropStack(p, rest);
+        }
+        s.interaction.syncInventory(p);
+        return { ok: true, text: `Gave a Glitched Structure reward roll: ${loot.map((st: ItemStack) => itemOf(st.id)?.def.name).join(', ')}.` };
+      }
+      case 'bunker_reset': {
+        const b = this.bunkerHere(p);
+        if (!b || b.quest?.kind !== 'bunker') return { ok: false, text: 'Stand inside a bunker first.' };
+        const q = b.quest;
+        delete s.level.quests.bunker[StructureQuests.key(b)];
+        const dim = p.dim;
+        const lit = (pos: [number, number, number], on: boolean): void => {
+          const st = dim.getState(...pos);
+          if (hasProp(st, 'lit')) dim.setBlock(...pos, withProp(st, 'lit', on ? 'true' : 'false'));
+        };
+        lit(q.reader, false);
+        for (const g of q.generators) lit(g, false);
+        for (const d of q.doors) {
+          const st = dim.getState(...d);
+          if (hasProp(st, 'open')) dim.setBlock(...d, withProp(st, 'open', 'false'), { updateNeighbors: false });
+        }
+        for (const b2 of q.blast) dim.setBlock(...b2, S('bunker_blast_door'));
+        // Version 4.5 bunkers: the security gate is a blast door too
+        if (q.cache) for (const d of q.doors) dim.setBlock(...d, S('bunker_blast_door'));
+        return { ok: true, text: 'The bunker was reset.', data: status() };
+      }
+      case 'temple_advance': {
+        const t = s.templeTrials?.templeAt(p);
+        if (!t || !s.templeTrials) return { ok: false, text: s.level.generatorVersion < 5 ? 'Temples of trials come with Version 4.5 worlds.' : 'Stand inside a temple first.' };
+        return { ok: true, text: s.templeTrials.adminAdvance(p.dim, t) + ' (as a cheat)', data: status() };
+      }
+      case 'temple_reset': {
+        const t = s.templeTrials?.templeAt(p);
+        if (!t || !s.templeTrials) return { ok: false, text: 'Stand inside a temple first.' };
+        s.templeTrials.adminReset(p.dim, t);
+        return { ok: true, text: 'The temple was reset: its seals are shut and its altars dormant again.', data: status() };
+      }
+      case 'fluid_rig': {
+        // A glass tank beside the player: a water channel running into lava sources and flowing lava
+        const dim = p.dim;
+        const x0 = Math.floor(p.x) + 3;
+        const y0 = Math.floor(p.y);
+        const z0 = Math.floor(p.z) - 4;
+        for (let x = 0; x < 9; x++)
+          for (let z = 0; z < 9; z++)
+            for (let y = -1; y <= 3; y++) {
+              const wall = x === 0 || x === 8 || z === 0 || z === 8 || y === -1;
+              dim.setBlock(x0 + x, y0 + y, z0 + z, wall ? S('glass') : 0);
+              this.setBlockMark(dim, x0 + x, y0 + y, z0 + z, true);
+            }
+        const mark = (x: number, y: number, z: number, st: number): void => {
+          dim.setBlock(x0 + x, y0 + y, z0 + z, st);
+          this.setBlockMark(dim, x0 + x, y0 + y, z0 + z, true);
+        };
+        for (let x = 1; x < 8; x++) mark(x, 0, 4, S('stone'));
+        mark(2, 0, 2, S('lava'));
+        // Lava falling from a source keeps a stream of flowing lava for the water to meet
+        mark(6, 2, 2, S('lava'));
+        mark(4, 0, 6, S('lava'));
+        mark(4, 2, 4, S('water'));
+        mark(2, 2, 6, S('water'));
+        return { ok: true, text: 'Fluid test rig built: watch water meet lava sources (obsidian) and flowing lava (cobblestone).' };
+      }
+    }
+    return { ok: false, text: 'Unknown operation.' };
+  }
+
+  /** The bunker whose area the player stands in, if any. */
+  private bunkerHere(p: ServerPlayer): Start | null {
+    const g = p.dim.generator as { questStartsAt?(cx: number, cz: number): Start[] };
+    const list = g.questStartsAt?.(Math.floor(p.x) >> 4, Math.floor(p.z) >> 4) ?? [];
+    return (
+      list.find((b) => {
+        if (b.quest?.kind !== 'bunker') return false;
+        const a = b.quest.area;
+        return p.x >= a.x0 && p.x <= a.x1 + 1 && p.z >= a.z0 && p.z <= a.z1 + 1 && p.y >= a.y0 - 1 && p.y <= a.y1 + 2;
+      }) ?? null
+    );
+  }
+
+  /** V3: endings and The Error. Forced endings are remembered as forced, never as reached. */
+  private endgame(p: ServerPlayer, op: 'status' | 'reset_endings' | 'force_ending' | 'reset_error', id?: string): { ok: boolean; text: string; data?: unknown } {
+    const s = this.server;
+    const e = s.endings;
+    if (!e) return { ok: false, text: 'Endings are not available.' };
+    switch (op) {
+      case 'reset_endings':
+        e.reset();
+        delete s.level.flags.errorCalm;
+        return { ok: true, text: 'Every ending in this world was reset.', data: this.endgameStatus() };
+      case 'force_ending':
+        if (!e.force(p, id!)) return { ok: false, text: 'Unknown ending.' };
+        return { ok: true, text: 'Ending forced (as a cheat).', data: this.endgameStatus() };
+      case 'reset_error': {
+        const f = s.errorBoss?.fight;
+        if (f) s.errorBoss!.reset(f);
+        e.state.errorDefeated = false;
+        delete s.level.flags.errorCalm;
+        return { ok: true, text: f ? 'The Error was reset; its arena is restored.' : 'The Error can form again.', data: this.endgameStatus() };
+      }
+      default:
+        return { ok: true, text: '', data: this.endgameStatus() };
+    }
+  }
+
+  private endgameStatus(): Record<string, unknown> {
+    const s = this.server;
+    const st = s.endings!.state;
+    return { dragonDeath: st.dragonDeath, reached: Object.keys(st.reached), forced: st.forced, eyeAwarded: st.eyeAwarded, farlandsAccess: st.farlandsAccess, errorDefeated: st.errorDefeated, error: s.errorBoss?.status() ?? null };
   }
 
   private setCheats(on: boolean, by: ServerPlayer): void {
@@ -584,6 +808,15 @@ export class AdminService {
     const oz = p.dim === dim ? p.z : p.z * scale;
     let steps: Search['steps'];
     let id: string;
+    if (a.dim === 'end') {
+      const ex = this.expansionSearch(p, a);
+      if (ex && 'text' in ex) return ex;
+      if (ex) {
+        const structure = a.a === 'locate_structure' || a.a === 'tp_structure';
+        this.searches.push({ p, req, kind: structure ? 'structure' : 'biome', dim: 'end', id: structure ? a.structure : a.biome, teleport: a.a.startsWith('tp_'), started: this.server.tickNo, ...ex });
+        return null;
+      }
+    }
     if (a.a === 'locate_structure' || a.a === 'tp_structure') {
       id = a.structure;
       const g = dim.generator;
@@ -604,6 +837,54 @@ export class AdminService {
     }
     this.searches.push({ p, req, kind: a.a.includes('structure') ? 'structure' : 'biome', dim: a.dim, id, teleport: a.a.startsWith('tp_'), steps, started: this.server.tickNo });
     return null; // replied when the search finishes
+  }
+
+  /**
+   * V6: the End Expansion's biomes and structures in the End's Teleport lists.
+   * The Expanded End lies thousands of blocks out, so (as on the End Expansion
+   * tab) it is searched from the player when they are out there, otherwise
+   * from the arrival platform. The Dragon's Nest and the Void Citadel are one
+   * place each. Null for everything else in the End.
+   */
+  private expansionSearch(p: ServerPlayer, a: AdminAction & { a: 'locate_structure' | 'tp_structure' | 'locate_biome' | 'tp_biome' }): Pick<Search, 'steps' | 'label' | 'surface'> | { ok: false; text: string } | null {
+    const s = this.server;
+    const at = (pos: { x: number; y: number; z: number } | null): Search['steps'] =>
+      (function* (): Generator<void, { x: number; y: number; z: number } | null> {
+        return pos;
+      })();
+    const structure = a.a === 'locate_structure' || a.a === 'tp_structure' ? a.structure : null;
+    if (structure === 'dragon_nest') {
+      const es = s.endStructures;
+      if (!es) return { ok: false, text: "The Dragon's Nest is not in this world." };
+      const plan = es.nestPlan();
+      // Before it is carved, the landing is where its entrance will be
+      if (es.nest?.built) return { steps: at({ x: plan.floor[0], y: plan.floor[1], z: plan.floor[2] }) };
+      return { steps: at({ x: plan.entrance[0], y: plan.entrance[1], z: plan.entrance[2] }), label: "Dragon's Nest entrance (not carved yet)", surface: true };
+    }
+    if (structure === 'void_citadel') {
+      const spot = s.citadel?.plan ? s.citadel.spotOf('entrance') : null;
+      if (!spot) return { ok: false, text: 'The Void Citadel has no site yet (it is chosen when the End is first loaded).' };
+      return { steps: at({ x: spot[0], y: spot[1], z: spot[2] }), label: "the Void Citadel's entrance" };
+    }
+    const biomeId = a.a === 'locate_biome' || a.a === 'tp_biome' ? a.biome : null;
+    const biome = biomeId === null ? -1 : expansionBiomeIndex(biomeId);
+    if (biome < 0 && (structure === null || !EXPANSION_STRUCTURE_IDS.includes(structure))) return null;
+    const gen = s.dim('end').generator as EndGenerator;
+    if (!gen.terrain.expanded) return { ok: false, text: 'This world was made before the End Expansion, so its End has no Expanded End.' };
+    if (structure !== null && !gen.expansionStructures) return { ok: false, text: 'This world was made before the Expanded End had structures (only newly made worlds have them).' };
+    const ex = gen.terrain.expansion;
+    const arrival = ex.arrival();
+    const from = p.dim.id === 'end' && inExpansion(p.x, p.z) ? { x: Math.floor(p.x), z: Math.floor(p.z) } : { x: arrival.x, z: arrival.z };
+    if (structure !== null) {
+      return {
+        steps: (function* (): Generator<void, { x: number; y: number; z: number } | null> {
+          const st = yield* gen.expansionSteps(structure, from.x, from.z);
+          return st ? { x: st.x, y: st.y + 1, z: st.z } : null;
+        })(),
+      };
+    }
+    const name = biomes.find((b) => b.id === biomeId)?.name ?? 'biome';
+    return { steps: at(ex.findBiome(biome, from.x, from.z)), label: `${name}${EXPANDED_END_SUFFIX}` };
   }
 
   // ------------------------------------------------------------------ tick
@@ -644,7 +925,7 @@ export class AdminService {
 
   private finishSearch(q: Search, pos: { x: number; y: number; z: number } | null): void {
     const p = q.p;
-    const label = q.kind === 'structure' ? structureName(q.id) : q.kind === 'cave' ? caveFeatureName(q.id) : biomes.find((b) => b.id === q.id)?.name ?? q.id;
+    const label = q.label ?? (q.kind === 'structure' ? structureName(q.id) : q.kind === 'cave' ? caveFeatureName(q.id) : biomes.find((b) => b.id === q.id)?.name ?? q.id);
     if (!pos) {
       p.send({ t: 'admin_result', req: q.req, ok: false, text: `No ${label} found within range in the ${q.dim}.` });
       return;
@@ -658,8 +939,16 @@ export class AdminService {
       p.send({ t: 'admin_result', req: q.req, ok: true, text: `Nearest ${label}: ${res.distance} blocks away in the ${q.dim}.`, data: res });
       return;
     }
-    this.pending.push({ p, req: q.req, dim: q.dim, x: pos.x, y: pos.y, z: pos.z, label, surface: q.kind === 'biome', since: this.server.tickNo });
+    this.pending.push({ p, req: q.req, dim: q.dim, x: pos.x, y: pos.y, z: pos.z, label, surface: q.surface ?? q.kind === 'biome', since: this.server.tickNo });
     p.send({ t: 'admin_result', req: q.req, ok: true, text: `Found ${label} ${res.distance} blocks away. Preparing a safe landing...`, data: { ...res, pending: true } });
+  }
+
+  /**
+   * Moves a player (as a cheat) to a place that may not be loaded yet: the
+   * landing waits for the chunks, then picks a safe spot near (x, y, z).
+   */
+  queueTeleport(p: ServerPlayer, req: number, dim: DimensionId, x: number, y: number, z: number, label: string, surface: boolean): void {
+    this.pending.push({ p, req, dim, x, y, z, label, surface, since: this.server.tickNo });
   }
 
   /** Waits for the destination to generate, then lands the player somewhere safe. */
@@ -762,11 +1051,18 @@ export class AdminService {
     const structures: Record<string, string[]> = {};
     const bl: AdminCatalog['biomes'] = {};
     const caves: NonNullable<AdminCatalog['caves']> = {};
+    // V6: the Expanded End's biomes are listed with the End's in worlds that have it
+    const expanded = (s.dim('end').generator as EndGenerator).terrain.expanded;
     for (const d of ADMIN_DIMENSIONS) {
       structures[d] = s.dim(d).generator.structureTypes?.() ?? [];
       if (s.dim(d).generator.caves) caves[d] = caveFeatures();
-      bl[d] = biomes.filter((b) => b.dimension === d).map((b) => ({ id: b.id, name: b.name }));
+      bl[d] = biomes
+        .filter((b) => b.dimension === d && b.id !== 'error_biome' && (expanded || !EXPANSION_BIOME_IDS.includes(b.id)))
+        .map((b) => ({ id: b.id, name: EXPANSION_BIOME_IDS.includes(b.id) ? `${b.name}${EXPANDED_END_SUFFIX}` : b.name }));
     }
+    // ...and its two single places (its other structures come from the generator's list)
+    if (s.endStructures) structures.end!.push('dragon_nest');
+    if (s.citadel && expanded) structures.end!.push('void_citadel');
     return {
       structures,
       biomes: bl,

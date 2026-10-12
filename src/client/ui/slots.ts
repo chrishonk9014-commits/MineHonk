@@ -1,7 +1,9 @@
 /** Item slot rendering and tooltips. */
+import { loreBookName } from '../../common/endExpansion/lore';
+import { upgradeLines } from '../../common/endExpansion/elytra';
 import { el } from './dom';
 import type { ItemIcons } from '../render/ItemIcons';
-import type { Slot } from '../../common/game/itemstack';
+import { type Slot, maxDurability } from '../../common/game/itemstack';
 import { items, itemById } from '../../common/registry/items';
 import { romanNumeral } from '../../common/data/enchantments';
 import { enchantName } from '../../common/game/enchanting';
@@ -28,7 +30,7 @@ export function iconEl(stack: Slot, showCount = true): HTMLElement | null {
   const frag = document.createDocumentFragment() as unknown as HTMLElement;
   const wrap = el('div', { style: { position: 'absolute', inset: '0' } }, icon);
   if (showCount && stack.count > 1) wrap.append(el('div', { class: 'count' }, String(stack.count)));
-  const dur = it.def.durability;
+  const dur = maxDurability(stack);
   if (dur && stack.damage && stack.damage > 0) {
     const f = 1 - stack.damage / dur;
     const bar = el('div', { style: { width: `${Math.max(1, Math.round(f * 13))}/13` } });
@@ -55,6 +57,8 @@ export function itemDisplayName(stack: Slot): string {
   if (stack.tag?.name) return stack.tag.name;
   const it = items[stack.id];
   if (it?.id === 'compass' && stack.tag?.data?.lodestone) return 'Lodestone Compass';
+  // V6 phase 3: a lore book is called by what it holds
+  if (it?.id === 'book' && stack.tag?.lore) return loreBookName(stack.tag.lore) ?? it.def.name;
   if (stack.tag?.potion && (it?.id === 'potion' || it?.id === 'splash_potion')) {
     const p = POTION_BY_ID.get(stack.tag.potion);
     if (p) return (it.id === 'splash_potion' ? 'Splash ' : '') + p.name;
@@ -103,14 +107,32 @@ export function showTooltip(stack: Slot, x: number, y: number, advanced = false)
     tooltipEl.append(el('div', { class: 'dim' }, ''), el('div', { class: 'dim' }, 'When in Main Hand:'), el('div', { class: 'blue' }, ` ${d.weapon.damage} Attack Damage`), el('div', { class: 'blue' }, ` ${d.weapon.speed} Attack Speed`));
   }
   if (d.armor) tooltipEl.append(el('div', { class: 'blue' }, `+${d.armor.defense} Armor`), ...(d.armor.toughness ? [el('div', { class: 'blue' }, `+${d.armor.toughness} Armor Toughness`)] : []));
-  if (d.durability && (stack.damage ?? 0) > 0) tooltipEl.append(el('div', { class: 'dim' }, `Durability: ${d.durability - (stack.damage ?? 0)} / ${d.durability}`));
-  if (it.id === 'shulker_box' && Array.isArray(stack.tag?.data?.items)) {
-    // Packed contents: the first five stacks, then a count of the rest
+  if (d.durability && (stack.damage ?? 0) > 0) tooltipEl.append(el('div', { class: 'dim' }, `Durability: ${maxDurability(stack) - (stack.damage ?? 0)} / ${maxDurability(stack)}`));
+  if (d.tooltip) tooltipEl.append(el('div', { class: 'dim italic' }, d.tooltip));
+  // V6 phase 4: an Elytra's upgrades (and its free slots)
+  if (it.id === 'elytra') for (const line of upgradeLines(stack)) tooltipEl.append(el('div', { class: line.startsWith('  ') ? 'blue' : 'dim' }, line));
+  // Packed contents (a shulker box, a V6 Void Pack): the first five stacks, then a count of the rest
+  if ((it.id === 'shulker_box' || it.id === 'void_pack') && Array.isArray(stack.tag?.data?.items)) {
     const packed = (stack.tag!.data!.items as ({ id?: unknown; count?: unknown } | null)[]).filter((e) => e && typeof e.id === 'string');
     for (const e of packed.slice(0, 5)) tooltipEl.append(el('div', {}, `${itemById.get(String(e!.id).replace(/^minehonk:/, ''))?.def.name ?? String(e!.id)} x${Number(e!.count ?? 1)}`));
     if (packed.length > 5) tooltipEl.append(el('div', { class: 'dim italic' }, `and ${packed.length - 5} more...`));
   }
   if (it.id === 'farlands_compass') tooltipEl.append(el('div', { class: 'rarity-glitched' }, 'Points somewhere it should not.'));
+  if (it.id === 'mysterious_potion') tooltipEl.append(el('div', { class: 'dim italic' }, 'Something in it is looking back.'));
+  // V5.5: drives show what they hold
+  if (it.id === 'hard_drive' || it.id === 'flash_drive' || it.id === 'corrupted_flash_drive') {
+    const t = stack.tag?.data as { label?: string; used?: number; cap?: number; spent?: boolean } | undefined;
+    if (it.id === 'corrupted_flash_drive') tooltipEl.append(el('div', { class: 'rarity-glitched' }, t?.spent ? 'Empty now. Something used to be on it.' : 'Do not plug this in.'));
+    if (t?.label && it.id !== 'corrupted_flash_drive') tooltipEl.append(el('div', {}, `"${t.label}"`));
+    if (typeof t?.used === 'number' && typeof t.cap === 'number') tooltipEl.append(el('div', { class: 'dim' }, it.id === 'corrupted_flash_drive' ? `${t.used} / ??? KB` : `${t.used} / ${t.cap} KB used`));
+    else if (it.id !== 'corrupted_flash_drive') tooltipEl.append(el('div', { class: 'dim' }, 'Empty'));
+  }
+  if (it.id === 'witch_grimoire') tooltipEl.append(el('div', { class: 'dim italic' }, 'Two doors, one bottle.'));
+  if (it.id === 'book' && stack.tag?.lore) tooltipEl.append(el('div', { class: 'dim' }, 'Right-click to read'));
+  if (it.id === 'corrupted_eye') {
+    tooltipEl.append(el('div', { class: 'dim italic' }, 'It remembers the End breaking.'));
+    tooltipEl.append(el('div', { class: 'dim' }, 'Throw: shows the way to a glitched portal'));
+  }
   if (stack.tag?.admin) tooltipEl.append(el('div', { class: 'dim' }, 'Cheat item: never counts for advancements'));
   if (advanced) {
     tooltipEl.append(el('div', { class: 'dim' }, `minehonk:${it.id}`));

@@ -14,13 +14,19 @@ export interface GeneratorOptions {
   /**
    * World generator version. Unmodified chunks are regenerated from the seed
    * on every load, so a world keeps the version it was created with:
-   * 1 = V1 terrain, 2 = V2 (the Caves Update). Defaults to the latest.
+   * 1 = V1 terrain, 2 = V2 (the Caves Update), 3 = V3 (corrupted caves,
+   * glitched portals, powder snow ice caves), 4 = V4 (the World Update),
+   * 5 = V4 temples and bunkers (temple trials, the desert pyramid, bunkers
+   * with random layouts and biome styles), 6 = V6 (the End Expansion: the
+   * End's outer islands stop short of the Expanded End), 7 = V6 phase 2 (the
+   * Expanded End's own stone, ores and plants), 8 = V6 phase 3 (the Expanded
+   * End's structures). Defaults to the latest.
    */
   version?: number;
 }
 
 /** Newest world generator version (new worlds use this). */
-export const LATEST_GENERATOR = 2;
+export const LATEST_GENERATOR = 8;
 
 export interface SpawnPoint {
   x: number;
@@ -50,6 +56,10 @@ export interface DimensionGenerator {
   caveBiomeAt?(x: number, y: number, z: number): number;
   /** Whether a position lies inside a mega-cavern (V2 overworld). */
   inMegaCavern?(x: number, y: number, z: number): boolean;
+  /** V4: the Error Biome chunk at chunk (cx, cz), if that chunk is one. */
+  errorChunk?(cx: number, cz: number): import('./v4/errorBiome').ErrorChunk | null;
+  /** V4: nearest Error Biome chunk. */
+  nearestErrorChunk?(x: number, z: number, maxRings?: number): import('./v4/errorBiome').ErrorChunk | null;
   /** Structure type whose bounds contain the position (used for structure mob spawns). */
   structureAt?(x: number, y: number, z: number): string | null;
 }

@@ -445,6 +445,55 @@ for (const dim of ['nether', 'end', 'farlands']) {
   });
 }
 
+// V6: the End's outer islands next to the Expanded End's seven biomes (compare at RD=8)
+await run('end-outer', async () => {
+  if ((await page.evaluate(() => window.minehonk.game.dimension)) !== 'end') {
+    await cmd('/dimension end');
+    await page.waitForFunction(() => window.minehonk.game.dimension === 'end', null, { timeout: 180000 });
+  }
+  await page.evaluate(() => (window.minehonk.game.player.flying = true));
+  await cmd('/tp 1500 95 0');
+  await settle(60000);
+  await setLook(0.785, 0.3);
+  return measure('end-outer');
+});
+for (const biome of ['end_barrens', 'shattered_end', 'astral_end', 'highlands', 'end_crystal_fields', 'chorus_forest', 'void_wastes']) {
+  await run(`end-${biome}`, async () => {
+    const r = await page.evaluate((b) => window.minehonk.game.adminRequest({ a: 'v6', op: 'tp_biome', biome: b }), biome);
+    if (!r.ok) throw new Error(r.text);
+    await page.evaluate(() => (window.minehonk.game.player.flying = true));
+    await page.evaluate(() => (window.minehonk.game.player.body.y += 25));
+    await settle(60000);
+    await setLook(0.785, 0.3);
+    return measure(`end-${biome}`);
+  });
+}
+
+// V6 phase 5: the Expanded End under a Void Storm and under the End Eclipse (the Astral End). Each is
+// measured twice from the same spot and view: first without the event (<name>-off), then under it.
+for (const [name, start, stop] of [
+  ['end-storm', 'storm_start', 'storm_stop'],
+  ['end-eclipse', 'eclipse_start', 'eclipse_stop'],
+]) {
+  await run(name, async () => {
+    const r = await page.evaluate(() => window.minehonk.game.adminRequest({ a: 'v6', op: 'tp_biome', biome: 'astral_end' }));
+    if (!r.ok) throw new Error(r.text);
+    await page.evaluate(() => (window.minehonk.game.player.flying = true));
+    await page.evaluate(() => (window.minehonk.game.player.body.y += 25));
+    await settle(60000);
+    await setLook(0.785, 0.3);
+    results.push(await measure(`${name}-off`));
+    const s = await page.evaluate((op) => window.minehonk.game.adminRequest({ a: 'v6', op }), start);
+    if (!s.ok) throw new Error(s.text);
+    // A storm breaks a few seconds after it is called, and the sky takes a few seconds to turn
+    await wait(10000);
+    await setLook(0.785, 0.3);
+    const m = await measure(name);
+    await page.evaluate((op) => window.minehonk.game.adminRequest({ a: 'v6', op }), stop);
+    return m;
+  });
+}
+
 await cmd('/dimension overworld').catch(() => {});
 await page.waitForFunction(() => window.minehonk.game.dimension === 'overworld', null, { timeout: 180000 }).catch(() => {});
 await wait(2000);

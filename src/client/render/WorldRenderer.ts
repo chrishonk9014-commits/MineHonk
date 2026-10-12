@@ -5,7 +5,7 @@
 import * as THREE from 'three';
 import type { ClientWorld } from '../world/ClientWorld';
 import { ChunkRenderer } from './ChunkRenderer';
-import { Sky } from './Sky';
+import { Sky, type SkyEvents } from './Sky';
 import { EntityRenderer } from './entities/EntityRenderer';
 import './entities/mobs';
 import './entities/projectiles';
@@ -18,7 +18,10 @@ import { AtlasLookup, type AtlasMeta } from './atlasInfo';
 import type { Settings } from '../settings';
 import { selectionShape } from '../../common/physics/shapes';
 import { BeaconBeams } from './BeaconBeams';
+import { TorchGlow } from './TorchGlow';
 import { SignText } from './SignText';
+import { GlitchFX } from './GlitchFX';
+import { WorldFX } from './WorldFX';
 
 export interface GameAssets {
   blockAtlas: THREE.Texture;
@@ -64,11 +67,21 @@ export interface FrameState {
   portalColor?: number;
   /** Underground in a cave biome: fog colour/thickness and how far the view has blended in (0..1). */
   cave?: { color: number; density: number; amount: number };
+  /** V6: the Expanded End's blended sky tint, fog colour and density, and how far the view has blended in. */
+  endAtmos?: { sky: THREE.Color; fog: THREE.Color; density: number; light: number; amount: number };
+  /** V6 phase 5: the End's events (storm, eclipse, the Dragon's storm, where the Citadel is). */
+  endEvents?: SkyEvents;
 }
 
 export class WorldRenderer {
   readonly renderer: THREE.WebGLRenderer;
   readonly scene = new THREE.Scene();
+  /**
+   * The sky (dome, sun, moon, stars) is drawn in its own pass before the
+   * world. Its see-through pieces would otherwise land in three.js's
+   * transparent pass, after all solid terrain, and show through blocks.
+   */
+  readonly skyScene = new THREE.Scene();
   readonly camera: THREE.PerspectiveCamera;
   readonly chunks: ChunkRenderer;
   readonly sky: Sky;
@@ -77,7 +90,13 @@ export class WorldRenderer {
   readonly weather: Weather;
   readonly hand: HandRenderer;
   readonly beams: BeaconBeams;
+  readonly torchGlow: TorchGlow;
   readonly signs: SignText;
+  /** Glitch screen effects and world corruption (V3). */
+  readonly glitch: GlitchFX;
+  /** Warning rings, danger zones, lasers, shockwaves and afterimages (V3). */
+  readonly worldFx = new WorldFX();
+  private lastFrameAt = 0;
   private readonly caveColor = new THREE.Color();
   readonly atlas: AtlasLookup;
   private readonly selection: THREE.LineSegments;
@@ -113,8 +132,11 @@ export class WorldRenderer {
     this.weather = new Weather(world);
     this.hand = new HandRenderer(assets.icons, (n) => this.blockTexture(n));
     this.beams = new BeaconBeams(world);
+    this.torchGlow = new TorchGlow(world);
     this.signs = new SignText(world);
-    this.scene.add(this.sky.group, this.sky.cloudGroup, this.chunks.group, this.entities.group, this.particles.mesh, this.weather.mesh, this.beams.group, this.signs.group);
+    this.glitch = new GlitchFX(settings);
+    this.skyScene.add(this.sky.group);
+    this.scene.add(this.sky.cloudGroup, this.sky.eventGroup, this.chunks.group, this.entities.group, this.particles.mesh, this.weather.mesh, this.beams.group, this.torchGlow.mesh, this.signs.group, this.glitch.group, this.worldFx.group);
 
     const selMat = new THREE.LineBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.45 });
     this.selection = new THREE.LineSegments(new THREE.BufferGeometry(), selMat);
@@ -256,6 +278,7 @@ export class WorldRenderer {
     for (const m of this.chunks.materials) g.add(new THREE.Mesh(geo, m));
     this.scene.add(g);
     try {
+      this.renderer.compile(this.skyScene, cam);
       this.renderer.compile(this.scene, cam);
     } finally {
       this.scene.remove(g);
@@ -293,6 +316,7 @@ export class WorldRenderer {
       cam.position.x += (Math.random() - 0.5) * f.shake * 0.2;
       cam.position.y += (Math.random() - 0.5) * f.shake * 0.2;
     }
+    this.glitch.jolt(cam);
     // Nausea: a slow roll and breathing field of view
     const nausea = f.nausea ?? 0;
     if (nausea > 0) cam.rotation.z += Math.sin(f.time * 0.12) * 0.12 * nausea;
@@ -301,7 +325,7 @@ export class WorldRenderer {
     cam.far = Math.max(300, rd * 1.8 + 200);
     cam.updateProjectionMatrix();
 
-    const skyState = this.sky.update(cam, f.dayTime, f.time, f.biomeSky, f.rain, f.thunder, f.underwater);
+    const skyState = this.sky.update(cam, f.dayTime, f.time, f.biomeSky, f.rain, f.thunder, f.underwater, f.endAtmos, f.endEvents);
     this.lastSky = skyState;
     const u = this.chunks.uniforms;
     u.uDaylight!.value = skyState.daylight;
@@ -310,6 +334,9 @@ export class WorldRenderer {
     u.uBrightness!.value = this.settings.brightness;
     u.uNightVision!.value = f.nightVision;
     u.uFlicker!.value = 0.96 + Math.sin(f.time * 0.9) * 0.02 + Math.sin(f.time * 2.3) * 0.02;
+    // V6 phase 5: under the eclipse the End's glowing blocks (astral blocks, ores, crystals) shine brighter and paler
+    const ecl = this.world.dimension === 'end' ? f.endEvents?.eclipse ?? 0 : 0;
+    (u.uBlockTint!.value as THREE.Color).setRGB(1.0 + 0.3 * ecl, 0.93 + 0.25 * ecl, 0.8 + 0.55 * ecl);
     const fog = this.fogColor.copy(skyState.fog);
     let fogNear = rd * 0.72;
     let fogFar = rd * 0.98;
@@ -323,6 +350,23 @@ export class WorldRenderer {
     } else if (this.world.dimension === 'nether') {
       fogNear = Math.min(fogNear, 40);
       fogFar = Math.min(fogFar, 110);
+    } else if (this.world.dimension === 'end' && f.endAtmos) {
+      // V6: each Expanded End biome has its own fog density
+      const a = f.endAtmos;
+      const far = Math.max(28, rd * 0.98 * (1 - a.density * 0.8));
+      fogFar = fogFar + (far - fogFar) * a.amount;
+      fogNear = Math.min(fogNear, fogFar * (0.75 - 0.55 * a.density * a.amount));
+    }
+    // V6 phase 5: a Void Storm's fog closes in; the eclipse's a little
+    const evs = this.world.dimension === 'end' ? f.endEvents : undefined;
+    if (evs && evs.storm + evs.eclipse + evs.dragonStorm > 0) {
+      const k = Math.max(evs.storm * 0.55, evs.eclipse * 0.25, evs.dragonStorm * 0.3);
+      fogFar = Math.max(24, fogFar * (1 - k));
+      fogNear = Math.min(fogNear, fogFar * (0.7 - 0.4 * k));
+    } else if (this.world.dimension === 'computer') {
+      // V5.5: the fog across the lake (the far shore is never quite clear)
+      fogNear = Math.min(fogNear, 16);
+      fogFar = Math.min(fogFar, 72);
     }
     if (f.rain > 0 && !f.underwater) fogNear *= 1 - f.rain * 0.4;
     // Caves: the fog turns the cave biome's colour and the sky disappears
@@ -356,14 +400,23 @@ export class WorldRenderer {
     this.renderer.setClearColor(fog);
 
     this.chunks.update(cam, f.time);
+    const now = performance.now();
+    const dt = this.lastFrameAt ? Math.min(0.1, (now - this.lastFrameAt) / 1000) : 0.016;
+    this.lastFrameAt = now;
+    this.glitch.updateWorld(this.chunks.group, this.sky.group, cam, dt);
+    this.worldFx.update(f.time / 20);
     this.beams.update(cam.position.x, cam.position.z, f.time);
+    this.torchGlow.update(cam.position.x, cam.position.y, cam.position.z, f.time, this.lightAt(f.x, f.y + 1.6, f.z), this.particles, dt);
     this.signs.update(cam.position.x, cam.position.y, cam.position.z, (x, y, z) => this.lightAt(x, y, z));
     this.updateSelection(f.target);
     this.updateCracks(f.crack);
     this.particles.update((x, y, z) => this.lightAt(x, y, z));
 
+    // While glitching, the frame renders into the effect target and is composited at the end
+    const fx = this.glitch.begin(this.renderer);
     this.renderer.clear();
     if (!this.warmed) this.warmUp(cam);
+    if (this.sky.group.visible) this.renderer.render(this.skyScene, cam);
     this.renderer.render(this.scene, cam);
 
     // Hand overlay
@@ -391,11 +444,16 @@ export class WorldRenderer {
       this.renderer.clearDepth();
       this.renderer.render(this.overlayScene, this.overlayCam);
     }
+    if (fx) this.glitch.end(this.renderer);
+    this.glitch.afterRender();
   }
 
   dispose(): void {
+    this.glitch.dispose();
+    this.worldFx.clear();
     this.chunks.dispose();
     this.beams.dispose();
+    this.torchGlow.dispose();
     this.signs.dispose();
     this.sky.dispose();
     this.entities.clear();

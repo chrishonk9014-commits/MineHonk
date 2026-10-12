@@ -10,7 +10,12 @@ import { stackOf } from '../../common/game/itemstack';
 registerEntityInfo('eye_of_ender', { width: 0.25, height: 0.25, eye: 0.1, attackable: false, interactable: false });
 registerEntityInfo('end_crystal', { width: 2, height: 2, eye: 1, attackable: true, interactable: false });
 
-/** A thrown Eye of Ender: floats towards a target and then drops or shatters. */
+/**
+ * A thrown Eye of Ender: floats towards a target and then drops or shatters.
+ * A Corrupted Eye's guide (V3.1) flies the same way towards a glitched
+ * portal, diving towards it underground when close, then dissolves: the Eye
+ * itself never leaves its owner's hand.
+ */
 export class EnderEye extends Entity {
   readonly type = 'eye_of_ender';
   private readonly aim: { x: number; y: number; z: number };
@@ -19,8 +24,10 @@ export class EnderEye extends Entity {
     x: number,
     y: number,
     z: number,
-    target: { x: number; z: number } | null,
+    target: { x: number; y?: number; z: number } | null,
     private readonly survives: boolean,
+    /** A Corrupted Eye's guide: glitch trail, never dropped or broken. */
+    readonly corrupted = false,
   ) {
     super(0.25, 0.25);
     this.persistent = false;
@@ -30,8 +37,13 @@ export class EnderEye extends Entity {
       const dz = target.z - z;
       const d = Math.hypot(dx, dz) || 1;
       const reach = Math.min(d, 12);
-      this.aim = { x: x + (dx / d) * reach, y: d > 12 ? y + 8 : y - 1, z: z + (dz / d) * reach };
+      const near = target.y !== undefined ? Math.max(target.y + 1, y - 10) : y - 1;
+      this.aim = { x: x + (dx / d) * reach, y: d > 12 ? y + 8 : near, z: z + (dz / d) * reach };
     } else this.aim = { x, y: y + 6, z };
+  }
+
+  override meta(): Record<string, unknown> {
+    return this.corrupted ? { corrupted: true } : {};
   }
 
   override tick(): void {
@@ -51,10 +63,14 @@ export class EnderEye extends Entity {
       b.z += b.vz;
     }
     const server = this.dim.server;
-    if (this.age % 2 === 0) server.particles(this.dim, 'portal', b.x, b.y, b.z, 2, 0.2);
+    if (this.age % 2 === 0) server.particles(this.dim, this.corrupted ? 'glitch' : 'portal', b.x, b.y, b.z, 2, 0.2);
     if (this.age >= 70) {
       this.remove();
-      if (this.survives) server.mining.dropItem(this.dim, b.x, b.y, b.z, stackOf('ender_eye', 1));
+      if (this.corrupted) {
+        // The guide was only an image of the Eye: it breaks up into static
+        server.particles(this.dim, 'void_burst', b.x, b.y, b.z, 14, 0.3);
+        server.playSound(this.dim, 'glitch.zap', b.x, b.y, b.z, 0.7, 1.3);
+      } else if (this.survives) server.mining.dropItem(this.dim, b.x, b.y, b.z, stackOf('ender_eye', 1));
       else {
         server.particles(this.dim, 'item_break', b.x, b.y, b.z, 12, 0.2);
         server.playSound(this.dim, 'item.break', b.x, b.y, b.z, 1, 1);

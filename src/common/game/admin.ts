@@ -3,10 +3,17 @@
  * strict validation of their arguments. The server re-checks authorisation
  * for every request; the client only uses this to build the panel.
  */
+import { EXPANSION_STRUCTURE_IDS, expansionStructureName } from '../endExpansion/structures';
 import type { DimensionId } from '../data/biomes';
 import { GAME_MODES, DIFFICULTIES, type GameMode, type Difficulty } from './gamemode';
+import { EXPANSION_BIOME_IDS } from '../endExpansion/biomes';
+import { expansionGiveSets } from '../endExpansion/resources';
+import { END_QUEST_IDS } from '../endExpansion/quests';
+import { RARE_END_LOOT } from '../endExpansion/guardian';
+import { DRAGON_TESTS } from '../endExpansion/dragon';
+import { HAUNT_OPS, HAUNT_MIN_MINUTES, HAUNT_MAX_MINUTES, HAUNT_ENDINGS, type HauntOp, type HauntEnding } from './haunting';
 
-export const ADMIN_DIMENSIONS: DimensionId[] = ['overworld', 'nether', 'end', 'farlands'];
+export const ADMIN_DIMENSIONS: DimensionId[] = ['overworld', 'nether', 'end', 'farlands', 'computer'];
 
 export const STRUCTURE_NAMES: Record<string, string> = {
   village: 'Village',
@@ -41,10 +48,122 @@ export const STRUCTURE_NAMES: Record<string, string> = {
   abandoned_lab: 'Abandoned Lab',
   cave_shrine: 'Cave Shrine',
   monster_chamber: 'Monster Chamber',
+  // V3
+  glitched_portal: 'Glitched Portal',
+  error_arena: "The Error's Arena",
+  // V4: The World Update
+  desert_oasis: 'Desert Oasis',
+  sun_monument: 'Sun Monument',
+  buried_tomb: 'Buried Tomb',
+  ranger_tower: 'Ranger Tower',
+  hunter_camp: 'Hunter Camp',
+  frozen_ruins: 'Frozen Ruins',
+  jungle_shrine: 'Jungle Shrine',
+  swamp_shack: 'Swamp Shack',
+  stone_circle: 'Stone Circle',
+  lighthouse: 'Lighthouse',
+  mountain_lookout: 'Mountain Lookout',
+  prospector_camp: 'Prospector Camp',
+  bunker: 'Bunker',
+  // Version 4.5: temples of trials
+  frost_temple: 'Frost Temple',
+  swamp_temple: 'Swamp Temple',
+  badlands_temple: 'Canyon Temple',
+  forest_temple: 'Grove Temple',
+  mountain_temple: 'Mountain Temple',
+  desert_pyramid: 'Desert Pyramid',
+  error_biome: 'Error Biome',
+  glitched_structure: 'Glitched Structure',
 };
 
+/** V4 Admin Panel operations (all cheats: never advancements, rewards cheat-marked). */
+export const V4_OPS = ['status', 'glitch_start', 'glitch_clear', 'glitch_reset', 'glitch_reward', 'fluid_rig', 'bunker_reset', 'temple_advance', 'temple_reset'] as const;
+export type V4Op = (typeof V4_OPS)[number];
+export const V5_OPS = ['status', 'fill_energy', 'drain_energy', 'reset_machines', 'kit_basic', 'kit_advanced', 'kit_factory', 'test_rig', 'stress_test'] as const;
+export type V5Op = (typeof V5_OPS)[number];
+/** V5.5: the Herobrine story's test tools (all cheats: they never award anything). */
+export const V55_OPS = [
+  'status',
+  'give_potion',
+  'give_hard_drive',
+  'give_flash_drive',
+  'give_corrupted',
+  'spawn_dragon',
+  'trigger_malware',
+  'trigger_event',
+  'spawn_first',
+  'enter_world',
+  'tp_seed',
+  'tp_cave',
+  'spawn_final',
+  'force_ending',
+  'reset_progress',
+  'reset_ending',
+] as const;
+export type V55Op = (typeof V55_OPS)[number];
+/** V6: the End Expansion's portal and travel to the Expanded End (all cheats: never advancements). */
+export const V6_OPS = [
+  'status',
+  'activate',
+  'deactivate',
+  'build_portal',
+  'tp_portal',
+  'tp_arrival',
+  'tp_biome',
+  'where',
+  'defeat_dragon',
+  'give_set',
+  'kill_mobs',
+  'mob_spawning_on',
+  'mob_spawning_off',
+  // Phase 3: structures, the ancient civilization and the Dragon's Nest
+  'locate_structures',
+  'tp_structure',
+  'generate_here',
+  'build_nest',
+  'tp_nest',
+  'reset_loot',
+  'give_lore',
+  // Phase 4: the End quests (start, complete, reset, go to the nearest start) and testing tools
+  'quest_start',
+  'quest_complete',
+  'quest_reset',
+  'quest_tp',
+  'fill_eu',
+  'force_gate',
+  'open_sanctum',
+  'end_rig',
+  // Phase 5: events, the Void Citadel, the End Guardian, rare loot and the Dragon's new moves
+  'storm_start',
+  'storm_stop',
+  'eclipse_start',
+  'eclipse_stop',
+  'citadel_tp',
+  'citadel_solve',
+  'citadel_reset',
+  'guardian_spawn',
+  'guardian_defeat',
+  'guardian_reset',
+  'guardian_phase',
+  'give_rare',
+  'dragon_respawn',
+  'dragon_test',
+] as const;
+/** V6 phase 5: where the Admin Panel's Citadel teleport goes (the entrance, a floor 1-6, the arena). */
+export const CITADEL_SPOTS = ['entrance', '1', '2', '3', '4', '5', '6', 'arena'] as const;
+export type V6Op = (typeof V6_OPS)[number];
+
 export function structureName(id: string): string {
+  if (id === 'dragon_nest' || EXPANSION_STRUCTURE_IDS.includes(id)) return expansionStructureName(id);
   return STRUCTURE_NAMES[id] ?? id.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+/** V6: how the Admin Panel's End lists mark the Expanded End's biomes and places. */
+export const EXPANDED_END_SUFFIX = ' (Expanded End)';
+
+/** V6: the places of the Expanded End in the Admin Panel's End structure list. */
+export function inExpandedEnd(structure: string): boolean {
+  return structure === 'void_citadel' || EXPANSION_STRUCTURE_IDS.includes(structure);
 }
 
 export const TIME_PRESETS: Record<string, number> = { sunrise: 23000, day: 1000, noon: 6000, sunset: 12000, night: 13000, midnight: 18000 };
@@ -75,9 +194,85 @@ export type AdminAction =
   | { a: 'regen_chunk' }
   | { a: 'reload_chunks' }
   | { a: 'perf' }
-  | { a: 'set_cheats'; on: boolean };
+  | { a: 'set_cheats'; on: boolean }
+  /** V3 endgame: endings and The Error's fight (all cheats: never advancements). */
+  | { a: 'endgame'; op: 'status' | 'reset_endings' | 'force_ending' | 'reset_error'; id?: string }
+  /** V4: the Glitched Structure's quest, bunkers and a fluid test rig. */
+  | { a: 'v4'; op: V4Op }
+  /** V5: engineering (kits, energy, test rigs; all cheats). */
+  | { a: 'v5'; op: V5Op }
+  /** V5.5: the Herobrine story (all cheats: never advancements). */
+  | { a: 'v55'; op: V55Op }
+  /** V6: the End Expansion (tp_biome names one of the Expanded End's biomes). */
+  | { a: 'v6'; op: V6Op; biome?: string; set?: string; structure?: string; quest?: string; spot?: string; test?: string }
+  /** The Haunting (every world): Herobrine over `minutes`; `erase` deletes the world at the end (its owner only). */
+  | { a: 'haunt'; op: HauntOp; minutes?: number; erase?: boolean; ending?: HauntEnding };
 
 export type AdminActionName = AdminAction['a'];
+
+/**
+ * What an admin action did, in a few words for the chat announcement
+ * ("[Admin] Name used: give diamond ×64"); null for lookups that change nothing.
+ */
+export function describeAdmin(a: AdminAction): string | null {
+  const who = (t?: string): string => (t ? ` on ${t}` : '');
+  switch (a.a) {
+    // A haunting announced in chat would spoil it
+    case 'haunt':
+    case 'catalog':
+    case 'perf':
+    case 'locate_structure':
+    case 'locate_biome':
+    case 'set_cheats':
+      return null;
+    case 'give':
+      return `give ${a.item.replace(/_/g, ' ')} ×${a.count}${a.target ? ` to ${a.target}` : ''}`;
+    case 'spawn':
+      return `spawn ${a.mob.replace(/_/g, ' ')} ×${a.count}`;
+    case 'tp_structure':
+      return `teleport to a ${a.structure.replace(/_/g, ' ')}`;
+    case 'tp_biome':
+      return `teleport to a ${a.biome.replace(/_/g, ' ')}`;
+    case 'tp_player':
+      return `teleport to ${a.target}`;
+    case 'bring_player':
+      return `bring ${a.target}`;
+    case 'gamemode':
+      return `game mode ${a.mode}${who(a.target)}`;
+    case 'time':
+      return `time ${a.value}`;
+    case 'weather':
+      return `weather ${a.kind}`;
+    case 'difficulty':
+      return `difficulty ${a.value}`;
+    case 'pvp':
+      return `PvP ${a.on ? 'on' : 'off'}`;
+    case 'clear_mobs':
+      return `clear mobs (radius ${a.radius})`;
+    case 'heal':
+      return `heal${who(a.target)}`;
+    case 'health':
+      return `health ${a.value}${who(a.target)}`;
+    case 'hunger':
+      return `hunger ${a.value}${who(a.target)}`;
+    case 'xp':
+      return `${a.mode} ${a.levels} XP levels${who(a.target)}`;
+    case 'clear_inventory':
+      return `clear inventory${who(a.target)}`;
+    case 'flight':
+      return `flight ${a.on ? 'on' : 'off'}${who(a.target)}`;
+    case 'regen_chunk':
+      return 'regenerate a chunk';
+    case 'reload_chunks':
+      return 'reload chunks';
+    default: {
+      const op = (a as { op?: string }).op ?? '';
+      // Lookups and status checks change nothing
+      if (/^(status|locate|list|where|count)/.test(op)) return null;
+      return `${a.a} ${op.replace(/_/g, ' ')}`.trim();
+    }
+  }
+}
 
 const isInt = (v: unknown): v is number => Number.isInteger(v);
 const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
@@ -90,6 +285,36 @@ export function validateAdmin(raw: unknown): AdminAction | null {
   if (!raw || typeof raw !== 'object') return null;
   const m = raw as Record<string, unknown>;
   switch (m.a) {
+    case 'v5':
+      if (!V5_OPS.includes(m.op as V5Op)) return null;
+      return { a: 'v5', op: m.op as V5Op };
+    case 'v55':
+      if (!V55_OPS.includes(m.op as V55Op)) return null;
+      return { a: 'v55', op: m.op as V55Op };
+    case 'haunt': {
+      if (!HAUNT_OPS.includes(m.op as HauntOp)) return null;
+      if (m.op !== 'start') return { a: 'haunt', op: m.op as HauntOp };
+      if (!isInt(m.minutes) || m.minutes < HAUNT_MIN_MINUTES || m.minutes > HAUNT_MAX_MINUTES || typeof m.erase !== 'boolean') return null;
+      if (m.ending !== undefined && !HAUNT_ENDINGS.includes(m.ending as HauntEnding)) return null;
+      return { a: 'haunt', op: 'start', minutes: m.minutes, erase: m.erase, ...(m.ending !== undefined ? { ending: m.ending as HauntEnding } : {}) };
+    }
+    case 'v6':
+      if (!V6_OPS.includes(m.op as V6Op)) return null;
+      if (m.op === 'tp_biome') return typeof m.biome === 'string' && EXPANSION_BIOME_IDS.includes(m.biome) ? { a: 'v6', op: 'tp_biome', biome: m.biome } : null;
+      if (m.op === 'give_set') return typeof m.set === 'string' && expansionGiveSets().some((g) => g.id === m.set) ? { a: 'v6', op: 'give_set', set: m.set } : null;
+      if (m.op === 'tp_structure' || m.op === 'generate_here') return typeof m.structure === 'string' && EXPANSION_STRUCTURE_IDS.includes(m.structure) ? { a: 'v6', op: m.op, structure: m.structure } : null;
+      if (m.op === 'quest_start' || m.op === 'quest_complete' || m.op === 'quest_reset' || m.op === 'quest_tp') return typeof m.quest === 'string' && (END_QUEST_IDS as readonly string[]).includes(m.quest) ? { a: 'v6', op: m.op, quest: m.quest } : null;
+      if (m.op === 'citadel_tp') return typeof m.spot === 'string' && (CITADEL_SPOTS as readonly string[]).includes(m.spot) ? { a: 'v6', op: 'citadel_tp', spot: m.spot } : null;
+      if (m.op === 'give_rare') return typeof m.set === 'string' && RARE_END_LOOT.some((g) => g.id === m.set) ? { a: 'v6', op: 'give_rare', set: m.set } : null;
+      if (m.op === 'dragon_test') return typeof m.test === 'string' && (DRAGON_TESTS as readonly string[]).includes(m.test) ? { a: 'v6', op: 'dragon_test', test: m.test } : null;
+      return { a: 'v6', op: m.op as V6Op };
+    case 'v4':
+      if (!V4_OPS.includes(m.op as V4Op)) return null;
+      return { a: 'v4', op: m.op as V4Op };
+    case 'endgame':
+      if (m.op !== 'status' && m.op !== 'reset_endings' && m.op !== 'force_ending' && m.op !== 'reset_error') return null;
+      if (m.op === 'force_ending' && !id(m.id)) return null;
+      return { a: 'endgame', op: m.op, id: m.op === 'force_ending' ? (m.id as string) : undefined };
     case 'catalog':
     case 'regen_chunk':
     case 'reload_chunks':

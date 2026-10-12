@@ -115,7 +115,8 @@ describe('shulker box', () => {
     expect(w.slots[1]!.mayPlace!(stackOf('shulker_box', 1))).toBe(false);
     server.interaction.closeWindow(player, w.id);
     server.mining.breakBlock(player, x, y, z, player.dim.getState(x, y, z));
-    const drops = [...player.dim.entities.values()].filter((e): e is ItemEntity => e instanceof ItemEntity);
+    // (only what dropped where the box stood: a chicken nearby may lay an egg meanwhile)
+    const drops = [...player.dim.entities.values()].filter((e): e is ItemEntity => e instanceof ItemEntity && Math.hypot(e.x - (x + 0.5), e.z - (z + 0.5)) < 2);
     expect(drops.length).toBe(1);
     const box = drops[0]!.stack;
     expect(items[box.id]!.id).toBe('shulker_box');

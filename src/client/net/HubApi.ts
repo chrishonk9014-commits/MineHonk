@@ -3,12 +3,27 @@
  * localStorage per server address and is only ever sent to that server.
  */
 import type { AccountInfo, FriendsResponse, WorldDetails, WorldSummary } from '../../common/net/multiplayer';
+import { stretchPassword } from '../../hub/crypto';
+
+/** What the cloud hub answers to POST /ticket. */
+export interface TicketResponse {
+  ticket: string;
+  host: string;
+  hostName: string;
+  relayOnly: boolean;
+  iceServers: RTCIceServer[];
+  world: WorldSummary;
+}
 
 const SERVER_KEY = 'minehonk.server';
 
 export class HubApi {
   token: string | null;
   account: AccountInfo | null = null;
+  /** 'cloud' (the Cloudflare hub: worlds run in browsers) or 'node' (a self-hosted server). */
+  kind: 'cloud' | 'node' = 'node';
+  /** The hub wants passwords stretched on this device first (it never sees them). */
+  stretched = false;
 
   constructor(readonly base: string) {
     this.token = this.load();
@@ -90,7 +105,9 @@ export class HubApi {
 
   async health(): Promise<boolean> {
     try {
-      const r = await this.call<{ ok: boolean; name: string }>('GET', '/health');
+      const r = await this.call<{ ok: boolean; name: string; kind?: string; auth?: string }>('GET', '/health');
+      this.kind = r.kind === 'cloud' ? 'cloud' : 'node';
+      this.stretched = r.auth === 'stretched-v1';
       return r.ok && r.name === 'MineHonk';
     } catch {
       return false;
@@ -107,15 +124,20 @@ export class HubApi {
     }
   }
 
+  /** The password as this hub wants it: as typed (Node server) or stretched on this device (cloud hub). */
+  private async secret(name: string, password: string): Promise<string> {
+    return this.stretched ? stretchPassword(name, password) : password;
+  }
+
   async register(name: string, password: string): Promise<AccountInfo> {
-    const r = await this.call<{ token: string; account: AccountInfo }>('POST', '/register', { name, password });
+    const r = await this.call<{ token: string; account: AccountInfo }>('POST', '/register', { name, password: await this.secret(name, password) });
     this.store(r.token);
     this.account = r.account;
     return r.account;
   }
 
   async login(name: string, password: string): Promise<AccountInfo> {
-    const r = await this.call<{ token: string; account: AccountInfo }>('POST', '/login', { name, password });
+    const r = await this.call<{ token: string; account: AccountInfo }>('POST', '/login', { name, password: await this.secret(name, password) });
     this.store(r.token);
     this.account = r.account;
     return r.account;
@@ -141,6 +163,12 @@ export class HubApi {
   }
   removeFriend(uuid: string): Promise<FriendsResponse> {
     return this.call('POST', '/friends/remove', { uuid });
+  }
+  blockPlayer(who: { uuid?: string; name?: string }): Promise<FriendsResponse> {
+    return this.call('POST', '/friends/block', who);
+  }
+  unblockPlayer(uuid: string): Promise<FriendsResponse> {
+    return this.call('POST', '/friends/unblock', { uuid });
   }
 
   worlds(): Promise<{ mine: WorldSummary[]; friends: WorldSummary[]; public: WorldSummary[] }> {
@@ -169,6 +197,32 @@ export class HubApi {
   }
   join(code: string): Promise<WorldSummary> {
     return this.call('POST', '/join', { code });
+  }
+
+  // ------------------------------------------------------------------ the cloud hub (browser hosting)
+
+  /** Registers a hosted world, or updates its settings (the host is authoritative). */
+  hostWorld(body: Record<string, unknown>): Promise<WorldDetails> {
+    return this.call('POST', '/host', body);
+  }
+  /** A signed join ticket for a world online now. */
+  ticket(world: string, compat: string): Promise<TicketResponse> {
+    return this.call('POST', '/ticket', { world, compat });
+  }
+  async hubKey(): Promise<JsonWebKey> {
+    return (await this.call<{ jwk: JsonWebKey }>('GET', '/hub-key')).jwk;
+  }
+  async iceServers(): Promise<RTCIceServer[]> {
+    return (await this.call<{ iceServers: RTCIceServer[] }>('POST', '/ice')).iceServers;
+  }
+  invite(to: string, world: string): Promise<{ ok: boolean; delivered: boolean }> {
+    return this.call('POST', '/invite', { to, world });
+  }
+
+  /** WebSocket URLs on the cloud hub (credentials go in the subprotocol list, never the URL). */
+  socketUrl(path: string): string {
+    const origin = this.base || location.origin;
+    return `${origin.replace(/^http/, 'ws')}/api${path}`;
   }
 
   /** WebSocket URL for playing in a world. */

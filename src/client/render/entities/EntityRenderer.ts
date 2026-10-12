@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import type { ClientEntity } from '../../game/ClientEntity';
 import { BoxModel, humanoidDef } from './BoxModel';
 import { playerSkin } from './skins';
+import { armorOverlay } from './armorOverlay';
 import type { ItemIcons } from '../ItemIcons';
 import { items } from '../../../common/registry/items';
 import { blocks, STATE_BLOCK } from '../../../common/registry/blocks';
@@ -138,12 +139,30 @@ export function boxVisual(model: BoxModel, animate: (m: BoxModel, e: ClientEntit
 
 // ------------------------------------------------------------------ built-in visuals
 
+/**
+ * V6 phase 4: what each Elytra upgrade adds to the wings (colour, size and
+ * place on a wing, x away from the spine): a steel edge for Reinforced, a
+ * blue vent at the root for Thrust, crystal veins for Hover, a cyan streak
+ * for Burst, a dark trailing edge for Void Recovery, a green eye for Ender
+ * Blink.
+ */
+const WING_MARKS: [string, number, [number, number, number], [number, number, number]][] = [
+  ['reinforced', 0x56687a, [0.06, 0.95, 0.075], [0.47, -0.475, 0]],
+  ['thrust', 0x6ab0ff, [0.16, 0.08, 0.075], [0.1, -0.08, 0]],
+  ['hover', 0xe0b8ff, [0.3, 0.04, 0.072], [0.24, -0.4, 0]],
+  ['burst', 0x9af0ff, [0.04, 0.4, 0.072], [0.3, -0.62, 0]],
+  ['void_recovery', 0x24142e, [0.46, 0.06, 0.075], [0.25, -0.92, 0]],
+  ['ender_blink', 0x7ae0a0, [0.08, 0.08, 0.078], [0.2, -0.22, 0]],
+];
+
 registerVisual('player', (e, ctx) => {
   const name = typeof e.meta.name === 'string' ? e.meta.name : null;
   const m = new BoxModel(humanoidDef(), playerSkin(name));
   // Elytra wings on the back, folded unless gliding
   const wingMat = new THREE.MeshBasicMaterial({ color: 0x8e8aa8 });
   const wings: THREE.Mesh[] = [];
+  // V6 phase 4: each Elytra upgrade adds a small mark to both wings
+  const marks: { up: string; mesh: THREE.Mesh; mat: THREE.MeshBasicMaterial; color: number }[] = [];
   const body = m.part('body');
   if (body) {
     for (const side of [-1, 1]) {
@@ -154,14 +173,28 @@ registerVisual('player', (e, ctx) => {
       w.visible = false;
       body.add(w);
       wings.push(w);
+      for (const [up, color, size, at] of WING_MARKS) {
+        const mat = new THREE.MeshBasicMaterial({ color });
+        const mg = new THREE.BoxGeometry(size[0], size[1], size[2]);
+        mg.translate(side * at[0], at[1], at[2]);
+        const mesh = new THREE.Mesh(mg, mat);
+        mesh.visible = false;
+        w.add(mesh);
+        marks.push({ up, mesh, mat, color });
+      }
     }
   }
+  // Worn armor (V6), in each piece's material
+  const armor = armorOverlay(m);
   const v = boxVisual(
     m,
     (mm, ee, a) => {
       animateHumanoid(mm, ee, a);
+      armor.set(Array.isArray(ee.meta.armor) ? (ee.meta.armor as string[]) : undefined);
       const gliding = ee.meta.glide === true;
       const hasWings = ee.meta.elytra === true;
+      const ups = Array.isArray(ee.meta.wings) ? (ee.meta.wings as string[]) : [];
+      for (const k of marks) k.mesh.visible = ups.includes(k.up);
       wings.forEach((w, i) => {
         const side = i === 0 ? -1 : 1;
         w.visible = hasWings;
@@ -200,12 +233,19 @@ registerVisual('player', (e, ctx) => {
   v.setBrightness = (b) => {
     baseBright(b);
     wingMat.color.setHex(0x8e8aa8).multiplyScalar(b);
+    for (const k of marks) k.mat.color.setHex(k.color).multiplyScalar(Math.max(b, 0.6));
+    armor.setBrightness(b);
   };
   const baseDispose = v.dispose.bind(v);
   v.dispose = () => {
+    armor.dispose();
     baseDispose();
     for (const w of wings) w.geometry.dispose();
     wingMat.dispose();
+    for (const k of marks) {
+      k.mesh.geometry.dispose();
+      k.mat.dispose();
+    }
   };
   return v;
 });
@@ -338,6 +378,11 @@ export class EntityRenderer {
   readonly group = new THREE.Group();
   private readonly visuals = new Map<number, EntityVisual>();
   private readonly known = new Map<number, ClientEntity>();
+
+  /** The drawn object of an entity (afterimages copy it). */
+  objectOf(id: number): THREE.Object3D | null {
+    return this.visuals.get(id)?.object ?? null;
+  }
   private readonly ctx: VisualContext;
   /** The local player (not a replicated entity): id and hand position for lines. */
   local: { id: number; hand: () => [number, number, number] } | null = null;
@@ -362,6 +407,8 @@ export class EntityRenderer {
   remove(id: number): void {
     const v = this.visuals.get(id);
     this.glowing.delete(id);
+    this.outlined.delete(id);
+    this.veiled.delete(id);
     if (!v) return;
     this.group.remove(v.object);
     v.dispose();
@@ -380,12 +427,71 @@ export class EntityRenderer {
       const v = this.visuals.get(e.id);
       if (!v) continue;
       const glowing = e.meta.glowing === true;
-      v.setBrightness(glowing ? 1 : lightAt(e.x, e.y + 0.5, e.z));
+      // V6 phase 5: eclipsed mobs are pale and outlined in light; a veiled player is hard to see
+      const pale = e.meta.eclipsed === true;
+      const veil = e.meta.veil === true;
+      v.setBrightness(glowing ? 1 : pale ? Math.max(0.85, lightAt(e.x, e.y + 0.5, e.z)) : lightAt(e.x, e.y + 0.5, e.z));
       v.update(e, alpha, time);
-      if (v.nameTag) v.nameTag.visible = !(e.meta.sneak === true);
+      if (v.nameTag) v.nameTag.visible = !(e.meta.sneak === true) && !veil;
       if (glowing !== this.glowing.has(e.id)) this.setGlowing(e.id, v, glowing);
+      if (pale !== this.outlined.has(e.id)) this.setOutline(e.id, v, pale);
+      if (veil !== this.veiled.has(e.id)) this.setVeil(e.id, v, veil);
     }
     void this.world;
+  }
+
+  /** V6 phase 5: entities drawn with a pale outline (eclipsed Void Stalkers and Phantoms). */
+  private readonly outlined = new Set<number>();
+  private readonly outlineMat = new THREE.MeshBasicMaterial({ color: 0xece4ff, side: THREE.BackSide, transparent: true, opacity: 0.55, depthWrite: false, fog: false });
+
+  private setOutline(id: number, v: EntityVisual, on: boolean): void {
+    if (on) this.outlined.add(id);
+    else this.outlined.delete(id);
+    const shells: THREE.Object3D[] = [];
+    v.object.traverse((o) => {
+      if (o.userData.outline) shells.push(o);
+    });
+    if (shells.length) {
+      for (const s of shells) s.visible = on;
+      return;
+    }
+    if (!on) return;
+    // A slightly larger back-faced copy of each box, riding on it (so it follows the animation)
+    const meshes: THREE.Mesh[] = [];
+    v.object.traverse((o) => {
+      if (o instanceof THREE.Mesh && !o.userData.outline && o.geometry instanceof THREE.BufferGeometry) meshes.push(o);
+    });
+    for (const m of meshes) {
+      const shell = new THREE.Mesh(m.geometry, this.outlineMat);
+      shell.userData.outline = true;
+      shell.scale.setScalar(1.1);
+      shell.renderOrder = 1;
+      m.add(shell);
+    }
+  }
+
+  /** V6 phase 5: the Eclipse Veil: a player all but invisible for its five seconds. */
+  private readonly veiled = new Set<number>();
+
+  private setVeil(id: number, v: EntityVisual, on: boolean): void {
+    if (on) this.veiled.add(id);
+    else this.veiled.delete(id);
+    v.object.traverse((o) => {
+      const mat = (o as THREE.Mesh).material as THREE.Material | THREE.Material[] | undefined;
+      if (!mat || o.userData.outline) return;
+      for (const m of Array.isArray(mat) ? mat : [mat]) {
+        if (on) {
+          if (m.userData.veilWas === undefined) m.userData.veilWas = { t: m.transparent, o: m.opacity };
+          m.transparent = true;
+          m.opacity = 0.12;
+        } else if (m.userData.veilWas) {
+          m.transparent = m.userData.veilWas.t;
+          m.opacity = m.userData.veilWas.o;
+          delete m.userData.veilWas;
+        }
+        m.needsUpdate = true;
+      }
+    });
   }
 
   /** Entity ids currently drawn through walls (the Glowing effect). */

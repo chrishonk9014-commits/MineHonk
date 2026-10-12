@@ -18,6 +18,7 @@ import type { AccountInfo, FriendsResponse } from '../common/net/multiplayer';
 import { Accounts, AccountError } from './Accounts';
 import { Friends, FriendError } from './Friends';
 import { Worlds, WorldError } from './Worlds';
+import { HubFileStore } from './HubFileStore';
 import { RateLimiter } from './RateLimiter';
 import { readIfExists } from './fsutil';
 
@@ -90,6 +91,7 @@ export class Hub {
 
   private constructor(
     readonly opts: HubOptions,
+    readonly store: HubFileStore,
     readonly accounts: Accounts,
     readonly friends: Friends,
     readonly worlds: Worlds,
@@ -103,10 +105,11 @@ export class Hub {
     await fs.mkdir(opts.dataDir, { recursive: true });
     const extra = (await readIfExists(path.join(opts.dataDir, 'moderation', 'blocklist.txt')))?.toString('utf8').split(/\r?\n/).map((l) => l.trim()).filter((l) => l && !l.startsWith('#')) ?? [];
     const filter = new ChatFilter(extra);
-    const accounts = await Accounts.open(opts.dataDir, log);
-    const friends = await Friends.open(opts.dataDir, log);
-    const worlds = await Worlds.open({ dataDir: opts.dataDir, accounts, friends, filter, log, maxPlayers: opts.maxPlayersPerWorld, serverOptions: opts.serverOptions });
-    return new Hub(opts, accounts, friends, worlds, filter);
+    const store = await HubFileStore.open(opts.dataDir, log);
+    const accounts = new Accounts(store);
+    const friends = new Friends(store);
+    const worlds = await Worlds.open({ dataDir: opts.dataDir, store, accounts, friends, filter, log, maxPlayers: opts.maxPlayersPerWorld, serverOptions: opts.serverOptions });
+    return new Hub(opts, store, accounts, friends, worlds, filter);
   }
 
   // ------------------------------------------------------------------ lifecycle
@@ -136,8 +139,7 @@ export class Hub {
   async close(): Promise<void> {
     for (const c of this.wss?.clients ?? []) c.close(1001, 'Server shutting down');
     await this.worlds.shutdown();
-    await this.accounts.flush();
-    await this.friends.flush();
+    await this.store.flush();
     await new Promise<void>((resolve) => (this.server ? this.server.close(() => resolve()) : resolve()));
   }
 
@@ -189,19 +191,22 @@ export class Hub {
         conn.close('expected hello');
         return;
       }
-      account = this.accounts.verify(hello.token);
-      if (!account) {
-        conn.send({ t: 'kick', reason: 'Please log in again.' });
-        conn.close('auth');
-        return;
-      }
       pending = true;
-      this.worlds
-        .connect(conn, account, hello as C2S & { t: 'hello' }, worldId)
+      this.accounts
+        .verify(hello.token)
+        .then((a) => {
+          account = a;
+          if (!account) {
+            conn.send({ t: 'kick', reason: 'Please log in again.' });
+            conn.close('auth');
+            return null;
+          }
+          return this.worlds.connect(conn, account, hello as C2S & { t: 'hello' }, worldId);
+        })
         .then((g) => {
           game = g;
           pending = false;
-          if (!g) conn.close('join failed');
+          if (!g && account) conn.close('join failed');
         })
         .catch((e) => {
           this.log(`[hub] join failed: ${(e as Error).stack ?? e}`);
@@ -279,10 +284,10 @@ export class Hub {
     }
   }
 
-  private auth(req: http.IncomingMessage): { account: AccountInfo; token: string } {
+  private async auth(req: http.IncomingMessage): Promise<{ account: AccountInfo; token: string }> {
     const h = req.headers.authorization ?? '';
     const token = h.startsWith('Bearer ') ? h.slice(7).trim() : '';
-    const account = this.accounts.verify(token);
+    const account = await this.accounts.verify(token);
     if (!account) throw new HttpError(401, 'Please log in');
     this.lastSeen.set(account.uuid, Date.now());
     return { account, token };
@@ -292,22 +297,20 @@ export class Hub {
     return this.worlds.presence.has(uuid) || Date.now() - (this.lastSeen.get(uuid) ?? 0) < 90_000;
   }
 
-  private friendsOf(uuid: string): FriendsResponse {
-    const info = (u: string): AccountInfo | null => this.accounts.info(u);
+  private async friendsOf(uuid: string): Promise<FriendsResponse> {
+    const infos = async (ids: string[]): Promise<AccountInfo[]> => (await Promise.all(ids.map((u) => this.accounts.info(u)))).filter((x): x is AccountInfo => !!x);
+    const friends: FriendsResponse['friends'] = [];
+    for (const a of await infos(await this.friends.list(uuid))) {
+      const world = this.worlds.presence.get(a.uuid);
+      const shared = world ? await this.worlds.details(world, uuid) : null;
+      friends.push({ ...a, online: this.online(a.uuid), world: shared ? shared.name : undefined });
+    }
+    friends.sort((a, b) => Number(b.online) - Number(a.online) || a.name.localeCompare(b.name));
     return {
-      friends: this.friends
-        .list(uuid)
-        .map((u) => {
-          const a = info(u);
-          if (!a) return null;
-          const world = this.worlds.presence.get(u);
-          const shared = world ? this.worlds.details(world, uuid) : null;
-          return { ...a, online: this.online(u), world: shared ? shared.name : undefined };
-        })
-        .filter((x): x is NonNullable<typeof x> => !!x)
-        .sort((a, b) => Number(b.online) - Number(a.online) || a.name.localeCompare(b.name)),
-      incoming: this.friends.incoming(uuid).map(info).filter((x): x is AccountInfo => !!x),
-      outgoing: this.friends.outgoing(uuid).map(info).filter((x): x is AccountInfo => !!x),
+      friends,
+      incoming: await infos(await this.friends.incoming(uuid)),
+      outgoing: await infos(await this.friends.outgoing(uuid)),
+      blocked: await infos(await this.friends.blocked(uuid)),
     };
   }
 
@@ -327,30 +330,39 @@ export class Hub {
       return this.accounts.login(str(b.name), str(b.password));
     }
 
-    const { account, token } = this.auth(req);
+    const { account, token } = await this.auth(req);
     const me = account.uuid;
     switch (route) {
       case 'POST /logout':
-        this.accounts.logout(token);
+        await this.accounts.logout(token);
         return { ok: true };
       case 'GET /me':
         return account;
       case 'GET /friends':
         return this.friendsOf(me);
       case 'POST /friends/request': {
-        const other = this.accounts.findByName(str(b.name));
+        const other = await this.accounts.findByName(str(b.name));
         if (!other) throw new WorldError('No player with that name');
-        const result = this.friends.request(me, other.uuid);
-        return { result, ...this.friendsOf(me) };
+        const result = await this.friends.request(me, other.uuid);
+        return { result, ...(await this.friendsOf(me)) };
       }
       case 'POST /friends/accept':
-        this.friends.accept(me, str(b.uuid));
+        await this.friends.accept(me, str(b.uuid));
         return this.friendsOf(me);
       case 'POST /friends/decline':
-        this.friends.decline(me, str(b.uuid));
+        await this.friends.decline(me, str(b.uuid));
         return this.friendsOf(me);
       case 'POST /friends/remove':
-        this.friends.remove(me, str(b.uuid));
+        await this.friends.remove(me, str(b.uuid));
+        return this.friendsOf(me);
+      case 'POST /friends/block': {
+        const other = b.uuid ? await this.accounts.info(str(b.uuid)) : await this.accounts.findByName(str(b.name));
+        if (!other) throw new WorldError('No player with that name');
+        await this.friends.block(me, other.uuid);
+        return this.friendsOf(me);
+      }
+      case 'POST /friends/unblock':
+        await this.friends.unblock(me, str(b.uuid));
         return this.friendsOf(me);
       case 'GET /worlds':
         return this.worlds.list(me);
@@ -365,7 +377,7 @@ export class Hub {
       const id = parts[1];
       const sub = parts.slice(2).join('/');
       if (method === 'GET' && !sub) {
-        const d = this.worlds.details(id, me);
+        const d = await this.worlds.details(id, me);
         if (!d) throw new HttpError(404, 'World not found');
         return d;
       }

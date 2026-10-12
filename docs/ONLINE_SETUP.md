@@ -1,0 +1,154 @@
+# Putting MineHonk online (one-time setup, no terminal)
+
+Browser multiplayer needs a small "hub": accounts, friends, join codes, the
+list of public worlds, and the helper that connects players to each other. It
+runs for free on Cloudflare. A GitHub workflow in this repository installs and
+updates it for you. Everything below happens in your web browser, and you only
+do it once (about 5 minutes).
+
+You need:
+
+- the GitHub account that owns this repository
+- an email address for a free Cloudflare account (no credit card)
+
+---
+
+## 1. Create a free Cloudflare account
+
+1. Open **https://dash.cloudflare.com/sign-up**.
+2. Enter your email and a password, then press **Sign up**.
+3. Open the email from Cloudflare and click the verification link.
+4. If Cloudflare asks what you want to do first, you can skip it. You don't
+   need a website or a domain.
+
+## 2. Turn on Workers (and pick your workers.dev name)
+
+1. In the Cloudflare dashboard, open **Workers & Pages** in the left menu.
+   (It may be inside a group called **Compute**.)
+2. If Cloudflare asks you to choose a **workers.dev subdomain**, type a short
+   name (for example your GitHub name) and confirm. Your hub's address will be
+   `https://minehonk-hub.<that-name>.workers.dev`.
+3. If it shows a **Create** button and nothing else, that's fine: you don't
+   need to create anything here. Keep the page open for the next step.
+
+## 3. Copy your Account ID
+
+1. Still on **Workers & Pages**, look on the right side for **Account details**.
+2. Next to **Account ID**, press **Click to copy** (a 32-character code of
+   letters and digits).
+3. Paste it somewhere for a minute (a note), you'll need it in step 5.
+
+(Another place to find it: the dashboard's home page, menu **⋯** next to your
+account name → **Copy account ID**.)
+
+## 4. Create an API token
+
+1. In the top-right corner of the dashboard, open the person icon →
+   **My Profile**.
+2. Choose **API Tokens** in the left menu, then press **Create Token**.
+3. Find the template **Edit Cloudflare Workers** and press **Use template**.
+4. Under **Permissions**, press **+ Add more** and add one more row:
+   **Account** → **D1** → **Edit**. (The hub keeps accounts and friends in a
+   D1 database.)
+5. Under **Account Resources**, choose **Include** → your account.
+6. Under **Zone Resources**, leave **All zones** (the hub doesn't use any).
+7. Press **Continue to summary**, then **Create Token**.
+8. Press **Copy** next to the token. Cloudflare shows it only once. If you
+   lose it, just make a new one.
+
+## 5. Give the two values to GitHub
+
+1. Open this repository on GitHub.
+2. Go to **Settings** (top bar of the repository) → **Secrets and variables**
+   (left menu) → **Actions**.
+3. Press **New repository secret**:
+   - **Name:** `CLOUDFLARE_API_TOKEN`
+   - **Secret:** paste the token from step 4
+   - press **Add secret**
+4. Press **New repository secret** again:
+   - **Name:** `CLOUDFLARE_ACCOUNT_ID`
+   - **Secret:** paste the Account ID from step 3
+   - press **Add secret**
+
+Names must be exactly as written (capital letters, underscores).
+
+## 6. Start the deploy
+
+1. Open the **Actions** tab of this repository.
+2. In the left list, choose **Deploy online hub**.
+3. Either:
+   - press **Run workflow** (on the right), pick the branch with the game,
+     and press the green **Run workflow** button; or
+   - if there is already a red ✗ run in the list (it ran before the secrets
+     existed), open it and press **Re-run all jobs**.
+4. Wait a few minutes for two green ✓: **Deploy the hub to Cloudflare** and
+   **Update the game website**. The summary says **MineHonk hub is online**
+   with its address, and that the website was updated.
+5. Open the game (your GitHub Pages address, for example
+   `https://<your-name>.github.io/MineHonk/`), press **Multiplayer**, and
+   create an account. If the page was already open, refresh it.
+
+That's it. From now on the workflow runs by itself whenever the hub's code
+changes, rebuilds the website with the hub's address, and never touches your
+players' data. Running it again by hand is always safe.
+
+## Optional: Cloudflare TURN (more direct connections)
+
+Players connect to a host directly when their networks allow it, and through
+the hub's relay otherwise. A TURN server lets more players connect directly
+through strict networks (some schools, offices and mobile networks). Cloudflare
+includes 1,000 GB of TURN traffic a month for free.
+
+1. In the Cloudflare dashboard, open **Realtime** → **TURN Server** →
+   **Create** (any name).
+2. Copy the **Turn Token ID** and the **API Token** it shows.
+3. In GitHub (**Settings → Secrets and variables → Actions**) add:
+   - `TURN_KEY_ID` = the Turn Token ID
+   - `TURN_KEY_API_TOKEN` = the API Token
+4. Run **Deploy online hub** again (step 6).
+
+## Optional: Herobrine's voice (Claude)
+
+In the Haunting (Admin Panel), players can talk to Herobrine once he starts
+speaking. Without this step he answers with his scripted lines. With it, the
+hub asks Claude for each answer, in character, from what he knows about the
+player (their name, what they hold, where they are). The game falls back to
+his scripted lines whenever Claude can't answer.
+
+**Cost.** This is billed separately from any Claude.ai subscription and never
+uses its weekly limits. You pay for what Herobrine actually says, from credit
+you add in advance. With the model the hub uses (`claude-haiku-5-5`), one
+answer costs about $0.0002, so less than a cent for a whole haunting. The hub
+stops at 200 answers a day across everyone (about 4 cents a day at most), then
+uses the scripted lines until the next day.
+
+1. Open the Claude Console at **platform.claude.com** and sign in (your
+   Claude.ai email works; it is a separate account).
+2. Under **Billing**, add some credit (a few dollars lasts a very long time).
+   You can also set a monthly spend limit there.
+3. Open **API Keys** → **Create Key**, name it `MineHonk hub`, and copy it.
+   The Console shows it only once.
+4. In GitHub (**Settings → Secrets and variables → Actions**) add:
+   - `ANTHROPIC_API_KEY` = the key
+5. Run **Deploy online hub** again (step 6). The summary says
+   **Herobrine's voice: Claude**.
+
+The key stays on Cloudflare: players never see it. To change the model or the
+daily limit, edit `HEROBRINE_MODEL` and `HEROBRINE_DAILY_LIMIT` in
+`hub/wrangler.toml`. For example, `claude-sonnet-5-5` costs about $0.005 an
+answer and `claude-opus-5-5` about $0.01. To turn it off, delete the secret
+and run the deploy again, or revoke the key in the Console.
+
+## If something goes wrong
+
+The failed run's summary lists the usual fixes. The common ones:
+
+| Message in the run | What to do |
+| --- | --- |
+| *Cloudflare is not set up yet* | Add the two secrets (step 5), then **Re-run all jobs**. |
+| *You need to register a workers.dev subdomain* | Do step 2, then re-run. |
+| *Authentication error* / code 10000 | The token is wrong or expired. Make a new one (step 4) and replace `CLOUDFLARE_API_TOKEN`. |
+| *Could not create or find the D1 database* | The token is missing **D1 → Edit** (step 4, item 4). |
+
+Nothing here costs money: the free plan simply pauses the hub for the rest of
+the day if a limit is ever reached (see [MULTIPLAYER.md](MULTIPLAYER.md#free-plan-limits)).

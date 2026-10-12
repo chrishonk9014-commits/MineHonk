@@ -157,12 +157,15 @@ describe('farlands progression', () => {
     expect(player.effects.has('nausea')).toBe(true);
   });
 
-  it('points the farlands compass at a glitched ruin', async () => {
+  it('points the farlands compass at a glitched portal (a glitched ruin in older worlds)', async () => {
     const { server } = await makeServer();
     const { conn, player } = await join(server);
     player.inventory.set(player.selectedSlot, stackOf('farlands_compass', 1));
     server.handle(conn, { t: 'use', hand: 0, action: 'start' });
-    const msg = conn.of('chat').map((m) => m.text).find((t) => t.includes('glitched ruin'));
-    expect(msg).toBeTruthy();
-  });
+    expect(conn.of('chat').map((m) => m.text).find((t) => t.includes('glitched portal'))).toBeTruthy();
+    // Worlds made before V3 still have their portals in the surface ruins
+    server.level.generatorVersion = 2;
+    server.handle(conn, { t: 'use', hand: 0, action: 'start' });
+    expect(conn.of('chat').map((m) => m.text).find((t) => t.includes('glitched ruin'))).toBeTruthy();
+  }, 30000);
 });

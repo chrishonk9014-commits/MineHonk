@@ -441,6 +441,65 @@ function chorus(c: Ctx, x: number, y: number, z: number, depth = 0): boolean {
   return true;
 }
 
+/**
+ * V6: a giant chorus tree of the Expanded End's Chorus Forest. A tall stalk
+ * flared at the root, with branches that climb outwards and end in clumps of
+ * chorus flowers, and a larger clump on top.
+ */
+function giantChorus(c: Ctx, x: number, y: number, z: number): boolean {
+  const h = 9 + c.rng.int(7);
+  if (!trunkClear(c, x, y - 1, z, h)) return false;
+  const stalk = (axis: 'x' | 'y' | 'z'): number => stateOf('chorus_stalk', { axis });
+  const bloom = stateOf('chorus_flower', { age: 5 });
+  const clump = (cx: number, cy: number, cz: number, r: number): void => {
+    for (let dy = -1; dy <= r; dy++)
+      for (let dz = -r; dz <= r; dz++)
+        for (let dx = -r; dx <= r; dx++) {
+          const d = dx * dx + dz * dz + (dy > 0 ? dy * dy * 1.5 : dy * dy * 3);
+          if (d > r * r + 0.5 || (d > r * r * 0.6 && c.rng.chance(0.3))) continue;
+          leaf(c, cx + dx, cy + dy, cz + dz, bloom);
+        }
+  };
+  for (let i = 0; i < h; i++) log(c, x, y + i, z, stalk('y'));
+  // Root flares
+  for (const [dx, dz] of [
+    [1, 0],
+    [-1, 0],
+    [0, 1],
+    [0, -1],
+  ] as const) {
+    const fh = 1 + c.rng.int(3);
+    for (let i = 0; i < fh; i++) log(c, x + dx, y + i, z + dz, stalk('y'));
+  }
+  // Branches: out and up from the upper half of the trunk
+  const n = 3 + c.rng.int(3);
+  const start = c.rng.int(8);
+  for (let b = 0; b < n; b++) {
+    const a = ((start + b * (8 / n) + c.rng.next()) / 8) * Math.PI * 2;
+    const dx = Math.cos(a);
+    const dz = Math.sin(a);
+    let by = y + Math.floor(h * 0.45) + c.rng.int(Math.max(1, Math.floor(h * 0.45)));
+    const len = 3 + c.rng.int(4);
+    let px = x;
+    let pz = z;
+    for (let s = 1; s <= len; s++) {
+      const nx = x + Math.round(dx * s);
+      const nz = z + Math.round(dz * s);
+      if (nx !== px && nz !== pz) log(c, nx, by, pz, stalk('x'));
+      log(c, nx, by, nz, stalk(Math.abs(dx) > Math.abs(dz) ? 'x' : 'z'));
+      px = nx;
+      pz = nz;
+      if (s % 2 === 0) {
+        by++;
+        log(c, px, by, pz, stalk('y'));
+      }
+    }
+    clump(px, by + 1, pz, 1 + c.rng.int(2));
+  }
+  clump(x, y + h, z, 2);
+  return true;
+}
+
 /** Places a generated tree/plant of the given kind rooted at (x, y, z) (y = first trunk block). */
 export function placeTree(r: TreeReader, set: TreeSetter, rng: Random, kind: TreeKind, x: number, y: number, z: number): boolean {
   const c: Ctx = { r, cur: r.current ? (x2, y2, z2) => r.current!(x2, y2, z2) : (x2, y2, z2) => r.getState(x2, y2, z2), set, rng };
@@ -489,6 +548,8 @@ export function placeTree(r: TreeReader, set: TreeSetter, rng: Random, kind: Tre
       return nullTree(c, x, y, z);
     case 'chorus':
       return chorus(c, x, y, z);
+    case 'giant_chorus':
+      return giantChorus(c, x, y, z);
     default:
       return oak(c, x, y, z);
   }

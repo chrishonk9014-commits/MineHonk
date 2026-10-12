@@ -2,6 +2,7 @@
 import { el, clear, button } from './dom';
 import type { GameMode } from '../../common/game/gamemode';
 import type { WorldInfo } from '../../common/net/protocol';
+import type { WorldRole } from '../../common/net/multiplayer';
 import { LIMITS } from '../../common/net/protocol';
 
 export class SignEditor {
@@ -39,11 +40,13 @@ export class SignEditor {
   }
 }
 
+const ROLE_TAG: Record<WorldRole, string> = { owner: 'Owner', operator: 'Op', builder: '', visitor: 'Visitor' };
+
 export class PlayerList {
   readonly root = el('div', { class: 'player-list hidden' });
   private lastKey = '';
 
-  update(players: { name: string; uuid: string; ping: number; mode: GameMode }[], visible: boolean, world: WorldInfo | null): void {
+  update(players: { name: string; uuid: string; ping: number; mode: GameMode; role?: WorldRole }[], visible: boolean, world: WorldInfo | null): void {
     this.root.classList.toggle('hidden', !visible);
     if (!visible) return;
     const key = JSON.stringify([players, world?.name, world?.joinCode]);
@@ -54,7 +57,9 @@ export class PlayerList {
     const grid = el('div', { class: 'pl-grid' });
     for (const p of players) {
       const bars = p.ping < 150 ? 5 : p.ping < 300 ? 4 : p.ping < 600 ? 3 : p.ping < 1000 ? 2 : 1;
-      grid.append(el('div', { class: 'pl-row' + (p.mode === 'spectator' ? ' spectator' : '') }, el('span', {}, p.name), el('span', { class: 'ping', title: `${p.ping} ms` }, '▮'.repeat(bars))));
+      // Roles only matter (and are only sent) in multiplayer worlds
+      const tag = p.role && p.role !== 'builder' ? el('span', { class: 'pl-role ' + p.role }, ROLE_TAG[p.role]) : null;
+      grid.append(el('div', { class: 'pl-row' + (p.mode === 'spectator' ? ' spectator' : '') }, el('span', {}, p.name, tag), el('span', { class: 'ping', title: `${p.ping} ms` }, '▮'.repeat(bars))));
     }
     this.root.append(grid);
   }

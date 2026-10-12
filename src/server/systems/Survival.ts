@@ -2,6 +2,7 @@
  * Survival stats: health/damage, God Mode health rules, hunger, air,
  * environmental hazards, status effects, experience and death.
  */
+import { itemIdOf } from '../../common/game/itemstack';
 import type { GameServer } from '../GameServer';
 import type { ServerPlayer } from '../player/ServerPlayer';
 import { ARMOR_SLOTS, ARMOR_START } from '../player/Inventory';
@@ -39,8 +40,13 @@ export type DamageSource =
   | 'freeze'
   | 'glitch'
   | 'sonic_boom'
+  // V6 phase 5: the End's events and the End Guardian
+  | 'void_debris'
+  | 'guardian'
   | 'kill';
 
+/** Freezing meter at which the cold starts to hurt (ticks). */
+export const FREEZE_MAX = 140;
 const BYPASS_ARMOR = new Set<DamageSource>(['fall', 'drown', 'starve', 'void', 'magic', 'wither', 'poison', 'suffocate', 'fire', 'kill', 'freeze', 'fly_into_wall', 'sonic_boom']);
 /** Hazards that God Mode can optionally disable (world rule godHazards = false). */
 const ENVIRONMENTAL = new Set<DamageSource>(['fall', 'lava', 'fire', 'in_fire', 'drown', 'starve', 'void', 'cactus', 'magma', 'berry_bush', 'suffocate', 'freeze', 'fly_into_wall']);
@@ -56,6 +62,8 @@ export interface DamageInfo {
   disableShield?: number;
   /** Heavy blows go through a raised shield (it still softens and absorbs part of the hit). */
   pierceShield?: boolean;
+  /** V6 phase 3: armor points the blow ignores (the Ancient Blade). */
+  armorPierce?: number;
 }
 
 /** Sources a raised shield can stop when facing them. */
@@ -146,7 +154,7 @@ export class Survival {
       p.hurtCooldown = 20;
     }
     if (!BYPASS_ARMOR.has(src)) {
-      const armor = p.armorCache;
+      const armor = Math.max(0, p.armorCache - (info.armorPierce ?? 0));
       const tough = this.toughness(p);
       const reduced = Math.min(20, Math.max(armor / 5, armor - amount / (2 + tough / 4)));
       amount *= 1 - reduced / 25;
@@ -182,6 +190,8 @@ export class Survival {
     p.health = Math.max(0, p.health - amount);
     p.addStat('damage_taken', Math.round((before - p.health) * 10));
     if (p.health <= 0) {
+      // Version 4.5: a temple duel knocks its contestants out instead of killing them
+      if (this.server.templeTrials?.spare(p, src)) return before - p.health;
       if (this.tryTotem(p) && src !== 'kill' && src !== 'void') return before;
       this.die(p, info);
     }
@@ -266,6 +276,29 @@ export class Survival {
     const cz = Math.floor(p.z) >> 4;
     for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) if (!p.sentChunks.has(chunkIndex(cx + dx, cz + dz))) return false;
     return true;
+  }
+
+  /**
+   * Freezing: the meter fills while any of the body is in powder snow (three
+   * times as fast with the head under) and thaws outside. A full meter hurts.
+   * A full set of leather armour keeps the cold out.
+   */
+  private freeze(p: ServerPlayer): void {
+    const b = p.body;
+    let leather = 0;
+    const ids = this.leatherIds();
+    for (let i = 0; i < 4; i++) if (p.inventory.get(ARMOR_SLOTS.feet + i)?.id === ids[i]) leather++;
+    const before = p.freezeTicks;
+    if (b.inPowder && leather < 4) p.freezeTicks = Math.min(FREEZE_MAX, p.freezeTicks + (b.headInPowder ? 3 : 1));
+    else p.freezeTicks = Math.max(0, p.freezeTicks - 2);
+    if (p.freezeTicks >= FREEZE_MAX && this.server.tickNo % 40 === 0) this.damage(p, b.headInPowder ? 2 : 1, { source: 'freeze' });
+    if (Math.floor(before / 7) !== Math.floor(p.freezeTicks / 7)) p.statsDirty = true;
+  }
+
+  private leatherCache: number[] | undefined;
+  private leatherIds(): number[] {
+    // In slot order: feet, legs, chest, head
+    return (this.leatherCache ??= ['leather_boots', 'leather_leggings', 'leather_chestplate', 'leather_helmet'].map((id) => itemById.get(id)?.num ?? -1));
   }
 
   heal(p: ServerPlayer, amount: number): void {
@@ -387,8 +420,16 @@ export class Survival {
     }
     const b = p.body;
     updateEnvironment(p.dim, b, p.eyeHeight);
-    // Air / drowning
-    if (b.eyesInWater && !p.effects.has('water_breathing')) {
+    // Air / drowning (buried in powder snow there is no air either)
+    if (b.headInPowder) {
+      // Air runs out twice as fast as underwater; once gone it hurts like drowning
+      p.air -= p.air > 0 ? 2 : 1;
+      if (p.air <= -20) {
+        p.air = 0;
+        this.damage(p, 2, { source: 'suffocate' });
+      }
+      p.statsDirty = true;
+    } else if (b.eyesInWater && !p.effects.has('water_breathing')) {
       const resp = enchantLevel(p.inventory.get(ARMOR_SLOTS.head), 'respiration');
       if (resp === 0 || Math.random() < 1 / (resp + 1)) p.air--;
       if (p.air <= -20) {
@@ -420,7 +461,7 @@ export class Survival {
       fire.fireTicks = Math.max(fire.fireTicks ?? 0, 160);
     }
     if (fdef.id === 'sweet_berry_bush' && t % 10 === 0) this.damage(p, 1, { source: 'berry_bush' });
-    if (fdef.id === 'powder_snow' && t % 40 === 0) this.damage(p, 1, { source: 'freeze' });
+    this.freeze(p);
     const under = p.dim.getState(Math.floor(p.x), Math.floor(p.y - 0.1), Math.floor(p.z));
     const udef = blocks[STATE_BLOCK[under]!]!.def;
     if ((udef.id === 'magma_block' || udef.id === 'smoldering_netherrack') && b.onGround && !p.sneaking && t % 10 === 0 && !enchantLevel(p.inventory.get(ARMOR_SLOTS.feet), 'frost_walker')) this.damage(p, 1, { source: 'magma' });
@@ -510,8 +551,10 @@ export class Survival {
     p.send({ t: 'death_pos', pos: p.lastDeath });
     const level = this.server.level;
     const score = p.xpTotal;
-    if (!level.rules.keepInventory) {
-      this.server.interaction.dropAll(p);
+    // While the world is haunted nobody loses their things (his monsters are there to scare, not to rob)
+    if (!level.rules.keepInventory && !this.server.haunting?.active) {
+      // V6: a Void Pack (and all it holds) survives a death in the void, and only that
+      this.server.interaction.dropAll(p, info.source === 'void' ? (st) => itemIdOf(st) === 'void_pack' : undefined);
       const lvl = p.xpLevel().level;
       const xp = Math.min(100, lvl * 7);
       if (xp > 0) this.server.mining.dropXp(p.dim, p.x, p.y + 0.5, p.z, xp, p.cheat.xp > 0);
@@ -565,7 +608,7 @@ function deathMessage(p: ServerPlayer, info: DamageInfo): string {
     case 'poison':
       return `${p.name} succumbed to poison`;
     case 'suffocate':
-      return `${p.name} suffocated in a wall`;
+      return p.body.headInPowder ? `${p.name} suffocated in powder snow` : `${p.name} suffocated in a wall`;
     case 'lightning':
       return `${p.name} was struck by lightning`;
     case 'dragon_breath':
@@ -578,6 +621,10 @@ function deathMessage(p: ServerPlayer, info: DamageInfo): string {
       return `${p.name} was obliterated by a sonic shriek${by ? ` from ${by}` : ''}`;
     case 'glitch':
       return `${p.name} was deleted by the Farlands`;
+    case 'void_debris':
+      return `${p.name} was struck by Void Debris`;
+    case 'guardian':
+      return `${p.name} was struck down by the End Guardian`;
     default:
       return `${p.name} died`;
   }

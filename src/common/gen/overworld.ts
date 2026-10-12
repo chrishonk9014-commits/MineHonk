@@ -13,6 +13,7 @@ import { NoiseGrid } from './grid';
 import { B, OverworldClimate, newClimate, type Climate } from './climate';
 import { CaveBiomeSource } from './caves/caveBiomes';
 import { CaveCarver } from './caves/carver';
+import { CorruptedCaves, CORRUPTED_BIOME } from './caves/corrupted';
 
 interface Palette {
   stone: number;
@@ -93,15 +94,18 @@ export class OverworldTerrain {
   /** V2 underground (null for worlds made with the V1 generator). */
   readonly caveBiomes: CaveBiomeSource | null;
   readonly carver: CaveCarver | null;
+  /** V3 corrupted caves and glitched portals (null before V3). */
+  readonly corrupted: CorruptedCaves | null;
   private readonly temps = new Float32Array(256);
 
   constructor(
     readonly seed: number,
     readonly version = 2,
   ) {
-    this.caveBiomes = version >= 2 ? new CaveBiomeSource(seed) : null;
-    this.carver = this.caveBiomes ? new CaveCarver(seed, this.caveBiomes) : null;
+    this.caveBiomes = version >= 2 ? new CaveBiomeSource(seed, version) : null;
+    this.carver = this.caveBiomes ? new CaveCarver(seed, this.caveBiomes, version) : null;
     this.climate = new OverworldClimate(seed);
+    this.corrupted = version >= 3 ? new CorruptedCaves(seed, (x, z) => this.estimateHeight(x, z)) : null;
     const r = (salt: number): Random => new Random(hashInts(seed, salt, 0x7e44a1));
     this.overhang = new Octave3(r(1), 3, 90, 64);
     this.cheese = new Octave3(r(2), 2, 80, 44);
@@ -213,6 +217,8 @@ export class OverworldTerrain {
     }
 
     if (this.carver) this.carver.veins(chunk, bx, bz);
+    // V3: corrupted zones overwrite everything beneath them
+    this.corrupted?.apply(chunk, bx, bz);
 
     chunk.recomputeHeightmap();
     return chunk;
@@ -220,7 +226,7 @@ export class OverworldTerrain {
 
   private carveStatesCache: import('./caves/carver').CarveStates | undefined;
   private carveStates(pal: Palette): import('./caves/carver').CarveStates {
-    return (this.carveStatesCache ??= { water: pal.water, lava: pal.lava, caveAir: pal.caveAir, solid: (s) => isSolidTerrain(s, pal) });
+    return (this.carveStatesCache ??= { water: pal.water, lava: pal.lava, caveAir: pal.caveAir, powder: S('powder_snow'), ice: S('ice'), solid: (s) => isSolidTerrain(s, pal) });
   }
 
   /** Cave biome at a position (V2 worlds), None above the ground or in V1 worlds. */
@@ -233,6 +239,7 @@ export class OverworldTerrain {
     const cl = newClimate();
     this.climate.sample(cx, cz, cl);
     if (cy > cl.height - 6) return 0;
+    if (this.corrupted?.inside(cx, cy, cz)) return CORRUPTED_BIOME;
     return this.caveBiomes.at(cx, cy, cz, cl.t);
   }
 

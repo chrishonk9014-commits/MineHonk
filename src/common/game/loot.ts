@@ -7,6 +7,7 @@ import { stackOf, type ItemStack } from './itemstack';
 import { selectEnchantments } from './enchanting';
 import { ENCHANTMENTS } from '../data/enchantments';
 import { LOOT_TABLES } from '../data/loot';
+import { pickLore, type LoreSite } from '../endExpansion/lore';
 
 export type Range = number | [number, number];
 
@@ -32,7 +33,14 @@ export type LootFunction =
   | { fn: 'potion'; potion: string }
   | { fn: 'name'; name: string }
   /** A specific enchantment (on a book: stored) at a level in the range. */
-  | { fn: 'set_enchant'; id: string; levels: Range };
+  | { fn: 'set_enchant'; id: string; levels: Range }
+  /** V6 phase 3: a lore book: a fragment picked by a site's weights, or a fixed one. */
+  | { fn: 'lore'; site?: LoreSite; id?: string }
+  /**
+   * V6 phase 3: an Ancient Map, to be tied to the nearest giant structure by
+   * the server when the container is filled (it knows where the chest is).
+   */
+  | { fn: 'ancient_map' };
 
 export interface LootEntry {
   item?: string;
@@ -183,6 +191,14 @@ function applyFns(stack: ItemStack, fns: LootFunction[] | undefined, ctx: LootCo
         break;
       case 'name':
         stack.tag = { ...(stack.tag ?? {}), name: f.name };
+        break;
+      case 'lore': {
+        const id = f.id ?? (f.site ? pickLore(f.site, ctx.rng).id : undefined);
+        if (id) stack.tag = { ...(stack.tag ?? {}), lore: id };
+        break;
+      }
+      case 'ancient_map':
+        stack.tag = { ...(stack.tag ?? {}), data: { ...(stack.tag?.data ?? {}), map: 'unmarked' } };
         break;
       case 'set_enchant': {
         const lvl = roll(f.levels, ctx.rng);

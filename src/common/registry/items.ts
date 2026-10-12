@@ -32,6 +32,8 @@ export const CREATIVE_TABS = [
   { id: 'brewing', name: 'Brewing', icon: 'potion' },
   { id: 'spawn_eggs', name: 'Spawn Eggs', icon: 'spawn_egg_zombie' },
   { id: 'farlands', name: 'Farlands', icon: 'glitch_block' },
+  { id: 'engineering', name: 'Engineering', icon: 'crusher' },
+  { id: 'digital', name: 'Digital', icon: 'computer' },
 ] as const;
 
 function autoTab(def: { id: string; tags?: string[]; interact?: string; entity?: string; light?: number; model: string; creative?: string }): string {
@@ -88,14 +90,15 @@ export function initItems(): void {
       block: bd.id,
       maxStack: bd.model === 'bed' ? 1 : maxStack,
       creative: autoTab(bd),
-      fuel: bd.flammable && ['planks', 'logs'].some((t) => bd.tags?.includes(t)) ? 300 : bd.flammable && bd.tags?.includes('wooden_slabs') ? 150 : bd.id === 'coal_block' ? 16000 : undefined,
+      fuel: typeof bd.data?.fuel === 'number' ? bd.data.fuel : bd.flammable && ['planks', 'logs'].some((t) => bd.tags?.includes(t)) ? 300 : bd.flammable && bd.tags?.includes('wooden_slabs') ? 150 : bd.id === 'coal_block' ? 16000 : undefined,
       tags: [...(bd.tags ?? []), 'block'],
+      tooltip: typeof bd.data?.tooltip === 'string' ? bd.data.tooltip : undefined,
     });
   }
   for (const d of explicit.values()) register(d);
   // Spawn eggs generated from the mob registry
   for (const m of MOB_DEFS) {
-    if (m.id === 'ender_dragon') continue;
+    if (m.id === 'ender_dragon' || m.vehicle) continue;
     register({ id: 'spawn_egg_' + m.id, name: m.name + ' Spawn Egg', use: 'spawn_egg', spawns: m.id, creative: 'spawn_eggs', rarity: m.category === 'boss' ? 'epic' : undefined });
   }
 }

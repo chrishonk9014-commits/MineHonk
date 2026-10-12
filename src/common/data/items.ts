@@ -3,9 +3,18 @@
  * from block definitions by the item registry; this file lists everything
  * else plus overrides.
  */
+import { transportItemDefs } from '../endExpansion/transport';
+import { elytraItemDefs } from '../endExpansion/elytra';
+import { questItemDefs } from '../endExpansion/quests';
+import { eventItemDefs } from '../endExpansion/events';
+import { citadelItemDefs } from '../endExpansion/citadel';
+import { guardianItemDefs } from '../endExpansion/guardian';
 import type { ItemDef } from '../registry/itemTypes';
 import type { ToolType } from '../registry/blockTypes';
 import { COLORS } from './blocks';
+import { engineeringItemDefs } from '../engineering/catalog';
+import { expansionItemDefs } from '../endExpansion/resources';
+import { ancientItemDefs } from '../endExpansion/ancient';
 
 const defs: ItemDef[] = [];
 const add = (d: ItemDef): ItemDef => {
@@ -42,14 +51,16 @@ export const TIERS: Tier[] = [
   { id: 'diamond', name: 'Diamond', level: 3, speed: 8, durability: 1561, enchantability: 10, bonus: 3, repair: 'diamond' },
   { id: 'netherite', name: 'Netherite', level: 4, speed: 9, durability: 2031, enchantability: 15, bonus: 4, repair: 'netherite_ingot', fireResistant: true, rarity: 'rare' },
   { id: 'glitched', name: 'Glitched', level: 5, speed: 12, durability: 3333, enchantability: 18, bonus: 5, repair: 'glitched_ingot', fireResistant: true, rarity: 'glitched' },
+  // V6 (the End Expansion): netherite upgraded at a smithing table with an Ender Alloy Ingot
+  { id: 'ender_alloy', name: 'Ender Alloy', level: 4, speed: 10, durability: 2500, enchantability: 18, bonus: 5, repair: 'ender_alloy_ingot', fireResistant: true, rarity: 'epic' },
 ];
 
-const SWORD_DMG = [4, 5, 6, 4, 7, 8, 10];
-const AXE_DMG = [7, 9, 9, 7, 9, 10, 12];
-const AXE_SPD = [0.8, 0.8, 0.9, 1.0, 1.0, 1.0, 1.1];
-const PICK_DMG = [2, 3, 4, 2, 5, 6, 7];
-const SHOVEL_DMG = [2.5, 3.5, 4.5, 2.5, 5.5, 6.5, 7.5];
-const HOE_SPD = [1, 2, 3, 1, 4, 4, 4];
+const SWORD_DMG = [4, 5, 6, 4, 7, 8, 10, 9];
+const AXE_DMG = [7, 9, 9, 7, 9, 10, 12, 11];
+const AXE_SPD = [0.8, 0.8, 0.9, 1.0, 1.0, 1.0, 1.1, 1.0];
+const PICK_DMG = [2, 3, 4, 2, 5, 6, 7, 7];
+const SHOVEL_DMG = [2.5, 3.5, 4.5, 2.5, 5.5, 6.5, 7.5, 7.5];
+const HOE_SPD = [1, 2, 3, 1, 4, 4, 4, 4];
 
 TIERS.forEach((t, i) => {
   const common = {
@@ -65,7 +76,7 @@ TIERS.forEach((t, i) => {
     add({
       id: `${t.id}_${type}`,
       name: `${t.name} ${title(type)}`,
-      tool: { type, tier: t.level, speed: t.speed },
+      tool: { type, tier: t.level, speed: t.speed, material: t.id },
       weapon: { damage: dmg, speed: spd },
       use: type === 'hoe' ? 'hoe' : type === 'shovel' ? 'shovel' : type === 'axe' ? 'axe' : undefined,
       tags: ['tools', type + 's'],
@@ -74,7 +85,7 @@ TIERS.forEach((t, i) => {
   add({
     id: `${t.id}_sword`,
     name: `${t.name} Sword`,
-    tool: { type: 'sword', tier: t.level, speed: 1.5 },
+    tool: { type: 'sword', tier: t.level, speed: 1.5, material: t.id },
     weapon: { damage: SWORD_DMG[i]!, speed: 1.6 },
     tags: ['weapons', 'swords'],
     ...common,
@@ -109,6 +120,7 @@ export const ARMOR_MATERIALS: ArmorMat[] = [
   { id: 'diamond', name: 'Diamond', mult: 33, def: [3, 8, 6, 3], toughness: 2, ench: 10, repair: 'diamond' },
   { id: 'netherite', name: 'Netherite', mult: 37, def: [3, 8, 6, 3], toughness: 3, kb: 0.1, ench: 15, repair: 'netherite_ingot', fireResistant: true, rarity: 'rare' },
   { id: 'glitched', name: 'Glitched', mult: 42, def: [4, 9, 7, 4], toughness: 4, kb: 0.15, ench: 18, repair: 'glitched_ingot', fireResistant: true, rarity: 'glitched' },
+  { id: 'ender_alloy', name: 'Ender Alloy', mult: 42, def: [3, 8, 6, 3], toughness: 4, kb: 0.15, ench: 18, repair: 'ender_alloy_ingot', fireResistant: true, rarity: 'epic' },
 ];
 const ARMOR_PIECES = [
   { slot: 'head', piece: 'helmet', base: 11 },
@@ -134,7 +146,8 @@ for (const m of ARMOR_MATERIALS) {
   });
 }
 add({ id: 'turtle_helmet', name: 'Turtle Shell', maxStack: 1, durability: 275, armor: { slot: 'head', defense: 2, material: 'turtle' }, enchantability: 9, creative: 'combat', tags: ['armor'] });
-add({ id: 'elytra', name: 'Elytra', maxStack: 1, durability: 432, armor: { slot: 'chest', defense: 0, material: 'elytra' }, use: 'elytra', rarity: 'epic', creative: 'combat', repair: 'phantom_membrane' });
+// (repaired with either membrane: a phantom's, or a V6 End Phantom's)
+add({ id: 'elytra', name: 'Elytra', maxStack: 1, durability: 432, armor: { slot: 'chest', defense: 0, material: 'elytra' }, use: 'elytra', rarity: 'epic', creative: 'combat', repair: 'membranes' });
 
 // ---------------------------------------------------------------------------
 // Combat & utility
@@ -168,6 +181,8 @@ add({ id: 'bone_meal', name: 'Bone Meal', use: 'bone_meal', creative: 'materials
 add({ id: 'glass_bottle', name: 'Glass Bottle', use: 'glass_bottle', creative: 'brewing' });
 add({ id: 'potion', name: 'Potion', maxStack: 1, use: 'potion', creative: 'brewing' });
 add({ id: 'splash_potion', name: 'Splash Potion', maxStack: 1, use: 'splash_potion', creative: 'brewing' });
+// V3: found only in witch's huts. What it does is left for the player to find out.
+add({ id: 'mysterious_potion', name: 'Mysterious Potion', maxStack: 1, rarity: 'glitched', glint: true, creative: 'brewing' });
 add({ id: 'experience_bottle', name: "Bottle o' Enchanting", use: 'experience_bottle', rarity: 'uncommon', glint: true, creative: 'tools' });
 add({ id: 'enchanted_book', name: 'Enchanted Book', maxStack: 1, rarity: 'uncommon', glint: true, creative: 'tools' });
 add({ id: 'name_tag', name: 'Name Tag', creative: 'tools' });
@@ -206,7 +221,8 @@ mat('copper_ingot');
 mat('diamond');
 mat('emerald');
 mat('lapis_lazuli');
-mat('redstone', { block: 'redstone_wire' });
+// V5: redstone dust is a material now; Signal Cable replaces placing it as wire (old wire keeps working)
+mat('redstone');
 mat('quartz', { name: 'Nether Quartz' });
 mat('amethyst_shard');
 mat('netherite_scrap', { fireResistant: true });
@@ -240,7 +256,7 @@ mat('lumen_shard', { name: 'Lumen Shard' });
 mat('disc_fragment', { name: 'Disc Fragment', rarity: 'uncommon' });
 add({ id: 'resonance_charm', name: 'Resonance Charm', maxStack: 1, rarity: 'epic', creative: 'tools' });
 mat('glow_ink_sac');
-mat('phantom_membrane');
+mat('phantom_membrane', { tags: ['membranes'] });
 mat('rabbit_foot');
 mat('spider_eye', { food: { hunger: 2, saturation: 3.2, effects: [{ effect: 'poison', duration: 100 }] }, creative: 'food' });
 mat('fermented_spider_eye');
@@ -338,5 +354,36 @@ mat('glitch_core', { name: 'Glitch Core', rarity: 'glitched', glint: true });
 mat('corrupted_eye', { name: 'Corrupted Eye', rarity: 'glitched' });
 add({ id: 'rift_pearl', name: 'Rift Pearl', maxStack: 16, use: 'rift_pearl', rarity: 'rare', creative: 'tools' });
 add({ id: 'farlands_compass', name: 'Farlands Compass', maxStack: 1, use: 'farlands_compass', rarity: 'glitched', creative: 'tools', glint: true });
+
+// ---------------------------------------------------------------------------
+// V4 - The World Update: biome foods and the bunker keycard
+// ---------------------------------------------------------------------------
+food('cactus_fruit', 3, 1.8, { name: 'Cactus Fruit' });
+food('snowberries', 2, 1.2, { name: 'Snowberries' }, { eatTime: 16 });
+food('lingonberries', 2, 1.2, { name: 'Lingonberries' }, { eatTime: 16 });
+food('aloe_leaf', 1, 1, { name: 'Aloe Leaf' }, { alwaysEdible: true, eatTime: 16, effects: [{ effect: 'regeneration', duration: 100 }] });
+add({ id: 'bunker_keycard', name: 'Bunker Keycard', maxStack: 1, rarity: 'uncommon', creative: 'tools' });
+add({ id: 'temple_relic', name: 'Temple Relic', maxStack: 1, rarity: 'rare', creative: 'tools' });
+
+// V5 - The Engineering Update: materials, components, upgrades and the Engineering Book
+for (const d of engineeringItemDefs()) add(d);
+
+// V5.5 - The Digital Corruption Update: an old book in every witch's hut, full of drawings that should not make sense yet
+add({ id: 'witch_grimoire', name: "Witch's Grimoire", maxStack: 1, use: 'grimoire', rarity: 'rare', creative: 'tools' });
+
+// V6 - The End Expansion, phase 2: the Expanded End's materials, food and the Void Pack
+for (const d of expansionItemDefs()) add(d);
+
+// V6 - The End Expansion, phase 3: End Artifacts, the ancient weapons and the Ancient Map
+for (const d of ancientItemDefs()) add(d);
+
+// V6 - The End Expansion, phase 4: vehicles, the Skiff's blueprint, Elytra upgrade modules, the Ancient Key and the Silent Bell
+for (const d of transportItemDefs()) add(d);
+for (const d of elytraItemDefs()) add(d);
+for (const d of questItemDefs()) add(d);
+// V6 phase 5
+for (const d of eventItemDefs()) add(d);
+for (const d of citadelItemDefs()) add(d);
+for (const d of guardianItemDefs()) add(d);
 
 export const ITEM_DEFS: readonly ItemDef[] = defs;

@@ -12,7 +12,7 @@ import { blocks, STATE_BLOCK, S, STATE_SOLID, STATE_FLUID, withProp, getProp } f
 import { Random } from '../../common/math/rng';
 import { selectEnchantments, tableCosts, canApply, compatible, enchantLevel } from '../../common/game/enchanting';
 import { ENCHANT_BY_ID } from '../../common/data/enchantments';
-import { stackOf, cloneStack, type ItemStack, type Slot, toSaved, fromSaved, type SavedStack, isAdminStack, markAdmin } from '../../common/game/itemstack';
+import { stackOf, cloneStack, type ItemStack, type Slot, toSaved, fromSaved, type SavedStack, isAdminStack, markAdmin, maxDurability } from '../../common/game/itemstack';
 import { POTION_BY_ID, brewResult, isIngredient } from '../../common/data/potions';
 import type { C2S } from '../../common/net/protocol';
 import { raycastBlocks } from '../../common/physics/raycast';
@@ -230,8 +230,10 @@ export class Workstations {
     const baseCost = left.tag?.repairCost ?? 0;
     if (right) {
       const rdef = items[right.id]!;
-      const maxDur = ldef.def.durability ?? 0;
-      if (maxDur > 0 && ldef.def.repair && rdef.id === ldef.def.repair) {
+      const maxDur = maxDurability(left);
+      // The repair material is an item id or an item tag (planks; V6: either membrane for Elytra)
+      const rep = ldef.def.repair;
+      if (maxDur > 0 && rep && (rdef.id === rep || rdef.tags.has(rep))) {
         // Repair with material: each unit restores a quarter
         let dmg = left.damage ?? 0;
         if (dmg <= 0) return { stack: null, cost: 0, material: 0 };

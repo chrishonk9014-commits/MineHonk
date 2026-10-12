@@ -3,6 +3,12 @@
  * with end crystals and holding the (inactive) exit portal, an empty void
  * out to 1000 blocks, and beyond it a field of outer islands with chorus
  * forests, void crystals and end cities.
+ *
+ * V6: far beyond, between EXPANSION_INNER and EXPANSION_OUTER, lies the
+ * Expanded End (./endExpansion.ts), in every world. In worlds made with
+ * generator 6 or later the outer islands thin out and stop well before it
+ * (APPROACH_FADE_START..APPROACH_FADE_END), leaving open void; older worlds
+ * keep their End exactly as it generated before, up to the ring.
  */
 import { Chunk } from '../world/chunk';
 import { Octave2 } from '../math/noise';
@@ -13,7 +19,13 @@ import { DecorView } from './decorate/view';
 import { placeTree } from './features/trees';
 import { StructureManager } from './structures/manager';
 import { END_CITY } from './structures/end';
-import { ProtoCache, cloneChunk, addGenEntities, type DimensionGenerator, type GeneratorOptions, type SpawnPoint } from './pipeline';
+import { ProtoCache, cloneChunk, addGenEntities, LATEST_GENERATOR, type DimensionGenerator, type GeneratorOptions, type SpawnPoint } from './pipeline';
+import { ExpansionTerrain } from './endExpansion';
+import { APPROACH_FADE_END, APPROACH_FADE_START, EXPANSION_GENERATOR, EXPANSION_INNER, EXPANSION_OUTER, EXPANSION_STRUCTURES_GENERATOR, chunkInExpansion, inExpansion } from '../endExpansion/region';
+import { expansionStructureTypes } from './structures/expanded';
+import { EXPANSION_STRUCTURE_IDS, GIANT_IDS, GIANT_TYPE } from '../endExpansion/structures';
+import type { CitadelPlan } from '../endExpansion/citadel';
+import type { Start } from './structures/manager';
 
 /** Distance from the centre where the outer islands begin. */
 export const OUTER_ISLANDS = 1000;
@@ -69,8 +81,17 @@ export class EndTerrain {
   private readonly edge: Octave2;
   private readonly under: Octave2;
   private readonly rare: Octave2;
+  /** V6 worlds: the outer islands stop short of the Expanded End. */
+  private readonly approachGap: boolean;
+  private expansionTerrain: ExpansionTerrain | null = null;
+  private readonly version: number;
 
-  constructor(readonly seed: number) {
+  constructor(
+    readonly seed: number,
+    version = LATEST_GENERATOR,
+  ) {
+    this.approachGap = version >= EXPANSION_GENERATOR;
+    this.version = version;
     const r = (salt: number): Random => new Random(hashInts(seed, salt, 0xe4d));
     this.field = new Octave2(r(1), 3, 110);
     this.hills = new Octave2(r(2), 2, 36);
@@ -79,9 +100,24 @@ export class EndTerrain {
     this.rare = new Octave2(r(5), 2, 420);
   }
 
+  /** The Expanded End's terrain (built on first use). */
+  get expansion(): ExpansionTerrain {
+    return (this.expansionTerrain ??= new ExpansionTerrain(this.seed, this.version));
+  }
+
+  /** Whether this world's End has the Expanded End (worlds made before V6 keep the classic End only). */
+  get expanded(): boolean {
+    return this.approachGap;
+  }
+
   private fieldValue(x: number, z: number, d: number): number {
     // Fade the outer field in past OUTER_ISLANDS
-    const t = 0.2 + Math.max(0, (OUTER_ISLANDS + 120 - d) / 120) * 0.6;
+    let t = 0.2 + Math.max(0, (OUTER_ISLANDS + 120 - d) / 120) * 0.6;
+    if (this.approachGap && d > APPROACH_FADE_START) {
+      // V6: the field thins out to nothing on the way to the Expanded End
+      if (d >= APPROACH_FADE_END) return 0;
+      t += (1 - t) * ((d - APPROACH_FADE_START) / (APPROACH_FADE_END - APPROACH_FADE_START));
+    }
     const v = this.field.sample(x, z);
     return v > t ? (v - t) / (1 - t) : 0;
   }
@@ -98,6 +134,7 @@ export class EndTerrain {
       return { top, bottom: Math.max(1, bottom) };
     }
     if (d < OUTER_ISLANDS) return null;
+    if (d >= EXPANSION_INNER && d < EXPANSION_OUTER) return this.expansion.topColumn(x, z);
     const a = this.fieldValue(x, z, d);
     if (a <= 0) return null;
     const top = 50 + Math.floor(Math.min(0.8, a) * 42 + this.hills.sample(x, z) * 4);
@@ -110,6 +147,7 @@ export class EndTerrain {
     const b = eb();
     const d = Math.hypot(x, z);
     if (d < OUTER_ISLANDS) return b.end;
+    if (d >= EXPANSION_INNER && d < EXPANSION_OUTER) return this.expansion.biomeAt(x, z);
     if (d > 2500 && this.rare.sample(x, z) > 0.5) return b.voidReach;
     const a = this.fieldValue(x, z, d);
     if (a > 0.3) return b.highlands;
@@ -122,13 +160,16 @@ export class EndTerrain {
     const stone = S('end_stone');
     const bx = cx << 4;
     const bz = cz << 4;
+    const ring = chunkInExpansion(cx, cz);
     for (let z = 0; z < 16; z++)
       for (let x = 0; x < 16; x++) {
+        if (ring && inExpansion(bx + x, bz + z)) continue;
         c.biomes[(z << 4) | x] = this.biomeAt(bx + x, bz + z);
         const col = this.column(bx + x, bz + z);
         if (!col) continue;
         for (let y = col.bottom; y <= col.top; y++) c.setRaw(x, y, z, stone);
       }
+    if (ring) this.expansion.fill(c);
     c.recomputeHeightmap();
     return c;
   }
@@ -247,17 +288,30 @@ function voidCrystals(v: DecorView, seed: number, cx: number, cz: number): void 
     }
 }
 
+/** True when chunk (cx, cz) or a neighbour lies in the Expanded End (its features may reach in). */
+function nearExpansion(cx: number, cz: number): boolean {
+  for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) if (chunkInExpansion(cx + dx, cz + dz)) return true;
+  return false;
+}
+
 export class EndGenerator implements DimensionGenerator {
   readonly dimension = 'end' as const;
   readonly terrain: EndTerrain;
   readonly structures: StructureManager;
+  /**
+   * V6 phase 3: the Expanded End's structures (the End City 2.0 variants and
+   * the giant structures), in generator 8 worlds only. Null in older worlds.
+   */
+  readonly expansionStructures: StructureManager | null;
   private readonly protos: ProtoCache;
+  /** Columns covered by expansion structure pieces, per chunk (landscape features keep out of them). */
+  private readonly covered = new Map<string, number[]>();
 
   constructor(
     readonly seed: number,
     opts: GeneratorOptions = {},
   ) {
-    this.terrain = new EndTerrain(seed);
+    this.terrain = new EndTerrain(seed, opts.version ?? LATEST_GENERATOR);
     this.protos = new ProtoCache(400, (cx, cz) => this.terrain.generate(cx, cz));
     const top = (x: number, z: number): number => this.terrain.column(x, z)?.top ?? -1;
     this.structures = new StructureManager(
@@ -273,6 +327,81 @@ export class EndGenerator implements DimensionGenerator {
       },
       () => opts.structures !== false,
     );
+    const version = opts.version ?? LATEST_GENERATOR;
+    this.structuresOn = opts.structures !== false;
+    this.expansionStructures = version >= EXPANSION_STRUCTURES_GENERATOR ? this.newExpansionManager() : null;
+  }
+
+  private readonly structuresOn: boolean;
+  private census: StructureManager | null = null;
+  /**
+   * V6 phase 5: the Void Citadel, once the server has picked its site (it is
+   * built into the chunks generated from then on; saved chunks never change).
+   */
+  citadel: CitadelPlan | null = null;
+
+  /** Whether the Citadel's footprint holds a column (features keep out of it). */
+  private inCitadel(x: number, z: number, reach = 0): boolean {
+    const c = this.citadel;
+    return !!c && x + reach >= c.bounds.x0 && x - reach <= c.bounds.x1 && z + reach >= c.bounds.z0 && z - reach <= c.bounds.z1;
+  }
+
+  private newExpansionManager(): StructureManager {
+    return new StructureManager(
+      this.seed,
+      expansionStructureTypes(this.terrain.expansion),
+      {
+        seed: this.seed,
+        groundY: (x, z) => this.terrain.expansion.topColumn(x, z)?.top ?? -1,
+        isWater: () => false,
+        biome: (x, z) => biomeOf(this.terrain.biomeAt(x, z)),
+        estimateHeight: (x, z) => this.terrain.expansion.topColumn(x, z)?.top ?? -1,
+        estimateBiome: (x, z) => biomeOf(this.terrain.biomeAt(x, z)),
+      },
+      () => this.structuresOn,
+      true,
+      16,
+    );
+  }
+
+  /**
+   * V6 phase 4: a second manager over the same structures (the same seed, so
+   * the same starts) for surveys over wide areas, such as the broken
+   * portals' census, so they never churn the chunk generator's cache.
+   */
+  censusManager(): StructureManager | null {
+    if (!this.expansionStructures) return null;
+    return (this.census ??= this.newExpansionManager());
+  }
+
+  /** Whether an expansion structure's piece covers a column (features keep out). Pure: plans read only the seed. */
+  private coveredBy(x: number, z: number, reach = 0): boolean {
+    const m = this.expansionStructures;
+    if (!m) return false;
+    const key = `${x >> 4},${z >> 4}`;
+    let boxes = this.covered.get(key);
+    if (!boxes) {
+      boxes = [];
+      for (const s of m.startsFor(x >> 4, z >> 4)) for (const p of s.pieces) boxes.push(p.box.x0 - 2, p.box.z0 - 2, p.box.x1 + 2, p.box.z1 + 2);
+      if (this.covered.size > 256) this.covered.clear();
+      this.covered.set(key, boxes);
+    }
+    for (let i = 0; i < boxes.length; i += 4) if (x + reach >= boxes[i]! && z + reach >= boxes[i + 1]! && x - reach <= boxes[i + 2]! && z - reach <= boxes[i + 3]!) return true;
+    // A feature reaching across into the next chunk's structure
+    if (reach > 0 && ((x + reach) >> 4 !== x >> 4 || (x - reach) >> 4 !== x >> 4 || (z + reach) >> 4 !== z >> 4 || (z - reach) >> 4 !== z >> 4)) {
+      for (const [dx, dz] of [
+        [reach, 0],
+        [-reach, 0],
+        [0, reach],
+        [0, -reach],
+        [reach, reach],
+        [-reach, -reach],
+        [reach, -reach],
+        [-reach, reach],
+      ] as const)
+        if ((x + dx) >> 4 !== x >> 4 || (z + dz) >> 4 !== z >> 4) if (this.coveredBy(x + dx, z + dz, 0)) return true;
+    }
+    return false;
   }
 
   generate(cx: number, cz: number): Chunk {
@@ -282,9 +411,24 @@ export class EndGenerator implements DimensionGenerator {
     mainIsland(v, this.seed, this.terrain, c);
     const starts = this.structures.build(v);
     voidCrystals(v, this.seed, cx, cz);
+    // V6: the Expanded End's landscape and the arrival site; phase 3: its structures
+    let expansionStarts: Start[] = [];
+    if (nearExpansion(cx, cz)) {
+      const ex = this.expansionStructures;
+      const cit = this.citadel;
+      const keepOut = ex && cit ? (x: number, z: number, reach: number) => this.coveredBy(x, z, reach) || this.inCitadel(x, z, reach) : ex ? (x: number, z: number, reach: number) => this.coveredBy(x, z, reach) : cit ? (x: number, z: number, reach: number) => this.inCitadel(x, z, reach) : undefined;
+      this.terrain.expansion.decorate(v, keepOut);
+      if (ex) expansionStarts = ex.build(v);
+      // The Void Citadel's part of this chunk (and its Constructs)
+      if (cit && (cx << 4) + 15 >= cit.bounds.x0 && cx << 4 <= cit.bounds.x1 && (cz << 4) + 15 >= cit.bounds.z0 && cz << 4 <= cit.bounds.z1) {
+        cit.build(v);
+        expansionStarts.push({ type: 'void_citadel', x: cit.x, y: cit.entrance[1], z: cit.z, pieces: [], bounds: cit.bounds, entities: cit.entities });
+      }
+    }
     c.recount();
     c.recomputeHeightmap();
     for (const s of starts) addGenEntities(c, s);
+    for (const s of expansionStarts) addGenEntities(c, s);
     return c;
   }
 
@@ -297,17 +441,36 @@ export class EndGenerator implements DimensionGenerator {
   }
 
   structureAt(x: number, y: number, z: number): string | null {
-    return this.structures.structureAt(x, y, z);
+    return this.structures.structureAt(x, y, z) ?? this.expansionStructures?.structureAt(x, y, z) ?? null;
   }
 
   structureTypes(): string[] {
-    return [...this.structures.typeIds(), 'end_fountain'];
+    return [...this.structures.typeIds(), 'end_fountain', ...(this.expansionStructures ? EXPANSION_STRUCTURE_IDS : [])];
   }
 
   *locateSteps(type: string, x: number, z: number): Generator<void, { x: number; y: number; z: number } | null> {
     if (type === 'end_fountain') return { x: 0, y: exitPortalY(this.terrain) + 1, z: 0 };
+    if (EXPANSION_STRUCTURE_IDS.includes(type)) {
+      const s = yield* this.expansionSteps(type, x, z);
+      return s ? { x: s.x, y: s.y, z: s.z } : null;
+    }
     const s = yield* this.structures.nearestSteps(type, x, z);
     return s ? { x: s.x, y: s.y, z: s.z } : null;
+  }
+
+  /** Nearest Expanded End structure of a kind (variant or giant), searched a region ring at a time. */
+  *expansionSteps(type: string, x: number, z: number): Generator<void, Start | null> {
+    const m = this.expansionStructures;
+    if (!m) return null;
+    if (GIANT_IDS.includes(type)) return yield* m.nearestSteps(GIANT_TYPE, x, z, 8, (s) => s.type === type);
+    return yield* m.nearestSteps(type, x, z, 24);
+  }
+
+  /** The expansion structure starts whose bounds hold a column (players finding them, the Admin Panel). */
+  expansionStartsAt(x: number, z: number): Start[] {
+    const m = this.expansionStructures;
+    if (!m || !inExpansion(x, z)) return [];
+    return m.startsFor(x >> 4, z >> 4).filter((s) => x >= s.bounds.x0 && x <= s.bounds.x1 && z >= s.bounds.z0 && z <= s.bounds.z1);
   }
 
   locate(type: string, x: number, z: number): { x: number; y: number; z: number } | null {

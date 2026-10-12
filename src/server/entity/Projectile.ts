@@ -11,8 +11,9 @@ import { STATE_SOLID, STATE_FLUID } from '../../common/registry/blocks';
 import type { EntitySpawn } from '../../common/net/protocol';
 import { entityInfo } from '../../common/data/entities';
 import { toSaved, fromSaved, type ItemStack, type SavedStack } from '../../common/game/itemstack';
+import { CHORUS_GLOB_GRAVITY } from '../../common/endExpansion/combat';
 
-export type ProjectileKind = 'arrow' | 'snowball' | 'egg' | 'ender_pearl' | 'small_fireball' | 'fireball' | 'dragon_fireball' | 'potion' | 'shulker_bullet' | 'rift_bolt' | 'experience_bottle' | 'trident';
+export type ProjectileKind = 'arrow' | 'snowball' | 'egg' | 'ender_pearl' | 'small_fireball' | 'fireball' | 'dragon_fireball' | 'potion' | 'shulker_bullet' | 'rift_bolt' | 'experience_bottle' | 'trident' | 'malware' | 'herobrine_bolt' | 'chorus_glob' | 'crystal_bolt' | 'crystal_shard';
 
 const GRAVITY: Record<ProjectileKind, number> = {
   arrow: 0.05,
@@ -27,6 +28,13 @@ const GRAVITY: Record<ProjectileKind, number> = {
   dragon_fireball: 0,
   shulker_bullet: 0,
   rift_bolt: 0,
+  malware: 0,
+  herobrine_bolt: 0,
+  // V6: a Chorus Beast's throw (no drag: it follows exactly the arc it showed)
+  chorus_glob: CHORUS_GLOB_GRAVITY,
+  // V6 phase 3: a Sentinel's crystal bolt and a Shardstaff's shard fly straight
+  crystal_bolt: 0,
+  crystal_shard: 0,
 };
 
 export interface ProjectileHit {
@@ -69,9 +77,11 @@ export class Projectile extends Entity {
   onReturn: ((p: Projectile) => void) | null = null;
   /** Free-form data (spectral arrows, potion effects...). */
   data?: Record<string, unknown>;
+  /** V6 phase 3: blocks still to fly straight before drag and gravity apply (a Voidpiercer's bolt). */
+  straight = 0;
 
   constructor(readonly kind: ProjectileKind) {
-    const size = kind === 'fireball' || kind === 'dragon_fireball' ? 1 : kind === 'arrow' || kind === 'trident' ? 0.5 : 0.25;
+    const size = kind === 'fireball' || kind === 'dragon_fireball' || kind === 'malware' ? 1 : kind === 'arrow' || kind === 'trident' || kind === 'herobrine_bolt' ? 0.5 : 0.25;
     super(size, size);
     this.type = kind;
     this.persistent = false;
@@ -139,6 +149,22 @@ export class Projectile extends Entity {
     const ex = x0 + (this.vx / (len || 1)) * travel;
     const ey = y0 + (this.vy / (len || 1)) * travel;
     const ez = z0 + (this.vz / (len || 1)) * travel;
+    // An ender pearl flying through an End Gateway takes its thrower along
+    if (this.kind === 'ender_pearl' && this.dim.id === 'end' && travel > 0) {
+      const steps = Math.ceil(travel / 0.25);
+      for (let i = 0; i <= steps; i++) {
+        const f = i / steps;
+        const gx = Math.floor(x0 + (ex - x0) * f);
+        const gy = Math.floor(y0 + (ey - y0) * f);
+        const gz = Math.floor(z0 + (ez - z0) * f);
+        if (this.dim.blockId(gx, gy, gz) !== 'end_gateway') continue;
+        if (this.dim.server.theEnd?.pearlGateway(this.owner, gx, gy, gz)) {
+          this.remove();
+          return;
+        }
+        break;
+      }
+    }
     let best = Infinity;
     const mid = [(x0 + ex) / 2, (y0 + ey) / 2, (z0 + ez) / 2] as const;
     // A trident that already hit something just drops
@@ -189,13 +215,16 @@ export class Projectile extends Entity {
         return;
       }
     }
-    // Drag & gravity
+    // Drag & gravity (none while a straight-flying bolt has distance left)
+    if (this.straight > 0) this.straight -= len;
     const inWater = this.dim.getState(Math.floor(this.x), Math.floor(this.y), Math.floor(this.z)) !== 0 && this.isInFluid();
-    const drag = inWater ? 0.6 : this.kind === 'fireball' || this.kind === 'small_fireball' || this.kind === 'dragon_fireball' || this.kind === 'rift_bolt' ? 1 : 0.99;
-    this.vx *= drag;
-    this.vy *= drag;
-    this.vz *= drag;
-    this.vy -= GRAVITY[this.kind];
+    const drag = inWater ? 0.6 : this.kind === 'fireball' || this.kind === 'small_fireball' || this.kind === 'dragon_fireball' || this.kind === 'rift_bolt' || this.kind === 'malware' || this.kind === 'herobrine_bolt' || this.kind === 'chorus_glob' || this.kind === 'crystal_bolt' || this.kind === 'crystal_shard' ? 1 : 0.99;
+    if (this.straight <= 0) {
+      this.vx *= drag;
+      this.vy *= drag;
+      this.vz *= drag;
+      this.vy -= GRAVITY[this.kind];
+    }
     if (len > 0.01) {
       this.yaw = Math.atan2(-this.vx, -this.vz);
       this.pitch = -Math.atan2(this.vy, Math.hypot(this.vx, this.vz));
@@ -203,6 +232,10 @@ export class Projectile extends Entity {
     if ((this.kind === 'fireball' || this.kind === 'small_fireball') && this.age % 2 === 0) this.dim.server.particles(this.dim, 'smoke', this.x, this.y + 0.2, this.z, 1, 0.1);
     if (this.kind === 'dragon_fireball' && this.age % 2 === 0) this.dim.server.particles(this.dim, 'dragon_breath', this.x, this.y + 0.3, this.z, 2, 0.2);
     if (this.kind === 'rift_bolt' && this.age % 2 === 0) this.dim.server.particles(this.dim, 'portal', this.x, this.y, this.z, 2, 0.2);
+    // V5.5: the dragon's malware trails corrupted data; Herobrine's bolts crackle
+    if (this.kind === 'malware' && this.age % 2 === 0) this.dim.server.particles(this.dim, 'malware', this.x, this.y + 0.3, this.z, 3, 0.3);
+    if (this.kind === 'herobrine_bolt' && this.age % 2 === 0) this.dim.server.particles(this.dim, 'glitch', this.x, this.y, this.z, 2, 0.15);
+    if ((this.kind === 'crystal_bolt' || this.kind === 'crystal_shard') && this.age % 2 === 0) this.dim.server.particles(this.dim, 'end_rod', this.x, this.y, this.z, 1, 0.05);
     if (this.crit && this.age % 2 === 0) this.dim.server.particles(this.dim, 'crit', this.x, this.y, this.z, 1, 0.05);
   }
 

@@ -169,7 +169,8 @@ interface MobVisualDef {
   nameY?: number;
   /** Extra per-frame effects. */
   extra?: (m: BoxModel, e: ClientEntity, time: number) => void;
-  glow?: boolean;
+  /** Full-bright (can depend on the entity, e.g. a Voidbound Enderman). */
+  glow?: boolean | ((e: ClientEntity) => boolean);
   transparent?: boolean;
 }
 
@@ -758,25 +759,47 @@ V.spider = {
 };
 V.cave_spider = { ...V.spider!, scale: 0.7 };
 V.enderman = {
-  parts: () => [
-    { name: 'body', pivot: [0, 30, 0], from: [-4, 0, -2], size: [8, 12, 4], colors: { all: '#161616' } },
-    { name: 'head', parent: 'body', pivot: [0, 12, 0], from: [-4, 0, -4], size: [8, 8, 8], colors: { all: '#161616' }, paint: (p) => {
-      p.px('front', 0, 4, '#e080f0', 3, 1);
-      p.px('front', 5, 4, '#e080f0', 3, 1);
-      p.px('front', 1, 4, '#b040d0');
-      p.px('front', 6, 4, '#b040d0');
-    } },
-    { name: 'rightArm', parent: 'body', pivot: [-5, 10, 0], from: [-1, -28, -1], size: [2, 30, 2], colors: { all: '#161616' } },
-    { name: 'leftArm', parent: 'body', pivot: [5, 10, 0], from: [-1, -28, -1], size: [2, 30, 2], colors: { all: '#161616' } },
-    { name: 'rightLeg', pivot: [-2, 30, 0], from: [-1, -30, -1], size: [2, 30, 2], colors: { all: '#161616' } },
-    { name: 'leftLeg', pivot: [2, 30, 0], from: [-1, -30, -1], size: [2, 30, 2], colors: { all: '#161616' } },
-  ],
+  // Voidbound (changed by the mysterious potion): darker, cracked with violet, eyes burning
+  variant: (e) => (e.meta.voidbound ? 'void' : 'plain'),
+  parts: (e) => {
+    const vb = !!e.meta.voidbound;
+    const skin = vb ? '#0e0616' : '#161616';
+    const cracks = (p: FacePainter): void => {
+      if (vb) p.speckle('all', '#4a1a78', 0.07);
+    };
+    return [
+      { name: 'body', pivot: [0, 30, 0], from: [-4, 0, -2], size: [8, 12, 4], colors: { all: skin }, paint: cracks },
+      { name: 'head', parent: 'body', pivot: [0, 12, 0], from: [-4, 0, -4], size: [8, 8, 8], colors: { all: skin }, paint: (p) => {
+        if (vb) {
+          cracks(p);
+          p.px('front', 0, 3, '#ff5ae8', 3, 2);
+          p.px('front', 5, 3, '#ff5ae8', 3, 2);
+          p.px('front', 1, 4, '#ffffff');
+          p.px('front', 6, 4, '#ffffff');
+          p.px('front', 1, 5, '#7a2ad0', 1, 2);
+          p.px('front', 6, 5, '#7a2ad0', 1, 2);
+        } else {
+          p.px('front', 0, 4, '#e080f0', 3, 1);
+          p.px('front', 5, 4, '#e080f0', 3, 1);
+          p.px('front', 1, 4, '#b040d0');
+          p.px('front', 6, 4, '#b040d0');
+        }
+      } },
+      { name: 'rightArm', parent: 'body', pivot: [-5, 10, 0], from: [-1, -28, -1], size: [2, 30, 2], colors: { all: skin }, paint: cracks },
+      { name: 'leftArm', parent: 'body', pivot: [5, 10, 0], from: [-1, -28, -1], size: [2, 30, 2], colors: { all: skin }, paint: cracks },
+      { name: 'rightLeg', pivot: [-2, 30, 0], from: [-1, -30, -1], size: [2, 30, 2], colors: { all: skin }, paint: cracks },
+      { name: 'leftLeg', pivot: [2, 30, 0], from: [-1, -30, -1], size: [2, 30, 2], colors: { all: skin }, paint: cracks },
+    ];
+  },
   anim: (m, e, alpha) => {
     animateHumanoid(m, e, alpha);
     const head = m.part('head');
     if (head) head.position.y = (12 + (e.meta.angry === true ? 2 : 0)) / 16;
-    m.root.position.x = e.meta.angry === true ? (Math.random() - 0.5) * 0.04 : 0;
+    // A Voidbound Enderman never stands quite still
+    const jitter = e.meta.angry === true ? 0.04 : e.meta.voidbound ? 0.025 : 0;
+    m.root.position.x = jitter ? (Math.random() - 0.5) * jitter : 0;
   },
+  glow: (e) => !!e.meta.voidbound,
   nameY: 3.2,
 };
 V.slime = {
@@ -1726,10 +1749,401 @@ V.ender_dragon = {
       if (l) l.rotation.x = perched ? 0 : 0.9;
     }
     if (dying && Math.floor(time / 2) % 2 === 0) m.material.color.setRGB(1.6, 1.4, 1.8);
+    // V6 phase 5: rearing up on the portal before a Wing Gust, wings raised high
+    m.root.rotation.x = 0;
+    if (e.meta.rear === true) {
+      m.root.rotation.x = -0.55;
+      if (wl) wl.rotation.z = 1.1 + Math.sin(time * 0.6) * 0.1;
+      if (wr) wr.rotation.z = -1.1 - Math.sin(time * 0.6) * 0.1;
+      if (tl) tl.rotation.z = 0.3;
+      if (tr) tr.rotation.z = -0.3;
+    }
+    // ... and the inhale before a Void Breath Wave: jaws wide, a violet glow in its throat
+    const inhale = e.meta.inhale === true;
+    if (inhale && jaw) jaw.rotation.x = 0.6;
+    for (let i = DRAGON_NECK - 2; i < DRAGON_NECK; i++) {
+      const g = flare(m, 'neck' + i, 'throat' + i, [5.6, 5.6, 5.6], [0, 0, 2.5], 0xb040ff);
+      if (g) {
+        g.visible = inhale;
+        (g.material as THREE.MeshBasicMaterial).opacity = 0.45 + Math.sin(time * 1.2 + i) * 0.25;
+      }
+    }
+  },
+  // V5.5: a dragon that drank the potion leaks data: it flickers green and jerks
+  extra: (m, e, time) => {
+    m.root.position.x = 0;
+    if (!e.meta.malware) return;
+    const tt = Math.floor(time / 2);
+    const g = ((tt * 6271 + e.id * 7919) % 41) < 5;
+    if (g) {
+      m.material.color.setRGB(0.4, 1.6, 0.7);
+      m.root.position.x = ((tt % 3) - 1) * 0.15;
+    } else if (tt % 11 === 0) m.material.color.setRGB(0.8, 1.2, 0.85);
   },
   scale: 2,
   glow: true,
   nameY: 6,
+};
+
+// The Error (V3): a giant glitched figure, authored at a quarter size and
+// scaled x4 (about 17 blocks tall). Chest plates swing open when it kneels to
+// show its core; shards orbit its head; its arms float in broken segments.
+const ERROR_PARTS = ['rightLeg', 'leftLeg', 'body', 'head', 'rightArm', 'rightFore', 'leftArm', 'leftFore', 'plateL', 'plateR', 'core', 'shard0', 'shard1', 'shard2'];
+const errorAnimState = new WeakMap<ClientEntity, { anim: string; since: number }>();
+const errorBase = new WeakMap<THREE.Object3D, THREE.Vector3>();
+function errorScatter(e: ClientEntity, i: number): [number, number, number] {
+  const h = (e.id * 928371 + i * 1237) >>> 0;
+  return [((h % 200) / 100 - 1) * 3, ((h >> 8) % 100) / 100 * 2 - 0.5, (((h >> 16) % 200) / 100 - 1) * 3];
+}
+V.the_error = {
+  parts: () => {
+    const dark = '#07030c';
+    const shell = '#140a20';
+    const crack = (p: FacePainter): void => {
+      p.speckle('all', '#ff2bd6', 0.05);
+      p.speckle('all', '#00e5ff', 0.035);
+      p.speckle('all', '#000000', 0.15);
+    };
+    return [
+      { name: 'rightLeg', pivot: [-5, 30, 0], from: [-3, -30, -3], size: [6, 30, 6], colors: { all: dark }, paint: crack },
+      { name: 'leftLeg', pivot: [5, 30, 0], from: [-3, -30, -3], size: [6, 30, 6], colors: { all: dark }, paint: crack },
+      { name: 'body', pivot: [0, 30, 0], from: [-10, 0, -5], size: [20, 24, 10], colors: { all: shell }, paint: (p) => {
+        crack(p);
+        p.px('back', 9, 2, '#ff2bd6', 2, 18);
+      } },
+      { name: 'core', parent: 'body', pivot: [0, 13, 4.4], from: [-3, -3, 0], size: [6, 6, 1], colors: { all: '#ffffff' }, paint: (p) => {
+        p.fill('front', '#ff5ce6');
+        p.px('front', 2, 2, '#ffffff', 2, 2);
+      } },
+      { name: 'plateL', parent: 'body', pivot: [-9, 19, 5], from: [0, -12, 0], size: [9, 12, 1.5], colors: { all: '#1f0f30' }, paint: (p) => {
+        p.speckle('all', '#9b30ff', 0.08);
+        p.px('front', 1, 1, '#000000', 7, 1);
+      } },
+      { name: 'plateR', parent: 'body', pivot: [9, 19, 5], from: [-9, -12, 0], size: [9, 12, 1.5], colors: { all: '#1f0f30' }, paint: (p) => {
+        p.speckle('all', '#9b30ff', 0.08);
+        p.px('front', 1, 1, '#000000', 7, 1);
+      } },
+      { name: 'head', parent: 'body', pivot: [0, 25, 0], from: [-6, 0, -6], size: [12, 12, 12], colors: { all: dark }, paint: (p) => {
+        crack(p);
+        // Two mismatched eyes and a torn mouth line
+        p.px('front', 2, 4, '#ffffff', 3, 2);
+        p.px('front', 3, 4, '#ff2bd6', 1, 2);
+        p.px('front', 7, 3, '#00e5ff', 3, 3);
+        p.px('front', 8, 4, '#ffffff', 1, 1);
+        p.px('front', 2, 9, '#ff2bd6', 8, 1);
+      } },
+      { name: 'shard0', parent: 'head', pivot: [-5, 15, 0], from: [-1, -1, -1], size: [2, 3, 2], colors: { all: '#f800f8' } },
+      { name: 'shard1', parent: 'head', pivot: [0, 17, 2], from: [-1, -1, -1], size: [2, 4, 2], colors: { all: '#000000' }, paint: (p) => p.speckle('all', '#f800f8', 0.5) },
+      { name: 'shard2', parent: 'head', pivot: [5, 15, -1], from: [-1, -1, -1], size: [2, 3, 2], colors: { all: '#00e5ff' } },
+      { name: 'rightArm', parent: 'body', pivot: [-13, 22, 0], from: [-3, -13, -3], size: [6, 13, 6], colors: { all: shell }, paint: crack },
+      { name: 'rightFore', parent: 'rightArm', pivot: [0, -15, 0], from: [-3, -14, -3], size: [6, 14, 6], colors: { all: dark }, paint: crack },
+      { name: 'leftArm', parent: 'body', pivot: [13, 22, 0], from: [-3, -13, -3], size: [6, 13, 6], colors: { all: shell }, paint: crack },
+      { name: 'leftFore', parent: 'leftArm', pivot: [0, -15, 0], from: [-3, -14, -3], size: [6, 14, 6], colors: { all: dark }, paint: crack },
+    ];
+  },
+  anim: (m, e, alpha, time) => {
+    const anim = String(e.meta.errorAnim ?? 'idle');
+    let st = errorAnimState.get(e);
+    if (!st || st.anim !== anim) {
+      st = { anim, since: time };
+      errorAnimState.set(e, st);
+    }
+    const t = time - st.since;
+    const P = (n: string): THREE.Object3D | undefined => m.part(n);
+    const base = (o: THREE.Object3D): THREE.Vector3 => {
+      let b = errorBase.get(o);
+      if (!b) {
+        b = o.position.clone();
+        errorBase.set(o, b);
+      }
+      return b;
+    };
+    // Reset to the resting pose
+    for (const n of ERROR_PARTS) {
+      const o = P(n);
+      if (!o) continue;
+      o.position.copy(base(o));
+      o.rotation.set(0, 0, 0);
+    }
+    m.root.position.set(0, 0, 0);
+    m.root.visible = true;
+    const head = P('head');
+    if (head) head.rotation.y = angle(e.headYaw - e.yaw) * 0.6;
+    // Idle sway and shards circling the head
+    const sway = Math.sin(time * 0.05 + e.id);
+    for (let i = 0; i < 3; i++) {
+      const s = P('shard' + i);
+      if (s) {
+        s.position.y = base(s).y + Math.sin(time * 0.12 + i * 2) * 0.12;
+        s.rotation.y = time * 0.05 * (i + 1);
+      }
+    }
+    const ra = P('rightArm');
+    const la = P('leftArm');
+    const rf = P('rightFore');
+    const lf = P('leftFore');
+    const body = P('body');
+    if (ra) ra.rotation.z = 0.08 + sway * 0.03;
+    if (la) la.rotation.z = -0.08 - sway * 0.03;
+    const k = (d: number): number => Math.min(1, t / d);
+    switch (anim) {
+      case 'form': {
+        // Pieces fall together out of the static
+        const f = 1 - Math.min(1, t / 50);
+        ERROR_PARTS.forEach((n, i) => {
+          const o = P(n);
+          if (!o) return;
+          const [sx, sy, sz] = errorScatter(e, i);
+          o.position.x += sx * f;
+          o.position.y += sy * f;
+          o.position.z += sz * f;
+          o.rotation.z += sx * f * 0.5;
+        });
+        m.root.visible = f < 0.9 || Math.floor(time) % 3 !== 0;
+        break;
+      }
+      case 'roar':
+        if (head) head.rotation.x = -0.5 * Math.sin(k(40) * Math.PI);
+        if (ra) ra.rotation.z = 1.1 * Math.sin(k(40) * Math.PI) + 0.08;
+        if (la) la.rotation.z = -1.1 * Math.sin(k(40) * Math.PI) - 0.08;
+        break;
+      case 'laser':
+        if (head) head.rotation.x = 0.25;
+        if (ra) ra.rotation.x = 0.5;
+        if (la) la.rotation.x = 0.5;
+        break;
+      case 'slam': {
+        // Both arms up, then down onto the arena
+        const up = Math.min(1, t / 12);
+        const down = Math.max(0, Math.min(1, (t - 14) / 5));
+        const x = -2.6 * up + 2.2 * down;
+        if (ra) ra.rotation.x = x;
+        if (la) la.rotation.x = x;
+        if (body) body.rotation.x = 0.35 * down;
+        break;
+      }
+      case 'cast':
+        if (ra) {
+          ra.rotation.x = -1.3;
+          ra.rotation.z = 0.5;
+        }
+        if (la) {
+          la.rotation.x = -1.3;
+          la.rotation.z = -0.5;
+        }
+        if (rf) rf.position.x += Math.sin(time * 1.7) * 0.05;
+        if (lf) lf.position.x += Math.cos(time * 1.9) * 0.05;
+        break;
+      case 'charge':
+        m.root.position.y = -0.8 * k(20);
+        if (ra) ra.rotation.z = 0.9 * k(20);
+        if (la) la.rotation.z = -0.9 * k(20);
+        if (body) body.rotation.x = 0.2 * k(20);
+        break;
+      case 'kneel': {
+        // Down on one knee, chest plates open: the core is exposed
+        const d = k(14);
+        m.root.position.y = -3.2 * d;
+        const rl = P('rightLeg');
+        const ll = P('leftLeg');
+        if (rl) rl.rotation.x = -1.45 * d;
+        if (ll) ll.rotation.x = 0.35 * d;
+        if (body) body.rotation.x = 0.3 * d;
+        const pl = P('plateL');
+        const pr = P('plateR');
+        if (pl) pl.rotation.y = -1.4 * d;
+        if (pr) pr.rotation.y = 1.4 * d;
+        const core = P('core');
+        if (core) core.scale.setScalar(1 + 0.15 * Math.sin(time * 0.6));
+        if (ra) ra.rotation.x = 0.4 * d;
+        if (la) la.rotation.x = 0.4 * d;
+        break;
+      }
+      case 'death':
+      case 'detach': {
+        // Frozen, twitching, then coming apart piece by piece
+        const detach = anim === 'detach' ? Math.min(1, t / 50) : 0;
+        ERROR_PARTS.forEach((n, i) => {
+          const o = P(n);
+          if (!o) return;
+          const tw = Math.floor(time / 2) % 5 === i % 5 ? 0.06 : 0;
+          const [sx, sy, sz] = errorScatter(e, i + 7);
+          o.position.x += tw + sx * detach * detach * 1.5;
+          o.position.y += sy * detach * 3;
+          o.position.z += sz * detach * detach * 1.5;
+          o.rotation.x += sx * detach;
+          o.rotation.z += sz * detach;
+        });
+        const pl = P('plateL');
+        const pr = P('plateR');
+        if (pl) pl.rotation.y = -1.4;
+        if (pr) pr.rotation.y = 1.4;
+        break;
+      }
+    }
+    // Clones flicker in and out
+    if (e.meta.clone) m.root.visible = Math.floor(time / 3 + e.id) % 4 !== 0;
+    void alpha;
+  },
+  extra: (m, e, time) => {
+    const t = Math.floor(time / 2);
+    const glitch = ((t * 7919 + e.id * 104729) % 67) < 7;
+    m.root.position.x += glitch ? ((t % 3) - 1) * 0.3 : 0;
+    m.root.position.z += glitch ? (((t >> 1) % 3) - 1) * 0.3 : 0;
+    if (glitch) m.material.color.setRGB(1.4, 0.7, 1.5);
+    if (e.meta.clone) m.material.color.multiply(new THREE.Color(0.6, 1.2, 1.4));
+  },
+  scale: 4,
+  glow: true,
+  nameY: 18.5,
+};
+
+// Herobrine (V5.5): the shape everyone knows, with white eyes that light
+// themselves. He comes out of a screen in slices, goes back into it the same
+// way, stands plugged into his machines, and sometimes isn't quite there.
+const hbAnimState = new WeakMap<ClientEntity, { anim: string; since: number }>();
+const hbEyes = new WeakSet<THREE.Object3D>();
+const HB_EYE_MAT = new THREE.MeshBasicMaterial({ color: 0xffffff, fog: true });
+const HB_EYE_GEO = new THREE.PlaneGeometry(2 / 16, 1 / 16);
+const HB_CABLE = '#1a1a1e';
+V.herobrine = {
+  parts: () => [
+    ...humanoidParts({
+      head: { all: '#b4846d', top: '#3b2512', back: '#3b2512' },
+      body: { all: '#00a8a8' },
+      arms: { all: '#b4846d', top: '#00a8a8' },
+      legs: { all: '#3c34a0', bottom: '#4a4a4a' },
+      face: (p) => {
+        // Hair, the face, white eyes with nothing in them, the beard line
+        p.px('front', 0, 0, '#3b2512', 8, 2);
+        p.px('front', 0, 2, '#3b2512', 1, 1);
+        p.px('front', 7, 2, '#3b2512', 1, 1);
+        p.px('front', 1, 4, '#ffffff', 2, 1);
+        p.px('front', 5, 4, '#ffffff', 2, 1);
+        p.px('front', 3, 5, '#946452', 2, 1);
+        p.px('front', 2, 6, '#6a3e2a', 4, 1);
+        p.px('front', 2, 7, '#5a3420', 4, 1);
+        p.px('left', 0, 0, '#3b2512', 8, 3);
+        p.px('right', 0, 0, '#3b2512', 8, 3);
+      },
+      bodyPaint: (p) => p.speckle('front', 'rgba(0,0,0,0.08)', 0.2),
+    }),
+    // Cables from his back into the floor (shown while he is plugged in)
+    { name: 'cableL', parent: 'body', pivot: [-2, 6, -2], from: [-0.5, -18, -0.5], size: [1, 18, 1], rot: [-0.5, 0, 0.15], colors: { all: HB_CABLE } },
+    { name: 'cableR', parent: 'body', pivot: [2, 6, -2], from: [-0.5, -18, -0.5], size: [1, 18, 1], rot: [-0.5, 0, -0.15], colors: { all: HB_CABLE } },
+    { name: 'cableN', parent: 'head', pivot: [0, 4, -4], from: [-0.5, -0.5, -12], size: [1, 1, 12], rot: [0.6, 0, 0], colors: { all: HB_CABLE } },
+  ],
+  anim: (m, e, alpha, time) => {
+    const anim = String(e.meta.hbAnim ?? 'idle');
+    let st = hbAnimState.get(e);
+    if (!st || st.anim !== anim) {
+      st = { anim, since: time };
+      hbAnimState.set(e, st);
+    }
+    const t = time - st.since;
+    const P = (n: string): THREE.Object3D | undefined => m.part(n);
+    // The eyes light themselves (once per model)
+    const head = P('head');
+    if (head && !hbEyes.has(head)) {
+      hbEyes.add(head);
+      for (const x of [-2, 2]) {
+        const eye = new THREE.Mesh(HB_EYE_GEO, HB_EYE_MAT);
+        eye.position.set(x / 16, 3.5 / 16, 4 / 16 + 0.003);
+        head.add(eye);
+      }
+    }
+    const still = anim === 'stare' || anim === 'plugged' || anim === 'emerge' || anim === 'retreat' || anim === 'death';
+    if (still) {
+      for (const n of ['rightLeg', 'leftLeg', 'rightArm', 'leftArm']) {
+        const o = P(n);
+        if (o) o.rotation.set(0, 0, 0);
+      }
+      if (head) {
+        head.rotation.y = anim === 'stare' ? angle(e.headYaw - e.yaw) : 0;
+        head.rotation.x = 0;
+      }
+      m.root.position.y = 0;
+    } else animateHumanoid(m, e, alpha);
+    m.root.scale.set(1, 1, 1);
+    m.root.visible = true;
+    const plugged = anim === 'plugged';
+    for (const n of ['cableL', 'cableR', 'cableN']) {
+      const o = P(n);
+      if (o) o.visible = plugged;
+    }
+    const ra = P('rightArm');
+    const la = P('leftArm');
+    const body = P('body');
+    if (body) body.rotation.x = 0;
+    const k = (d: number): number => Math.min(1, t / d);
+    switch (anim) {
+      case 'emerge': {
+        // Out of the screen a slice at a time
+        const f = k(50);
+        m.root.scale.set(1, 0.15 + 0.85 * f, 0.2 + 0.8 * f);
+        m.root.visible = f > 0.95 || Math.floor(time) % 3 !== 0;
+        if (head) head.rotation.x = 0.4 * (1 - f);
+        break;
+      }
+      case 'retreat': {
+        const f = 1 - k(50);
+        m.root.scale.set(1, Math.max(0.05, f), Math.max(0.1, f));
+        m.root.visible = Math.floor(time) % 3 !== 0;
+        break;
+      }
+      case 'plugged':
+        if (head) head.rotation.x = 0.35 + Math.sin(time * 0.05) * 0.03;
+        if (ra) ra.rotation.z = 0.15;
+        if (la) la.rotation.z = -0.15;
+        break;
+      case 'vanish':
+        m.root.visible = Math.floor(time / 2) % 2 === 0;
+        break;
+      case 'windup':
+        if (ra) {
+          ra.rotation.x = -2.6 * k(6);
+          ra.rotation.z = 0.2;
+        }
+        break;
+      case 'cast':
+        if (ra) ra.rotation.x = -1.45;
+        if (la) la.rotation.x = -1.45;
+        break;
+      case 'slam': {
+        const up = k(12);
+        const down = Math.max(0, Math.min(1, (t - 14) / 5));
+        if (ra) ra.rotation.x = -2.8 * up + 2.4 * down;
+        if (la) la.rotation.x = -2.8 * up + 2.4 * down;
+        break;
+      }
+      case 'pull':
+        if (ra) {
+          ra.rotation.z = 1.3;
+          ra.rotation.x = -0.4;
+        }
+        if (la) {
+          la.rotation.z = -1.3;
+          la.rotation.x = -0.4;
+        }
+        break;
+      case 'death': {
+        const tw = Math.floor(time / 2) % 4 === 0;
+        if (head) head.rotation.z = tw ? 0.3 : -0.1;
+        if (body) body.rotation.x = 0.15 * k(40);
+        m.root.visible = Math.floor(time / 3) % 5 !== 0;
+        break;
+      }
+    }
+  },
+  extra: (m, e, time) => {
+    // Never quite still
+    const tt = Math.floor(time / 2);
+    const glitch = ((tt * 7919 + e.id * 104729) % 89) < (e.meta.apparition ? 3 : 6);
+    m.root.position.x = glitch ? ((tt % 3) - 1) * 0.07 : 0;
+    m.root.position.z = glitch ? (((tt >> 1) % 3) - 1) * 0.07 : 0;
+    if (glitch) m.material.color.setRGB(1.25, 1.25, 1.3);
+  },
+  nameY: 2.3,
 };
 
 function glitchJitter(m: BoxModel, e: ClientEntity, time: number): void {
@@ -1739,6 +2153,700 @@ function glitchJitter(m: BoxModel, e: ClientEntity, time: number): void {
   m.root.position.z = glitch ? (((t >> 1) % 3) - 1) * 0.08 : 0;
   if (glitch) m.material.color.setRGB(0.8, 1.3, 1.3);
 }
+
+// ---------------------------------------------------------------- V6 phase 2: the Expanded End
+// Every attack shows: the server sets `tele` (lunge, slam, throw, bite, dive) for the whole wind-up.
+
+/** Bright, unlit bits (flaring eyes, flared wings, a held orb) that ignore the area's light level. */
+const flareBits = new WeakMap<BoxModel, Map<string, THREE.Mesh>>();
+function flare(m: BoxModel, part: string, key: string, size: [number, number, number], at: [number, number, number], color: number): THREE.Mesh | null {
+  let bits = flareBits.get(m);
+  if (!bits) flareBits.set(m, (bits = new Map()));
+  let mesh = bits.get(key);
+  if (!mesh) {
+    const p = m.part(part);
+    if (!p) return null;
+    mesh = new THREE.Mesh(new THREE.BoxGeometry(size[0] / 16, size[1] / 16, size[2] / 16), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.95, depthWrite: false }));
+    mesh.position.set(at[0] / 16, at[1] / 16, at[2] / 16);
+    mesh.visible = false;
+    p.add(mesh);
+    bits.set(key, mesh);
+  }
+  return mesh;
+}
+
+V.endling = {
+  parts: () => {
+    const lav = '#d8c8f0';
+    const leg = (n: string, x: number, z: number): KitPart => ({ name: n, pivot: [x, 2, z], from: [-0.75, -2, -0.75], size: [1.5, 2, 1.5], colors: { all: '#b8a8d8' } });
+    return [
+      { name: 'body', pivot: [0, 2, 0], from: [-3, 0, -3.5], size: [6, 4, 7], colors: { all: lav, bottom: '#ece4fa' }, paint: (p) => p.speckle('top', '#c4b0e8', 0.25) },
+      { name: 'head', pivot: [0, 5, 1.5], from: [-3.5, -1, -2.5], size: [7, 5, 6], colors: { all: lav }, paint: (p) => {
+        // Big dark eyes with a glint, and a small mouth
+        p.px('front', 0, 1, '#1a1028', 3, 3);
+        p.px('front', 4, 1, '#1a1028', 3, 3);
+        p.px('front', 1, 1, '#ffffff');
+        p.px('front', 5, 1, '#ffffff');
+        p.px('front', 3, 4, '#9a7ab8');
+        p.speckle('top', '#c4b0e8', 0.2);
+      } },
+      { name: 'earL', parent: 'head', pivot: [2.5, 4, 0], from: [-0.5, 0, -1], size: [1, 3, 2], rot: [0, 0, -0.3], colors: { all: lav, front: '#f0b8e0' } },
+      { name: 'earR', parent: 'head', pivot: [-2.5, 4, 0], from: [-0.5, 0, -1], size: [1, 3, 2], rot: [0, 0, 0.3], colors: { all: lav, front: '#f0b8e0' } },
+      { name: 'tail', parent: 'body', pivot: [0, 3, -3.5], from: [-0.5, -0.5, -2], size: [1, 1, 2], rot: [0.5, 0, 0], colors: { all: '#c4b0e8' } },
+      leg('leg0', -2, 2),
+      leg('leg1', 2, 2),
+      leg('leg2', -2, -2),
+      leg('leg3', 2, -2),
+    ];
+  },
+  anim: (m, e, alpha, time) => {
+    animQuad(m, e, alpha, time);
+    babyScale(m, e);
+    // A little hop as it trots, and twitching ears
+    m.root.position.y = Math.abs(Math.sin(walkPhase(e, alpha) * 1.2)) * 0.08 * Math.min(1, e.limbSpeed * 2);
+    const tw = Math.sin(time * 0.15 + e.id) > 0.92 ? 0.35 : 0;
+    const el = m.part('earL');
+    const er = m.part('earR');
+    if (el) el.rotation.z = -0.3 - tw;
+    if (er) er.rotation.z = 0.3 + tw;
+  },
+  nameY: 0.9,
+};
+
+V.void_stalker = {
+  parts: () => {
+    const dark = '#120c1c';
+    const vein = (p: FacePainter): void => p.speckle('all', '#3a1a5a', 0.12);
+    return [
+      { name: 'rightLeg', pivot: [-2, 16, 0], from: [-1.5, -16, -1.5], size: [3, 16, 3], colors: { all: dark }, paint: vein },
+      { name: 'leftLeg', pivot: [2, 16, 0], from: [-1.5, -16, -1.5], size: [3, 16, 3], colors: { all: dark }, paint: vein },
+      { name: 'body', pivot: [0, 16, 0], from: [-4, 0, -2], size: [8, 12, 4], colors: { all: dark }, paint: (p) => {
+        vein(p);
+        // Ribs of faint violet light
+        for (let y = 3; y < 10; y += 2) p.px('front', 2, y, '#4a2a78', 4, 1);
+      } },
+      { name: 'head', parent: 'body', pivot: [0, 12, 0], from: [-3.5, 0, -3.5], size: [7, 7, 7], colors: { all: dark }, paint: (p) => {
+        vein(p);
+        p.px('front', 1, 3, '#9a4dff', 2, 1);
+        p.px('front', 4, 3, '#9a4dff', 2, 1);
+        p.px('front', 1, 4, '#3a1a5a', 5, 1);
+      } },
+      { name: 'rightArm', parent: 'body', pivot: [-5, 11, 0], from: [-1, -19, -1], size: [2, 20, 2], colors: { all: dark, bottom: '#6a3aa8' }, paint: vein },
+      { name: 'leftArm', parent: 'body', pivot: [5, 11, 0], from: [-1, -19, -1], size: [2, 20, 2], colors: { all: dark, bottom: '#6a3aa8' }, paint: vein },
+    ];
+  },
+  anim: (m, e, alpha, time) => {
+    // Hidden while it is in the void (and until it has climbed out)
+    const away = e.meta.slip === 'gone' || e.meta.slip === 'rise';
+    m.root.visible = !away;
+    animateHumanoid(m, e, alpha, { armsForward: e.meta.angry === true });
+    const body = m.part('body');
+    const crouch = e.meta.tele === 'lunge';
+    if (body) body.rotation.x = crouch ? 0.75 : 0.28;
+    const rl = m.part('rightLeg');
+    const ll = m.part('leftLeg');
+    if (crouch) {
+      // Coiled to spring, swaying a little
+      m.root.position.y = -0.32 + Math.sin(time * 0.8) * 0.02;
+      if (rl) rl.rotation.x = -0.9;
+      if (ll) ll.rotation.x = -0.9;
+      const ra = m.part('rightArm');
+      const la = m.part('leftArm');
+      if (ra) ra.rotation.x = -1.1;
+      if (la) la.rotation.x = -1.1;
+    } else m.root.position.y = 0;
+    // Faintly glowing eyes (it is all but invisible in the dark otherwise) that flare through the wind-up
+    const pulse = 0.7 + Math.sin(time * 1.2) * 0.3;
+    for (const [k, x] of [['eyeL', 1.5], ['eyeR', -1.5]] as const) {
+      const eye = flare(m, 'head', k, [2.2, 1.2, 0.4], [x, 3.6, 3.7], 0xe0b0ff);
+      if (eye) {
+        (eye.material as THREE.MeshBasicMaterial).color.setHex(crouch ? 0xe8c0ff : 0x8a4ae0);
+        eye.scale.setScalar(crouch ? 0.8 + pulse * 0.5 : 0.7);
+        eye.visible = true;
+      }
+    }
+  },
+  nameY: 2.5,
+};
+
+V.chorus_beast = {
+  parts: () => {
+    const hide = '#8a5a9a';
+    const stalk = (p: FacePainter): void => {
+      p.speckle('all', '#5a3a6a', 0.18);
+      p.speckle('all', '#b07ac4', 0.08);
+    };
+    const bloom = (n: string, x: number, z: number, s: number): KitPart => ({ name: n, parent: 'body', pivot: [x, 20, z], from: [-s / 2, 0, -s / 2], size: [s, s, s], colors: { all: '#c890e0', top: '#f0d0ff' }, paint: (p) => p.speckle('all', '#e0b0f0', 0.3) });
+    return [
+      { name: 'rightLeg', pivot: [-6, 18, -4], from: [-4, -18, -4], size: [8, 18, 8], colors: { all: hide, bottom: '#4a2a5a' }, paint: stalk },
+      { name: 'leftLeg', pivot: [6, 18, -4], from: [-4, -18, -4], size: [8, 18, 8], colors: { all: hide, bottom: '#4a2a5a' }, paint: stalk },
+      { name: 'body', pivot: [0, 18, 0], from: [-12, 0, -10], size: [24, 20, 20], colors: { all: hide, bottom: '#a878b8' }, paint: (p) => {
+        stalk(p);
+        // Stalk-like ridges down its flanks
+        for (let x = 2; x < 20; x += 5) p.px('left', x, 2, '#5a3a6a', 1, 16);
+        for (let x = 2; x < 20; x += 5) p.px('right', x, 2, '#5a3a6a', 1, 16);
+      } },
+      { name: 'head', parent: 'body', pivot: [0, 14, 10], from: [-6, -5, 0], size: [12, 10, 9], colors: { all: '#7a4a8a' }, paint: (p) => {
+        stalk(p);
+        p.px('front', 2, 3, '#f0d8ff', 3, 2);
+        p.px('front', 7, 3, '#f0d8ff', 3, 2);
+        p.px('front', 3, 7, '#3a1a4a', 6, 1);
+      } },
+      { name: 'rightArm', parent: 'body', pivot: [-14, 16, 4], from: [-4, -30, -4], size: [8, 32, 8], colors: { all: hide, bottom: '#4a2a5a' }, paint: stalk },
+      { name: 'leftArm', parent: 'body', pivot: [14, 16, 4], from: [-4, -30, -4], size: [8, 32, 8], colors: { all: hide, bottom: '#4a2a5a' }, paint: stalk },
+      bloom('bloom0', -6, -3, 6),
+      bloom('bloom1', 5, 2, 5),
+      bloom('bloom2', 1, -7, 4),
+    ];
+  },
+  anim: (m, e, alpha, time) => {
+    const w = walkPhase(e, alpha);
+    const sw = Math.sin(w * 0.45) * 0.5 * Math.min(1, e.limbSpeed * 1.5);
+    const rl = m.part('rightLeg');
+    const ll = m.part('leftLeg');
+    const ra = m.part('rightArm');
+    const la = m.part('leftArm');
+    const body = m.part('body');
+    if (rl) rl.rotation.x = sw;
+    if (ll) ll.rotation.x = -sw;
+    if (ra) ra.rotation.set(-sw * 0.8, 0, 0);
+    if (la) la.rotation.set(sw * 0.8, 0, 0);
+    lookHead(m, e);
+    // Breathing
+    if (body) {
+      body.rotation.x = 0.15;
+      body.scale.y = 1 + Math.sin(time * 0.08 + e.id) * 0.015;
+    }
+    const tele = e.meta.tele;
+    if (tele === 'slam') {
+      // Rears up, both arms high
+      if (body) body.rotation.x = -0.45;
+      if (ra) ra.rotation.x = -2.7;
+      if (la) la.rotation.x = -2.7;
+    } else if (tele === 'throw') {
+      if (ra) ra.rotation.set(-2.4, 0, 0.3);
+    } else if (e.swingTime > 0) {
+      // The blow lands
+      const t = e.swingTime / 6;
+      if (ra) ra.rotation.x = -2.7 * t;
+      if (la) la.rotation.x = -2.7 * t;
+      if (body) body.rotation.x = 0.15 + 0.3 * (1 - t);
+    }
+    // The chorus it is about to throw, glowing in its fist
+    const orb = flare(m, 'rightArm', 'orb', [7, 7, 7], [0, -30, 0], 0xe8a8ff);
+    if (orb) {
+      orb.visible = tele === 'throw';
+      orb.rotation.y = time * 0.1;
+    }
+  },
+  nameY: 3.4,
+};
+
+V.end_crystal_mite = {
+  parts: () => [
+    { name: 'body', pivot: [0, 1.5, 0], from: [-2.5, -1, -3], size: [5, 2.5, 6], colors: { all: '#e8d8f8', bottom: '#b8a0d8' }, paint: (p) => p.speckle('all', '#c8b0f0', 0.3) },
+    { name: 'shard1', parent: 'body', pivot: [-1, 1.5, 0.5], from: [-0.5, 0, -0.5], size: [1, 3, 1], rot: [0.3, 0, -0.35], colors: { all: '#c8a8ff', top: '#ffffff' } },
+    { name: 'shard2', parent: 'body', pivot: [1, 1.5, -1], from: [-0.5, 0, -0.5], size: [1, 4, 1], rot: [-0.2, 0, 0.3], colors: { all: '#e0ccff', top: '#ffffff' } },
+    { name: 'shard3', parent: 'body', pivot: [0, 1.5, -2.5], from: [-0.5, 0, -0.5], size: [1, 2, 1], rot: [-0.45, 0, 0], colors: { all: '#b090f0', top: '#f8f0ff' } },
+    { name: 'head', parent: 'body', pivot: [0, 0.5, 3], from: [-1.5, -1, 0], size: [3, 2, 1.5], colors: { all: '#d0c0ec' }, paint: (p) => {
+      p.px('front', 0, 0, '#5a2a9a');
+      p.px('front', 2, 0, '#5a2a9a');
+    } },
+    ...[0, 1, 2].flatMap((i) => [
+      { name: `legL${i}`, parent: 'body', pivot: [2.5, -0.5, 2 - i * 2], from: [0, -1, -0.5], size: [1.5, 1, 1], colors: { all: '#a890c8' } } as KitPart,
+      { name: `legR${i}`, parent: 'body', pivot: [-2.5, -0.5, 2 - i * 2], from: [-1.5, -1, -0.5], size: [1.5, 1, 1], colors: { all: '#a890c8' } } as KitPart,
+    ]),
+  ],
+  anim: (m, e, alpha, time) => {
+    const w = walkPhase(e, alpha);
+    for (let i = 0; i < 3; i++) {
+      const k = i % 2 ? 1 : -1;
+      const l = m.part(`legL${i}`);
+      const r = m.part(`legR${i}`);
+      if (l) l.rotation.y = Math.sin(w * 2) * 0.6 * e.limbSpeed * k;
+      if (r) r.rotation.y = -Math.sin(w * 2) * 0.6 * e.limbSpeed * k;
+    }
+    const body = m.part('body');
+    // Rears up and shivers before it bites
+    const rear = e.meta.tele === 'bite';
+    if (body) {
+      body.rotation.x = rear ? -0.55 : e.swingTime > 0 ? 0.3 : 0;
+      body.position.x = rear ? Math.sin(time * 3) * 0.02 : 0;
+    }
+    m.root.position.y = rear ? 0.06 : 0;
+  },
+  glow: true,
+  nameY: 0.6,
+};
+
+V.end_phantom = {
+  parts: () => {
+    const ink = '#1a1a3a';
+    const edge = (p: FacePainter): void => {
+      p.speckle('top', '#2a2a5a', 0.3);
+      p.px('top', 0, 0, '#c8d0ff', 1, 99);
+    };
+    return [
+      { name: 'body', pivot: [0, 6, 0], from: [-4, -2, -9], size: [8, 4, 18], colors: { all: ink, bottom: '#2a2a4a' }, paint: (p) => p.speckle('top', '#3a3a7a', 0.2) },
+      { name: 'head', parent: 'body', pivot: [0, 0, 9], from: [-4.5, -2, 0], size: [9, 4, 6], colors: { all: ink }, paint: (p) => {
+        p.px('front', 1, 1, '#f0f4ff', 2, 1);
+        p.px('front', 6, 1, '#f0f4ff', 2, 1);
+      } },
+      { name: 'wingL', parent: 'body', pivot: [4, 1, 0], from: [0, 0, -7], size: [14, 1, 14], colors: { all: '#22224a', bottom: '#14142a' }, paint: edge },
+      { name: 'wingL2', parent: 'wingL', pivot: [14, 0, 0], from: [0, 0, -5], size: [10, 1, 10], colors: { all: '#22224a', bottom: '#14142a' }, paint: edge },
+      { name: 'wingR', parent: 'body', pivot: [-4, 1, 0], from: [-14, 0, -7], size: [14, 1, 14], colors: { all: '#22224a', bottom: '#14142a' }, paint: edge },
+      { name: 'wingR2', parent: 'wingR', pivot: [-14, 0, 0], from: [-10, 0, -5], size: [10, 1, 10], colors: { all: '#22224a', bottom: '#14142a' }, paint: edge },
+      { name: 'tail', parent: 'body', pivot: [0, 0, -9], from: [-2, -1, -8], size: [4, 2, 8], colors: { all: ink } },
+      { name: 'tail2', parent: 'tail', pivot: [0, 0, -8], from: [-1, -0.5, -8], size: [2, 1, 8], colors: { all: '#22224a' } },
+    ];
+  },
+  anim: (m, e, alpha, time) => {
+    const stun = e.meta.stun === true;
+    const dive = e.meta.tele === 'dive';
+    const flap = stun ? Math.sin(time * 1.5) * 0.15 - 0.5 : dive ? -0.15 : Math.sin(time * 0.35 + e.id) * 0.55;
+    for (const [n, k] of [['wingL', 1], ['wingR', -1]] as const) {
+      const w = m.part(n);
+      if (w) w.rotation.z = flap * k;
+    }
+    for (const [n, k] of [['wingL2', 1], ['wingR2', -1]] as const) {
+      const w = m.part(n);
+      if (w) w.rotation.z = (stun ? -0.6 : flap * 0.6) * k;
+    }
+    const tail = m.part('tail');
+    if (tail) tail.rotation.x = Math.sin(time * 0.3 + e.id) * 0.2;
+    lookHead(m, e);
+    m.root.rotation.x = stun ? 0.4 : -e.pitch * 0.6;
+    m.root.position.y = Math.sin(time * 0.1 + e.id) * 0.06;
+    // Wings flare white through the screech before the dive
+    const pulse = 0.85 + Math.sin(time * 1.4) * 0.15;
+    for (const [part, key, x] of [['wingL', 'flareL', 7], ['wingR', 'flareR', -7], ['wingL2', 'flareL2', 5], ['wingR2', 'flareR2', -5]] as const) {
+      const big = key.length === 6;
+      const f = flare(m, part, key, big ? [14.2, 1.3, 14.2] : [10.2, 1.3, 10.2], [x, 0.5, 0], 0xf0f4ff);
+      if (f) {
+        f.visible = dive;
+        (f.material as THREE.MeshBasicMaterial).opacity = 0.75 * pulse;
+      }
+    }
+  },
+  nameY: 1.2,
+};
+
+// ---------------------------------------------------------------------------
+// V6 phase 3: the Guardian Constructs. Built, not born: Ancient End Bricks
+// laid in courses, held together by glowing crystal joints.
+// ---------------------------------------------------------------------------
+const BRICK = '#8a7a5a';
+const BRICK_DARK = '#6a5a3e';
+const MORTAR = '#4a3e2a';
+/** Brick courses on every face. */
+function courses(p: FacePainter): void {
+  const [w, h, d] = p.size;
+  for (const face of ['front', 'back', 'left', 'right'] as const) {
+    const fw = face === 'front' || face === 'back' ? w : d;
+    for (let y = 2; y < h; y += 3) p.px(face, 0, y, MORTAR, Math.max(1, Math.ceil(fw)), 1);
+    for (let y = 0; y < h; y += 3) for (let x = ((y / 3) % 2) * 2 + 1; x < fw; x += 4) p.px(face, x, y, MORTAR, 1, 2);
+  }
+  p.speckle('all', BRICK_DARK, 0.12);
+}
+
+/** Crystal joints: small glowing cubes at the construct's seams, brighter as it charges. */
+function joints(m: BoxModel, list: [part: string, key: string, at: [number, number, number], s: number][], color: number, glow: number): void {
+  for (const [part, key, at, sz] of list) {
+    const j = flare(m, part, key, [sz, sz, sz], at, color);
+    if (!j) continue;
+    j.visible = true;
+    (j.material as THREE.MeshBasicMaterial).opacity = 0.35 + glow * 0.6;
+    j.scale.setScalar(0.8 + glow * 0.5);
+  }
+}
+
+V.guardian_sentinel = {
+  parts: () => [
+    { name: 'rightLeg', pivot: [-2.5, 14, 0], from: [-2.5, -14, -2.5], size: [5, 14, 5], colors: { all: BRICK, bottom: MORTAR }, paint: courses },
+    { name: 'leftLeg', pivot: [2.5, 14, 0], from: [-2.5, -14, -2.5], size: [5, 14, 5], colors: { all: BRICK, bottom: MORTAR }, paint: courses },
+    { name: 'body', pivot: [0, 14, 0], from: [-6, 0, -3.5], size: [12, 14, 7], colors: { all: BRICK, top: BRICK_DARK }, paint: (p) => {
+      courses(p);
+      // A chiselled plate on the chest
+      p.px('front', 3, 3, BRICK_DARK, 6, 6);
+      p.px('front', 5, 5, '#3a3048', 2, 2);
+    } },
+    { name: 'head', parent: 'body', pivot: [0, 14, 0], from: [-3.5, 0, -3.5], size: [7, 8, 7], colors: { all: BRICK, top: BRICK_DARK }, paint: (p) => {
+      courses(p);
+      // One slit where eyes would be
+      p.px('front', 1, 3, '#1a1424', 5, 1);
+    } },
+    { name: 'rightArm', parent: 'body', pivot: [-8, 13, 0], from: [-2.5, -15, -2.5], size: [5, 16, 5], colors: { all: BRICK, bottom: BRICK_DARK }, paint: courses },
+    { name: 'leftArm', parent: 'body', pivot: [8, 13, 0], from: [-2.5, -15, -2.5], size: [5, 16, 5], colors: { all: BRICK, bottom: BRICK_DARK }, paint: courses },
+  ],
+  anim: (m, e, alpha, time) => {
+    animateHumanoid(m, e, alpha);
+    const tele = e.meta.tele;
+    const ra = m.part('rightArm');
+    const la = m.part('leftArm');
+    const body = m.part('body');
+    if (body) body.rotation.x = 0.05;
+    const pulse = 0.5 + Math.sin(time * 0.6) * 0.5;
+    if (tele === 'punch') {
+      // The arm draws back and glows
+      if (ra) ra.rotation.set(-2.3, 0, 0.15);
+      if (body) body.rotation.y = 0.35;
+    } else if (tele === 'bolt') {
+      if (ra) ra.rotation.x = -1.4;
+      if (la) la.rotation.x = -1.4;
+    } else if (e.swingTime > 0) {
+      const t = e.swingTime / 6;
+      if (ra) ra.rotation.x = -1.6 * t;
+      if (body) body.rotation.y = 0;
+    } else if (body) body.rotation.y = 0;
+    const base = 0x7ae0ff;
+    joints(m, [
+      ['body', 'jShoulderR', [-7, 13, 0], 2.4],
+      ['body', 'jShoulderL', [7, 13, 0], 2.4],
+      ['body', 'jWaist', [0, 0.5, 0], 2.2],
+      ['rightLeg', 'jKneeR', [0, -7, -2.6], 1.8],
+      ['leftLeg', 'jKneeL', [0, -7, -2.6], 1.8],
+      ['rightArm', 'jElbowR', [0, -7, -2.6], 1.8],
+      ['leftArm', 'jElbowL', [0, -7, -2.6], 1.8],
+    ], base, e.meta.stun === true ? 0 : tele ? 0.7 + pulse * 0.3 : 0.25 + pulse * 0.15);
+    // The charging arm, and the eye slit before a bolt
+    const fist = flare(m, 'rightArm', 'fist', [5.6, 4, 5.6], [0, -13, 0], 0xb8f4ff);
+    if (fist) {
+      fist.visible = tele === 'punch';
+      (fist.material as THREE.MeshBasicMaterial).opacity = 0.4 + pulse * 0.5;
+    }
+    const eye = flare(m, 'head', 'eye', [5.4, 1.2, 0.4], [0, 4.4, 3.7], 0x9af0ff);
+    if (eye) {
+      eye.visible = true;
+      eye.scale.set(1, tele === 'bolt' ? 1.6 + pulse : 1, 1);
+      (eye.material as THREE.MeshBasicMaterial).color.setHex(tele === 'bolt' ? 0xffffff : 0x5ac0e0);
+    }
+  },
+  nameY: 2.7,
+};
+
+V.guardian_bulwark = {
+  parts: () => [
+    { name: 'rightLeg', pivot: [-5, 12, 0], from: [-4, -12, -4], size: [8, 12, 8], colors: { all: BRICK, bottom: MORTAR }, paint: courses },
+    { name: 'leftLeg', pivot: [5, 12, 0], from: [-4, -12, -4], size: [8, 12, 8], colors: { all: BRICK, bottom: MORTAR }, paint: courses },
+    { name: 'body', pivot: [0, 12, 0], from: [-11, 0, -6], size: [22, 20, 12], colors: { all: BRICK, top: BRICK_DARK }, paint: (p) => {
+      courses(p);
+      p.px('front', 7, 5, BRICK_DARK, 8, 8);
+      p.px('front', 9, 7, '#2a2040', 4, 4);
+    } },
+    { name: 'head', parent: 'body', pivot: [0, 20, -1], from: [-4, 0, -4], size: [8, 6, 8], colors: { all: BRICK_DARK }, paint: (p) => {
+      courses(p);
+      p.px('front', 1, 2, '#1a1424', 6, 1);
+    } },
+    { name: 'rightArm', parent: 'body', pivot: [-14, 18, 0], from: [-4, -24, -4.5], size: [8, 26, 9], colors: { all: BRICK, bottom: MORTAR }, paint: courses },
+    { name: 'leftArm', parent: 'body', pivot: [14, 18, 0], from: [-4, -24, -4.5], size: [8, 26, 9], colors: { all: BRICK, bottom: MORTAR }, paint: courses },
+  ],
+  anim: (m, e, alpha, time) => {
+    const awake = e.meta.awake === true;
+    const tele = e.meta.tele;
+    const w = walkPhase(e, alpha);
+    const sw = Math.sin(w * 0.45) * 0.35 * Math.min(1, e.limbSpeed * 1.5);
+    const rl = m.part('rightLeg');
+    const ll = m.part('leftLeg');
+    const ra = m.part('rightArm');
+    const la = m.part('leftArm');
+    const body = m.part('body');
+    if (rl) rl.rotation.x = sw;
+    if (ll) ll.rotation.x = -sw;
+    lookHead(m, e);
+    if (!awake) {
+      // Dormant: hunched, fists on the ground
+      m.root.position.y = -0.25;
+      if (body) body.rotation.x = 0.35;
+      if (ra) ra.rotation.set(-0.35, 0, 0);
+      if (la) la.rotation.set(-0.35, 0, 0);
+    } else {
+      m.root.position.y = 0;
+      if (body) body.rotation.x = 0.08;
+      if (ra) ra.rotation.set(-sw * 0.5, 0, 0.05);
+      if (la) la.rotation.set(sw * 0.5, 0, -0.05);
+      if (tele === 'pound') {
+        // Both fists high, ready to bring them down
+        if (ra) ra.rotation.set(-2.9, 0, 0.2);
+        if (la) la.rotation.set(-2.9, 0, -0.2);
+        if (body) body.rotation.x = -0.25;
+      } else if (e.swingTime > 0) {
+        const t = e.swingTime / 6;
+        if (ra) ra.rotation.x = -2.9 * t;
+        if (la) la.rotation.x = -2.9 * t;
+      }
+    }
+    const pulse = 0.5 + Math.sin(time * 0.4) * 0.5;
+    joints(m, [
+      ['body', 'jShoulderR', [-12, 18, 0], 3.2],
+      ['body', 'jShoulderL', [12, 18, 0], 3.2],
+      ['rightLeg', 'jKneeR', [0, -6, -4.2], 2.4],
+      ['leftLeg', 'jKneeL', [0, -6, -4.2], 2.4],
+      ['rightArm', 'jElbowR', [0, -12, -4.6], 2.6],
+      ['leftArm', 'jElbowL', [0, -12, -4.6], 2.6],
+    ], 0xc8a0ff, !awake || e.meta.stun === true ? 0.05 : tele === 'pound' ? 0.8 + pulse * 0.2 : 0.3 + pulse * 0.2);
+    const heart = flare(m, 'body', 'heart', [3.6, 3.6, 0.6], [0, 9, 6.2], 0xd8b8ff);
+    if (heart) {
+      heart.visible = awake;
+      heart.scale.setScalar(0.8 + pulse * 0.3);
+    }
+    // The shield: a pane of crystal standing before it while it lasts
+    const sh = flare(m, 'body', 'shield', [28, 30, 1], [0, 8, 9], 0xb8e8ff);
+    if (sh) {
+      sh.visible = e.meta.shield === true;
+      (sh.material as THREE.MeshBasicMaterial).opacity = 0.32 + pulse * 0.18;
+    }
+  },
+  nameY: 3.1,
+};
+
+// ---------------------------------------------------------------------------
+// V6 phase 5: the End Guardian. An ancient construct like the Sentinels, but
+// grander: Citadel Stone trimmed with pale gold, a crystal core in its chest
+// that shows when it kneels, a crown of floating shards and a crystal lance.
+// ---------------------------------------------------------------------------
+const CSTONE = '#3a3450';
+const CSTONE_DARK = '#2a2436';
+const TRIM = '#c8b070';
+/** Citadel Stone courses with gold trim at the edges. */
+function citadelStone(p: FacePainter): void {
+  const [w, h, d] = p.size;
+  for (const face of ['front', 'back', 'left', 'right'] as const) {
+    const fw = face === 'front' || face === 'back' ? w : d;
+    for (let y = 3; y < h; y += 4) p.px(face, 0, y, CSTONE_DARK, Math.max(1, Math.ceil(fw)), 1);
+    p.px(face, 0, Math.max(0, h - 1), TRIM, Math.max(1, Math.ceil(fw)), 1);
+  }
+  p.speckle('all', '#4a4262', 0.1);
+}
+const GUARDIAN_GLOW = [0xc8b8ff, 0xd8a0ff, 0xff8ac8];
+
+V.end_guardian = {
+  parts: () => [
+    { name: 'rightLeg', pivot: [-4.5, 16, 0], from: [-3.5, -16, -3.5], size: [7, 16, 7], colors: { all: CSTONE, bottom: CSTONE_DARK }, paint: citadelStone },
+    { name: 'leftLeg', pivot: [4.5, 16, 0], from: [-3.5, -16, -3.5], size: [7, 16, 7], colors: { all: CSTONE, bottom: CSTONE_DARK }, paint: citadelStone },
+    { name: 'body', pivot: [0, 16, 0], from: [-10, 0, -6], size: [20, 18, 12], colors: { all: CSTONE, top: CSTONE_DARK }, paint: (p) => {
+      citadelStone(p);
+      // The chest plates around the core
+      p.px('front', 4, 5, TRIM, 12, 1);
+      p.px('front', 4, 13, TRIM, 12, 1);
+      p.px('front', 7, 7, '#1a1428', 6, 5);
+    } },
+    { name: 'head', parent: 'body', pivot: [0, 18, 0], from: [-4.5, 0, -4.5], size: [9, 9, 9], colors: { all: CSTONE, top: TRIM }, paint: (p) => {
+      citadelStone(p);
+      p.px('front', 1, 4, '#120c1c', 7, 2);
+    } },
+    { name: 'rightArm', parent: 'body', pivot: [-13, 16, 0], from: [-3.5, -20, -3.5], size: [7, 22, 7], colors: { all: CSTONE, bottom: TRIM }, paint: citadelStone },
+    { name: 'leftArm', parent: 'body', pivot: [13, 16, 0], from: [-3.5, -20, -3.5], size: [7, 22, 7], colors: { all: CSTONE, bottom: TRIM }, paint: citadelStone },
+    // The lance: crystal on a gold haft, held in the right hand
+    { name: 'lance', parent: 'rightArm', pivot: [0, -18, 0], from: [-1, -1, -6], size: [2, 2, 30], colors: { all: '#d8ccff', top: '#f0ecff' }, paint: (p) => p.px('top', 0, 0, TRIM, 2, 6) },
+  ],
+  anim: (m, e, alpha, time) => {
+    const st = (e.meta.state as string | undefined) ?? 'fight';
+    const phase = Math.max(1, Math.min(3, Number(e.meta.phase ?? 1)));
+    const atk = e.meta.attack as string | undefined;
+    const w = walkPhase(e, alpha);
+    const sw = Math.sin(w * 0.4) * 0.3 * Math.min(1, e.limbSpeed * 1.5);
+    const rl = m.part('rightLeg');
+    const ll = m.part('leftLeg');
+    const ra = m.part('rightArm');
+    const la = m.part('leftArm');
+    const body = m.part('body');
+    const lance = m.part('lance');
+    lookHead(m, e);
+    const pulse = 0.5 + Math.sin(time * (0.3 + phase * 0.15)) * 0.5;
+    m.root.position.y = 0;
+    m.root.rotation.x = 0;
+    if (rl) rl.rotation.set(sw, 0, 0);
+    if (ll) ll.rotation.set(-sw, 0, 0);
+    if (body) body.rotation.set(0.04, 0, 0);
+    if (ra) ra.rotation.set(-0.5, 0, 0.08);
+    if (la) la.rotation.set(-sw * 0.4, 0, -0.08);
+    if (lance) lance.rotation.set(0, 0, 0);
+    if (st === 'rise') {
+      // Rising from the floor: stones settling into place
+      m.root.position.y = -0.8 + pulse * 0.2;
+      if (body) body.rotation.x = 0.4;
+    } else if (st === 'exposed' || st === 'dying') {
+      // Kneeling, its core bare
+      m.root.position.y = -0.55;
+      if (rl) rl.rotation.x = -1.4;
+      if (ll) ll.rotation.x = 0.1;
+      if (body) body.rotation.x = 0.45;
+      if (ra) ra.rotation.set(-0.2, 0, 0.3);
+      if (la) la.rotation.set(-0.2, 0, -0.3);
+    } else if (atk === 'lance') {
+      if (ra) ra.rotation.set(-1.55, 0, 0);
+    } else if (atk === 'final') {
+      // The sweep: the lance held out level, the body turning
+      if (ra) ra.rotation.set(-1.55, 0, 0.2);
+      if (body) body.rotation.y = time * 0.08;
+    } else if (atk === 'fracture' || atk === 'collapse') {
+      if (ra) ra.rotation.set(-2.9, 0, 0.2);
+      if (la) la.rotation.set(-2.9, 0, -0.2);
+      if (body) body.rotation.x = -0.2;
+    } else if (atk === 'call' || atk === 'well') {
+      if (ra) ra.rotation.set(-0.3, 0, 1.1);
+      if (la) la.rotation.set(-0.3, 0, -1.1);
+    } else if (atk === 'orbs') {
+      if (ra) ra.rotation.set(-1.2, 0, -0.3);
+      if (la) la.rotation.set(-1.2, 0, 0.3);
+    } else if (atk === 'shield') {
+      if (ra) ra.rotation.set(-1.3, 0, -0.7);
+      if (la) la.rotation.set(-1.3, 0, 0.7);
+    } else if (e.swingTime > 0) {
+      const t = e.swingTime / 6;
+      if (ra) ra.rotation.x = -2 * t;
+    }
+    const color = GUARDIAN_GLOW[phase - 1]!;
+    joints(m, [
+      ['body', 'jShoulderR', [-11, 16, 0], 3.4],
+      ['body', 'jShoulderL', [11, 16, 0], 3.4],
+      ['body', 'jWaist', [0, 0.5, 0], 3],
+      ['rightLeg', 'jKneeR', [0, -8, -3.6], 2.4],
+      ['leftLeg', 'jKneeL', [0, -8, -3.6], 2.4],
+      ['rightArm', 'jElbowR', [0, -10, -3.6], 2.4],
+      ['leftArm', 'jElbowL', [0, -10, -3.6], 2.4],
+    ], color, st === 'exposed' ? 0.1 : 0.35 + pulse * 0.25 + (phase - 1) * 0.15);
+    // The core: dim behind its plates, blazing when it kneels
+    const core = flare(m, 'body', 'core', [6, 5, 1.2], [0, 9.5, 6.3], 0xf0e8ff);
+    if (core) {
+      core.visible = true;
+      (core.material as THREE.MeshBasicMaterial).opacity = st === 'exposed' ? 0.95 : 0.25 + pulse * 0.15;
+      core.scale.setScalar(st === 'exposed' ? 1.3 + pulse * 0.3 : 1);
+    }
+    const eye = flare(m, 'head', 'eye', [7.2, 1.6, 0.4], [0, 5, 4.7], color);
+    if (eye) {
+      eye.visible = st !== 'dying';
+      eye.scale.set(1, atk ? 1.8 : 1, 1);
+    }
+    // The lance glows as it charges
+    const tip = flare(m, 'lance', 'tip', [2.6, 2.6, 8], [0, 0, 20], 0xe8e0ff);
+    if (tip) {
+      tip.visible = atk === 'lance' || atk === 'final';
+      (tip.material as THREE.MeshBasicMaterial).opacity = 0.5 + pulse * 0.45;
+    }
+    // The crown: shards circling its head
+    for (let i = 0; i < 5; i++) {
+      const a = time * 0.05 + (i / 5) * Math.PI * 2;
+      const sh = flare(m, 'head', 'crown' + i, [1.6, 3.4, 1.6], [Math.cos(a) * 8, 12 + Math.sin(time * 0.1 + i) * 0.8, Math.sin(a) * 8], color);
+      if (sh) {
+        sh.visible = st !== 'dying';
+        sh.position.set((Math.cos(a) * 8) / 16, (12 + Math.sin(time * 0.1 + i) * 0.8) / 16, (Math.sin(a) * 8) / 16);
+      }
+    }
+    // The Crystal Shield: a shell of light while the pylons stand
+    const shield = flare(m, 'body', 'shield', [40, 50, 40], [0, 6, 0], 0xb8d8ff);
+    if (shield) {
+      shield.visible = e.meta.shield === true;
+      (shield.material as THREE.MeshBasicMaterial).opacity = 0.16 + pulse * 0.08;
+    }
+  },
+  scale: 2,
+  glow: (e) => e.meta.state === 'exposed',
+  nameY: 5.8,
+};
+
+V.guardian_pylon = {
+  parts: () => [
+    { name: 'base', pivot: [0, 0, 0], from: [-5, 0, -5], size: [10, 4, 10], colors: { all: CSTONE, top: TRIM }, paint: citadelStone },
+    { name: 'shaft', parent: 'base', pivot: [0, 4, 0], from: [-2.5, 0, -2.5], size: [5, 30, 5], colors: { all: '#b8a8f0', top: '#e8e0ff' }, paint: (p) => p.speckle('all', '#d8ccff', 0.3) },
+  ],
+  anim: (m, e, alpha, time) => {
+    void alpha;
+    const shaft = m.part('shaft');
+    if (shaft) shaft.rotation.y = time * 0.04;
+    const glow = flare(m, 'shaft', 'glow', [7, 32, 7], [0, 15, 0], 0xd8c8ff);
+    if (glow) {
+      glow.visible = true;
+      (glow.material as THREE.MeshBasicMaterial).opacity = 0.2 + Math.sin(time * 0.2 + e.id) * 0.1;
+    }
+    for (let i = 0; i < 3; i++) {
+      const a = time * 0.08 + (i / 3) * Math.PI * 2;
+      const r = flare(m, 'base', 'ring' + i, [1.6, 1.6, 1.6], [0, 0, 0], 0xf0e8ff);
+      if (r) {
+        r.visible = true;
+        r.position.set((Math.cos(a) * 6) / 16, (20 + Math.sin(time * 0.1 + i) * 6) / 16, (Math.sin(a) * 6) / 16);
+      }
+    }
+  },
+  glow: true,
+  nameY: 2.8,
+};
+
+V.void_orb = {
+  parts: () => [{ name: 'core', pivot: [0, 6, 0], from: [-4, -4, -4], size: [8, 8, 8], colors: { all: '#140a22' }, paint: (p) => p.speckle('all', '#6a2ab0', 0.25) }],
+  anim: (m, e, alpha, time) => {
+    void alpha;
+    const c = m.part('core');
+    if (c) c.rotation.set(time * 0.07, time * 0.11 + e.id, 0);
+    const halo = flare(m, 'core', 'halo', [11, 11, 11], [0, 0, 0], 0xb070ff);
+    if (halo) {
+      halo.visible = true;
+      (halo.material as THREE.MeshBasicMaterial).opacity = 0.3 + Math.sin(time * 0.4 + e.id) * 0.12;
+    }
+  },
+  glow: true,
+  nameY: 1,
+};
+
+// ---------------------------------------------------------------------------
+// V6 phase 4: vehicles. A minecart, and the Void Skiff: a small flying boat
+// with a chorus-cloth sail and void crystals under its hull that glow while
+// it burns fuel.
+// ---------------------------------------------------------------------------
+V.minecart = {
+  parts: () => {
+    const steel = '#8a8e94';
+    const dark = '#4a4e54';
+    return [
+      { name: 'body', pivot: [0, 0, 0], from: [-7, 2, -9], size: [14, 1, 18], colors: { all: dark } },
+      { name: 'sideL', parent: 'body', pivot: [0, 0, 0], from: [-8, 2, -9], size: [1, 8, 18], colors: { all: steel, top: '#b0b4ba' } },
+      { name: 'sideR', parent: 'body', pivot: [0, 0, 0], from: [7, 2, -9], size: [1, 8, 18], colors: { all: steel, top: '#b0b4ba' } },
+      { name: 'front', parent: 'body', pivot: [0, 0, 0], from: [-7, 2, -10], size: [14, 8, 1], colors: { all: steel, top: '#b0b4ba' } },
+      { name: 'back', parent: 'body', pivot: [0, 0, 0], from: [-7, 2, 9], size: [14, 8, 1], colors: { all: steel, top: '#b0b4ba' } },
+      ...[[-6, -7], [6, -7], [-6, 7], [6, 7]].map(([x, z], i) => ({ name: `wheel${i}`, parent: 'body', pivot: [0, 0, 0] as [number, number, number], from: [x! - 1, 0, z! - 1] as [number, number, number], size: [2, 2, 2] as [number, number, number], colors: { all: '#2a2a2e' } })),
+    ];
+  },
+  anim: (m, e) => {
+    // A knocked cart shakes
+    m.root.rotation.z = e.hurtTime > 0 ? Math.sin(e.hurtTime * 1.6) * 0.15 : 0;
+  },
+  nameY: 1,
+};
+
+V.void_skiff = {
+  parts: () => {
+    const hull = '#6a4a7a';
+    const hullDark = '#4a3058';
+    const deck = '#8a6a9a';
+    const sail = '#d8c8e8';
+    return [
+      { name: 'hull', pivot: [0, 0, 0], from: [-9, 0, -16], size: [18, 4, 32], colors: { all: hull, bottom: hullDark, top: deck }, paint: (p) => p.speckle('top', '#7a5a8a', 0.2) },
+      { name: 'gunwaleL', parent: 'hull', pivot: [0, 0, 0], from: [-10, 4, -15], size: [2, 3, 30], colors: { all: hullDark, top: '#9a7aaa' } },
+      { name: 'gunwaleR', parent: 'hull', pivot: [0, 0, 0], from: [8, 4, -15], size: [2, 3, 30], colors: { all: hullDark, top: '#9a7aaa' } },
+      { name: 'prow', parent: 'hull', pivot: [0, 0, 0], from: [-6, 1, -20], size: [12, 5, 4], colors: { all: hull, top: deck } },
+      { name: 'stern', parent: 'hull', pivot: [0, 0, 0], from: [-8, 4, 14], size: [16, 3, 2], colors: { all: hullDark } },
+      { name: 'mast', parent: 'hull', pivot: [0, 4, -4], from: [-1, 0, -1], size: [2, 26, 2], colors: { all: '#4a3a2a' } },
+      { name: 'sail', parent: 'mast', pivot: [0, 6, 0], from: [-0.5, 0, 1], size: [1, 18, 14], colors: { all: sail, left: '#c0b0d8' } },
+    ];
+  },
+  anim: (m, e, _alpha, time) => {
+    const lit = e.meta.lit === true;
+    m.root.position.y = lit ? Math.sin(time * 0.12 + e.id) * 0.05 : 0;
+    m.root.rotation.z = Math.sin(time * 0.08 + e.id) * (lit ? 0.03 : 0.01) + (e.hurtTime > 0 ? Math.sin(e.hurtTime * 1.6) * 0.08 : 0);
+    const sail = m.part('sail');
+    if (sail) sail.rotation.y = Math.sin(time * 0.15 + e.id) * 0.12;
+    // Void crystals under the hull glow while it burns a shard
+    const pulse = 0.6 + Math.sin(time * 0.3) * 0.4;
+    for (const [key, x, z] of [['vcA', -5, -8], ['vcB', 5, -8], ['vcC', -5, 8], ['vcD', 5, 8]] as const) {
+      const c = flare(m, 'hull', key, [3, 2, 3], [x, -0.6, z], 0x8a6aff);
+      if (c) {
+        c.visible = true;
+        (c.material as THREE.MeshBasicMaterial).opacity = lit ? 0.55 + pulse * 0.4 : 0.15;
+      }
+    }
+  },
+  nameY: 1.6,
+};
 
 // ---------------------------------------------------------------- registration
 function makeVisual(def: MobVisualDef, e: ClientEntity, ctx: VisualContext): EntityVisual {
@@ -1772,8 +2880,9 @@ function makeVisual(def: MobVisualDef, e: ClientEntity, ctx: VisualContext): Ent
     arm.add(plane);
   }
   const baseSet = visual.setBrightness.bind(visual);
+  const glow = typeof def.glow === 'function' ? def.glow(e) : !!def.glow;
   visual.setBrightness = (v) => {
-    const b = def.glow ? Math.max(v, 0.85) : v;
+    const b = glow ? Math.max(v, 0.85) : v;
     baseSet(b);
     heldMat?.color.setScalar(b);
   };

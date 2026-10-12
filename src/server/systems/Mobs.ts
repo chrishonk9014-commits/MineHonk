@@ -9,6 +9,8 @@ import { Mob, isPlayer, isAlive, type Target } from '../entity/Mob';
 import { ItemEntity } from '../entity/ItemEntity';
 import { LivingEntity, type HurtInfo } from '../entity/Living';
 import type { Entity } from '../entity/Entity';
+import { ANCIENT_BLADE_PIERCE, VOIDPIERCER_STRAIGHT } from '../../common/endExpansion/ancient';
+import { isConstruct } from '../../common/endExpansion/structures';
 import { Projectile, PrimedTnt, type ProjectileKind, type ProjectileHit } from '../entity/Projectile';
 import { EndCrystal } from '../entity/EndEntities';
 import type { ServerPlayer } from '../player/ServerPlayer';
@@ -16,6 +18,7 @@ import { installBrain } from '../ai/brains';
 import type { RangedKind } from '../ai/goals';
 import { canSee } from '../ai/goals';
 import { MOB_DEFS, mobDef, type MobCategory } from '../../common/data/mobs';
+import { isExpansionMob } from '../../common/endExpansion/mobs';
 import { TRADES, PROFESSIONS, type Profession } from '../../common/data/trades';
 import { biomeOf } from '../../common/registry/biomes';
 import type { SpawnEntry } from '../../common/data/biomes';
@@ -54,6 +57,8 @@ const CAVE_MONSTERS: Record<number, SpawnEntry[]> = {
   6: [{ mob: 'zombie', weight: 60, min: 2, max: 4 }, { mob: 'husk', weight: 30, min: 1, max: 3 }, { mob: 'skeleton', weight: 60, min: 2, max: 3 }, { mob: 'drowned', weight: 20, min: 1, max: 2 }],
   7: [{ mob: 'magma_cube', weight: 80, min: 1, max: 3 }, { mob: 'skeleton', weight: 40, min: 1, max: 2 }, { mob: 'blaze', weight: 5, min: 1, max: 1 }],
   8: [{ mob: 'stray', weight: 100, min: 2, max: 4 }, { mob: 'skeleton', weight: 30, min: 1, max: 2 }, { mob: 'zombie', weight: 30, min: 1, max: 2 }],
+  // V3: things that leaked in from the Farlands
+  10: [{ mob: 'glitch_zombie', weight: 60, min: 1, max: 3 }, { mob: 'glitch_skeleton', weight: 50, min: 1, max: 2 }, { mob: 'farlands_wanderer', weight: 25, min: 1, max: 1 }, { mob: 'void_wisp', weight: 30, min: 1, max: 2 }],
 };
 const CAVE_WATER: Record<number, SpawnEntry[]> = {
   1: [{ mob: 'glow_squid', weight: 10, min: 1, max: 3 }],
@@ -214,7 +219,8 @@ export class MobSystem {
   /** Spawns generated non-mob entities (end crystals); returns true when handled. */
   extraEntity?: (dim: Dimension, type: string, x: number, y: number, z: number) => boolean;
   /** Boss death hand-off (the dragon fight runs its own death sequence). */
-  onBossDeath?: (m: Mob, killer: ServerPlayer | null) => void;
+  /** A boss died; returns false to let its death run the usual way (loot, experience, advancements). */
+  onBossDeath?: (m: Mob, killer: ServerPlayer | null, info: HurtInfo) => boolean;
 
   onChunkGenerated(dim: Dimension, c: Chunk): void {
     let spawned = false;
@@ -286,6 +292,9 @@ export class MobSystem {
         m.health = Math.min(m.maxHealth, hp);
       }
       installBrain(m);
+      // V6: an Expanded End mob forgets attacks it was in the middle of (a void slip resumes its return)
+      if (isExpansionMob(m.type)) this.server.endMobs?.onRestore(m);
+      if (isConstruct(m.type)) this.server.constructs?.onRestore(m);
       return m;
     }
     if (d.kind === 'projectile') {
@@ -358,6 +367,19 @@ export class MobSystem {
         break;
       case 'warden':
         s.warden?.tick(m);
+        break;
+      // V6 phase 2: the Expanded End's mobs
+      case 'endling':
+      case 'void_stalker':
+      case 'chorus_beast':
+      case 'end_crystal_mite':
+      case 'end_phantom':
+        s.endMobs?.mobTick(m);
+        break;
+      // V6 phase 3: the Guardian Constructs
+      case 'guardian_sentinel':
+      case 'guardian_bulwark':
+        s.constructs?.mobTick(m);
         break;
       default:
         this.animalTick(m);
@@ -617,9 +639,11 @@ export class MobSystem {
     else if (cat === 'water' && !underWater) y = Math.max(1, top - 1 - r.int(8));
     else if (underCreature || underWater) y = 8 + r.int(Math.max(1, Math.min(52, top - 12) - 8));
     else if (!dim.rules.hasSky) {
-      // Cavern dimensions: pick one of the column's floors instead of a random height
+      // Cavern dimensions: pick one of the column's floors instead of a random height.
+      // Without a ceiling (the End) the surface itself is a floor too.
       const floors: number[] = [];
-      for (let yy = 2; yy < top; yy++) if (STATE_SOLID[dim.getState(x, yy - 1, z)] && !STATE_SOLID[dim.getState(x, yy, z)] && !STATE_SOLID[dim.getState(x, yy + 1, z)] && !STATE_FLUID[dim.getState(x, yy, z)]) floors.push(yy);
+      const last = dim.rules.hasCeiling ? top - 1 : top;
+      for (let yy = 2; yy <= last; yy++) if (STATE_SOLID[dim.getState(x, yy - 1, z)] && !STATE_SOLID[dim.getState(x, yy, z)] && !STATE_SOLID[dim.getState(x, yy + 1, z)] && !STATE_FLUID[dim.getState(x, yy, z)]) floors.push(yy);
       if (!floors.length) return;
       y = floors[r.int(floors.length)]!;
     } else y = 1 + r.int(Math.max(1, top));
@@ -636,7 +660,7 @@ export class MobSystem {
     const cb = caves && cat !== 'ambient' && (cat !== 'creature' || underCreature) && (cat !== 'water' || underWater) ? dim.generator.caveBiomeAt!(x, y, z) : 0;
     if (cb === 9) return; // the deep dark: nothing spawns there
     if (cb) {
-      if (cat === 'monster' && CAVE_MONSTERS[cb] && r.chance(0.6)) entry = weighted(CAVE_MONSTERS[cb]!, r);
+      if (cat === 'monster' && CAVE_MONSTERS[cb] && (cb === 10 || r.chance(0.6))) entry = weighted(CAVE_MONSTERS[cb]!, r);
       else if (cat === 'water') entry = CAVE_WATER[cb] ? weighted(CAVE_WATER[cb]!, r) : null;
       else if (cat === 'creature') entry = cb === 4 ? { mob: 'sporeling', weight: 1, min: 1, max: 3 } : null;
     } else if (underCreature || underWater) entry = null;
@@ -646,7 +670,16 @@ export class MobSystem {
     if (!entry) return;
     const def = mobDef(entry.mob);
     if (!def) return;
-    const n = entry.min + r.int(entry.max - entry.min + 1);
+    let n = entry.min + r.int(entry.max - entry.min + 1);
+    // V6: the Expanded End's own limits (spawning switched off from the Admin Panel, caps around the
+    // player, the End Phantom's rarity and height)
+    const expansion = isExpansionMob(def.id);
+    if (expansion) {
+      const ok = this.server.endMobs?.allowSpawn(p, def.id, x, y, z) ?? null;
+      if (!ok) return;
+      y = ok.y;
+      n = Math.min(n, ok.limit);
+    }
     let spawned = 0;
     for (let i = 0; i < n * 3 && spawned < n; i++) {
       const sx = x + r.int(9) - 4;
@@ -661,6 +694,8 @@ export class MobSystem {
         }
       }
       if (sy < 1) continue;
+      // Chosen for a cave biome: it must still be in that biome after dropping to the floor
+      if (cb && dim.generator.caveBiomeAt!(sx, sy, sz) !== cb) continue;
       let tooClose = false;
       for (const pl of this.server.players.values()) if (pl.dim === dim && pl.distanceSq(sx, sy, sz) < 24 * 24) tooClose = true;
       if (tooClose) continue;
@@ -671,12 +706,15 @@ export class MobSystem {
       if (m && this.server.admin.skyTainted) m.admin = true;
       if (m) {
         if (cat === 'creature') m.persistenceRequired = true;
+        if (expansion) this.server.endMobs?.onNaturalSpawn(p, m);
         spawned++;
       }
     }
   }
 
   private spawnConditions(dim: Dimension, type: string, x: number, y: number, z: number, cat: MobCategory): boolean {
+    // V6: the Expanded End's mobs have their own ground and light rules
+    if (isExpansionMob(type)) return this.server.endMobs?.spawnConditions(dim, type, x, y, z) ?? false;
     const def = mobDef(type)!;
     const light = dim.getLight(x, y, z);
     const sky = light >> 4;
@@ -728,7 +766,7 @@ export class MobSystem {
       m.target = null;
       return;
     }
-    let dmg = m.def.damage ?? 2;
+    let dmg = (m.def.damage ?? 2) + (typeof m.data.dmgBonus === 'number' ? m.data.dmgBonus : 0);
     if (m.def.brain === 'slime') dmg = Math.max(0, Number(m.data.size ?? 1) - (m.type === 'slime' ? 0 : -1)) * (m.type === 'magma_cube' ? 1.5 : 1);
     if (m.held) {
       const w = items[m.held.id]!.def.weapon;
@@ -783,8 +821,8 @@ export class MobSystem {
   /** Damages any entity through the right path (players go through Survival). */
   damage(t: Entity, amount: number, info: HurtInfo & { kbx?: number; kbz?: number; knockback?: number }): number {
     if (isPlayer(t)) {
-      if (info.attacker && isPlayer(info.attacker) && !this.server.level.pvp) return 0;
-      return this.server.interaction.survival.damage(t, amount, { source: info.source as never, attacker: info.attacker, kbx: info.kbx, kbz: info.kbz, knockback: info.knockback, disableShield: info.disableShield, pierceShield: info.pierceShield });
+      if (info.attacker && isPlayer(info.attacker) && !this.server.level.pvp && !this.server.templeTrials?.pvpBetween(info.attacker, t)) return 0;
+      return this.server.interaction.survival.damage(t, amount, { source: info.source as never, attacker: info.attacker, kbx: info.kbx, kbz: info.kbz, knockback: info.knockback, disableShield: info.disableShield, pierceShield: info.pierceShield, armorPierce: info.armorPierce });
     }
     if (t instanceof LivingEntity) return t.hurt(amount, info);
     return 0;
@@ -897,6 +935,13 @@ export class MobSystem {
       s.theEnd?.breathCloud(dim, hit.x, hit.block ? hit.y : Math.floor(hit.y), hit.z, p.owner);
       return true;
     }
+    // V5.5: the dragon's malware bursts into a cloud; Herobrine's bolts
+    if (p.kind === 'malware') {
+      if (e && e === p.owner) return false;
+      s.herobrine?.malware.landed(p, hit.x, hit.y, hit.z);
+      return true;
+    }
+    if (p.kind === 'herobrine_bolt') return s.herobrine ? s.herobrine.boltHit(p, hit) : true;
     switch (p.kind) {
       case 'trident':
         if (p.item) return this.thrownTridentHit(p, hit);
@@ -1277,17 +1322,19 @@ export class MobSystem {
     const s = this.server;
     const killer = info.attacker && isPlayer(info.attacker) ? info.attacker : m.dim.server.tickNo - m.lastHurtByPlayerTick < 100 && isPlayer(m.lastAttacker) ? (m.lastAttacker as ServerPlayer) : null;
     const byPlayer = !!killer || (info.attacker instanceof Mob && !!info.attacker.owner);
-    if (m.def.category === 'boss' && this.onBossDeath) {
+    // V6 phase 4: a Crystal Vault's Bulwark falling clears its vault
+    if (m.data.vault) s.endQuests?.onMobDeath(m);
+    if (m.def.category === 'boss' && this.onBossDeath?.(m, killer, info)) {
       if (killer) {
         killer.addStat('killed.' + m.type);
         killer.addStat('mob_kills');
       }
-      this.onBossDeath(m, killer);
       return;
     }
     const weapon = killer ? killer.inventory.get(killer.selectedSlot) : null;
     const looting = enchantLevel(weapon, 'looting');
-    if (!m.baby && s.level.rules.doMobLoot) {
+    // The Haunting's monsters leave nothing behind
+    if (!m.baby && s.level.rules.doMobLoot && !m.data.hauntMob) {
       const drops = rollLoot('mob/' + (m.type === 'sheep' || m.type === 'glitched_sheep' ? m.type : m.type), { rng: m.rng, looting, killedByPlayer: byPlayer, onFire: m.fireTicks > 0, difficulty: s.level.difficulty });
       if ((m.type === 'sheep' || m.type === 'glitched_sheep') && !m.data.sheared) drops.push(stackOf(`${String(m.data.color ?? 'white')}_wool`, 1));
       if (m.held && m.rng.next() < 0.085 + looting * 0.01) drops.push({ ...cloneStack(m.held), damage: Math.floor(m.rng.next() * (items[m.held.id]!.def.durability ?? 0) * 0.8) || undefined });
@@ -1304,7 +1351,7 @@ export class MobSystem {
         break;
       }
     }
-    if (byPlayer && !m.baby) {
+    if (byPlayer && !m.baby && !m.data.hauntMob) {
       const xp = m.def.xp ?? (m.def.category === 'monster' ? 5 : m.def.category === 'boss' ? 500 : 1 + m.rng.int(3));
       // A sculk catalyst nearby drinks the experience and spreads sculk instead
       if (!s.sculk?.onDeath(m.dim, m.x, m.y, m.z, xp)) s.mining.dropXp(m.dim, m.x, m.y + 0.5, m.z, xp, m.admin);
@@ -1333,6 +1380,8 @@ export class MobSystem {
       killer.addStat('mob_kills');
       s.interaction.onMobKilled?.(killer, m);
     }
+    if (isExpansionMob(m.type)) s.endMobs?.onDeath(m, killer);
+    if (isConstruct(m.type)) s.constructs?.onDeath(m, killer);
     // Villager deaths are announced to nearby players (like named pets)
     if (m.customName || m.owner) s.broadcastChat(`${m.customName ?? m.def.name} died`, 'death');
   }
@@ -1357,12 +1406,13 @@ export class MobSystem {
       }
       return;
     }
-    if (isPlayer(target) && (!s.level.pvp || target.gamemode === 'creative')) return;
+    if (isPlayer(target) && ((!s.level.pvp && !s.templeTrials?.pvpBetween(p, target)) || target.gamemode === 'creative')) return;
     // Visitors may defend themselves against monsters but not hurt animals, pets or villagers
     if (s.roleOf(p) === 'visitor' && target instanceof Mob && target.def.category !== 'monster' && target.def.category !== 'boss') return;
     // Reach & line of sight
     const [ex, ey, ez] = s.eyePos(p);
-    const reach = p.gamemode === 'creative' ? 6 : 4.5;
+    // V6 phase 5: the Guardian's Lance reaches two blocks further
+    const reach = (p.gamemode === 'creative' ? 6 : 4.5) + (items[p.inventory.get(p.selectedSlot)?.id ?? -1]?.id === 'guardians_lance' ? 2 : 0);
     const cx = Math.max(target.x - target.body.width / 2, Math.min(ex, target.x + target.body.width / 2));
     const cy = Math.max(target.y, Math.min(ey, target.y + target.body.height));
     const cz = Math.max(target.z - target.body.width / 2, Math.min(ez, target.z + target.body.width / 2));
@@ -1393,7 +1443,9 @@ export class MobSystem {
     const kbLevel = enchantLevel(held, 'knockback') + (sprintKb ? 1 : 0);
     const dl = lookDir(p.yaw, 0);
     const axe = it?.tool?.type === 'axe';
-    const dealt = this.damage(target, Math.max(0, dmg), { source: 'player', attacker: p, kbx: dl[0], kbz: dl[2], knockback: 0.4 + kbLevel * 0.5, disableShield: axe && f > 0.9 ? 100 : undefined });
+    // V6 phase 3: the Ancient Blade cuts through part of the armor
+    const pierce = held && items[held.id]!.id === 'ancient_blade' ? ANCIENT_BLADE_PIERCE : undefined;
+    const dealt = this.damage(target, Math.max(0, dmg), { source: 'player', attacker: p, kbx: dl[0], kbz: dl[2], knockback: 0.4 + kbLevel * 0.5, disableShield: axe && f > 0.9 ? 100 : undefined, armorPierce: pierce });
     if (dealt <= 0 && !(target instanceof PrimedTnt)) {
       s.playSound(p.dim, 'attack.weak', target.x, target.y + 1, target.z, 0.6, 1);
       return;
@@ -1486,6 +1538,7 @@ export class MobSystem {
         consume();
         m.loveTicks = 600;
         if (cheatFood) m.data.cheatLove = true;
+        if (m.type === 'endling' && !cheatFood && !m.admin) s.interaction.grant(p, 'feed_endling');
         return true;
       }
     }
@@ -1707,7 +1760,7 @@ export class MobSystem {
       this.throwTrident(p, stack, ticks, slot);
       return;
     }
-    if (def.id !== 'bow' && def.id !== 'crossbow') return;
+    if (def.id !== 'bow' && def.def.use !== 'crossbow') return;
     let f = ticks / 20;
     f = (f * f + f * 2) / 3;
     if (f < 0.1) return;
@@ -1735,6 +1788,8 @@ export class MobSystem {
     pr.damage = 2 + (enchantLevel(stack, 'power') ? 0.5 * enchantLevel(stack, 'power') + 0.5 : 0);
     pr.knockback = enchantLevel(stack, 'punch');
     pr.fire = enchantLevel(stack, 'flame') > 0;
+    // V6 phase 3: a Voidpiercer's bolt flies straight (no gravity, no drag) for its first 32 blocks
+    if (def.id === 'voidpiercer') pr.straight = VOIDPIERCER_STRAIGHT;
     pr.pickup = !creative && !(infinity && !spectral);
     if (spectral) {
       pr.data = { spectral: true };

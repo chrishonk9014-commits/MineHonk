@@ -1,6 +1,6 @@
 {
   "name": "minehonk",
-  "version": "2.0.0",
+  "version": "6.0.0",
   "private": true,
   "description": "MineHonk - a multiplayer voxel survival sandbox",
   "type": "module",
@@ -16,20 +16,30 @@
     "test:watch": "vitest",
     "test:e2e": "node tests/e2e/run.mjs",
     "test:e2e:mp": "node tests/e2e/multiplayer.mjs",
+    "test:e2e:online": "node tests/e2e/online.mjs",
     "test:e2e:v1": "node tests/e2e/v1.mjs",
     "test:e2e:render": "node tests/e2e/render-equivalence.mjs",
+    "test:e2e:v4": "node tests/e2e/v4.mjs",
+    "test:e2e:v5": "node tests/e2e/v5.mjs",
+    "test:e2e:v6": "node tests/e2e/v6.mjs",
+    "test:e2e:updatelog": "node tests/e2e/update-log.mjs",
+    "test:e2e:autoopt": "node tests/e2e/auto-optimize.mjs",
+    "test:e2e:haunting": "node tests/e2e/haunting.mjs",
+    "update-log:images": "node tools/update-log/build-images.mjs",
     "bench": "node tests/perf/bench.mjs"
   },
   "engines": {
     "node": ">=20"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.133.0",
     "@msgpack/msgpack": "^3.1.3",
     "fflate": "^0.8.3",
     "three": "^0.186.1",
     "ws": "^8.22.0"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261008.1",
     "@types/node": "^26.6.3",
     "@types/opentype.js": "^1.3.10",
     "@types/pngjs": "^6.0.5",
@@ -42,6 +52,7 @@
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "vite": "^8.3.1",
-    "vitest": "^5.0.2"
+    "vitest": "^5.0.2",
+    "wrangler": "^4.149.0"
   }
 }

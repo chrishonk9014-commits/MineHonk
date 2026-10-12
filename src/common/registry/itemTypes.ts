@@ -17,6 +17,11 @@ export interface FoodDef {
 
 export type UseKind =
   | 'place_block'
+  /** V6 phase 5: the Guardian's Lance fires a short Crystal Lance. */
+  | 'guardians_lance'
+  | 'engineering_book'
+  /** V5.5: the witch's grimoire (opens its pages on the client). */
+  | 'grimoire'
   | 'bow'
   | 'crossbow'
   | 'flint_and_steel'
@@ -52,7 +57,19 @@ export type UseKind =
   | 'music_disc'
   | 'totem'
   | 'elytra'
-  | 'firework';
+  | 'firework'
+  /** V6: opens the pack's nine slots. */
+  | 'void_pack'
+  /** V6 phase 3: a compass needle towards the giant structure the map was drawn for. */
+  | 'ancient_map'
+  /** V6 phase 3: fires a slow crystal shard (with a cooldown). */
+  | 'shardstaff'
+  /** V6 phase 4: places a minecart on a rail, or a Void Skiff. */
+  | 'vehicle'
+  /** V6 phase 4: teaches a recipe (the Void Skiff blueprint). */
+  | 'blueprint'
+  /** V6 phase 4: stills the Guardian Constructs around. */
+  | 'silent_bell';
 
 export interface ItemDef {
   id: string;
@@ -60,7 +77,8 @@ export interface ItemDef {
   tex?: string;
   maxStack?: number;
   durability?: number;
-  tool?: { type: ToolType; tier: number; speed: number };
+  /** `material` is the tier's id (iron, netherite, ender_alloy...) for blocks that need one material. */
+  tool?: { type: ToolType; tier: number; speed: number; material?: string };
   weapon?: { damage: number; speed: number };
   armor?: { slot: ArmorSlot; defense: number; toughness?: number; knockbackRes?: number; material: string };
   food?: FoodDef;
@@ -82,5 +100,7 @@ export interface ItemDef {
   /** Repair material for anvils. */
   repair?: string;
   fireResistant?: boolean;
+  /** V6: a short line under the name in the tooltip (for blocks: their def's `data.tooltip`). */
+  tooltip?: string;
   data?: Record<string, unknown>;
 }

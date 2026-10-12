@@ -9,8 +9,9 @@ import type { WorldRole } from './multiplayer';
 import type { ItemStack, Slot } from '../game/itemstack';
 import type { GameMode, Difficulty, GodHearts } from '../game/gamemode';
 import type { DimensionId } from '../data/biomes';
+import type { HalloweenState } from '../halloween/season';
 
-export const PROTOCOL_VERSION = 5;
+export const PROTOCOL_VERSION = 6;
 
 // ---------------------------------------------------------------------------
 // Client -> Server
@@ -96,6 +97,8 @@ export interface WorldInfo {
   /** Whether this player may use the Admin Panel (operator in a world with cheats). */
   admin?: boolean;
   role: WorldRole;
+  /** V7: whether Halloween content is on in this world, and why (the server decides for everyone). */
+  halloween?: HalloweenState;
 }
 
 export interface EntitySpawn {
@@ -171,6 +174,8 @@ export type S2C =
   /** V4: the quest tracker (a structure's objective and progress), or null to hide it. */
   | { t: 'quest'; quest: QuestInfo | null }
   | { t: 'world_info'; world: WorldInfo }
+  /** V7: a Halloween ghost drifts past now (the Admin Panel; ghosts otherwise come by themselves on the client). */
+  | { t: 'ghost' }
   | { t: 'pong'; time: number }
   | { t: 'take_item'; item: number; by: number }
   | { t: 'use_result'; seq: number; ok: boolean }

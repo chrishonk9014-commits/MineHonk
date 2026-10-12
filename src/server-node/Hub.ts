@@ -236,6 +236,7 @@ export class Hub {
           res.setHeader('Vary', 'Origin');
           res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type');
           res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE');
+          res.setHeader('Access-Control-Expose-Headers', 'Date');
           if (req.method === 'OPTIONS') {
             res.writeHead(204);
             res.end();
@@ -323,7 +324,8 @@ export class Hub {
     const b = await this.body(req);
     const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 
-    if (route === 'GET /health') return { ok: true, name: 'MineHonk', protocol: 1 };
+    // `now`: this server's clock, which the Halloween season goes by (V7)
+    if (route === 'GET /health') return { ok: true, name: 'MineHonk', protocol: 1, now: Date.now() };
     if (route === 'POST /register' || route === 'POST /login') {
       if (!this.authLimiter.take(ip)) throw new HttpError(429, 'Too many attempts. Wait a minute.');
       if (route === 'POST /register') return this.accounts.register(str(b.name), str(b.password), (n) => !this.filter.mask(n).changed);

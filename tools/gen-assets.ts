@@ -24,6 +24,7 @@ import { registerV55Blocks, registerV55Items } from './textures/v55';
 import { registerV6Blocks, registerV6Phase2Blocks, registerV6Phase3Blocks, registerV6Items, registerV6Phase3Items } from './textures/v6';
 import { registerV6Phase4Blocks, registerV6Phase4Items } from './textures/v6phase4';
 import { registerV6Phase5Blocks, registerV6Phase5Items } from './textures/v6phase5';
+import { registerV7Blocks } from './textures/v7';
 import { BLOCK_DEFS } from '../src/common/data/blocks';
 import { buildFont } from './gen-font';
 
@@ -116,6 +117,7 @@ registerV6Phase2Blocks(blockReg);
 registerV6Phase3Blocks(blockReg);
 registerV6Phase4Blocks(blockReg);
 registerV6Phase5Blocks(blockReg);
+registerV7Blocks(blockReg);
 
 const referenced = new Set<string>();
 for (const d of BLOCK_DEFS) for (const v of Object.values(d.tex)) if (v) referenced.add(v);

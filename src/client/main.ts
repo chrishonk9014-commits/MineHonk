@@ -10,6 +10,7 @@ import { AudioEngine } from './audio/Audio';
 import { Input } from './input/Input';
 import { App } from './App';
 import { compatKey } from './net/version';
+import { seasonClock } from '../common/halloween/clock';
 
 async function boot(): Promise<void> {
   const status = document.getElementById('boot-status');
@@ -30,6 +31,11 @@ async function boot(): Promise<void> {
     const input = new Input(canvas, settings);
     const audio = new AudioEngine(settings);
     document.getElementById('boot')?.remove();
+    // V7: test browsers can set the Halloween season's clock (?clock=2026-11-07T08:01:00Z)
+    if (import.meta.env.DEV || navigator.webdriver) {
+      const pinned = new URLSearchParams(location.search).get('clock');
+      if (pinned) seasonClock.pin(Date.parse(pinned));
+    }
     const app = new App(canvas, ui, assets, settings, profile, audio, input);
     // Developer handle: only in development builds and automated test browsers
     if (import.meta.env.DEV || navigator.webdriver) Object.assign(window, { minehonk: app, minehonkState: stateFromString, minehonkRegistry: { itemById, blockById, blockOfState: (st: number) => STATE_BLOCK[st] }, minehonkNet: { compatKey } });

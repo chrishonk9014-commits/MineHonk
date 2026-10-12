@@ -144,7 +144,7 @@ All JSON over HTTPS under `/api`; signed-in calls send `Authorization: Bearer
 
 | Call | Purpose |
 | --- | --- |
-| `GET /health` | `{ok, kind: 'cloud', auth: 'stretched-v1'}` (the Node hub answers without `kind`) |
+| `GET /health` | `{ok, kind: 'cloud', auth: 'stretched-v1', now}` (the Node hub answers without `kind`); `now` is the hub's clock, which the V7 Halloween season goes by online (CORS also exposes the `Date` header) |
 | `GET /hub-key` | public key for verifying join tickets (JWK, ES256) |
 | `POST /register`, `POST /login`, `POST /logout`, `GET /me` | accounts and sessions |
 | `GET /friends` | friends (online, playing which world, JOIN if allowed, Cheats ON), requests, blocked |

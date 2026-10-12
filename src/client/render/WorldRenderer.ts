@@ -22,6 +22,7 @@ import { TorchGlow } from './TorchGlow';
 import { SignText } from './SignText';
 import { GlitchFX } from './GlitchFX';
 import { WorldFX } from './WorldFX';
+import { Ghosts } from './Ghosts';
 
 export interface GameAssets {
   blockAtlas: THREE.Texture;
@@ -71,6 +72,8 @@ export interface FrameState {
   endAtmos?: { sky: THREE.Color; fog: THREE.Color; density: number; light: number; amount: number };
   /** V6 phase 5: the End's events (storm, eclipse, the Dragon's storm, where the Citadel is). */
   endEvents?: SkyEvents;
+  /** V7: Halloween content is on in this world (its server says so): ghosts may drift by at night. */
+  halloween?: boolean;
 }
 
 export class WorldRenderer {
@@ -96,6 +99,8 @@ export class WorldRenderer {
   readonly glitch: GlitchFX;
   /** Warning rings, danger zones, lasers, shockwaves and afterimages (V3). */
   readonly worldFx = new WorldFX();
+  /** V7: Halloween ghosts at night. */
+  readonly ghosts: Ghosts;
   private lastFrameAt = 0;
   private readonly caveColor = new THREE.Color();
   readonly atlas: AtlasLookup;
@@ -135,8 +140,9 @@ export class WorldRenderer {
     this.torchGlow = new TorchGlow(world);
     this.signs = new SignText(world);
     this.glitch = new GlitchFX(settings);
+    this.ghosts = new Ghosts(world, settings);
     this.skyScene.add(this.sky.group);
-    this.scene.add(this.sky.cloudGroup, this.sky.eventGroup, this.chunks.group, this.entities.group, this.particles.mesh, this.weather.mesh, this.beams.group, this.torchGlow.mesh, this.signs.group, this.glitch.group, this.worldFx.group);
+    this.scene.add(this.sky.cloudGroup, this.sky.eventGroup, this.chunks.group, this.entities.group, this.particles.mesh, this.weather.mesh, this.beams.group, this.torchGlow.mesh, this.signs.group, this.glitch.group, this.worldFx.group, this.ghosts.mesh);
 
     const selMat = new THREE.LineBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.45 });
     this.selection = new THREE.LineSegments(new THREE.BufferGeometry(), selMat);
@@ -408,6 +414,10 @@ export class WorldRenderer {
     this.beams.update(cam.position.x, cam.position.z, f.time);
     this.torchGlow.update(cam.position.x, cam.position.y, cam.position.z, f.time, this.lightAt(f.x, f.y + 1.6, f.z), this.particles, dt);
     this.signs.update(cam.position.x, cam.position.y, cam.position.z, (x, y, z) => this.lightAt(x, y, z));
+    // V7: under a Halloween night sky (not underground, not under water), a ghost now and then
+    const dimNight = this.world.dimension === 'overworld' || this.world.dimension === 'farlands';
+    const outside = !f.underwater && !f.inLava && !(f.cave && f.cave.amount > 0.5) && cam.position.y > this.world.heightAt(Math.floor(cam.position.x), Math.floor(cam.position.z)) - 8;
+    this.ghosts.update({ x: cam.position.x, y: cam.position.y, z: cam.position.z, yaw: f.yaw, haunted: !!f.halloween && dimNight && outside, daylight: skyState.daylight, time: f.time, fogNear, fogFar }, dt);
     this.updateSelection(f.target);
     this.updateCracks(f.crack);
     this.particles.update((x, y, z) => this.lightAt(x, y, z));
@@ -454,6 +464,7 @@ export class WorldRenderer {
     this.chunks.dispose();
     this.beams.dispose();
     this.torchGlow.dispose();
+    this.ghosts.dispose();
     this.signs.dispose();
     this.sky.dispose();
     this.entities.clear();

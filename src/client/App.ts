@@ -31,6 +31,8 @@ import { PROTOCOL_VERSION, type FakeBan } from '../common/net/protocol';
 import { registryHash } from '../common/registry/hash';
 import { normalizeGodHearts, type GameMode } from '../common/game/gamemode';
 import { randomSeedString } from '../common/math/rng';
+import { seasonClock } from '../common/halloween/clock';
+import { seasonActive } from '../common/halloween/season';
 
 export class App implements GameHost, S.ScreenHost {
   private readonly stack: S.Screen[] = [];
@@ -102,6 +104,23 @@ export class App implements GameHost, S.ScreenHost {
     });
     setInterval(() => this.updateFps(), 500);
     this.applyGuiScale();
+    // V7: the Halloween season goes by the hub's clock when it can be reached (this device's otherwise)
+    seasonClock.onChange(() => this.seasonChanged());
+    if (HUB_URL) void seasonClock.sync(HUB_URL);
+    this.showTitle();
+  }
+
+  /** V7: whether the menu shows Halloween (the date only, by the hub's clock when known). */
+  private menuHalloween(): boolean {
+    return seasonActive(seasonClock.now());
+  }
+
+  /** The hub's clock disagreed with this device's about the season: the title screen follows it. */
+  private seasonChanged(): void {
+    const top = this.stack[this.stack.length - 1];
+    const onTitle = !this.game && !!top && top.root.classList.contains('title-screen');
+    if (!onTitle || this.panoramaHalloween === this.menuHalloween()) return;
+    this.stopPanorama();
     this.showTitle();
   }
 
@@ -126,6 +145,8 @@ export class App implements GameHost, S.ScreenHost {
 
   // ------------------------------------------------------------------ title panorama
   private panorama: TitlePanorama | null = null;
+  /** Whether the running panorama shows the Halloween scenes. */
+  private panoramaHalloween = false;
 
   private updatePanorama(): void {
     const p = this.panorama;
@@ -218,8 +239,10 @@ export class App implements GameHost, S.ScreenHost {
   // ------------------------------------------------------------------ menus
   showTitle(): void {
     this.clearStack();
+    const halloween = this.menuHalloween();
     if (!this.game && !this.panorama && !this.settings.reduceMotion) {
-      this.panorama = new TitlePanorama(this.canvas, this.assets, this.settings);
+      this.panorama = new TitlePanorama(this.canvas, this.assets, this.settings, halloween);
+      this.panoramaHalloween = halloween;
       this.panorama.onReady = () => this.updatePanorama();
       this.panorama.run();
     }
@@ -233,6 +256,7 @@ export class App implements GameHost, S.ScreenHost {
           profile: () => this.push(S.profileScreen(this, this.profile, () => this.showTitle())),
         },
         this.profile,
+        halloween,
       ),
     );
     this.audio.music.update('menu');
@@ -404,6 +428,7 @@ export class App implements GameHost, S.ScreenHost {
       godHearts: options.godHearts ?? 10,
       cheats: mode === 'hardcore' ? false : options.cheats,
       owner: this.profile.uuid,
+      halloween: options.halloween ?? 'seasonal',
     });
   }
 
@@ -604,6 +629,7 @@ export class App implements GameHost, S.ScreenHost {
       generateStructures: o.generateStructures,
       owner: this.profile.uuid,
       rules: { godHunger: o.godHunger, godHazards: o.godHazards, keepInventory: o.keepInventory },
+      halloween: o.halloween,
     };
     await this.startWorld(id, create);
   }

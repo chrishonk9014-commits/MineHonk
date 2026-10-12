@@ -14,6 +14,7 @@ import { installGameplay } from '../server/gameplay';
 import { BrowserHost, type HostConfig, type HostOptionsPatch } from './hosting';
 import type { HostSettingsPush } from '../common/net/hubProtocol';
 import { askHub } from '../common/game/herobrineVoice';
+import { seasonClock, type ClockSource } from '../common/halloween/clock';
 
 declare const __HUB_URL__: string;
 /** The cloud hub this build talks to ('' when none). */
@@ -46,7 +47,7 @@ const conn: Connection = {
 };
 
 type In =
-  | { type: 'start'; worldId: string; create: NewWorldOptions | null; identity: Identity; hello: C2S & { t: 'hello' }; viewDistance: number }
+  | { type: 'start'; worldId: string; create: NewWorldOptions | null; identity: Identity; hello: C2S & { t: 'hello' }; viewDistance: number; clock?: { offset: number; source: ClockSource } }
   | { type: 'c2s'; msg: unknown }
   | { type: 'stop' }
   | { type: 'pause'; paused: boolean }
@@ -65,6 +66,9 @@ self.onmessage = async (ev: MessageEvent<In>) => {
   try {
     switch (m.type) {
       case 'start': {
+        // V7: the Halloween season goes by the hub's time (the page's correction now, the hub's own answer when it comes)
+        if (m.clock) seasonClock.adopt(m.clock.offset, m.clock.source);
+        if (HUB_URL) void seasonClock.sync(HUB_URL);
         const storage = new IndexedDBStorage(m.worldId);
         server = await GameServer.open(storage, m.create, {
           log: (s) => post({ type: 'log', text: s }),
@@ -74,6 +78,7 @@ self.onmessage = async (ev: MessageEvent<In>) => {
           maxPlayers: 1,
           // Browsers can close tabs abruptly: save every minute
           autosaveTicks: 20 * 60,
+          clock: () => seasonClock.now(),
         });
         installGameplay(server);
         // The Haunting: Herobrine answers through the cloud hub when it can (his scripted lines otherwise)

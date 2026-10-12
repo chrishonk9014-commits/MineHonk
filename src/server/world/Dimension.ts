@@ -260,6 +260,8 @@ export class Dimension implements BlockAccess {
       const c = this.generator.generate(chunkIndexX(k), chunkIndexZ(k));
       c.dirty = false;
       c.modified = false;
+      // V7: while Halloween is on, its pumpkin (only ever into air; the chunk is then saved, so it stays)
+      this.server.halloween?.decorate(this, c);
       if (this.id === 'computer') this.epochs.set(c, this.epoch);
       this.addChunk(c);
       this.genMsTotal += performance.now() - t0;

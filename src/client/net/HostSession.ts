@@ -21,6 +21,7 @@ import { decodeRelay, relayFrames, RELAY_CLOSE, RELAY_DATA, RELAY_OPEN, type Rel
 import type { HostOut, LevelSettings } from '../../worker/hosting';
 import { importVerifyKey, verifyTicket } from '../../hub/tickets';
 import { GAME_VERSION, compatKey } from './version';
+import type { HalloweenSetting } from '../../common/halloween/season';
 
 export interface HostOptions {
   name: string;
@@ -32,6 +33,8 @@ export interface HostOptions {
   mode: string;
   /** God Mode's maximum health (new worlds). */
   godHearts?: GodHearts;
+  /** V7: Halloween content (new worlds; default Seasonal). */
+  halloween?: HalloweenSetting;
 }
 
 interface RtcPeer {

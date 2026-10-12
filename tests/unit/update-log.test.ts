@@ -9,18 +9,36 @@ import { ACHIEVEMENTS } from '../../src/common/data/achievements';
 initItems();
 
 describe('the Update Log', () => {
-  it('starts with V6, The End Expansion, and covers the new End and multiplayer', () => {
-    const v6 = UPDATE_LOG[0]!;
-    expect([v6.version, v6.name]).toEqual(['V6', 'The End Expansion']);
+  it('starts with V7, then V6.5, then V6, each with its own tab', () => {
+    expect(UPDATE_LOG.map((e) => [e.version, e.name])).toEqual([
+      ['V7', 'The Halloween Update'],
+      ['V6.5', 'Play Together'],
+      ['V6', 'The End Expansion'],
+    ]);
+    expect(new Set(UPDATE_LOG.map((e) => e.version.toLowerCase())).size).toBe(UPDATE_LOG.length);
+  });
+
+  it("V7 covers phase 1: the season, the pumpkins, ghosts, the title screen and the Admin Panel's tab", () => {
+    const ids = UPDATE_LOG[0]!.sections.map((s) => s.id);
+    for (const id of ['overview', 'season', 'pumpkins', 'ghosts', 'menu', 'admin']) expect(ids).toContain(id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it('V6.5 has multiplayer, the Haunting and Auto Optimize; V6 keeps the End and no longer has multiplayer', () => {
+    const v65 = UPDATE_LOG.find((e) => e.version === 'V6.5')!.sections.map((s) => s.id);
+    for (const id of ['overview', 'multiplayer', 'haunting', 'auto_optimize']) expect(v65).toContain(id);
+    const v6 = UPDATE_LOG.find((e) => e.version === 'V6')!;
     const ids = v6.sections.map((s) => s.id);
-    for (const id of ['overview', 'portal', 'biomes', 'mobs', 'resources', 'structures', 'ancient', 'nest', 'engineering', 'quests', 'elytra', 'events', 'dragon', 'citadel', 'guardian', 'advancements', 'multiplayer']) expect(ids).toContain(id);
+    for (const id of ['overview', 'portal', 'biomes', 'mobs', 'resources', 'structures', 'ancient', 'nest', 'engineering', 'quests', 'elytra', 'events', 'dragon', 'citadel', 'guardian', 'advancements', 'more']) expect(ids).toContain(id);
+    expect(ids).not.toContain('multiplayer');
+    expect(JSON.stringify(v6)).not.toMatch(/Auto Optimize|mp-/);
     expect(new Set(ids).size).toBe(ids.length);
   });
 
   for (const entry of UPDATE_LOG) {
     it(`${entry.version}: every picture is in public/ and small`, () => {
       const images = entryImages(entry);
-      expect(images.length).toBeGreaterThan(50);
+      expect(images.length).toBeGreaterThan(entry.version === 'V6' ? 50 : 8);
       for (const name of images) {
         const file = `public/${imageUrl(entry, name)}`;
         expect(existsSync(file), file).toBe(true);

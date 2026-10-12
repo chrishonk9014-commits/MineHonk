@@ -35,6 +35,34 @@ const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromi
 const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
 const errors = [];
 page.on('pageerror', (e) => errors.push(String(e)));
+// UPDATE_LOG_SHOTS=1: each screenshot also gets a clean copy in tests/e2e/out/clean (no HUD), for the
+// Update Log's pictures (tools/update-log/build-images.mjs)
+if (process.env.UPDATE_LOG_SHOTS) {
+  const CLEAN = path.join(OUT, 'clean');
+  fs.mkdirSync(CLEAN, { recursive: true });
+  const shoot = page.screenshot.bind(page);
+  const HIDE = ['.hotbar', '.crosshair', '.debug', '.debug-right', '.quest-tracker', '.cheats-indicator', '.chat', '.xpbar', '.xplevel', '.stat-row', '.item-name', '.toast', '.subtitles'];
+  page.screenshot = async (opts = {}) => {
+    if (opts.path) {
+      const was = await page.evaluate((hide) => {
+        if (!document.getElementById('clean-shot')) document.head.append(Object.assign(document.createElement('style'), { id: 'clean-shot', textContent: hide.map((c) => `body.clean-shot ${c}`).join(',') + '{visibility:hidden!important}' }));
+        document.body.classList.add('clean-shot');
+        const g = window.minehonk?.game;
+        const w = g?.hudHidden ?? false;
+        if (g) g.hudHidden = true;
+        return w;
+      }, HIDE).catch(() => false);
+      await page.waitForTimeout(150);
+      await shoot({ ...opts, path: path.join(CLEAN, path.basename(opts.path)) }).catch(() => {});
+      await page.evaluate((w) => {
+        document.body.classList.remove('clean-shot');
+        const g = window.minehonk?.game;
+        if (g) g.hudHidden = w;
+      }, was).catch(() => {});
+    }
+    return shoot(opts);
+  };
+}
 
 const inGame = () =>
   page.waitForFunction(() => {
@@ -63,6 +91,8 @@ const chatText = () => page.evaluate(() => [...document.querySelectorAll('.chat 
 const lookAtHerobrine = () =>
   page.evaluate(() => {
     const g = window.minehonk.game;
+    // The end can come at any moment (the game is gone)
+    if (!g) return null;
     const b = g.player.body;
     const hb = [...g.entities.values()].filter((e) => e.type === 'herobrine').sort((a, c) => Math.hypot(a.x - b.x, a.z - b.z) - Math.hypot(c.x - b.x, c.z - b.z))[0];
     if (!hb) return null;
@@ -133,7 +163,8 @@ for (;;) {
   } else {
     // Looking around, as a player does
     await page.evaluate(() => {
-      const p = window.minehonk.game.player;
+      const p = window.minehonk.game?.player;
+      if (!p) return;
       p.yaw = (p.yaw + 0.35) % (Math.PI * 2);
       p.pitch = 0.05;
     });
@@ -143,7 +174,7 @@ for (;;) {
   // From "He speaks" on (70% of two minutes), talking to him gets an answer
   if (!answer && el > 90 && el < 108 && asked < 4 && Math.floor(el) % 4 === 0) {
     asked++;
-    await page.evaluate(() => window.minehonk.game.send({ t: 'chat', text: 'herobrine, who are you?' }));
+    await page.evaluate(() => window.minehonk.game?.send({ t: 'chat', text: 'herobrine, who are you?' }));
     for (let k = 0; k < 4 && !answer; k++) {
       await page.waitForTimeout(1500);
       const lines = await page.evaluate(() => [...document.querySelectorAll('.chat .line.chat-herobrine')].map((e) => e.textContent.replace(/^<Herobrine>\s*/, '').trim()));
@@ -168,6 +199,7 @@ for (;;) {
   // What he left around: the blocks a player would notice
   const found = await page.evaluate(() => {
     const g = window.minehonk.game;
+    if (!g) return [];
     const b = g.player.body;
     const reg = window.minehonkRegistry;
     const ids = new Map([...reg.blockById.values()].map((x) => [x.num, x.id]));

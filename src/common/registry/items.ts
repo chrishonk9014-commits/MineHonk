@@ -34,6 +34,7 @@ export const CREATIVE_TABS = [
   { id: 'farlands', name: 'Farlands', icon: 'glitch_block' },
   { id: 'engineering', name: 'Engineering', icon: 'crusher' },
   { id: 'digital', name: 'Digital', icon: 'computer' },
+  { id: 'halloween', name: 'Halloween', icon: 'hallow_pumpkin' },
 ] as const;
 
 function autoTab(def: { id: string; tags?: string[]; interact?: string; entity?: string; light?: number; model: string; creative?: string }): string {

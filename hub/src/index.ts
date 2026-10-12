@@ -72,6 +72,8 @@ function corsHeaders(origin: string | null, env: Env): Record<string, string> {
     'Access-Control-Allow-Headers': 'Authorization, Content-Type',
     'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE',
     'Access-Control-Max-Age': '86400',
+    // V7: the game reads the hub's clock (the Halloween season)
+    'Access-Control-Expose-Headers': 'Date',
   };
 }
 
@@ -394,7 +396,8 @@ async function api(req: Request, url: URL, env: Env): Promise<unknown | Response
   const b = await body(req);
   const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 
-  if (route === 'GET /health') return { ok: true, name: 'MineHonk', protocol: 1, kind: 'cloud', auth: 'stretched-v1' };
+  // `now`: the hub's clock, which the Halloween season goes by online (V7)
+  if (route === 'GET /health') return { ok: true, name: 'MineHonk', protocol: 1, kind: 'cloud', auth: 'stretched-v1', now: Date.now() };
   if (route === 'GET /hub-key') return { alg: 'ES256', jwk: (await ticketKey(env)).publicJwk };
   if (route === 'POST /herobrine') return herobrine(req, env, ip, b);
   if (route === 'POST /register' || route === 'POST /login') {

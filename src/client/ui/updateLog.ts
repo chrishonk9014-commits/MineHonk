@@ -4,6 +4,8 @@
  * plain data; UpdateLogScreen.ts draws them.
  */
 import { V6_LOG } from './updateLogV6';
+import { V65_LOG } from './updateLogV65';
+import { V7_LOG } from './updateLogV7';
 import { itemById } from '../../common/registry/items';
 
 /** A card: a picture (or an item icon), a title, a description and a line of details. */
@@ -55,7 +57,7 @@ export interface Section {
 }
 
 export interface UpdateEntry {
-  /** "V6": also the folder of its pictures (lowercased). */
+  /** "V6", "V6.5": also the folder of its pictures (lowercased). */
   version: string;
   name: string;
   tagline: string;
@@ -65,7 +67,7 @@ export interface UpdateEntry {
 }
 
 /** Newest first. */
-export const UPDATE_LOG: readonly UpdateEntry[] = [V6_LOG];
+export const UPDATE_LOG: readonly UpdateEntry[] = [V7_LOG, V65_LOG, V6_LOG];
 
 /** Where an entry's picture is served from (relative to the page, like the game's other assets). */
 export function imageUrl(entry: UpdateEntry, name: string): string {

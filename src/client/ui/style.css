@@ -1449,7 +1449,8 @@ body {
 }
 .admin-body {
   flex: 1 1 auto;
-  min-height: calc(var(--s) * 150);
+  /* On short screens the tabs take more of the panel: the body still fits, and scrolls */
+  min-height: min(calc(var(--s) * 150), 36vh);
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -1559,6 +1560,7 @@ body {
   gap: calc(var(--s) * 6);
   overflow-y: auto;
   flex-wrap: wrap;
+  min-height: 0;
 }
 .admin-cols > * {
   flex: 1 1 calc(var(--s) * 140);
@@ -3027,6 +3029,12 @@ body {
   white-space: nowrap;
   font-size: var(--ul-fs-small);
 }
+.ul-version {
+  cursor: pointer;
+}
+.ul-version:hover {
+  color: var(--ul-text, #fff);
+}
 .ul-version.active {
   border-color: #9a6cff;
   color: #ffd76a;
@@ -3448,8 +3456,12 @@ body {
   .ul-page {
     padding: 8px 10px 16px;
   }
-  .ul-versions {
-    display: none;
+  /* Narrow screens: just the version numbers, in a strip that scrolls */
+  .ul-version {
+    padding: calc(var(--s) * 1) calc(var(--s) * 2);
+    max-width: calc(var(--s) * 60);
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 }
 @media (max-height: 480px) {
@@ -3776,4 +3788,52 @@ body {
   50% {
     opacity: 0;
   }
+}
+
+/* V7: the Admin Panel's Halloween tab */
+.halloween-on {
+  color: #ffa630;
+}
+.halloween-off {
+  color: #9a9a9a;
+}
+.halloween-why {
+  margin-top: calc(var(--s) * 3);
+  max-width: calc(var(--s) * 200);
+}
+.btn.chip.halloween-place {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--s) * 2);
+}
+.btn.chip.halloween-place .tiny-slot {
+  position: relative;
+  width: calc(var(--s) * 8);
+  height: calc(var(--s) * 8);
+  background: none;
+  border: none;
+  box-shadow: none;
+}
+.btn.chip.halloween-place .tiny-slot .item-icon {
+  left: 0;
+  top: 0;
+  width: calc(var(--s) * 8);
+  height: calc(var(--s) * 8);
+}
+.btn.chip.halloween-ghost,
+.btn.chip.halloween-place-all {
+  margin-top: calc(var(--s) * 2);
+}
+
+/* V7: the title screen while the Halloween season lasts */
+.logo.halloween {
+  color: #ff9c2a;
+  text-shadow: calc(var(--s) * 2) calc(var(--s) * 2) 0 #4a1a5a, calc(var(--s) * 4) calc(var(--s) * 4) 0 #12081a;
+}
+.logo.halloween .logo-edition {
+  color: #efe6ff;
+  text-shadow: var(--s) var(--s) 0 #3a1a4a;
+}
+.halloween-title .footer {
+  color: #e8dcff;
 }

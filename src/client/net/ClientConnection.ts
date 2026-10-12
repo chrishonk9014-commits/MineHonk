@@ -5,6 +5,7 @@ import type { NewWorldOptions } from '../../server/world/LevelData';
 import type { Identity } from '../../server/net/Connection';
 import type { HostConfig, HostOut, HostOptionsPatch } from '../../worker/hosting';
 import type { HostSettingsPush } from '../../common/net/hubProtocol';
+import { seasonClock } from '../../common/halloween/clock';
 
 export interface ClientConnection {
   send(msg: C2S): void;
@@ -65,7 +66,8 @@ export class WorkerConnection implements ClientConnection {
       console.error('server worker error', e);
       this.onClose('The integrated server crashed');
     };
-    this.worker.postMessage({ type: 'start', worldId, create, identity, hello, viewDistance: hello.viewDistance });
+    // V7: the page's clock correction (the hub's time) goes with it, for the Halloween season
+    this.worker.postMessage({ type: 'start', worldId, create, identity, hello, viewDistance: hello.viewDistance, clock: { offset: seasonClock.offset, source: seasonClock.source } });
   }
 
   send(msg: C2S): void {

@@ -29,7 +29,11 @@ describe('cloud hub (local Wrangler)', () => {
   it('answers as a cloud hub, only to allowed sites, and never accepts a raw password', async () => {
     const h = await fetch(`${hub.base}/api/health`, { headers: { Origin: ORIGIN } });
     expect(h.headers.get('Access-Control-Allow-Origin')).toBe(ORIGIN);
-    expect(await h.json()).toMatchObject({ ok: true, name: 'MineHonk', kind: 'cloud', auth: 'stretched-v1' });
+    // V7: its clock (the Halloween season goes by it online), in the answer and readable from the game's site
+    expect(h.headers.get('Access-Control-Expose-Headers')).toMatch(/Date/);
+    const health = (await h.json()) as { now?: number };
+    expect(health).toMatchObject({ ok: true, name: 'MineHonk', kind: 'cloud', auth: 'stretched-v1' });
+    expect(Math.abs((health.now ?? 0) - Date.now())).toBeLessThan(60_000);
     const evil = await fetch(`${hub.base}/api/health`, { headers: { Origin: 'https://evil.example' } });
     expect(evil.headers.get('Access-Control-Allow-Origin')).toBeNull();
     const raw = await new HubClient(hub.base, 'Rawpw').call('POST', '/register', { name: 'Rawpw', password: 'correct horse battery' });

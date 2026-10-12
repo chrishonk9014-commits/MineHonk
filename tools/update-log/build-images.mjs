@@ -1,10 +1,13 @@
 /**
- * Makes the Update Log's pictures (public/updatelog/v6/*.webp) from game
- * screenshots:
+ * Makes the Update Log's pictures (public/updatelog/<version>/*.webp) from
+ * game screenshots:
  *
- *   UPDATE_LOG_SHOTS=1 node tests/e2e/v6.mjs      the End Expansion (clean copies in tests/e2e/out/clean)
- *   node tools/update-log/capture-online.mjs       browser multiplayer
- *   node tools/update-log/build-images.mjs         resize, brighten and encode
+ *   UPDATE_LOG_SHOTS=1 node tests/e2e/v6.mjs           V6, the End Expansion (clean copies in tests/e2e/out/clean)
+ *   node tools/update-log/capture-online.mjs            V6.5, browser multiplayer
+ *   UPDATE_LOG_SHOTS=1 node tests/e2e/haunting.mjs      V6.5, the Haunting
+ *   node tests/e2e/auto-optimize.mjs                    V6.5, Auto Optimize
+ *   UPDATE_LOG_SHOTS=1 node tests/e2e/halloween.mjs     V7, the Halloween Update
+ *   node tools/update-log/build-images.mjs [v6 v6.5 v7] resize, brighten and encode (all, or just those)
  *
  * Encoding runs in the Chromium that Playwright already uses, so nothing else
  * needs installing.
@@ -14,8 +17,8 @@ import path from 'node:path';
 import { chromium } from 'playwright';
 
 const SHOTS = path.resolve('tests/e2e/out');
-const OUT = path.resolve('public/updatelog/v6');
-fs.mkdirSync(OUT, { recursive: true });
+const ROOT = path.resolve('public/updatelog');
+const only = process.argv.slice(2);
 
 /**
  * The End is dark: game views get an automatic exposure (brightened towards an average
@@ -23,7 +26,9 @@ fs.mkdirSync(OUT, { recursive: true });
  */
 const GAME = 'auto';
 const shots = [];
-const add = (name, src, opts = {}) => shots.push({ name, src, width: 800, filter: GAME, ...opts });
+/** The version the pictures added next belong to (their folder). */
+let version = 'v6';
+const add = (name, src, opts = {}) => shots.push({ name, src, width: 800, filter: GAME, version, ...opts });
 
 add('title-expanded-end', 'clean/v6-title-expanded-end.png', { width: 1280 });
 for (const t of ['crystal-fields', 'end-eclipse']) add(`title-${t}`, `clean/v6-title-${t}.png`);
@@ -42,9 +47,40 @@ for (const d of ['breath-wave', 'wing-gust', 'roar', 'pillar-weave', 'strafing-d
 for (const n of ['teleport-node', 'elytra-smithing', 'elytra-tooltip', 'ender-alloy-armor', 'glyph-tablet', 'admin-teleport-end']) add(n, `clean/v6-${n}.png`, { filter: '' });
 // The quest tracker is part of the HUD, so this one keeps it
 add('quest-tracker', 'v6-quest-tracker.png');
+
+// ---------------------------------------------------------------- V6.5: multiplayer, the Haunting, Auto Optimize
+version = 'v6.5';
 for (const m of ['signin', 'host-tab', 'host-form', 'hosting-panel', 'friends-join', 'join-code', 'public']) add(`mp-${m}`, `clean/ul-mp-${m}.png`, { filter: '' });
 add('mp-together', 'clean/ul-mp-together.png');
+add('haunting-tab', 'haunting-tab.png', { filter: '' });
+// Whichever sighting the haunting gave (it is random how close he came)
+add('haunting-sighting', ['clean/haunting-sighting-far.png', 'clean/haunting-sighting-mid.png', 'clean/haunting-sighting-near.png']);
+add('haunting-not-safe', 'haunting-not-safe.png', { filter: '' });
+add('haunting-ban', 'haunting-ban.png', { filter: '' });
+add('haunting-lair', 'clean/haunting-lair-wake.png');
+add('auto-optimize-toast', 'auto-optimize-toast.png', { filter: '' });
+add('auto-optimize-settings', 'auto-optimize-video-settings.png', { filter: '' });
 
+// ---------------------------------------------------------------- V7: the Halloween Update
+version = 'v7';
+add('title-haunted-forest', 'clean/halloween-scene-haunted_forest.png', { width: 1280 });
+for (const t of ['pumpkin_patch', 'ghost_marsh']) add(`title-${t.replace('_', '-')}`, `clean/halloween-scene-${t}.png`);
+add('title-menu', 'halloween-title-haunted_forest.png', { filter: '' });
+for (const d of ['overworld', 'nether', 'end', 'expanded_end', 'farlands', 'computer']) add(`pumpkin-${d.replace('_', '-')}`, `clean/halloween-pumpkin-${d}.png`);
+add('pumpkins-day', 'clean/halloween-pumpkins-day.png', { filter: '' });
+add('pumpkins-night', 'clean/halloween-pumpkins-night.png');
+add('ghost', 'clean/halloween-ghost.png');
+for (const n of ['admin', 'admin-simulated', 'world-option', 'creative-tab']) add(n, `clean/halloween-${n}.png`, { filter: '' });
+
+if (only.length) shots.splice(0, shots.length, ...shots.filter((s) => only.includes(s.version)));
+// A list of sources: the first one there is used
+for (const s of shots) if (Array.isArray(s.src)) s.src = s.src.find((f) => fs.existsSync(path.join(SHOTS, f))) ?? s.src[0];
+// A picture already made whose screenshot is not here is kept as it is (only what was captured is rebuilt)
+const kept = shots.filter((s) => !fs.existsSync(path.join(SHOTS, s.src)) && fs.existsSync(path.join(ROOT, s.version, `${s.name}.webp`)));
+if (kept.length) {
+  console.log(`Keeping ${kept.length} pictures whose screenshots are not here: ${kept.map((s) => `${s.version}/${s.name}`).join(', ')}`);
+  shots.splice(0, shots.length, ...shots.filter((s) => !kept.includes(s)));
+}
 const missing = shots.filter((s) => !fs.existsSync(path.join(SHOTS, s.src)));
 if (missing.length) {
   console.error('Missing screenshots (run the captures first):\n  ' + missing.map((s) => s.src).join('\n  '));
@@ -89,8 +125,10 @@ for (const s of shots) {
     { b64, width: s.width, filter: s.filter },
   );
   const buf = Buffer.from(url.slice(url.indexOf(',') + 1), 'base64');
-  fs.writeFileSync(path.join(OUT, `${s.name}.webp`), buf);
+  const dir = path.join(ROOT, s.version);
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, `${s.name}.webp`), buf);
   total += buf.length;
 }
 await browser.close();
-console.log(`${shots.length} pictures, ${(total / 1024).toFixed(0)} KB in ${path.relative(process.cwd(), OUT)}`);
+console.log(`${shots.length} pictures, ${(total / 1024).toFixed(0)} KB in ${path.relative(process.cwd(), ROOT)} (${[...new Set(shots.map((s) => s.version))].join(', ')})`);

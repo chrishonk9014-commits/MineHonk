@@ -90,7 +90,10 @@ describe('multiplayer hub', () => {
   let code = '';
 
   it('registers and logs in accounts safely', async () => {
-    expect((await api('GET', '/health')).data.ok).toBe(true);
+    const health = (await api('GET', '/health')).data;
+    expect(health.ok).toBe(true);
+    // V7: this server's clock, for the Halloween season
+    expect(Math.abs(Number(health.now) - Date.now())).toBeLessThan(60_000);
     const a = await api('POST', '/register', undefined, { name: 'Alice', password: 'correct horse' });
     expect(a.status).toBe(200);
     alice = String(a.data.token);

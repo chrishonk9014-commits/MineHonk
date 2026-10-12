@@ -1,4 +1,4 @@
-import { GameServer } from '../../src/server/GameServer';
+import { GameServer, type ServerOptions } from '../../src/server/GameServer';
 import { MemoryStorage } from '../../src/server/storage/Storage';
 import type { Connection } from '../../src/server/net/Connection';
 import type { S2C, C2S } from '../../src/common/net/protocol';
@@ -32,8 +32,8 @@ export class FakeConn implements Connection {
   }
 }
 
-export async function makeServer(opts: Partial<NewWorldOptions> = {}, storage = new MemoryStorage()): Promise<{ server: GameServer; storage: MemoryStorage }> {
-  const server = await GameServer.open(storage, { id: 'test', name: 'Test', seed: 'test-seed', mode: 'survival', difficulty: 'normal', ...opts }, { log: () => {}, genBudgetMs: 1000, chunksPerTick: 400 });
+export async function makeServer(opts: Partial<NewWorldOptions> = {}, storage = new MemoryStorage(), serverOpts: ServerOptions = {}): Promise<{ server: GameServer; storage: MemoryStorage }> {
+  const server = await GameServer.open(storage, { id: 'test', name: 'Test', seed: 'test-seed', mode: 'survival', difficulty: 'normal', ...opts }, { log: () => {}, genBudgetMs: 1000, chunksPerTick: 400, ...serverOpts });
   installGameplay(server);
   // Tests control spawning explicitly
   server.level.rules.doMobSpawning = false;

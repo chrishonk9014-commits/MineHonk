@@ -609,6 +609,8 @@ export class Commands {
         const cx = Math.floor(p.x) >> 4;
         const cz = Math.floor(p.z) >> 4;
         const fresh = p.dim.generator.generate(cx, cz);
+        // V7: with its Halloween pumpkin while the season is on, as a new chunk would have
+        s.halloween?.decorate(p.dim, fresh);
         for (let y = 0; y < 256; y++) for (let z = 0; z < 16; z++) for (let x = 0; x < 16; x++) {
           const st = fresh.get(x, y, z);
           const wx = (cx << 4) + x;

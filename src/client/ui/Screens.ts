@@ -13,6 +13,7 @@ import type { ItemIcons } from '../render/ItemIcons';
 import { LIMITS, type FakeBan } from '../../common/net/protocol';
 import { updateLogScreen } from './UpdateLogScreen';
 import { undoCount, undoAutoOptimize } from '../game/AutoOptimizer';
+import { HALLOWEEN_SETTING_NAMES, type HalloweenSetting } from '../../common/halloween/season';
 
 export interface Screen {
   root: HTMLElement;
@@ -94,8 +95,30 @@ const SPLASHES = [
   'Made of voxels!',
 ];
 
-export function titleScreen(host: ScreenHost, actions: { singleplayer: () => void; multiplayer: () => void; options: () => void; profile: () => void }, profile: Profile): Screen {
-  const logo = el('div', { class: 'logo' }, 'MINEHONK', el('div', { class: 'logo-edition' }, 'V6 - The End Expansion'), el('div', { class: 'splash' }, SPLASHES[Math.floor(Math.random() * SPLASHES.length)]!));
+/** V7: while the Halloween season lasts, the splashes are all Halloween. */
+const HALLOWEEN_SPLASHES = [
+  'The Halloween Update!',
+  'Happy Halloween!',
+  'Trick or treat!',
+  'Now with ghosts!',
+  'A pumpkin in every dimension!',
+  'Boo!',
+  'Look behind you.',
+  'Who carved that one?',
+  'Until November 7!',
+  'Glows in the dark!',
+  'He is watching the pumpkin patch.',
+  'Do not follow the lights.',
+  'Spooky, but harmless!',
+  'Even the Farlands have pumpkins!',
+];
+
+/** Splashes after the season (the Update Log, hauntings and the rest are never seasonal). */
+const V7_SPLASHES = ['The Halloween Update!', 'Read the Update Log!', 'Now in V6.5: multiplayer!'];
+
+export function titleScreen(host: ScreenHost, actions: { singleplayer: () => void; multiplayer: () => void; options: () => void; profile: () => void }, profile: Profile, halloween = false): Screen {
+  const splashes = halloween ? HALLOWEEN_SPLASHES : [...V7_SPLASHES, ...SPLASHES];
+  const logo = el('div', { class: 'logo' + (halloween ? ' halloween' : '') }, 'MINEHONK', el('div', { class: 'logo-edition' }, 'V7 - The Halloween Update'), el('div', { class: 'splash' }, splashes[Math.floor(Math.random() * splashes.length)]!));
   const body = el(
     'div',
     { class: 'stack', style: { marginTop: 'calc(var(--s) * 40)' } },
@@ -103,8 +126,8 @@ export function titleScreen(host: ScreenHost, actions: { singleplayer: () => voi
     button('Multiplayer', wrapClick(host, actions.multiplayer)),
     el('div', { class: 'row' }, button('Options...', wrapClick(host, actions.options), 'btn half'), button(`Profile: ${profile.name}`, wrapClick(host, actions.profile), 'btn half')),
   );
-  const footer = el('div', { class: 'footer' }, el('span', {}, 'MineHonk V6 - The End Expansion'), el('span', {}, 'Original game — all art & sound generated'));
-  return { root: el('div', { class: 'screen dirt title-screen' }, logo, body, footer), escapable: false };
+  const footer = el('div', { class: 'footer' }, el('span', {}, 'MineHonk V7 - The Halloween Update'), el('span', {}, 'Original game — all art & sound generated'));
+  return { root: el('div', { class: 'screen dirt title-screen' + (halloween ? ' halloween-title' : '') }, logo, body, footer), escapable: false };
 }
 
 // ---------------------------------------------------------------------------
@@ -304,10 +327,17 @@ export interface CreateWorldOptions {
   bonusChest: boolean;
   generateStructures: boolean;
   keepInventory: boolean;
+  /** V7: Halloween content (Seasonal: only until the season ends; Always on: for good). */
+  halloween: HalloweenSetting;
+}
+
+/** V7: what the world option means, under its button. */
+export function halloweenOptionHelp(v: HalloweenSetting): string {
+  return v === 'always' ? 'Always on: this world keeps Halloween content after the season ends.' : 'Seasonal: Halloween content until November 7, 2026. Nothing is removed after that.';
 }
 
 export function createWorldScreen(host: ScreenHost, create: (o: CreateWorldOptions) => void): Screen {
-  const o: CreateWorldOptions = { name: 'New World', seed: '', mode: 'survival', difficulty: 'normal', godHearts: 10, godHunger: true, godHazards: true, cheats: false, bonusChest: false, generateStructures: true, keepInventory: false };
+  const o: CreateWorldOptions = { name: 'New World', seed: '', mode: 'survival', difficulty: 'normal', godHearts: 10, godHunger: true, godHazards: true, cheats: false, bonusChest: false, generateStructures: true, keepInventory: false, halloween: 'seasonal' };
   const { root, body } = titled('Create New World');
   const nameInput = el('input', { class: 'field', value: o.name, maxLength: 48 }) as HTMLInputElement;
   const seedInput = el('input', { class: 'field', placeholder: 'Leave blank for a random seed', maxLength: 64 }) as HTMLInputElement;
@@ -365,11 +395,16 @@ export function createWorldScreen(host: ScreenHost, create: (o: CreateWorldOptio
   });
   modeBtn.style.width = 'calc(var(--s) * 200)';
   const more = el('div', { class: 'stack hidden' });
+  const halloweenHelp = el('div', { class: 'muted halloween-help', style: { maxWidth: 'calc(var(--s) * 300)', textAlign: 'center' } }, halloweenOptionHelp(o.halloween));
   more.append(
     el('div', { class: 'label' }, 'Seed for the world generator'),
     seedInput,
     el('div', { class: 'row' }, cycle((v: boolean) => `Generate Structures: ${v ? 'ON' : 'OFF'}`, [true, false], true, (v) => (o.generateStructures = v)), cycle((v: boolean) => `Bonus Chest: ${v ? 'ON' : 'OFF'}`, [false, true], false, (v) => (o.bonusChest = v))),
-    el('div', { class: 'row' }, cycle((v: boolean) => `Keep Inventory: ${v ? 'ON' : 'OFF'}`, [false, true], false, (v) => (o.keepInventory = v))),
+    el('div', { class: 'row' }, cycle((v: boolean) => `Keep Inventory: ${v ? 'ON' : 'OFF'}`, [false, true], false, (v) => (o.keepInventory = v)), cycle((v: HalloweenSetting) => `Halloween content: ${HALLOWEEN_SETTING_NAMES[v]}`, ['seasonal', 'always'] as const, o.halloween, (v) => {
+      o.halloween = v;
+      halloweenHelp.textContent = halloweenOptionHelp(v);
+    })),
+    halloweenHelp,
   );
   const moreBtn = button('More World Options...', () => {
     host.uiClick();

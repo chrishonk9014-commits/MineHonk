@@ -5,6 +5,7 @@ import type { GameMode, Difficulty, GodHearts } from '../../common/game/gamemode
 import { normalizeGodHearts, GAME_MODES, DIFFICULTIES } from '../../common/game/gamemode';
 import { seedFromString } from '../../common/math/rng';
 import type { DimensionId } from '../../common/data/biomes';
+import { normalizeHalloweenSetting, type HalloweenSetting } from '../../common/halloween/season';
 
 export const LEVEL_VERSION = 1;
 /** Worlds created from V2 on generate with the Caves Update terrain (see GeneratorOptions.version). */
@@ -92,6 +93,8 @@ export interface LevelData {
   digital: DigitalStore;
   /** V5.5: the Herobrine story in this world. */
   herobrine: HerobrineWorld;
+  /** V7: "Halloween content" chosen at creation (worlds from before V7: Seasonal). */
+  halloween: HalloweenSetting;
 }
 
 /** V5.5: every drive's files, kept with the world (the drive item carries its disk's id). */
@@ -297,6 +300,8 @@ export interface NewWorldOptions {
   owner?: string | null;
   visibility?: LevelData['visibility'];
   rules?: Partial<GameRules>;
+  /** V7: Halloween content (default Seasonal). */
+  halloween?: HalloweenSetting;
 }
 
 /** A browser-hosted world's link to the cloud hub (single player ignores it). */
@@ -357,6 +362,7 @@ export function createLevelData(o: NewWorldOptions): LevelData {
     quests: newWorldQuests(),
     digital: { next: 1, disks: {} },
     herobrine: newHerobrineWorld(),
+    halloween: normalizeHalloweenSetting(o.halloween),
   };
 }
 
@@ -417,6 +423,8 @@ export function sanitizeLevelData(raw: unknown, fallbackId: string): LevelData |
   // V5.5 (older saves have neither: they start empty)
   out.digital = sanitizeDigital(r.digital);
   out.herobrine = sanitizeHerobrine(r.herobrine);
+  // V7 (older saves have none: Seasonal)
+  out.halloween = normalizeHalloweenSetting(r.halloween);
   if (r.admin && typeof r.admin === 'object') {
     const a = r.admin as NonNullable<LevelData['admin']>;
     out.admin = { sky: a.sky === true, blocks: a.blocks && typeof a.blocks === 'object' ? a.blocks : {}, chunks: a.chunks && typeof a.chunks === 'object' ? a.chunks : {} };

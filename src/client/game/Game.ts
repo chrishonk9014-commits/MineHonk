@@ -814,6 +814,10 @@ export class Game {
         this.worldInfo = m.world;
         this.updateCheatsIndicator();
         break;
+      case 'ghost':
+        // V7: the Admin Panel's "Show a ghost now"
+        this.renderer.ghosts.showNow();
+        break;
       case 'admin_result':
         this.onAdminResult(m);
         break;
@@ -2006,6 +2010,7 @@ export class Game {
       portal: this.portalFx,
       nausea: this.effectLevel('nausea') > 0 && !this.settings.reduceMotion ? 1 : 0,
       portalColor: this.portalKind === 'far_portal' ? 0x2ad7c2 : this.portalKind === 'expansion_portal' ? 0x9ad8ff : 0x8a2be2,
+      halloween: !!this.worldInfo?.halloween?.active,
     };
     if (this.sceneCam) this.sceneCamera(fs, alpha);
     // Lines (fishing, leads) end at the local player's hand: lower right of the view

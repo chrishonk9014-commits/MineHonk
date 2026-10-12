@@ -43,7 +43,7 @@ function itemSlot(id: string, cls = 'slot ul-slot'): HTMLElement {
 const itemName = (id: string): string => itemById.get(id)?.def.name ?? id;
 
 export function updateLogScreen(host: ScreenHost, inGame: boolean): Screen {
-  const entry = UPDATE_LOG.find((e) => e.version === memory.version) ?? UPDATE_LOG[0]!;
+  let entry = UPDATE_LOG.find((e) => e.version === memory.version) ?? UPDATE_LOG[0]!;
   memory.version = entry.version;
   if (!entry.sections.some((s) => s.id === memory.section)) memory.section = entry.sections[0]!.id;
 
@@ -57,8 +57,28 @@ export function updateLogScreen(host: ScreenHost, inGame: boolean): Screen {
     hideTooltip();
     host.pop();
   });
+  // One tab per update, newest first: each its own book
   const versions = el('div', { class: 'ul-versions' });
-  for (const e of UPDATE_LOG) versions.append(el('div', { class: 'ul-version' + (e === entry ? ' active' : '') }, `${e.version} - ${e.name}`));
+  const renderVersions = (): void => {
+    clear(versions);
+    for (const e of UPDATE_LOG) {
+      const v = el('div', { class: 'ul-version' + (e === entry ? ' active' : ''), 'data-version': e.version, title: `${e.version} - ${e.name}` }, `${e.version} - ${e.name}`);
+      v.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        if (e === entry) return;
+        host.uiClick();
+        hideTooltip();
+        entry = e;
+        memory.version = e.version;
+        memory.section = e.sections[0]!.id;
+        renderVersions();
+        open(memory.section);
+      });
+      versions.append(v);
+    }
+    versions.querySelector('.ul-version.active')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  };
+  renderVersions();
   const book = el(
     'div',
     { class: 'ul-book' },

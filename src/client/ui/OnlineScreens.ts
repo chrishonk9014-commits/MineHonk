@@ -10,6 +10,7 @@ import type { HubApi } from '../net/HubApi';
 import type { HostOptions, HostSession } from '../net/HostSession';
 import { normalizeJoinCode, type FriendsResponse, type WorldSummary, type WorldRole, type WorldVisibility } from '../../common/net/multiplayer';
 import { GAME_MODE_INFO, GOD_HEART_PRESETS, type GameMode, type GodHearts } from '../../common/game/gamemode';
+import { HALLOWEEN_SETTING_NAMES, type HalloweenSetting } from '../../common/halloween/season';
 
 export interface OnlineContext {
   api: HubApi;
@@ -120,6 +121,9 @@ export function hostOptionsForm(o: HostOptions, isTouch: boolean, opts: { lockNa
         hearts,
       )
     : el('div', { class: 'label' }, `Game Mode: ${modeName(cur.mode)}`);
+  // V7: a new world's Halloween content (Seasonal unless chosen)
+  const halloween = cycle((v: HalloweenSetting) => `Halloween: ${HALLOWEEN_SETTING_NAMES[v]}`, ['seasonal', 'always'] as const, cur.halloween ?? 'seasonal', (v) => (cur.halloween = v), 'btn half');
+  halloween.title = 'Seasonal: Halloween content until November 7, 2026. Always on: this world keeps it after the season.';
   const root = el(
     'div',
     { class: 'stack' },
@@ -129,7 +133,7 @@ export function hostOptionsForm(o: HostOptions, isTouch: boolean, opts: { lockNa
     el('div', { class: 'row' }, vis, max),
     visHelp,
     el('div', { class: 'row' }, cheats, pvp),
-    el('div', { class: 'row' }, role),
+    el('div', { class: 'row' }, role, opts.newWorld ? halloween : null),
     el('div', { class: 'muted', style: { maxWidth: 'calc(var(--s) * 300)', textAlign: 'center' } }, 'Builders can build and break; visitors can only look around. With cheats on, you and your operators get the Admin Panel.'),
     isTouch ? el('div', { class: 'warn-text', style: { maxWidth: 'calc(var(--s) * 300)', textAlign: 'center' } }, 'Hosting works best on a computer.') : null,
   );

@@ -17,6 +17,9 @@ import { EXPANSION_BIOMES } from '../../common/endExpansion/biomes';
 import { END_QUESTS } from '../../common/endExpansion/quests';
 import type { DimensionId } from '../../common/data/biomes';
 import { ENDINGS } from '../../common/data/endings';
+import { DIMENSION_PUMPKINS } from '../../common/halloween/pumpkins';
+import { HALLOWEEN_SETTING_NAMES, type HalloweenSimulation } from '../../common/halloween/season';
+import type { HalloweenStatus } from '../../common/game/admin';
 
 export interface AdminReply {
   ok: boolean;
@@ -34,7 +37,7 @@ export interface AdminHost {
   cheats(): boolean;
 }
 
-type Tab = 'items' | 'mobs' | 'teleport' | 'player' | 'world' | 'endgame' | 'v4' | 'v5' | 'v55' | 'v6' | 'haunt' | 'perf';
+type Tab = 'items' | 'mobs' | 'teleport' | 'player' | 'world' | 'endgame' | 'v4' | 'v5' | 'v55' | 'v6' | 'halloween' | 'haunt' | 'perf';
 const TABS: { id: Tab; name: string; icon: string }[] = [
   { id: 'items', name: 'Give Items', icon: 'chest' },
   { id: 'mobs', name: 'Spawn Mobs', icon: 'spawn_egg_zombie' },
@@ -46,6 +49,7 @@ const TABS: { id: Tab; name: string; icon: string }[] = [
   { id: 'v5', name: 'Engineering', icon: 'crusher' },
   { id: 'v55', name: 'Digital Corruption', icon: 'corrupted_flash_drive' },
   { id: 'v6', name: 'End Expansion', icon: 'end_stone_bricks' },
+  { id: 'halloween', name: 'Halloween', icon: 'hallow_pumpkin' },
   { id: 'haunt', name: 'Haunting', icon: 'redstone_torch' },
   { id: 'perf', name: 'Performance', icon: 'redstone' },
 ];
@@ -907,6 +911,79 @@ export function adminScreen(host: AdminHost): Screen {
     );
   };
 
+  // ------------------------------------------------------------------ V7: Halloween
+  const renderHalloween = (): HTMLElement => {
+    const state = el('div', { class: 'admin-stats halloween-state' });
+    const simRow = el('div', { class: 'admin-chips halloween-sim' });
+    const when = (ms: number): string => {
+      const d = Math.max(0, ms);
+      const days = Math.floor(d / 86400000);
+      const hours = Math.floor((d % 86400000) / 3600000);
+      const mins = Math.floor((d % 3600000) / 60000);
+      return days > 0 ? `${days} day${days === 1 ? '' : 's'}, ${hours} h` : `${hours} h ${mins} min`;
+    };
+    const SIMS: { id: HalloweenSimulation; label: string }[] = [
+      { id: 'none', label: 'No simulation' },
+      { id: 'expired', label: 'After the cutoff' },
+      { id: 'always', label: 'Always on' },
+    ];
+    const showState = (d: HalloweenStatus | undefined): void => {
+      if (!d) return;
+      clear(state);
+      const left = d.endsAt - d.now;
+      const rows: [string, string][] = [
+        ['Halloween content', d.state.active ? 'ON' : 'OFF'],
+        ['World setting', HALLOWEEN_SETTING_NAMES[d.state.setting]],
+        ['Season', left > 0 ? `${when(left)} left` : 'Over'],
+        ['Simulation', d.state.sim === 'expired' ? 'After the cutoff' : d.state.sim === 'always' ? 'Always on' : 'None'],
+        ['Pumpkins grown', String(d.placed)],
+      ];
+      const tips: Record<string, string> = { Season: 'Until the cutoff', 'Pumpkins grown': 'On new chunks since the world opened' };
+      for (const [k, v] of rows) state.append(el('div', { class: 'admin-kv', title: tips[k] ?? '' }, el('span', { class: 'muted' }, k), el('span', { class: k === 'Halloween content' ? (d.state.active ? 'halloween-on' : 'halloween-off') : '' }, v)));
+      state.append(el('div', { class: 'muted small halloween-why' }, d.text));
+      for (const c of simRow.children) c.classList.toggle('active', (c as HTMLElement).dataset.sim === d.state.sim);
+    };
+    const op = (action: Parameters<typeof send>[0]): void => void send(action).then((r) => showState(r.data as HalloweenStatus));
+    for (const sm of SIMS) {
+      const b = btn(sm.label, () => op({ a: 'halloween', op: 'simulate', sim: sm.id }), 'btn chip');
+      b.dataset.sim = sm.id;
+      simRow.append(b);
+    }
+    const pumpkinBtn = (p: (typeof DIMENSION_PUMPKINS)[number]): HTMLElement => {
+      const b = btn('', () => op({ a: 'halloween', op: 'place', pumpkin: p.id }), 'btn chip halloween-place');
+      const num = itemById.get(p.id)?.num;
+      const ic = num !== undefined ? iconEl({ id: num, count: 1 }, false) : null;
+      if (ic) b.append(el('span', { class: 'slot tiny-slot' }, ic));
+      b.append(el('span', {}, p.name));
+      b.title = `${p.name} (${p.where}): ${p.look}`;
+      return b;
+    };
+    void host.request({ a: 'halloween', op: 'status' }).then((r) => !destroyed && showState(r.data as HalloweenStatus));
+    perfTimer = setInterval(() => {
+      if (destroyed || !root.isConnected) {
+        if (perfTimer) clearInterval(perfTimer);
+        return;
+      }
+      void host.request({ a: 'halloween', op: 'status' }).then((r) => !destroyed && showState(r.data as HalloweenStatus));
+    }, 1000);
+    return el(
+      'div',
+      { class: 'admin-cols' },
+      el(
+        'div',
+        { class: 'admin-col' },
+        section('Halloween in this world', state),
+        section('Test the season', el('div', { class: 'muted small' }, 'Simulate the end of the season, or Halloween always on. Never saved: it ends when the world closes.'), simRow),
+      ),
+      el(
+        'div',
+        { class: 'admin-col' },
+        section('Ghosts', el('div', { class: 'muted small' }, 'They drift past now and then on Halloween nights. This shows you one now, day or night.'), btn('Show a ghost now', () => op({ a: 'halloween', op: 'ghost' }), 'btn chip halloween-ghost')),
+        section('Dimension pumpkins', el('div', { class: 'muted small' }, 'Placed in front of you, facing you (cheat-made).'), el('div', { class: 'admin-chips' }, ...DIMENSION_PUMPKINS.map(pumpkinBtn)), btn('Place one of each', () => op({ a: 'halloween', op: 'place_all' }), 'btn chip halloween-place-all')),
+      ),
+    );
+  };
+
   // ------------------------------------------------------------------ the Haunting (every world)
   const renderHaunt = (): HTMLElement => {
     const state = el('div', { class: 'admin-stats' });
@@ -1079,7 +1156,7 @@ export function adminScreen(host: AdminHost): Screen {
     for (const c of tabs.children) c.classList.toggle('active', (c as HTMLElement).dataset.tab === t);
     clear(body);
     hideTooltip();
-    const view = t === 'items' ? renderItems() : t === 'mobs' ? renderMobs() : t === 'teleport' ? renderTeleport() : t === 'player' ? renderPlayer() : t === 'world' ? renderWorld() : t === 'endgame' ? renderEndgame() : t === 'v4' ? renderV4() : t === 'v5' ? renderV5() : t === 'v55' ? renderV55() : t === 'v6' ? renderV6() : t === 'haunt' ? renderHaunt() : renderPerf();
+    const view = t === 'items' ? renderItems() : t === 'mobs' ? renderMobs() : t === 'teleport' ? renderTeleport() : t === 'player' ? renderPlayer() : t === 'world' ? renderWorld() : t === 'endgame' ? renderEndgame() : t === 'v4' ? renderV4() : t === 'v5' ? renderV5() : t === 'v55' ? renderV55() : t === 'v6' ? renderV6() : t === 'halloween' ? renderHalloween() : t === 'haunt' ? renderHaunt() : renderPerf();
     body.append(view);
   };
   for (const t of TABS) {

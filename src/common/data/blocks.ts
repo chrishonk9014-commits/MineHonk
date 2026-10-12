@@ -14,6 +14,7 @@ import { transportBlockDefs } from '../endExpansion/transport';
 import { questBlockDefs } from '../endExpansion/quests';
 import { eventBlockDefs } from '../endExpansion/events';
 import { citadelBlockDefs } from '../endExpansion/citadel';
+import { pumpkinBlockDefs } from '../halloween/blocks';
 
 const defs: BlockDef[] = [];
 const add = (d: BlockDef): BlockDef => {
@@ -1044,5 +1045,8 @@ for (const d of questBlockDefs()) add(d);
 // V6 phase 5: the End's events, the Void Citadel and the End Guardian's arena
 for (const d of eventBlockDefs()) add(d);
 for (const d of citadelBlockDefs()) add(d);
+
+// V7 - The Halloween Update, phase 1: a pumpkin for every dimension
+for (const d of pumpkinBlockDefs()) add(d);
 
 export const BLOCK_DEFS: readonly BlockDef[] = defs;

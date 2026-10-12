@@ -6,6 +6,10 @@ deterministic. The server is authoritative. There are four dimensions: the
 Overworld, the Nether, the End and the Farlands (and, since Version 5.5,
 somewhere you can only get to through a computer).
 
+**Now: V7 - The Halloween Update** (phase 1 of 5). Until November 7, 2026,
+12:00 AM PST, every dimension grows pumpkins, ghosts drift by on dark nights
+and the title screen is haunted. See [below](#version-7---the-halloween-update).
+
 ## Quick start
 
 ```bash
@@ -324,10 +328,10 @@ Void Storms and the End Eclipse, new moves for the Ender Dragon, the Void
 Citadel and the End Guardian at its bottom. Design notes:
 [docs/END_EXPANSION.md](docs/END_EXPANSION.md).
 
-In the game, **Options > Update Log** walks through all of V6 and the new
-browser multiplayer, with screenshots, item icons, recipes and step-by-step
-examples (`src/client/ui/updateLogV6.ts`; its pictures are made by the scripts
-in `tools/update-log/`).
+In the game, **Options > Update Log** walks through every update since V6,
+one tab each (V7, V6.5 and V6), with screenshots, item icons, recipes and
+step-by-step examples (`src/client/ui/updateLogV7.ts`, `updateLogV65.ts` and
+`updateLogV6.ts`; the pictures are made by the scripts in `tools/update-log/`).
 
 - **The Expansion Portal** stands on the main End island, apart from the exit
   portal: an upright frame of its own.
@@ -568,6 +572,59 @@ in `tools/update-log/`).
   eclipses. Worlds older than V6 have no Expanded End, so no events and no
   Citadel.
 
+### Version 6.5 - Play Together
+
+What came after the End Expansion: multiplayer from the browser (see
+[Playing online](#playing-online)), the Admin Panel's Haunting (see
+[Admin Panel and cheats](#admin-panel-and-cheats)), Auto Optimize, and the
+Update Log itself.
+
+### Version 7 - The Halloween Update
+
+V7 comes in five phases. **Phase 1** (version 7.0.0-phase1) is the
+foundation: the season, the pumpkins, ghosts, the title screen and the Admin
+Panel's Halloween tab. Villages, trick-or-treating, new hauntings and
+advancements follow in phases 2 to 5. Design notes:
+[docs/HALLOWEEN.md](docs/HALLOWEEN.md).
+
+- **The Halloween season** runs until **November 7, 2026, 12:00 AM PST**
+  (`2026-11-07T08:00:00Z`): one moment for everyone, never the player's own
+  time zone. It does not come back by itself next year. Online it goes by the
+  hub's clock, offline by the device's.
+- **Halloween content: Seasonal / Always on**, a new world option under
+  **More World Options...** (Seasonal unless chosen; worlds from before V7 are
+  Seasonal). After the cutoff a Seasonal world gets no new seasonal content;
+  an Always on world keeps it for good. Nothing is ever removed: pumpkins
+  already out there, items and saves all stay. In a world the server decides
+  (in multiplayer, the host) and tells every player, so everyone sees the
+  same.
+- **Dimension pumpkins**, one block each, scattered rarely on newly generated
+  land while Halloween is on (about one chunk in twenty, on natural ground,
+  never in a structure). They glow, drop themselves and face the player who
+  places them:
+  - **Hallow Pumpkin** (the Overworld): the classic orange jack o'lantern;
+  - **Ember Pumpkin** (the Nether): charred, cracked with lava light, a fiery face;
+  - **Ender Pumpkin** (the End and the Expanded End): pale, violet, many-eyed;
+  - **Glitched Pumpkin** (the Farlands): corrupted, its face tearing;
+  - **Data Pumpkin** (inside the computer): a face on a little screen.
+
+  Where they go is a pure function of the world's seed and the chunk, added
+  after generation and only ever into air, so world generation (and every
+  generation hash test) is unchanged. In creative they are in the new
+  **Halloween** tab.
+- **Ghosts at night**: now and then on a Halloween night a translucent ghost
+  drifts across your view in the Overworld or the Farlands and fades away.
+  Harmless and rare: drawn only on your screen, they touch nothing and nothing
+  reacts to them. Reduce Motion keeps them slow and still.
+- **The title screen**, all season: Halloween nights built from real terrain,
+  a new one every 40 seconds: a foggy forest path lit by pumpkins with
+  Herobrine at its end, a glowing pumpkin patch with scarecrows, and ghosts
+  over a misty marsh. After the season it goes back to the End Expansion.
+- **Admin Panel**: a Halloween tab shows whether Halloween content is on in
+  the world and why, shows a ghost now, places any pumpkin (or one of each)
+  and simulates "after the cutoff" or "always on" for testing (never saved).
+  As always, nothing done there counts towards advancements.
+
 ### Recipe Book
 
 The book button in the top corner of the inventory and of every workstation
@@ -608,6 +665,9 @@ show a **Cheats ON** badge in the Friends and Public lists and when joining.
   chunks.
 - **Performance**: client FPS, frame time, chunks and meshes, server TPS,
   tick time, entities and memory.
+- **Halloween** (V7): whether Halloween content is on in this world and why,
+  a ghost now, every dimension pumpkin, and simulating the end of the season
+  (or Halloween always on) for testing.
 - **Haunting**: Herobrine haunts the world, the way the old creepypastas tell
   it. Choose how long it lasts, from the first sighting to the end (30 minutes
   unless changed, 1 to 180), and how it ends, then press Start. Nobody is told
@@ -685,6 +745,7 @@ npm run test:e2e:render   # culling never changes a pixel
 npm run test:e2e:v4       # the World Update: Error Biome, Glitched Structure, admin tab
 npm run test:e2e:v6       # the End Expansion: the portal, travel, every biome, the mobs, ores and armor, every structure, the Constructs and the Dragon's Nest (screenshots)
 npm run test:e2e:haunting # the Haunting: a two-minute haunting to the fake ban and the deleted world, talking to him, and the lair ending (screenshots)
+npm run test:e2e:halloween # V7: the Halloween title scenes and their rotation, the world option, pumpkins in every dimension, ghosts, the Admin Panel tab, worlds after the cutoff, the Update Log's V7 and V6.5 tabs (screenshots)
 ```
 
 ### Performance tools

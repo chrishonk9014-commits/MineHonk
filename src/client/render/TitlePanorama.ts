@@ -1,7 +1,15 @@
 /**
  * The title screen backdrop: a patch of real, freshly generated terrain from
- * a random seed. Since V6 it shows The End Expansion, one of four scenes
- * picked at random:
+ * a random seed.
+ *
+ * V7: while the Halloween season lasts (the menu's clock, see
+ * src/common/halloween/season.ts), it shows Halloween nights instead, a new
+ * one every 40 seconds:
+ *  - a foggy forest, a path lit by pumpkins, and Herobrine far off at its end;
+ *  - a pumpkin patch glowing in the dark, with scarecrows, ghosts drifting over;
+ *  - a misty marsh, ghosts drifting over the water.
+ * After the season the End Expansion's scenes come back. Since V6 those are
+ * one of four scenes picked at random:
  *  - the Expanded End around its arrival island;
  *  - the End Crystal Fields, glittering;
  *  - the Void Citadel, hanging upside down over the void;
@@ -50,29 +58,50 @@ import { ComputerWorldGenerator } from '../../common/gen/computer';
 import type { DimensionGenerator } from '../../common/gen/pipeline';
 import { LightEngine } from '../../common/world/light';
 import { encodeChunk, type Chunk } from '../../common/world/chunk';
-import { chunkIndex } from '../../common/world/constants';
-import { seedFromString } from '../../common/math/rng';
-import { STATE_SOLID, S, stateOf } from '../../common/registry/blocks';
+import { chunkIndex, SEA_LEVEL } from '../../common/world/constants';
+import { seedFromString, Random } from '../../common/math/rng';
+import { STATE_SOLID, STATE_REPLACEABLE, STATE_FLUID, S, stateOf, blockHasTag } from '../../common/registry/blocks';
 import type { Settings } from '../settings';
 import { EndAtmosphere } from '../game/EndAtmosphere';
 import { EXPANSION_BIOMES } from '../../common/endExpansion/biomes';
 import { inExpansion } from '../../common/endExpansion/region';
 import { CITADEL, citadelCandidates, planCitadel } from '../../common/endExpansion/citadel';
+import { biomeOf } from '../../common/registry/biomes';
 
 const RADIUS = 4;
 
 type EngScene = 'factory' | 'power_plant' | 'mine' | 'farm' | 'control_room' | 'computer_lab';
 type DigitalScene = 'digital_world' | 'herobrine_cave';
 type EndScene = 'expanded_end' | 'crystal_fields' | 'void_citadel' | 'end_eclipse';
-type Scene = 'farlands' | 'end' | 'arena' | 'error_biome' | 'village' | 'dragon_malware' | EngScene | DigitalScene | EndScene;
+type HalloweenScene = 'haunted_forest' | 'pumpkin_patch' | 'ghost_marsh';
+type Scene = 'farlands' | 'end' | 'arena' | 'error_biome' | 'village' | 'dragon_malware' | EngScene | DigitalScene | EndScene | HalloweenScene;
 /** The Engineering Update's set scenes (built onto overworld terrain). */
 const ENG_SCENES: EngScene[] = ['factory', 'power_plant', 'mine', 'farm', 'control_room', 'computer_lab'];
 /** The End Expansion's scenes, shown at random; the others only when asked for. */
 const END_SCENES: EndScene[] = ['expanded_end', 'crystal_fields', 'void_citadel', 'end_eclipse'];
 const RANDOM_SCENES: Scene[] = [...END_SCENES];
-const ALL_SCENES: Scene[] = [...END_SCENES, ...ENG_SCENES, 'digital_world', 'herobrine_cave', 'dragon_malware', 'error_biome', 'village', 'farlands', 'end', 'arena'];
+/** V7: Halloween nights, in turn, while the season lasts. */
+const HALLOWEEN_SCENES: HalloweenScene[] = ['haunted_forest', 'pumpkin_patch', 'ghost_marsh'];
+/** Seconds each Halloween scene shows before the next. */
+const ROTATE_SECONDS = 40;
+const ALL_SCENES: Scene[] = [...HALLOWEEN_SCENES, ...END_SCENES, ...ENG_SCENES, 'digital_world', 'herobrine_cave', 'dragon_malware', 'error_biome', 'village', 'farlands', 'end', 'arena'];
 const isEndScene = (s: Scene): s is EndScene => (END_SCENES as Scene[]).includes(s);
 const isEng = (s: Scene): s is EngScene => (ENG_SCENES as Scene[]).includes(s);
+const isHalloween = (s: Scene): s is HalloweenScene => (HALLOWEEN_SCENES as Scene[]).includes(s);
+
+/** V7: the biomes each Halloween scene is looked for in (best first). */
+const HALLOWEEN_BIOMES: Record<HalloweenScene, string[]> = {
+  haunted_forest: ['dark_forest', 'forest', 'birch_forest', 'old_growth_birch_forest'],
+  pumpkin_patch: ['plains', 'sunflower_plains', 'meadow'],
+  ghost_marsh: ['swamp', 'mangrove_swamp'],
+};
+
+/** V7: each Halloween scene's night air (fog colour and thickness, as a cave's is given). */
+const HALLOWEEN_FOG: Record<HalloweenScene, { color: number; density: number; amount: number }> = {
+  haunted_forest: { color: 0x1e2636, density: 0, amount: 0.88 },
+  pumpkin_patch: { color: 0x0e1222, density: 0.7, amount: 0.3 },
+  ghost_marsh: { color: 0x1a2628, density: 0.2, amount: 0.65 },
+};
 
 /** What each scene looks like: particles in the air, camera tilt, extra light. */
 const LOOK: Record<Scene, { particle: string; pitch: number; nightVision: number; aside: number }> = {
@@ -96,6 +125,10 @@ const LOOK: Record<Scene, { particle: string; pitch: number; nightVision: number
   crystal_fields: { particle: 'crystal_glint', pitch: 0.28, nightVision: 0.3, aside: 0.45 },
   void_citadel: { particle: 'void_aura', pitch: -0.08, nightVision: 0.35, aside: 0.4 },
   end_eclipse: { particle: 'end_mote_float', pitch: 0.12, nightVision: 0.25, aside: 0.45 },
+  // Herobrine stands right of the menu, at the end of the path
+  haunted_forest: { particle: 'none', pitch: 0.03, nightVision: 0.12, aside: 0.62 },
+  pumpkin_patch: { particle: 'none', pitch: 0.36, nightVision: 0.04, aside: 0.45 },
+  ghost_marsh: { particle: 'none', pitch: 0.2, nightVision: 0.12, aside: 0.42 },
 };
 
 /** The Error's poses shown on the title screen, cycling. */
@@ -115,18 +148,35 @@ export class TitlePanorama {
   private gen: DimensionGenerator | null = null;
   /** A camera that looks one way (the lake inside the computer) instead of turning. */
   private fixedYaw: number | null = null;
+  /** How far a fixed camera looks left and right (radians). */
+  private sway = 0.35;
   private disposed = false;
   private lastTick = 0;
   /** V6: the Expanded End's air (sky and fog by biome) for the End Expansion's scenes. */
   private readonly endAtmos = new EndAtmosphere();
   onReady: (() => void) | null = null;
   ready = false;
+  /** V7: Halloween scenes take turns (not when one was asked for with ?title=). */
+  private rotating = false;
+  private switching = false;
+  private sceneStart = 0;
+  /** V7: where Herobrine stands at the end of the forest path. */
+  private figure: { x: number; y: number; z: number } | null = null;
+  /** V7: a fixed camera's spot and what it looks at (the marsh). */
+  private look: { cam: { x: number; y: number; z: number }; at: { x: number; y: number; z: number } } | null = null;
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
     private readonly assets: GameAssets,
     private readonly settings: Settings,
+    /** V7: the Halloween season is on (the menu's answer). */
+    private readonly halloween = false,
   ) {}
+
+  /** The scene showing (tests and screenshots). */
+  get sceneName(): string {
+    return this.scene;
+  }
 
   run(): void {
     try {
@@ -137,7 +187,17 @@ export class TitlePanorama {
     const seed = seedFromString('title-' + Math.floor(Math.random() * 1e9));
     // ?title=factory|power_plant|mine|farm|control_room|error_biome|village|farlands|end|arena picks one (for screenshots)
     const asked = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('title') : null;
-    this.scene = ALL_SCENES.includes(asked as Scene) ? (asked as Scene) : RANDOM_SCENES[Math.floor(Math.random() * RANDOM_SCENES.length)]!;
+    const pool: Scene[] = this.halloween ? HALLOWEEN_SCENES : RANDOM_SCENES;
+    this.scene = ALL_SCENES.includes(asked as Scene) ? (asked as Scene) : pool[Math.floor(Math.random() * pool.length)]!;
+    this.rotating = this.halloween && !ALL_SCENES.includes(asked as Scene);
+    this.startScene(seed);
+  }
+
+  private startScene(seed: number): void {
+    if (isHalloween(this.scene)) {
+      this.findHalloween(seed, this.scene);
+      return;
+    }
     if (this.scene === 'error_biome' || this.scene === 'village') {
       this.findOverworld(seed);
       return;
@@ -224,6 +284,192 @@ export class TitlePanorama {
     }
   }
 
+  /** V7: finds a spot well inside one of the scene's biomes, a little per frame, then builds it. */
+  private findHalloween(seed: number, scene: HalloweenScene): void {
+    const gen = new OverworldGenerator(seed);
+    const all = HALLOWEEN_BIOMES[scene];
+    // The first biome is the one wanted most (a dark forest): looked for alone first, nearer
+    let want = new Set(all.slice(0, 1));
+    const ox = Math.floor((Math.random() - 0.5) * 2000);
+    const oz = Math.floor((Math.random() - 0.5) * 2000);
+    const height = (x: number, z: number): number => gen.terrain.estimateHeight(x, z);
+    // The forest and the field on dry land; the marsh down by its water
+    const level = (x: number, z: number): boolean => (scene === 'ghost_marsh' ? Math.abs(height(x, z) - SEA_LEVEL) < 4 : height(x, z) > SEA_LEVEL + 3);
+    const inside = (x: number, z: number): boolean => level(x, z) && [[0, 0], [28, 0], [-28, 0], [0, 28], [0, -28]].every(([dx, dz]) => all.includes(biomeOf(gen.biomeAt(x + dx!, z + dz!)).id));
+    // Rings outwards from a random point, 48 blocks apart
+    // The pumpkin patch is an open field, not somebody's village
+    const clear = (x: number, z: number): boolean => {
+      if (scene !== 'pumpkin_patch') return true;
+      const v = gen.locate?.('village', x, z);
+      return !v || Math.hypot(v.x - x, v.z - z) > 96;
+    };
+    const search = (function* (): Generator<void, { x: number; z: number } | null> {
+      for (const pass of [24, 64]) {
+        for (let r = 0; r <= pass; r++) {
+          for (let i = -r; i <= r; i++)
+            for (const [dx, dz] of r === 0 ? [[0, 0]] : [[i, -r], [i, r], [-r, i], [r, i]]) {
+              const x = ox + dx! * 48;
+              const z = oz + dz! * 48;
+              if (want.has(biomeOf(gen.biomeAt(x, z)).id) && inside(x, z) && clear(x, z)) return { x, z };
+            }
+          yield;
+        }
+        want = new Set(all);
+      }
+      return null;
+    })();
+    const step = (): void => {
+      if (this.disposed) return;
+      const t0 = performance.now();
+      let r = search.next();
+      while (!r.done && performance.now() - t0 < 10) r = search.next();
+      if (!r.done) {
+        this.raf = requestAnimationFrame(step);
+        return;
+      }
+      if (r.value) this.build(gen, { x: r.value.x, y: 64, z: r.value.z });
+      else if (scene !== 'pumpkin_patch') {
+        // No forest or marsh near (rare): a pumpkin patch wherever there is grass
+        this.scene = 'pumpkin_patch';
+        this.findHalloween(seed + 1, 'pumpkin_patch');
+      } else this.build(gen, { ...gen.findSpawn() });
+    };
+    this.raf = requestAnimationFrame(step);
+  }
+
+  /** V7: stamps a Halloween scene onto its terrain (pumpkins, a path, scarecrows); returns the ground height at the focus. */
+  private stampHalloween(chunks: Map<number, Chunk>, fx: number, fz: number): number {
+    const get = (x: number, y: number, z: number): number => chunks.get(chunkIndex(x >> 4, z >> 4))?.get(x & 15, y, z & 15) ?? 0;
+    const set = (x: number, y: number, z: number, st: number): void => {
+      const c = chunks.get(chunkIndex(x >> 4, z >> 4));
+      if (c && y > 0 && y < 255) c.set(x & 15, y, z & 15, st);
+    };
+    const soft = (st: number): boolean => st === 0 || blockHasTag(st, 'leaves') || blockHasTag(st, 'logs') || (!!STATE_REPLACEABLE[st] && !STATE_FLUID[st]);
+    /** The first free spot over real ground (under the trees, not on them). */
+    const ground = (x: number, z: number): number => {
+      let y = (chunks.get(chunkIndex(x >> 4, z >> 4))?.getHeight(x & 15, z & 15) ?? 65) - 1;
+      while (y > 1 && (soft(get(x, y, z)) || !STATE_SOLID[get(x, y, z)])) {
+        if (STATE_FLUID[get(x, y, z)]) return -1;
+        y--;
+      }
+      return y + 1;
+    };
+    const facingTo = (dx: number, dz: number): string => (Math.abs(dx) > Math.abs(dz) ? (dx > 0 ? 'east' : 'west') : dz > 0 ? 'south' : 'north');
+    const rng = new Random((fx * 73856093) ^ (fz * 19349663));
+    const top = (x: number, z: number): number => chunks.get(chunkIndex(x >> 4, z >> 4))?.getHeight(x & 15, z & 15) ?? 65;
+    let g0 = ground(fx, fz);
+    if (g0 < 2) g0 = top(fx, fz);
+    this.figure = null;
+    this.look = null;
+    switch (this.scene) {
+      case 'haunted_forest': {
+        // A path north into the trees, pumpkins along it, and him at its end
+        const LEN = 22;
+        let px = fx;
+        for (let d = -5; d <= LEN; d++) {
+          const z = fz - d;
+          px = fx + Math.round(Math.sin(Math.max(0, d) * 0.21) * 1.6);
+          // Wider where the camera stands, so no trunk is right in front of it
+          const half = d < 6 ? 2 : 1;
+          for (let dx = -half; dx <= half; dx++) {
+            const x = px + dx;
+            const gy = ground(x, z);
+            if (gy < 2) continue;
+            const under = get(x, gy - 1, z);
+            if (d >= 0 && Math.abs(dx) <= 1 && (blockHasTag(under, 'dirt') || under === S('grass_block'))) set(x, gy - 1, z, S('dirt_path'));
+            for (let y = gy; y <= gy + 5; y++) if (soft(get(x, y, z))) set(x, y, z, 0);
+            // A trunk in the way goes altogether (no floating logs)
+            for (let y = gy + 6; y <= gy + 30; y++) if (blockHasTag(get(x, y, z), 'logs')) set(x, y, z, 0);
+          }
+          if (d > 2 && d < LEN - 2 && d % 5 === 0) {
+            const side = (d / 5) % 2 ? -2 : 2;
+            const x = px + side;
+            const gy = ground(x, z);
+            // Grinning back down the path, at whoever comes along it
+            if (gy > 1 && soft(get(x, gy, z))) set(x, gy, z, stateOf('hallow_pumpkin', { facing: 'south' }));
+          }
+        }
+        const hz = fz - LEN;
+        const hy = ground(px, hz);
+        if (hy > 1) {
+          this.figure = { x: px, y: hy, z: hz };
+          if (soft(get(px + 1, hy, hz))) set(px + 1, hy, hz, S('redstone_torch'));
+        }
+        break;
+      }
+      case 'pumpkin_patch': {
+        // Pumpkins all over the field, most of them carved and glowing, round a few scarecrows
+        for (let i = 0; i < 52; i++) {
+          const a = i * 2.39996 + rng.float(-0.2, 0.2);
+          const r = 2.5 + Math.sqrt(i / 52) * 12;
+          const x = Math.round(fx + Math.cos(a) * r);
+          const z = Math.round(fz + Math.sin(a) * r);
+          const gy = ground(x, z);
+          if (gy < 2 || !soft(get(x, gy, z))) continue;
+          const lit = rng.chance(0.62);
+          set(x, gy, z, lit ? stateOf('hallow_pumpkin', { facing: facingTo(fx - x, fz - z) }) : S('pumpkin'));
+          if (soft(get(x, gy + 1, z)) && get(x, gy + 1, z) !== 0) set(x, gy + 1, z, 0);
+        }
+        for (const [dx, dz] of [[5, -3], [-6, 2], [1, 7]] as const) {
+          const x = fx + dx;
+          const z = fz + dz;
+          const gy = ground(x, z);
+          if (gy < 2) continue;
+          set(x, gy, z, S('oak_fence'));
+          set(x, gy + 1, z, S('hay_block'));
+          set(x, gy + 2, z, stateOf('hallow_pumpkin', { facing: facingTo(-dx, -dz) }));
+        }
+        break;
+      }
+      case 'ghost_marsh': {
+        // The water: where the swamp's pools are, round the focus
+        let wx = 0;
+        let wz = 0;
+        let wn = 0;
+        let wy = SEA_LEVEL;
+        for (let dz = -20; dz <= 20; dz++)
+          for (let dx = -20; dx <= 20; dx++) {
+            const h = top(fx + dx, fz + dz) - 1;
+            if (!STATE_FLUID[get(fx + dx, h, fz + dz)]) continue;
+            wx += fx + dx;
+            wz += fz + dz;
+            wy = h;
+            wn++;
+          }
+        const cx = wn > 12 ? Math.round(wx / wn) : fx;
+        const cz = wn > 12 ? Math.round(wz / wn) : fz;
+        // A dry bank 9-16 blocks from the water's middle, looking across it
+        let cam: { x: number; y: number; z: number } | null = null;
+        for (let r = 9; r <= 16 && !cam; r++)
+          for (let k = 0; k < 16 && !cam; k++) {
+            const a = (k / 16) * Math.PI * 2;
+            const x = Math.round(cx + Math.cos(a) * r);
+            const z = Math.round(cz + Math.sin(a) * r);
+            const gy = ground(x, z);
+            if (gy > 1 && gy <= wy + 4) cam = { x, y: gy, z };
+          }
+        cam ??= { x: cx, y: wy + 1, z: cz + 12 };
+        // No leaves right round the camera (it is not in a tree)
+        for (let dz = -7; dz <= 7; dz++) for (let dx = -7; dx <= 7; dx++) for (let y = cam.y; y <= cam.y + 9; y++) if (blockHasTag(get(cam.x + dx, y, cam.z + dz), 'leaves')) set(cam.x + dx, y, cam.z + dz, 0);
+        this.look = { cam, at: { x: cx, y: wy + 1, z: cz } };
+        // A few pumpkins glowing on the banks
+        let n = 0;
+        for (let i = 0; i < 400 && n < 9; i++) {
+          const x = cx + rng.range(-14, 14);
+          const z = cz + rng.range(-14, 14);
+          const gy = ground(x, z);
+          if (gy < 2 || !soft(get(x, gy, z))) continue;
+          const wet = [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dz]) => STATE_FLUID[get(x + dx!, gy - 1, z + dz!)]);
+          if (!wet) continue;
+          set(x, gy, z, stateOf('hallow_pumpkin', { facing: facingTo(cam.x - x, cam.z - z) }));
+          n++;
+        }
+        break;
+      }
+    }
+    return g0;
+  }
+
   /** V4 scenes: find the Error Biome or a village a step per frame, then build around it. */
   private findOverworld(seed: number): void {
     const gen = new OverworldGenerator(seed);
@@ -278,11 +524,16 @@ export class TitlePanorama {
       }
       if (isEng(this.scene)) focus = { ...focus, y: stampScene(this.scene, chunks, Math.floor(focus.x), Math.floor(focus.z)) };
       if (this.scene === 'end_eclipse') this.stampEclipse(chunks, Math.floor(focus.x), Math.floor(focus.z));
+      if (isHalloween(this.scene)) focus = { ...focus, y: this.stampHalloween(chunks, Math.floor(focus.x), Math.floor(focus.z)) };
       const light = new LightEngine({ getChunk: (cx, cz) => chunks.get(chunkIndex(cx, cz)), markLightDirty: () => {} }, this.world.hasSky);
       for (const c of chunks.values()) light.initChunk(c);
       for (const c of chunks.values()) this.world.loadChunk(encodeChunk(c, { light: true, blockEntities: false }));
       this.frameScene(focus);
       this.ready = true;
+      this.sceneStart = performance.now();
+      this.switching = false;
+      // V7: back in from the fade between Halloween scenes
+      if (this.canvas.style.opacity === '0') this.canvas.style.opacity = '1';
       this.onReady?.();
       this.raf = requestAnimationFrame(this.frame);
     };
@@ -346,6 +597,43 @@ export class TitlePanorama {
         this.orbit = this.scene === 'expanded_end' ? 30 : 22;
         break;
       }
+      case 'haunted_forest': {
+        // Standing at the start of the path, looking along it into the fog; he is at its end
+        this.center = { x: fx + 0.5, y: focus.y + 2.2, z: fz + 2.5 };
+        this.orbit = 0;
+        // Looking along the path (north), and a little to its right where he stands
+        this.fixedYaw = 0;
+        this.sway = 0.08;
+        const f = this.figure;
+        if (f) {
+          this.boss = new ClientEntity(-1, 'herobrine', f.x + 0.5, f.y, f.z + 0.5, 0, 0, { hbAnim: 'stare', apparition: true });
+          this.renderer!.entities.add(this.boss);
+        }
+        this.renderer!.ghosts.ambient = 2;
+        this.renderer!.ghosts.ambientArea = { x: fx, y: focus.y, z: fz - 16, r: 7 };
+        break;
+      }
+      case 'pumpkin_patch': {
+        // Circling the field from a little above it
+        this.center = { x: fx + 0.5, y: focus.y + 6, z: fz + 0.5 };
+        this.orbit = 19;
+        this.renderer!.ghosts.ambient = 3;
+        this.renderer!.ghosts.ambientArea = { x: fx, y: focus.y + 1, z: fz, r: 12 };
+        break;
+      }
+      case 'ghost_marsh': {
+        // On the bank, looking out over the water; ghosts drift across it
+        const L = this.look;
+        const cam = L?.cam ?? { x: fx, y: focus.y, z: fz + 12 };
+        const at = L?.at ?? { x: fx, y: focus.y, z: fz };
+        this.center = { x: cam.x + 0.5, y: cam.y + 3.2, z: cam.z + 0.5 };
+        this.orbit = 0;
+        this.fixedYaw = Math.atan2(-(at.x - cam.x), -(at.z - cam.z));
+        this.sway = 0.22;
+        this.renderer!.ghosts.ambient = 4;
+        this.renderer!.ghosts.ambientArea = { x: at.x, y: at.y - 0.5, z: at.z, r: 9 };
+        break;
+      }
       case 'void_citadel': {
         // Circling the tower that hangs into the void, a little below its island
         this.center = { x: fx + 0.5, y: focus.y, z: fz + 0.5 };
@@ -393,12 +681,14 @@ export class TitlePanorama {
     if (this.disposed || !this.renderer) return;
     this.raf = requestAnimationFrame(this.frame);
     if (!this.active) return;
+    // V7: the next Halloween scene, after a fade
+    if (this.rotating && !this.switching && performance.now() - this.sceneStart > ROTATE_SECONDS * 1000) this.rotate();
     const t = (performance.now() - this.start) / 1000;
     const r = this.renderer;
     const look = LOOK[this.scene];
     const c = this.center;
     // The world inside the computer: a slow look left and right across the lake
-    const yaw = this.fixedYaw !== null ? this.fixedYaw + Math.sin(t * 0.06) * 0.35 : t * 0.045;
+    const yaw = this.fixedYaw !== null ? this.fixedYaw + Math.sin(t * 0.06) * this.sway : t * 0.045;
     const cam = { x: c.x, y: c.y + Math.sin(t * 0.07) * 1.5, z: c.z };
     if (this.orbit > 0) {
       // Forward is (-sin yaw, -cos yaw): standing here looks straight at the centre
@@ -443,7 +733,8 @@ export class TitlePanorama {
       fovMod: 1,
       bobPhase: 0,
       bobAmount: 0,
-      dayTime: 1500 + t * 4,
+      // V7: Halloween scenes are at midnight
+      dayTime: isHalloween(this.scene) ? 18000 + t * 0.5 : 1500 + t * 4,
       time: t * 20,
       alpha: 1,
       rain: 0,
@@ -460,7 +751,7 @@ export class TitlePanorama {
       shake: 0,
       darkness: 0,
       hurtTilt: 0,
-      cave: undefined,
+      cave: isHalloween(this.scene) ? HALLOWEEN_FOG[this.scene] : undefined,
     };
     // V6: the Expanded End's air, and the eclipse over its scene
     if (isEndScene(this.scene)) {
@@ -471,6 +762,35 @@ export class TitlePanorama {
     r.render(fs);
   };
 
+  /** V7: fades out, then builds the next Halloween scene (it fades back in when ready). */
+  private rotate(): void {
+    this.switching = true;
+    this.canvas.style.transition = 'opacity 0.9s';
+    this.canvas.style.opacity = '0';
+    setTimeout(() => {
+      if (this.disposed) return;
+      cancelAnimationFrame(this.raf);
+      if (this.boss) this.renderer?.entities.remove(this.boss.id);
+      this.boss = null;
+      this.figure = null;
+      this.look = null;
+      this.fixedYaw = null;
+      this.sway = 0.35;
+      this.orbit = 0;
+      this.ready = false;
+      this.world.clear();
+      const g = this.renderer?.ghosts;
+      if (g) {
+        g.clear();
+        g.ambient = 0;
+        g.ambientArea = null;
+      }
+      const i = HALLOWEEN_SCENES.indexOf(this.scene as HalloweenScene);
+      this.scene = HALLOWEEN_SCENES[(i + 1) % HALLOWEEN_SCENES.length]!;
+      this.startScene(seedFromString('title-' + Math.floor(Math.random() * 1e9)));
+    }, 950);
+  }
+
   /** Only renders while the title screen is visible. */
   setActive(on: boolean): void {
     this.active = on;
@@ -478,6 +798,9 @@ export class TitlePanorama {
 
   dispose(): void {
     this.disposed = true;
+    // The game draws on the same canvas: no fade left behind
+    this.canvas.style.transition = '';
+    this.canvas.style.opacity = '';
     cancelAnimationFrame(this.raf);
     if (this.boss) this.renderer?.entities.remove(this.boss.id);
     this.world.clear();

@@ -34,6 +34,7 @@ import { ElytraUpgrades } from './systems/ElytraUpgrades';
 import { EndEventsSystem } from './systems/EndEvents';
 import { EndCitadelSystem } from './systems/EndCitadel';
 import { EndGuardianSystem } from './systems/EndGuardian';
+import { HalloweenSystem } from './systems/Halloween';
 import { itemIdOf, type ItemStack } from '../common/game/itemstack';
 import { Mob } from './entity/Mob';
 import type { ServerPlayer } from './player/ServerPlayer';
@@ -147,6 +148,9 @@ export function installGameplay(server: GameServer): void {
   // The Haunting (Admin Panel, every world)
   const haunting = new HauntingSystem(server);
   server.haunting = haunting;
+  // V7: the Halloween season (pumpkins on new chunks, the world's state for everyone)
+  const halloween = new HalloweenSystem(server);
+  server.halloween = halloween;
   mobs.onBossDeath = (m, killer, info) => {
     if (m.type === 'ender_dragon') end.fight.onDeath(m, killer, info);
     else if (m.type === 'the_error') errorBoss.onDeath(m, killer, info);
@@ -196,6 +200,7 @@ export function installGameplay(server: GameServer): void {
     engineering.tick();
     herobrine.tick();
     haunting.tick();
+    halloween.tick();
     far.tick();
     gadgets.tick();
     mounts.tick();

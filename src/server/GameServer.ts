@@ -29,6 +29,7 @@ import { Commands } from './commands/Commands';
 import { PlayerData } from './player/PlayerData';
 import { AdminService } from './admin/AdminService';
 import { RegistryHistory } from './world/RegistryHistory';
+import { halloweenState, type HalloweenState } from '../common/halloween/season';
 
 export interface ServerOptions {
   /** Max chunks sent per player per tick. */
@@ -46,6 +47,11 @@ export interface ServerOptions {
   maxPlayers?: number;
   /** Send slow, unimportant movement (loot) less often to players on the network. */
   spareBandwidth?: boolean;
+  /**
+   * V7: the time (ms since 1970) the Halloween season is checked against: the
+   * hub's time where it is known (browser hosts), the machine's otherwise.
+   */
+  clock?: () => number;
 }
 
 export class GameServer {
@@ -104,6 +110,8 @@ export class GameServer {
   herobrine: import('./herobrine/Herobrine').HerobrineSystem | null = null;
   /** The Haunting (Admin Panel, every world). */
   haunting: import('./herobrine/Haunting').HauntingSystem | null = null;
+  /** V7: the Halloween Update's seasonal content (installed by gameplay). */
+  halloween: import('./systems/Halloween').HalloweenSystem | null = null;
   /**
    * The Haunting: where Herobrine's answers come from when players talk to him
    * (the cloud hub, or Claude with a dedicated server's own key). Null: only
@@ -125,7 +133,9 @@ export class GameServer {
   private nextTickAt = 0;
   running = false;
   private saving: Promise<void> | null = null;
-  readonly opts: Required<Omit<ServerOptions, 'filterChat' | 'canJoin'>> & Pick<ServerOptions, 'filterChat' | 'canJoin'>;
+  readonly opts: Required<Omit<ServerOptions, 'filterChat' | 'canJoin' | 'clock'>> & Pick<ServerOptions, 'filterChat' | 'canJoin'>;
+  /** V7: the season's clock (see ServerOptions.clock). */
+  readonly clock: () => number;
   lastTickMs = 0;
   avgTickMs = 0;
   readonly regHash = registryHash();
@@ -150,6 +160,7 @@ export class GameServer {
       filterChat: opts.filterChat,
       canJoin: opts.canJoin,
     };
+    this.clock = opts.clock ?? (() => Date.now());
     this.registries = new RegistryHistory(storage, (m) => this.log(m));
     this.blockUpdates = new BlockUpdates(this);
     this.mining = new Mining(this);
@@ -365,7 +376,17 @@ export class GameServer {
       isHost: this.isOperator(p),
       admin: this.level.cheats && this.isOperator(p),
       role: this.roleOf(p),
+      halloween: this.halloweenState(),
     };
+  }
+
+  /**
+   * V7: is Halloween content on in this world? The one answer every seasonal
+   * feature asks (the date, the world's setting and any Admin Panel test
+   * simulation). Players get it in their world info.
+   */
+  halloweenState(): HalloweenState {
+    return halloweenState(this.clock(), this.level.halloween, this.halloween?.sim ?? 'none');
   }
 
   isOperator(p: ServerPlayer): boolean {

@@ -12,8 +12,26 @@ import { END_QUEST_IDS } from '../endExpansion/quests';
 import { RARE_END_LOOT } from '../endExpansion/guardian';
 import { DRAGON_TESTS } from '../endExpansion/dragon';
 import { HAUNT_OPS, HAUNT_MIN_MINUTES, HAUNT_MAX_MINUTES, HAUNT_ENDINGS, type HauntOp, type HauntEnding } from './haunting';
+import { HALLOWEEN_SIMULATIONS, type HalloweenSimulation, type HalloweenState } from '../halloween/season';
+import { PUMPKIN_IDS } from '../halloween/pumpkins';
 
 export const ADMIN_DIMENSIONS: DimensionId[] = ['overworld', 'nether', 'end', 'farlands', 'computer'];
+
+/** V7: the Admin Panel's Halloween tab (all cheats; the simulations are never saved). */
+export type HalloweenOp = 'status' | 'ghost' | 'place' | 'place_all' | 'simulate';
+export const HALLOWEEN_OPS: readonly HalloweenOp[] = ['status', 'ghost', 'place', 'place_all', 'simulate'];
+
+/** What the Halloween tab shows. */
+export interface HalloweenStatus {
+  state: HalloweenState;
+  /** Why, in a sentence. */
+  text: string;
+  /** The cutoff and the server's time now (ms since 1970). */
+  endsAt: number;
+  now: number;
+  /** Pumpkins scattered on new chunks since the world opened. */
+  placed: number;
+}
 
 export const STRUCTURE_NAMES: Record<string, string> = {
   village: 'Village',
@@ -206,7 +224,9 @@ export type AdminAction =
   /** V6: the End Expansion (tp_biome names one of the Expanded End's biomes). */
   | { a: 'v6'; op: V6Op; biome?: string; set?: string; structure?: string; quest?: string; spot?: string; test?: string }
   /** The Haunting (every world): Herobrine over `minutes`; `erase` deletes the world at the end (its owner only). */
-  | { a: 'haunt'; op: HauntOp; minutes?: number; erase?: boolean; ending?: HauntEnding };
+  | { a: 'haunt'; op: HauntOp; minutes?: number; erase?: boolean; ending?: HauntEnding }
+  /** V7: Halloween (the season's state, a ghost now, the pumpkins, test simulations). */
+  | { a: 'halloween'; op: HalloweenOp; pumpkin?: string; sim?: HalloweenSimulation };
 
 export type AdminActionName = AdminAction['a'];
 
@@ -263,6 +283,12 @@ export function describeAdmin(a: AdminAction): string | null {
       return `flight ${a.on ? 'on' : 'off'}${who(a.target)}`;
     case 'regen_chunk':
       return 'regenerate a chunk';
+    case 'halloween':
+      if (a.op === 'status') return null;
+      if (a.op === 'ghost') return 'show a ghost';
+      if (a.op === 'place') return `place a ${(a.pumpkin ?? 'pumpkin').replace(/_/g, ' ')}`;
+      if (a.op === 'place_all') return 'place every dimension pumpkin';
+      return a.sim === 'expired' ? 'simulate the end of the Halloween season' : a.sim === 'always' ? 'simulate Halloween always on' : 'stop simulating the Halloween season';
     case 'reload_chunks':
       return 'reload chunks';
     default: {
@@ -291,6 +317,12 @@ export function validateAdmin(raw: unknown): AdminAction | null {
     case 'v55':
       if (!V55_OPS.includes(m.op as V55Op)) return null;
       return { a: 'v55', op: m.op as V55Op };
+    case 'halloween': {
+      if (!HALLOWEEN_OPS.includes(m.op as HalloweenOp)) return null;
+      if (m.op === 'place') return typeof m.pumpkin === 'string' && PUMPKIN_IDS.includes(m.pumpkin) ? { a: 'halloween', op: 'place', pumpkin: m.pumpkin } : null;
+      if (m.op === 'simulate') return HALLOWEEN_SIMULATIONS.includes(m.sim as HalloweenSimulation) ? { a: 'halloween', op: 'simulate', sim: m.sim as HalloweenSimulation } : null;
+      return { a: 'halloween', op: m.op as HalloweenOp };
+    }
     case 'haunt': {
       if (!HAUNT_OPS.includes(m.op as HauntOp)) return null;
       if (m.op !== 'start') return { a: 'haunt', op: m.op as HauntOp };

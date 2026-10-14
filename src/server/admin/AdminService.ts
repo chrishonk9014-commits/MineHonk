@@ -468,7 +468,7 @@ export class AdminService {
         return herobrineAdmin(this.server.herobrine, { moveTo: (pl, dim, x, y, z) => this.moveTo(pl, dim, x, y, z), give: (pl, id, n) => this.giveMarked(pl, id, n), safeSpot: (dim, x, y, z) => this.safeSpot(dim, x, y, z, false) }, p, a.op);
       case 'halloween':
         if (!this.server.halloween) return { ok: false, text: 'Halloween is not available.' };
-        return this.server.halloween.admin(p, a.op, a.pumpkin, a.sim);
+        return this.server.halloween.admin(p, a.op, a.pumpkin, a.sim, a.door);
       case 'haunt':
         if (!this.server.haunting) return { ok: false, text: 'The haunting is not available.' };
         return this.server.haunting.admin(p, a.op, a.minutes, a.erase, a.ending);

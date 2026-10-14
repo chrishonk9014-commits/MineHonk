@@ -28,6 +28,8 @@ import type { Entity } from '../entity/Entity';
 import { LivingEntity } from '../entity/Living';
 import { growTree } from '../../common/gen/features/trees';
 import { OFFHAND, ARMOR_START } from '../player/Inventory';
+import { WEARABLE_BLOCKS } from '../../common/halloween/heads';
+
 
 const rng = new Random();
 
@@ -692,9 +694,9 @@ export class Interaction {
       this.using.set(p, { slot: hand, hand: m.hand, item: stack.id, start: this.server.tickNo, duration: 72000, kind: 'block' });
       return;
     }
-    if (def.armor) {
-      // equip from hand
-      const slot = { head: 39, chest: 38, legs: 37, feet: 36 }[def.armor.slot];
+    if (def.armor || WEARABLE_BLOCKS.includes(def.id)) {
+      // equip from hand (V7: a costume head or a carved pumpkin, used in the air, goes on the head)
+      const slot = { head: 39, chest: 38, legs: 37, feet: 36 }[def.armor?.slot ?? 'head'];
       const cur = p.inventory.get(slot);
       p.inventory.set(slot, cloneStack(stack));
       p.inventory.set(hand, cur);

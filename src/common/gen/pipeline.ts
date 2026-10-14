@@ -7,6 +7,7 @@ import { Chunk } from '../world/chunk';
 import type { DimensionId } from '../data/biomes';
 import { chunkIndex } from '../world/constants';
 import type { Start } from './structures/manager';
+import type { VillageHooks } from '../halloween/villages';
 
 export interface GeneratorOptions {
   /** Generate villages, temples and other structures (default true). */
@@ -20,13 +21,16 @@ export interface GeneratorOptions {
    * with random layouts and biome styles), 6 = V6 (the End Expansion: the
    * End's outer islands stop short of the Expanded End), 7 = V6 phase 2 (the
    * Expanded End's own stone, ores and plants), 8 = V6 phase 3 (the Expanded
-   * End's structures). Defaults to the latest.
+   * End's structures), 9 = V7 (Trick-or-Treat and Abandoned Villages).
+   * Defaults to the latest.
    */
   version?: number;
+  /** V7: the server's answers about villages (which are dressed for Halloween). */
+  villages?: VillageHooks;
 }
 
 /** Newest world generator version (new worlds use this). */
-export const LATEST_GENERATOR = 8;
+export const LATEST_GENERATOR = 9;
 
 export interface SpawnPoint {
   x: number;

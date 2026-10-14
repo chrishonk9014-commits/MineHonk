@@ -20,7 +20,7 @@ import type { DecorView } from '../decorate/view';
 import { Builder, type Rotation } from '../structures/builder';
 import { boxOf, unionBoxes, type StructureType, type PlanContext, type Start, type Piece } from '../structures/manager';
 
-interface Style {
+export interface Style {
   id: string;
   log: string;
   planks: string;
@@ -58,7 +58,7 @@ const wood = (w: string, o: Partial<Style> & { id: string }): Style => ({
   ...o,
 });
 
-const STYLES: Record<string, Style> = {
+export const STYLES: Record<string, Style> = {
   plains: wood('oak', { id: 'plains', roof: 'spruce_stairs', roofSlab: 'spruce_slab', wall: 'oak_planks', accent: 'white_terracotta', crop: ['wheat', 'wheat', 'carrots', 'potatoes', 'beetroots', 'sunroot'] }),
   desert: wood('jungle', { id: 'desert', log: 'cut_sandstone', planks: 'smooth_sandstone', foundation: 'sandstone', wall: 'smooth_sandstone', roof: 'sandstone_stairs', roofSlab: 'sandstone_slab', accent: 'orange_terracotta', bed: 'green_bed', wool: 'orange_wool', flatRoof: true, crop: ['wheat', 'beetroots', 'sunroot'], animals: ['camel', 'chicken', 'sheep'] }),
   savanna: wood('acacia', { id: 'savanna', wall: 'orange_terracotta', accent: 'yellow_terracotta', bed: 'yellow_bed', wool: 'yellow_wool', crop: ['wheat', 'beetroots', 'potatoes'], animals: ['cow', 'sheep', 'horse'] }),
@@ -69,7 +69,7 @@ const STYLES: Record<string, Style> = {
   cherry: wood('cherry', { id: 'cherry', foundation: 'stone_bricks', wall: 'cherry_planks', roof: 'dark_oak_stairs', roofSlab: 'dark_oak_slab', accent: 'pink_terracotta', bed: 'pink_bed', wool: 'pink_wool' }),
 };
 
-function styleFor(biomeId: string, category: string): Style | null {
+export function styleFor(biomeId: string, category: string): Style | null {
   if (category === 'desert') return STYLES.desert!;
   if (category === 'savanna') return STYLES.savanna!;
   if (biomeId === 'snowy_plains' || biomeId === 'snowy_taiga') return STYLES.snowy!;
@@ -84,7 +84,7 @@ function styleFor(biomeId: string, category: string): Style | null {
 // ---------------------------------------------------------------------------
 // Building kit
 // ---------------------------------------------------------------------------
-const logY = (st: Style): number => (st.log.endsWith('_log') ? stateOf(st.log, { axis: 'y' }) : S(st.log));
+export const logY = (st: Style): number => (st.log.endsWith('_log') ? stateOf(st.log, { axis: 'y' }) : S(st.log));
 
 /** Solid ground under the footprint (or stilts) and air above it. */
 function site(b: Builder, st: Style, sx: number, sz: number, height: number): number {
@@ -177,7 +177,7 @@ function roof(b: Builder, st: Style, x0: number, x1: number, z0: number, z1: num
   }
 }
 
-function lampPost(b: Builder, st: Style, x: number, z: number, y = 0): void {
+export function lampPost(b: Builder, st: Style, x: number, z: number, y = 0): void {
   const fence = `${st.flatRoof ? 'jungle' : st.wood}_fence`;
   b.set(x, y + 1, z, S(fence));
   b.set(x, y + 2, z, S(fence));
@@ -575,7 +575,7 @@ const HOUSES = [cottage, cottage, house, house, house, manor];
 // ---------------------------------------------------------------------------
 // Town centre
 // ---------------------------------------------------------------------------
-const PLAZA = 6; // half-size: the plaza spans 13 x 13
+export const PLAZA = 6; // half-size: the plaza spans 13 x 13
 
 function buildPlaza(b: Builder, st: Style, rng: Random): void {
   const n = PLAZA * 2 + 1;
@@ -657,8 +657,9 @@ function overlaps(a: Plot, list: Plot[], gap = 1): boolean {
   return false;
 }
 
-/** Median ground height over a plot, or null when it is wet or too steep to build on. */
-function footprint(ctx: PlanContext, p: Plot, maxSlope = 5): number | null {
+/** Median ground height over a plot, or null when it is wet or too steep to build on (V7: `forced` takes nearly anything). */
+function footprint(ctx: PlanContext, p: Plot, maxSlope = 5, forced = false): number | null {
+  if (forced) maxSlope = Math.max(maxSlope, 10);
   const ys: number[] = [];
   for (const [x, z] of [
     [p.x0, p.z0],
@@ -667,7 +668,7 @@ function footprint(ctx: PlanContext, p: Plot, maxSlope = 5): number | null {
     [p.x1, p.z1],
     [(p.x0 + p.x1) >> 1, (p.z0 + p.z1) >> 1],
   ] as const) {
-    if (ctx.isWater(x, z)) return null;
+    if (ctx.isWater(x, z) && !forced) return null;
     ys.push(ctx.groundY(x, z));
   }
   ys.sort((a, b) => a - b);
@@ -682,6 +683,250 @@ const DIRS: [number, number][] = [
   [0, -1],
 ];
 
+/** Where each design's door is (local x, on the z = 0 side), and its walls' and roof's heights above its floor. */
+export const DESIGN_INFO: Record<string, { door?: number; wallTop: number; roof: number }> = {
+  cottage: { door: 3, wallTop: 3, roof: 4 },
+  house: { door: 4, wallTop: 4, roof: 5 },
+  manor: { door: 5, wallTop: 8, roof: 9 },
+  workshop: { door: 2, wallTop: 4, roof: 5 },
+  chapel: { door: 3, wallTop: 5, roof: 6 },
+  storehouse: { wallTop: 4, roof: 5 },
+  smithy: { wallTop: 4, roof: 5 },
+  stall: { wallTop: 3, roof: 4 },
+  farm: { wallTop: 0, roof: 1 },
+  pen: { wallTop: 1, roof: 2 },
+  watchtower: { wallTop: 9, roof: 13 },
+};
+
+/** A building a village plan placed (world position of its local origin and the frame it was built in). */
+export interface LoggedBuilding {
+  design: string;
+  rot: Rotation;
+  px: number;
+  pz: number;
+  /** Ground height it stands on (local y 0). */
+  gy: number;
+  /** The design's own footprint (before turning). */
+  sx: number;
+  sz: number;
+  height: number;
+  /** Index of its piece in the start's pieces. */
+  piece: number;
+  /** World footprint. */
+  x0: number;
+  z0: number;
+  x1: number;
+  z1: number;
+}
+
+/**
+ * What a village plan placed, for the variants generator 9 builds on top of
+ * it (V7). Logging takes no randomness, so a plan with a log is block for block
+ * the plan without one.
+ */
+export interface VillageLog {
+  style: Style;
+  plaza: { x0: number; z0: number; y: number; piece: number };
+  buildings: LoggedBuilding[];
+  lamps: { x: number; y: number; z: number; piece: number }[];
+  /** The road piece and its columns. */
+  road: { piece: number; cols: [number, number][] } | null;
+}
+
+export function newVillageLog(): VillageLog {
+  return { style: STYLES.plains!, plaza: { x0: 0, z0: 0, y: 0, piece: -1 }, buildings: [], lamps: [], road: null };
+}
+
+/** Admin Panel villages (V7): any biome (plains style where no village grows) and any ground. */
+export interface ForcedVillage {
+  style?: string;
+}
+
+/** Plans a V4 village at a start chunk; `log` records what went where, `force` plans one anywhere. */
+export function planVillage(ctx: PlanContext, cx: number, cz: number, rng: Random, log?: VillageLog, force?: ForcedVillage): Start | null {
+  const x = (cx << 4) + 8;
+  const z = (cz << 4) + 8;
+  const biome = ctx.biome(x, z);
+  const st = force ? (STYLES[force.style ?? ''] ?? styleFor(biome.id, biome.category) ?? STYLES.plains!) : styleFor(biome.id, biome.category);
+  if (!st) return null;
+  const seed = ctx.seed;
+  const plaza: Plot = { x0: x - PLAZA, z0: z - PLAZA, x1: x + PLAZA, z1: z + PLAZA };
+  const py = footprint(ctx, plaza, 4) ?? (force ? ctx.groundY(x, z) : null);
+  if (py === null || (py < 62 && !force)) return null;
+  if (log) {
+    log.style = st;
+    log.plaza = { x0: plaza.x0, z0: plaza.z0, y: py, piece: 0 };
+  }
+  const pieces: Piece[] = [];
+  const plots: Plot[] = [plaza];
+  const roadCells = new Set<string>();
+  const entities: NonNullable<Start['entities']> = [];
+  pieces.push({ box: boxOf(plaza.x0 - 1, py - 6, plaza.z0 - 1, plaza.x1 + 1, py + 8, plaza.z1 + 1), build: (v) => buildPlaza(new Builder(v, plaza.x0, py, plaza.z0, 0, PLAZA * 2 + 1, PLAZA * 2 + 1), st, new Random(hashInts(seed, x, z, 0x91a2a))) });
+  const used = new Map<string, number>();
+  let homes = 0;
+  let beds = 0;
+  const place = (d: Design, rot: Rotation, px: number, pz: number, y?: number): boolean => {
+    const wsx = rot & 1 ? d.sz : d.sx;
+    const wsz = rot & 1 ? d.sx : d.sz;
+    const plot = { x0: px, z0: pz, x1: px + wsx - 1, z1: pz + wsz - 1 };
+    if (overlaps(plot, plots)) return false;
+    for (let a = plot.x0; a <= plot.x1; a++) for (let c = plot.z0; c <= plot.z1; c++) if (roadCells.has(a + ',' + c)) return false;
+    const gy = y ?? footprint(ctx, plot, 5, !!force);
+    if (gy === null) return false;
+    plots.push(plot);
+    used.set(d.id, (used.get(d.id) ?? 0) + 1);
+    const bSeed = hashInts(seed, px, gy, pz, 0xb1d);
+    const lift = st.stilts ?? 0;
+    pieces.push({ box: boxOf(plot.x0 - 1, gy - 14, plot.z0 - 1, plot.x1 + 1, gy + d.height + lift + 1, plot.z1 + 1), build: (v) => d.build(new Builder(v, px, gy, pz, rot, d.sx, d.sz), st, new Random(bSeed), seed) });
+    log?.buildings.push({ design: d.id, rot, px, pz, gy, sx: d.sx, sz: d.sz, height: d.height + lift, piece: pieces.length - 1, x0: plot.x0, z0: plot.z0, x1: plot.x1, z1: plot.z1 });
+    const mx = plot.x0 + wsx / 2;
+    const mz = plot.z0 + wsz / 2;
+    for (let i = 0; i < (d.beds ?? 0); i++) {
+      beds++;
+      entities.push({ type: 'villager', x: mx, y: gy + 1 + lift, z: mz, data: { profession: i === 0 && d.job ? d.job : rng.pick(['farmer', 'fisherman', 'shepherd', 'butcher', 'librarian', 'none']) } });
+    }
+    if (d.job && !d.beds) entities.push({ type: 'villager', x: mx, y: gy + 1 + lift, z: mz, data: { profession: d.job } });
+    if (d.animals) {
+      const kind = rng.pick(st.animals);
+      for (let a = 0; a < d.animals; a++) entities.push({ type: kind, x: mx, y: gy + 1, z: mz });
+    }
+    if (d.beds) homes++;
+    return true;
+  };
+  /** Places a design beside a road cell, facing it. */
+  const beside = (d: Design, rx: number, rz: number, dx: number, dz: number, side: 1 | -1, setback = 2): boolean => {
+    const alongX = dx !== 0;
+    // Rotation that turns the design's north-facing door towards the road
+    const rot: Rotation = alongX ? (side === 1 ? 0 : 2) : side === 1 ? 3 : 1;
+    const wsx = rot & 1 ? d.sz : d.sx;
+    const wsz = rot & 1 ? d.sx : d.sz;
+    let px: number;
+    let pz: number;
+    if (alongX) {
+      px = rx - (wsx >> 1);
+      pz = side === 1 ? rz + setback : rz - setback - wsz + 1;
+    } else {
+      pz = rz - (wsz >> 1);
+      px = side === 1 ? rx + setback : rx - setback - wsx + 1;
+    }
+    return place(d, rot, px, pz);
+  };
+  const pickNear = (dist: number, isEnd: boolean): Design => {
+    if (isEnd) return watchtower;
+    const count = (id: string): number => used.get(id) ?? 0;
+    if (dist < 22) {
+      const civic = [smithy, storehouse, workshop, chapel].filter((d) => count(d.id) === 0);
+      if (civic.length && rng.chance(0.75)) return rng.pick(civic);
+      return rng.pick(HOUSES);
+    }
+    if (dist < 40) return rng.chance(0.85) ? rng.pick(HOUSES) : rng.chance(0.5) ? pen : farm;
+    return rng.chance(0.55) ? (rng.chance(0.6) ? farm : pen) : rng.pick(HOUSES);
+  };
+  // Roads: one step at a time, following the ground, stopping at water or cliffs
+  const walk = (sx: number, sz: number, dx: number, dz: number, len: number, width: number): [number, number][] => {
+    const cells: [number, number][] = [];
+    let prev = ctx.groundY(sx, sz);
+    let wet = 0;
+    for (let i = 0; i < len; i++) {
+      const rx = sx + dx * i;
+      const rz = sz + dz * i;
+      const g = ctx.groundY(rx, rz);
+      if (ctx.isWater(rx, rz)) {
+        if (++wet > (force ? 16 : 4)) break;
+      } else wet = 0;
+      if (!ctx.isWater(rx, rz) && Math.abs(g - prev) > (force ? 4 : 2)) break;
+      if (overlaps({ x0: rx, z0: rz, x1: rx, z1: rz }, plots.slice(1), 0)) break;
+      prev = ctx.isWater(rx, rz) ? prev : g;
+      cells.push([rx, rz]);
+      for (let w = -(width >> 1); w <= width >> 1; w++) roadCells.add(rx + (dz !== 0 ? w : 0) + ',' + (rz + (dx !== 0 ? w : 0)));
+    }
+    return cells;
+  };
+  const first = rng.int(4);
+  const arms = 2 + rng.int(3);
+  const lamps: [number, number][] = [];
+  for (let a = 0; a < arms; a++) {
+    const [dx, dz] = DIRS[(first + a + (a === 2 && arms === 3 ? rng.int(2) : 0)) % 4]!;
+    const sx = x + dx * (PLAZA + 1);
+    const sz = z + dz * (PLAZA + 1);
+    const main = walk(sx, sz, dx, dz, 26 + rng.int(22), 3);
+    if (main.length < 8) continue;
+    main.forEach(([rx, rz], i) => {
+      const dist = Math.hypot(rx - x, rz - z);
+      if (i % 9 === 4) {
+        // Buildings along both sides of the main road
+        for (const side of [1, -1] as const) if (rng.chance(0.85)) beside(pickNear(dist, false), rx, rz, dx, dz, side);
+      }
+      if (i % 10 === 7) lamps.push([rx + dz * 2, rz + dx * 2]);
+      // Side streets branch off now and then
+      if (i % 12 === 9 && i < main.length - 4) {
+        for (const side of [1, -1] as const) {
+          if (!rng.chance(0.55)) continue;
+          const [ex, ez] = [dz * side, dx * side];
+          const street = walk(rx + ex * 2, rz + ez * 2, ex, ez, 10 + rng.int(12), 3);
+          street.forEach(([qx, qz], k) => {
+            if (k % 8 === 3) for (const s2 of [1, -1] as const) if (rng.chance(0.8)) beside(pickNear(Math.hypot(qx - x, qz - z) + 6, false), qx, qz, ex, ez, s2);
+          });
+        }
+      }
+    });
+    // A watchtower where the road ends
+    const [ex, ez] = main[main.length - 1]!;
+    beside(watchtower, ex, ez, dx, dz, rng.chance(0.5) ? 1 : -1, 2);
+  }
+  // Market stalls around the plaza
+  const stallSpots: [number, number, Rotation][] = [
+    [x - PLAZA - 6, z - PLAZA - 5, 1],
+    [x + PLAZA + 2, z - PLAZA - 5, 3],
+    [x - PLAZA - 6, z + PLAZA + 2, 1],
+    [x + PLAZA + 2, z + PLAZA + 2, 3],
+  ];
+  for (const [sx, sz, rot] of stallSpots) if (rng.chance(0.75)) place(stall, rot, sx, sz);
+  if (homes < (force ? 1 : 3)) return null;
+  // The road piece: column-local path blocks that follow the ground, bridges over water
+  const plotBlocked = (a: number, c: number): boolean => plots.some((p) => a >= p.x0 && a <= p.x1 && c >= p.z0 && c <= p.z1);
+  const cols = [...roadCells].map((k) => k.split(',').map(Number) as [number, number]).filter(([a, c]) => !plotBlocked(a, c));
+  if (cols.length) {
+    const rb = unionBoxes(cols.map(([a, c]) => boxOf(a, 0, c, a, 255, c)));
+    const path = S(st.path);
+    const bridge = S(st.planks);
+    if (log) log.road = { piece: pieces.length, cols };
+    pieces.push({
+      box: rb,
+      build: (v: DecorView) => {
+        for (const [a, c] of cols) {
+          if (!v.inside(a, c)) continue;
+          const gy = ctx.groundY(a, c);
+          const top = v.get(a, gy, c);
+          if (STATE_FLUID[top] || gy < 62) {
+            v.set(a, Math.max(63, gy + 1), c, bridge);
+            continue;
+          }
+          // Gravel edges on wider roads look worn in
+          const h = hashInts(seed, a, c, 0x9a7);
+          v.set(a, gy, c, st.flatRoof ? S('sandstone') : (h & 7) === 0 ? S('gravel') : path);
+          for (let k = 1; k <= 3; k++) {
+            const s = v.get(a, gy + k, c);
+            if (s !== 0 && !STATE_SOLID[s]) v.set(a, gy + k, c, 0);
+          }
+        }
+      },
+    });
+  }
+  for (const [lx, lz] of lamps) {
+    const lp = { x0: lx, z0: lz, x1: lx, z1: lz };
+    if (overlaps(lp, plots, 0) || roadCells.has(lx + ',' + lz) || ctx.isWater(lx, lz)) continue;
+    const ly = ctx.groundY(lx, lz);
+    plots.push(lp);
+    pieces.push({ box: boxOf(lx, ly - 2, lz, lx, ly + 5, lz), build: (v) => lampPost(new Builder(v, lx, ly, lz, 0, 1, 1), st, 0, 0) });
+    log?.lamps.push({ x: lx, y: ly, z: lz, piece: pieces.length - 1 });
+  }
+  entities.push({ type: 'iron_golem', x: x + 3, y: py + 1, z: z + 4 });
+  if (st.id === 'plains' || st.id === 'cherry') entities.push({ type: 'cat', x: x - 3, y: py + 1, z: z - 3 });
+  if (beds === 0) entities.push({ type: 'villager', x, y: py + 2, z: z - 3, data: { profession: 'none' } });
+  return { type: 'village', x, y: py, z, pieces, bounds: unionBoxes(pieces.map((p) => p.box)), entities };
+}
+
 export const VILLAGE_V4: StructureType = {
   id: 'village',
   spacing: 28,
@@ -692,180 +937,5 @@ export const VILLAGE_V4: StructureType = {
     const b = ctx.estimateBiome(x, z);
     return !!styleFor(b.id, b.category);
   },
-  plan(ctx, cx, cz, rng) {
-    const x = (cx << 4) + 8;
-    const z = (cz << 4) + 8;
-    const biome = ctx.biome(x, z);
-    const st = styleFor(biome.id, biome.category);
-    if (!st) return null;
-    const seed = ctx.seed;
-    const plaza: Plot = { x0: x - PLAZA, z0: z - PLAZA, x1: x + PLAZA, z1: z + PLAZA };
-    const py = footprint(ctx, plaza, 4);
-    if (py === null || py < 62) return null;
-    const pieces: Piece[] = [];
-    const plots: Plot[] = [plaza];
-    const roadCells = new Set<string>();
-    const entities: NonNullable<Start['entities']> = [];
-    pieces.push({ box: boxOf(plaza.x0 - 1, py - 6, plaza.z0 - 1, plaza.x1 + 1, py + 8, plaza.z1 + 1), build: (v) => buildPlaza(new Builder(v, plaza.x0, py, plaza.z0, 0, PLAZA * 2 + 1, PLAZA * 2 + 1), st, new Random(hashInts(seed, x, z, 0x91a2a))) });
-    const used = new Map<string, number>();
-    let homes = 0;
-    let beds = 0;
-    const place = (d: Design, rot: Rotation, px: number, pz: number, y?: number): boolean => {
-      const wsx = rot & 1 ? d.sz : d.sx;
-      const wsz = rot & 1 ? d.sx : d.sz;
-      const plot = { x0: px, z0: pz, x1: px + wsx - 1, z1: pz + wsz - 1 };
-      if (overlaps(plot, plots)) return false;
-      for (let a = plot.x0; a <= plot.x1; a++) for (let c = plot.z0; c <= plot.z1; c++) if (roadCells.has(a + ',' + c)) return false;
-      const gy = y ?? footprint(ctx, plot);
-      if (gy === null) return false;
-      plots.push(plot);
-      used.set(d.id, (used.get(d.id) ?? 0) + 1);
-      const bSeed = hashInts(seed, px, gy, pz, 0xb1d);
-      const lift = st.stilts ?? 0;
-      pieces.push({ box: boxOf(plot.x0 - 1, gy - 14, plot.z0 - 1, plot.x1 + 1, gy + d.height + lift + 1, plot.z1 + 1), build: (v) => d.build(new Builder(v, px, gy, pz, rot, d.sx, d.sz), st, new Random(bSeed), seed) });
-      const mx = plot.x0 + wsx / 2;
-      const mz = plot.z0 + wsz / 2;
-      for (let i = 0; i < (d.beds ?? 0); i++) {
-        beds++;
-        entities.push({ type: 'villager', x: mx, y: gy + 1 + lift, z: mz, data: { profession: i === 0 && d.job ? d.job : rng.pick(['farmer', 'fisherman', 'shepherd', 'butcher', 'librarian', 'none']) } });
-      }
-      if (d.job && !d.beds) entities.push({ type: 'villager', x: mx, y: gy + 1 + lift, z: mz, data: { profession: d.job } });
-      if (d.animals) {
-        const kind = rng.pick(st.animals);
-        for (let a = 0; a < d.animals; a++) entities.push({ type: kind, x: mx, y: gy + 1, z: mz });
-      }
-      if (d.beds) homes++;
-      return true;
-    };
-    /** Places a design beside a road cell, facing it. */
-    const beside = (d: Design, rx: number, rz: number, dx: number, dz: number, side: 1 | -1, setback = 2): boolean => {
-      const alongX = dx !== 0;
-      // Rotation that turns the design's north-facing door towards the road
-      const rot: Rotation = alongX ? (side === 1 ? 0 : 2) : side === 1 ? 3 : 1;
-      const wsx = rot & 1 ? d.sz : d.sx;
-      const wsz = rot & 1 ? d.sx : d.sz;
-      let px: number;
-      let pz: number;
-      if (alongX) {
-        px = rx - (wsx >> 1);
-        pz = side === 1 ? rz + setback : rz - setback - wsz + 1;
-      } else {
-        pz = rz - (wsz >> 1);
-        px = side === 1 ? rx + setback : rx - setback - wsx + 1;
-      }
-      return place(d, rot, px, pz);
-    };
-    const pickNear = (dist: number, isEnd: boolean): Design => {
-      if (isEnd) return watchtower;
-      const count = (id: string): number => used.get(id) ?? 0;
-      if (dist < 22) {
-        const civic = [smithy, storehouse, workshop, chapel].filter((d) => count(d.id) === 0);
-        if (civic.length && rng.chance(0.75)) return rng.pick(civic);
-        return rng.pick(HOUSES);
-      }
-      if (dist < 40) return rng.chance(0.85) ? rng.pick(HOUSES) : rng.chance(0.5) ? pen : farm;
-      return rng.chance(0.55) ? (rng.chance(0.6) ? farm : pen) : rng.pick(HOUSES);
-    };
-    // Roads: one step at a time, following the ground, stopping at water or cliffs
-    const walk = (sx: number, sz: number, dx: number, dz: number, len: number, width: number): [number, number][] => {
-      const cells: [number, number][] = [];
-      let prev = ctx.groundY(sx, sz);
-      let wet = 0;
-      for (let i = 0; i < len; i++) {
-        const rx = sx + dx * i;
-        const rz = sz + dz * i;
-        const g = ctx.groundY(rx, rz);
-        if (ctx.isWater(rx, rz)) {
-          if (++wet > 4) break;
-        } else wet = 0;
-        if (!ctx.isWater(rx, rz) && Math.abs(g - prev) > 2) break;
-        if (overlaps({ x0: rx, z0: rz, x1: rx, z1: rz }, plots.slice(1), 0)) break;
-        prev = ctx.isWater(rx, rz) ? prev : g;
-        cells.push([rx, rz]);
-        for (let w = -(width >> 1); w <= width >> 1; w++) roadCells.add(rx + (dz !== 0 ? w : 0) + ',' + (rz + (dx !== 0 ? w : 0)));
-      }
-      return cells;
-    };
-    const first = rng.int(4);
-    const arms = 2 + rng.int(3);
-    const lamps: [number, number][] = [];
-    for (let a = 0; a < arms; a++) {
-      const [dx, dz] = DIRS[(first + a + (a === 2 && arms === 3 ? rng.int(2) : 0)) % 4]!;
-      const sx = x + dx * (PLAZA + 1);
-      const sz = z + dz * (PLAZA + 1);
-      const main = walk(sx, sz, dx, dz, 26 + rng.int(22), 3);
-      if (main.length < 8) continue;
-      main.forEach(([rx, rz], i) => {
-        const dist = Math.hypot(rx - x, rz - z);
-        if (i % 9 === 4) {
-          // Buildings along both sides of the main road
-          for (const side of [1, -1] as const) if (rng.chance(0.85)) beside(pickNear(dist, false), rx, rz, dx, dz, side);
-        }
-        if (i % 10 === 7) lamps.push([rx + dz * 2, rz + dx * 2]);
-        // Side streets branch off now and then
-        if (i % 12 === 9 && i < main.length - 4) {
-          for (const side of [1, -1] as const) {
-            if (!rng.chance(0.55)) continue;
-            const [ex, ez] = [dz * side, dx * side];
-            const street = walk(rx + ex * 2, rz + ez * 2, ex, ez, 10 + rng.int(12), 3);
-            street.forEach(([qx, qz], k) => {
-              if (k % 8 === 3) for (const s2 of [1, -1] as const) if (rng.chance(0.8)) beside(pickNear(Math.hypot(qx - x, qz - z) + 6, false), qx, qz, ex, ez, s2);
-            });
-          }
-        }
-      });
-      // A watchtower where the road ends
-      const [ex, ez] = main[main.length - 1]!;
-      beside(watchtower, ex, ez, dx, dz, rng.chance(0.5) ? 1 : -1, 2);
-    }
-    // Market stalls around the plaza
-    const stallSpots: [number, number, Rotation][] = [
-      [x - PLAZA - 6, z - PLAZA - 5, 1],
-      [x + PLAZA + 2, z - PLAZA - 5, 3],
-      [x - PLAZA - 6, z + PLAZA + 2, 1],
-      [x + PLAZA + 2, z + PLAZA + 2, 3],
-    ];
-    for (const [sx, sz, rot] of stallSpots) if (rng.chance(0.75)) place(stall, rot, sx, sz);
-    if (homes < 3) return null;
-    // The road piece: column-local path blocks that follow the ground, bridges over water
-    const plotBlocked = (a: number, c: number): boolean => plots.some((p) => a >= p.x0 && a <= p.x1 && c >= p.z0 && c <= p.z1);
-    const cols = [...roadCells].map((k) => k.split(',').map(Number) as [number, number]).filter(([a, c]) => !plotBlocked(a, c));
-    if (cols.length) {
-      const rb = unionBoxes(cols.map(([a, c]) => boxOf(a, 0, c, a, 255, c)));
-      const path = S(st.path);
-      const bridge = S(st.planks);
-      pieces.push({
-        box: rb,
-        build: (v: DecorView) => {
-          for (const [a, c] of cols) {
-            if (!v.inside(a, c)) continue;
-            const gy = ctx.groundY(a, c);
-            const top = v.get(a, gy, c);
-            if (STATE_FLUID[top] || gy < 62) {
-              v.set(a, Math.max(63, gy + 1), c, bridge);
-              continue;
-            }
-            // Gravel edges on wider roads look worn in
-            const h = hashInts(seed, a, c, 0x9a7);
-            v.set(a, gy, c, st.flatRoof ? S('sandstone') : (h & 7) === 0 ? S('gravel') : path);
-            for (let k = 1; k <= 3; k++) {
-              const s = v.get(a, gy + k, c);
-              if (s !== 0 && !STATE_SOLID[s]) v.set(a, gy + k, c, 0);
-            }
-          }
-        },
-      });
-    }
-    for (const [lx, lz] of lamps) {
-      const lp = { x0: lx, z0: lz, x1: lx, z1: lz };
-      if (overlaps(lp, plots, 0) || roadCells.has(lx + ',' + lz) || ctx.isWater(lx, lz)) continue;
-      const ly = ctx.groundY(lx, lz);
-      plots.push(lp);
-      pieces.push({ box: boxOf(lx, ly - 2, lz, lx, ly + 5, lz), build: (v) => lampPost(new Builder(v, lx, ly, lz, 0, 1, 1), st, 0, 0) });
-    }
-    entities.push({ type: 'iron_golem', x: x + 3, y: py + 1, z: z + 4 });
-    if (st.id === 'plains' || st.id === 'cherry') entities.push({ type: 'cat', x: x - 3, y: py + 1, z: z - 3 });
-    if (beds === 0) entities.push({ type: 'villager', x, y: py + 2, z: z - 3, data: { profession: 'none' } });
-    return { type: 'village', x, y: py, z, pieces, bounds: unionBoxes(pieces.map((p) => p.box)), entities };
-  },
+  plan: (ctx, cx, cz, rng) => planVillage(ctx, cx, cz, rng),
 };

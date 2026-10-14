@@ -582,6 +582,36 @@ function zombieParts(skin: string, shirt: string, pants: string, eyesCol = '#1a1
   });
 }
 V.zombie = { parts: () => zombieParts('#5a8a4a', '#2a8a9a', '#3a3a8a'), anim: animZombie };
+/** V7: a villager the undead took: the villager's long head, nose and robe (its profession's colour gone dull), a zombie's skin and reach. */
+V.zombie_villager = {
+  variant: (e) => String(e.meta.profession ?? 'none'),
+  parts: (e) => {
+    const robe = PROF[String(e.meta.profession ?? 'none')] ?? '#7a5a3a';
+    const skin = '#5a8a4a';
+    return [
+      ...humanoidParts({
+        head: { all: skin },
+        body: { all: '#4a3a2a' },
+        arms: { all: skin, top: '#4a3a2a' },
+        legs: { all: '#3a2a1e' },
+        headSize: [8, 10, 8],
+        face: (p) => {
+          p.px('front', 1, 4, '#1a2a16', 2, 1);
+          p.px('front', 5, 4, '#1a2a16', 2, 1);
+          p.px('front', 1, 3, '#2a4a22', 6, 1);
+          p.speckle('all', 'rgba(0,0,0,0.18)', 0.12);
+        },
+        bodyPaint: (p) => {
+          p.fill('front', robe);
+          p.speckle('all', 'rgba(0,0,0,0.35)', 0.35);
+        },
+      }),
+      { name: 'robe', parent: 'body', pivot: [0, 0, 0], from: [-4, -8, -2], size: [8, 8, 4], inflate: 0.4, colors: { all: '#4a3a2a', front: robe }, paint: (p) => p.speckle('all', 'rgba(0,0,0,0.35)', 0.3) },
+      { name: 'nose', parent: 'head', pivot: [0, 2, 4], from: [-1, 0, 0], size: [2, 4, 2], colors: { all: '#4a7a3a' } },
+    ];
+  },
+  anim: animZombie,
+};
 V.husk = { parts: () => zombieParts('#9a8a60', '#6a5a3a', '#4a3a2a', '#3a2a1a'), anim: animZombie };
 V.drowned = { parts: () => zombieParts('#4a8a8a', '#3a6a5a', '#2a4a6a', '#6af0f0'), anim: animZombie, glow: false };
 V.glitch_zombie = {

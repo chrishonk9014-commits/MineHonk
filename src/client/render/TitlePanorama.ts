@@ -73,7 +73,9 @@ const RADIUS = 4;
 type EngScene = 'factory' | 'power_plant' | 'mine' | 'farm' | 'control_room' | 'computer_lab';
 type DigitalScene = 'digital_world' | 'herobrine_cave';
 type EndScene = 'expanded_end' | 'crystal_fields' | 'void_citadel' | 'end_eclipse';
-type HalloweenScene = 'haunted_forest' | 'pumpkin_patch' | 'ghost_marsh';
+type HalloweenScene = 'haunted_forest' | 'pumpkin_patch' | 'ghost_marsh' | VillageScene;
+/** V7 phase 2: the two villages, at night. */
+type VillageScene = 'trick_village' | 'abandoned_village';
 type Scene = 'farlands' | 'end' | 'arena' | 'error_biome' | 'village' | 'dragon_malware' | EngScene | DigitalScene | EndScene | HalloweenScene;
 /** The Engineering Update's set scenes (built onto overworld terrain). */
 const ENG_SCENES: EngScene[] = ['factory', 'power_plant', 'mine', 'farm', 'control_room', 'computer_lab'];
@@ -81,16 +83,17 @@ const ENG_SCENES: EngScene[] = ['factory', 'power_plant', 'mine', 'farm', 'contr
 const END_SCENES: EndScene[] = ['expanded_end', 'crystal_fields', 'void_citadel', 'end_eclipse'];
 const RANDOM_SCENES: Scene[] = [...END_SCENES];
 /** V7: Halloween nights, in turn, while the season lasts. */
-const HALLOWEEN_SCENES: HalloweenScene[] = ['haunted_forest', 'pumpkin_patch', 'ghost_marsh'];
+const HALLOWEEN_SCENES: HalloweenScene[] = ['haunted_forest', 'trick_village', 'pumpkin_patch', 'abandoned_village', 'ghost_marsh'];
 /** Seconds each Halloween scene shows before the next. */
 const ROTATE_SECONDS = 40;
 const ALL_SCENES: Scene[] = [...HALLOWEEN_SCENES, ...END_SCENES, ...ENG_SCENES, 'digital_world', 'herobrine_cave', 'dragon_malware', 'error_biome', 'village', 'farlands', 'end', 'arena'];
 const isEndScene = (s: Scene): s is EndScene => (END_SCENES as Scene[]).includes(s);
 const isEng = (s: Scene): s is EngScene => (ENG_SCENES as Scene[]).includes(s);
 const isHalloween = (s: Scene): s is HalloweenScene => (HALLOWEEN_SCENES as Scene[]).includes(s);
+const isVillageScene = (s: Scene): s is VillageScene => s === 'trick_village' || s === 'abandoned_village';
 
 /** V7: the biomes each Halloween scene is looked for in (best first). */
-const HALLOWEEN_BIOMES: Record<HalloweenScene, string[]> = {
+const HALLOWEEN_BIOMES: Record<Exclude<HalloweenScene, VillageScene>, string[]> = {
   haunted_forest: ['dark_forest', 'forest', 'birch_forest', 'old_growth_birch_forest'],
   pumpkin_patch: ['plains', 'sunflower_plains', 'meadow'],
   ghost_marsh: ['swamp', 'mangrove_swamp'],
@@ -101,6 +104,8 @@ const HALLOWEEN_FOG: Record<HalloweenScene, { color: number; density: number; am
   haunted_forest: { color: 0x1e2636, density: 0, amount: 0.88 },
   pumpkin_patch: { color: 0x0e1222, density: 0.7, amount: 0.3 },
   ghost_marsh: { color: 0x1a2628, density: 0.2, amount: 0.65 },
+  trick_village: { color: 0x120e22, density: 0.5, amount: 0.22 },
+  abandoned_village: { color: 0x1c2422, density: 0.25, amount: 0.7 },
 };
 
 /** What each scene looks like: particles in the air, camera tilt, extra light. */
@@ -129,6 +134,8 @@ const LOOK: Record<Scene, { particle: string; pitch: number; nightVision: number
   haunted_forest: { particle: 'none', pitch: 0.03, nightVision: 0.12, aside: 0.62 },
   pumpkin_patch: { particle: 'none', pitch: 0.36, nightVision: 0.04, aside: 0.45 },
   ghost_marsh: { particle: 'none', pitch: 0.2, nightVision: 0.12, aside: 0.42 },
+  trick_village: { particle: 'none', pitch: 0.32, nightVision: 0.06, aside: 0.45 },
+  abandoned_village: { particle: 'none', pitch: 0.3, nightVision: 0.24, aside: 0.45 },
 };
 
 /** The Error's poses shown on the title screen, cycling. */
@@ -194,6 +201,10 @@ export class TitlePanorama {
   }
 
   private startScene(seed: number): void {
+    if (isVillageScene(this.scene)) {
+      this.findVillage(seed, this.scene);
+      return;
+    }
     if (isHalloween(this.scene)) {
       this.findHalloween(seed, this.scene);
       return;
@@ -284,8 +295,38 @@ export class TitlePanorama {
     }
   }
 
+  /**
+   * V7 phase 2: the nearest village, built as a Trick-or-Treat Village or an
+   * Abandoned Village (generator 9, every village that variant), a little per frame.
+   */
+  private findVillage(seed: number, scene: VillageScene): void {
+    const gen = new OverworldGenerator(seed, { villages: { force: scene === 'trick_village' ? 'trick' : 'abandoned' } });
+    // Open country, so the trees don't hide it (plains, savanna, desert, cherry groves)
+    const open = ['plains', 'savanna', 'desert', 'cherry'];
+    const search = (function* (): Generator<void, { x: number; y: number; z: number } | null> {
+      const s = yield* gen.structures.nearestSteps('village', Math.floor((Math.random() - 0.5) * 3000), Math.floor((Math.random() - 0.5) * 3000), 24, (v) => open.includes(v.village?.style ?? ''));
+      return s ? { x: s.x, y: s.y, z: s.z } : null;
+    })();
+    const step = (): void => {
+      if (this.disposed) return;
+      const t0 = performance.now();
+      let r = search.next();
+      while (!r.done && performance.now() - t0 < 10) r = search.next();
+      if (!r.done) {
+        this.raf = requestAnimationFrame(step);
+        return;
+      }
+      if (r.value) this.build(gen, r.value);
+      else {
+        this.scene = 'pumpkin_patch';
+        this.findHalloween(seed + 1, 'pumpkin_patch');
+      }
+    };
+    this.raf = requestAnimationFrame(step);
+  }
+
   /** V7: finds a spot well inside one of the scene's biomes, a little per frame, then builds it. */
-  private findHalloween(seed: number, scene: HalloweenScene): void {
+  private findHalloween(seed: number, scene: Exclude<HalloweenScene, VillageScene>): void {
     const gen = new OverworldGenerator(seed);
     const all = HALLOWEEN_BIOMES[scene];
     // The first biome is the one wanted most (a dark forest): looked for alone first, nearer
@@ -524,7 +565,7 @@ export class TitlePanorama {
       }
       if (isEng(this.scene)) focus = { ...focus, y: stampScene(this.scene, chunks, Math.floor(focus.x), Math.floor(focus.z)) };
       if (this.scene === 'end_eclipse') this.stampEclipse(chunks, Math.floor(focus.x), Math.floor(focus.z));
-      if (isHalloween(this.scene)) focus = { ...focus, y: this.stampHalloween(chunks, Math.floor(focus.x), Math.floor(focus.z)) };
+      if (isHalloween(this.scene) && !isVillageScene(this.scene)) focus = { ...focus, y: this.stampHalloween(chunks, Math.floor(focus.x), Math.floor(focus.z)) };
       const light = new LightEngine({ getChunk: (cx, cz) => chunks.get(chunkIndex(cx, cz)), markLightDirty: () => {} }, this.world.hasSky);
       for (const c of chunks.values()) light.initChunk(c);
       for (const c of chunks.values()) this.world.loadChunk(encodeChunk(c, { light: true, blockEntities: false }));
@@ -656,6 +697,18 @@ export class TitlePanorama {
         // Circling the set scene from just above it
         this.center = { x: fx + 0.5, y: focus.y + (this.scene === 'mine' ? 10 : 8), z: fz + 0.5 };
         this.orbit = this.scene === 'control_room' || this.scene === 'computer_lab' ? 17 : 21;
+        break;
+      }
+      case 'trick_village':
+      case 'abandoned_village': {
+        // Circling the plaza at night, low over the rooftops; ghosts over the ruins
+        let h = focus.y;
+        for (let dz = -10; dz <= 10; dz += 5) for (let dx = -10; dx <= 10; dx += 5) h = Math.max(h, w.heightAt(fx + dx, fz + dz));
+        this.center = { x: fx + 0.5, y: Math.min(h + 5, focus.y + 12), z: fz + 0.5 };
+        this.orbit = 17;
+        const abandoned = this.scene === 'abandoned_village';
+        this.renderer!.ghosts.ambient = abandoned ? 4 : 1;
+        this.renderer!.ghosts.ambientArea = { x: fx, y: focus.y + 1, z: fz, r: abandoned ? 16 : 10 };
         break;
       }
       case 'village': {

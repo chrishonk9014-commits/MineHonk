@@ -73,7 +73,7 @@ export class Dimension implements BlockAccess {
     seed: number,
   ) {
     this.rules = DIMENSION_RULES[id];
-    this.generator = createGenerator(id, seed, { structures: server.level.generateStructures !== false, version: server.level.generatorVersion });
+    this.generator = createGenerator(id, seed, { structures: server.level.generateStructures !== false, version: server.level.generatorVersion, villages: id === 'overworld' ? server.villageHooks : undefined });
     this.light = new LightEngine(
       {
         getChunk: (cx, cz) => this.chunks.get(chunkIndex(cx, cz)),
@@ -279,17 +279,24 @@ export class Dimension implements BlockAccess {
   /** Unloads chunks nobody wanted for a while; saves modified ones. */
   async unloadUnused(now: number, graceTicks: number): Promise<void> {
     const toSave: Chunk[] = [];
+    const gone: [number, Chunk][] = [];
     for (const [k, c] of this.chunks) {
       const last = this.wanted.get(k);
       if (last !== undefined && now - last < graceTicks) continue;
       if (this.server.isChunkForceLoaded(this, c.cx, c.cz)) continue;
       if (c.dirty || this.chunkHasPersistentEntities(k) || this.server.blockUpdates.hasTicks(this, c)) toSave.push(c);
+      gone.push([k, c]);
+    }
+    // Encoded before anything is removed (saveChunks serialises synchronously before its first
+    // await), so the persistent entities in an unloading chunk are saved with it, not dropped
+    const saving = toSave.length ? this.saveChunks(toSave) : null;
+    for (const [k, c] of gone) {
       this.chunks.delete(k);
       this.wanted.delete(k);
       this.server.onChunkUnloaded(this, c);
     }
     this.light.invalidateCache();
-    if (toSave.length) await this.saveChunks(toSave);
+    if (saving) await saving;
     // Drop stale wants for chunks that never loaded
     for (const [k, t] of this.wanted) if (now - t >= graceTicks && !this.chunks.has(k)) this.wanted.delete(k);
     for (const k of this.loading.keys()) {
@@ -358,6 +365,7 @@ export class Dimension implements BlockAccess {
 
   removeEntity(e: Entity): void {
     this.entities.delete(e.id);
+    this.persistentLeft(e, e.bucketKey);
     const b = this.buckets.get(e.bucketKey);
     if (b) {
       b.delete(e);
@@ -367,9 +375,20 @@ export class Dimension implements BlockAccess {
     this.server.onEntityRemoved(this, e);
   }
 
+  /**
+   * A persistent entity left a chunk (walked out, died, despawned): the chunk is
+   * saved again, so the copy saved with it earlier can't come back on reload.
+   */
+  private persistentLeft(e: Entity, key: number): void {
+    if (!e.persistent || e.type === 'player' || Number.isNaN(key)) return;
+    const c = this.chunks.get(key);
+    if (c) c.dirty = true;
+  }
+
   updateBucket(e: Entity): void {
     const k = chunkIndex(Math.floor(e.x) >> 4, Math.floor(e.z) >> 4);
     if (k === e.bucketKey) return;
+    this.persistentLeft(e, e.bucketKey);
     const old = this.buckets.get(e.bucketKey);
     if (old) {
       old.delete(e);

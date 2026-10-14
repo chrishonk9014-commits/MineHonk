@@ -238,6 +238,21 @@ endComp({ id: 'ancient_core', name: 'Ancient Core (dormant)', kind: 'cable', tie
 endComp({ id: 'citadel_core', name: 'Citadel Core', kind: 'generator', tier: 4, nets: ['energy'], energy: { capacity: 102400, maxOut: 1024, gen: ANCIENT_CORE_GEN }, existing: true, uncraftable: true, desc: 'A Void Citadel\'s core, still running: 512 EU/t to whatever its broken conduits reach. Bridge them with your own cable.', guide: 'end_engineering' });
 endComp({ id: 'citadel_socket', name: 'Citadel Socket', kind: 'machine', tier: 4, nets: ['energy'], energy: { capacity: 64 * 200, maxIn: 512, use: 64 }, machine: 'socket', signal: true, existing: true, uncraftable: true, desc: 'The lock of a Void Citadel\'s engineering floor: powered from the floor\'s core, it opens the door when the signal it gets follows the rule on the wall. Use it to have it check.', guide: 'end_engineering' });
 
+// ---------------------------------------------------------------------------
+// V7 - The Halloween Update, phase 2: the Factory Light in Halloween colours
+// (Trick-or-Treat Villages are strung with them). Appended to the block
+// registry after the V7 blocks (halloweenEngineeringBlockDefs).
+// ---------------------------------------------------------------------------
+const H: ComponentDef[] = [];
+for (const [id, name, desc] of [
+  ['factory_light_orange', 'Orange Factory Light', 'A factory light in Halloween orange.'],
+  ['factory_light_purple', 'Purple Factory Light', 'A factory light in Halloween purple.'],
+] as const)
+  H.push({ id, name, kind: 'decor', tier: 2, nets: [], desc, guide: 'factories' });
+
+/** V7: the Halloween factory lights. */
+export const HALLOWEEN_COMPONENTS: readonly ComponentDef[] = H;
+
 /** End engineering components (phase 4). */
 export const END_COMPONENTS: readonly ComponentDef[] = E;
 /**
@@ -247,8 +262,8 @@ export const END_COMPONENTS: readonly ComponentDef[] = E;
  * cores that carry power are found, never made: they are in END_COMPONENTS
  * and COMPONENT_BY_ID but not here.
  */
-export const COMPONENTS: readonly ComponentDef[] = [...C, ...E.filter((c) => !c.uncraftable)];
-export const COMPONENT_BY_ID: ReadonlyMap<string, ComponentDef> = new Map([...C, ...E].map((c) => [c.id, c]));
+export const COMPONENTS: readonly ComponentDef[] = [...C, ...E.filter((c) => !c.uncraftable), ...H];
+export const COMPONENT_BY_ID: ReadonlyMap<string, ComponentDef> = new Map([...C, ...E, ...H].map((c) => [c.id, c]));
 
 /** Machines whose block faces the player who placed them (generators, machines, sensors...). */
 const FACED = new Set<EngKind>(['generator', 'machine', 'multiblock', 'hopper', 'extractor', 'sorter', 'pump', 'outlet', 'monitor', 'control_panel', 'conveyor', 'computer', 'peripheral', 'server']);
@@ -274,6 +289,11 @@ export function engineeringBlockDefs(): BlockDef[] {
 /** V6 phase 4: the End engineering blocks (appended after the expansion's phase 3 blocks). */
 export function endEngineeringBlockDefs(): BlockDef[] {
   return blockDefsFor(E.filter((c) => !c.existing));
+}
+
+/** V7 phase 2: the Halloween factory lights (appended after the V7 heads). */
+export function halloweenEngineeringBlockDefs(): BlockDef[] {
+  return blockDefsFor(H);
 }
 
 const RAIL_STRAIGHT = ['north_south', 'east_west', 'ascending_north', 'ascending_south', 'ascending_east', 'ascending_west'] as const;
@@ -381,7 +401,7 @@ function blockDefsFor(list: readonly ComponentDef[]): BlockDef[] {
         } else if (c.id === 'metal_grate') {
           out.push({ id: c.id, name: c.name, hardness: 3, sound: 'metal', model: 'cube', tex: { all: c.id }, layer: 'cutout', opacity: 0, tool: 'pickaxe', harvestLevel: 0, requiresTool: true, creative: 'engineering' } as BlockDef);
         } else {
-          out.push({ id: c.id, name: c.name, hardness: c.id === 'steel_block' ? 5 : 3.5, resistance: 12, sound: 'metal', model: 'cube', tex: { all: c.id }, tool: 'pickaxe', harvestLevel: 1, requiresTool: true, light: c.id === 'factory_light' ? 15 : 0, creative: 'engineering' } as BlockDef);
+          out.push({ id: c.id, name: c.name, hardness: c.id === 'steel_block' ? 5 : 3.5, resistance: 12, sound: 'metal', model: 'cube', tex: { all: c.id }, tool: 'pickaxe', harvestLevel: 1, requiresTool: true, light: c.id.startsWith('factory_light') ? 15 : 0, creative: 'engineering' } as BlockDef);
         }
         break;
       }
@@ -566,6 +586,8 @@ shaped('industrial_glass', 4, ['pLp', 'LLL', 'pLp'], k('p', 'L'));
 shaped('metal_grate', 4, ['pp', 'pp'], k('p'));
 shaped('hazard_stripes', 8, ['YBY', 'BpB', 'YBY'], with_(k('p'), { Y: 'yellow_dye', B: 'black_dye' }));
 shaped('factory_light', 4, ['pLp', 'LOL', 'pLp'], k('p', 'L', 'O'));
+shapeless('factory_light_orange', 1, 'factory_light', 'orange_dye');
+shapeless('factory_light_purple', 1, 'factory_light', 'purple_dye');
 shaped('industrial_door', 3, ['PP', 'PP', 'PP'], k('P'));
 // Tier 3
 shaped('advanced_generator', 1, ['PAP', 'MUM', 'PKP'], with_(k('P', 'A', 'M', 'K'), { U: 'steam_generator' }));

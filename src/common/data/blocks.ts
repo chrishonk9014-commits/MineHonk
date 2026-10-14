@@ -5,7 +5,7 @@
  * produces one 16x16 PNG per texture name and packs them into the atlas.
  */
 import type { BlockDef, SoundGroup, TintKind } from '../registry/blockTypes';
-import { engineeringBlockDefs, endEngineeringBlockDefs } from '../engineering/catalog';
+import { engineeringBlockDefs, endEngineeringBlockDefs, halloweenEngineeringBlockDefs } from '../engineering/catalog';
 import { digitalBlockDefs } from '../digital/blocks';
 import { expansionBlockDefs } from '../endExpansion/blocks';
 import { addExpansionResourceBlocks } from '../endExpansion/resources';
@@ -15,6 +15,7 @@ import { questBlockDefs } from '../endExpansion/quests';
 import { eventBlockDefs } from '../endExpansion/events';
 import { citadelBlockDefs } from '../endExpansion/citadel';
 import { pumpkinBlockDefs } from '../halloween/blocks';
+import { headBlockDefs } from '../halloween/heads';
 
 const defs: BlockDef[] = [];
 const add = (d: BlockDef): BlockDef => {
@@ -1048,5 +1049,8 @@ for (const d of citadelBlockDefs()) add(d);
 
 // V7 - The Halloween Update, phase 1: a pumpkin for every dimension
 for (const d of pumpkinBlockDefs()) add(d);
+// V7 phase 2: costume heads, and the factory light in Halloween orange and purple
+for (const d of headBlockDefs()) add(d);
+for (const d of halloweenEngineeringBlockDefs()) add(d);
 
 export const BLOCK_DEFS: readonly BlockDef[] = defs;

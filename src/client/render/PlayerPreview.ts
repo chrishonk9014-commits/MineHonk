@@ -1,5 +1,6 @@
 /** Small 3D player doll shown in the inventory; it turns to follow the mouse. */
 import { armorOverlay, type ArmorOverlay } from './entities/armorOverlay';
+import { headwearOverlay, type HeadwearOverlay } from './entities/headwear';
 import * as THREE from 'three';
 import { BoxModel, humanoidDef } from './entities/BoxModel';
 import { playerSkin } from './entities/skins';
@@ -13,6 +14,9 @@ class PreviewRenderer {
   private readonly armor: ArmorOverlay;
   /** The local player's worn armor materials, head to feet. */
   wornArmor: (() => string[]) | null = null;
+  private readonly headwear: HeadwearOverlay;
+  /** V7: the block worn on the head, if any. */
+  wornHead: (() => string | undefined) | null = null;
   private host: HTMLElement | null = null;
   private raf = 0;
   private mouse = { x: 0, y: 0 };
@@ -24,6 +28,7 @@ class PreviewRenderer {
     this.model = new BoxModel(humanoidDef(), playerSkin(null));
     this.model.setBrightness(1);
     this.armor = armorOverlay(this.model);
+    this.headwear = headwearOverlay(this.model);
     this.scene.add(this.model.root);
     // Orthographic frustum bounds are relative to the camera, so keep it at y=0
     this.camera.position.set(0, 0, 5);
@@ -85,6 +90,7 @@ class PreviewRenderer {
     const head = this.model.part('head');
     if (head) head.rotation.set(dy * 0.5, dx * 0.4, 0);
     this.armor.set(this.wornArmor?.());
+    this.headwear.set(this.wornHead?.());
     this.renderer.render(this.scene, this.camera);
   }
 }
@@ -92,7 +98,7 @@ class PreviewRenderer {
 let instance: PreviewRenderer | null = null;
 
 /** Shows the player doll inside `host`. Returns a detach function. */
-export function attachPlayerPreview(host: HTMLElement, name: string | null = null, wornArmor: (() => string[]) | null = null): () => void {
+export function attachPlayerPreview(host: HTMLElement, name: string | null = null, wornArmor: (() => string[]) | null = null, wornHead: (() => string | undefined) | null = null): () => void {
   try {
     instance ??= new PreviewRenderer();
   } catch {
@@ -100,5 +106,6 @@ export function attachPlayerPreview(host: HTMLElement, name: string | null = nul
   }
   instance.setSkin(name);
   instance.wornArmor = wornArmor;
+  instance.wornHead = wornHead;
   return instance.attach(host);
 }

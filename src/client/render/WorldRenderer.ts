@@ -22,7 +22,8 @@ import { TorchGlow } from './TorchGlow';
 import { SignText } from './SignText';
 import { GlitchFX } from './GlitchFX';
 import { WorldFX } from './WorldFX';
-import { Ghosts } from './Ghosts';
+import { Ghosts } from './Ghosts';import { setHeadwearTextures } from './entities/headwear';
+
 
 export interface GameAssets {
   blockAtlas: THREE.Texture;
@@ -74,6 +75,8 @@ export interface FrameState {
   endEvents?: SkyEvents;
   /** V7: Halloween content is on in this world (its server says so): ghosts may drift by at night. */
   halloween?: boolean;
+  /** V7 phase 2: the Abandoned Village the player is in or near (ghosts day and night; not seasonal). */
+  hauntedArea?: { x0: number; z0: number; x1: number; z1: number; y: number } | null;
 }
 
 export class WorldRenderer {
@@ -136,6 +139,7 @@ export class WorldRenderer {
     this.particles = new Particles(assets.blockAtlas, this.atlas, world);
     this.weather = new Weather(world);
     this.hand = new HandRenderer(assets.icons, (n) => this.blockTexture(n));
+    setHeadwearTextures((n) => this.blockTexture(n));
     this.beams = new BeaconBeams(world);
     this.torchGlow = new TorchGlow(world);
     this.signs = new SignText(world);
@@ -417,6 +421,7 @@ export class WorldRenderer {
     // V7: under a Halloween night sky (not underground, not under water), a ghost now and then
     const dimNight = this.world.dimension === 'overworld' || this.world.dimension === 'farlands';
     const outside = !f.underwater && !f.inLava && !(f.cave && f.cave.amount > 0.5) && cam.position.y > this.world.heightAt(Math.floor(cam.position.x), Math.floor(cam.position.z)) - 8;
+    this.ghosts.village = this.world.dimension === 'overworld' ? (f.hauntedArea ?? null) : null;
     this.ghosts.update({ x: cam.position.x, y: cam.position.y, z: cam.position.z, yaw: f.yaw, haunted: !!f.halloween && dimNight && outside, daylight: skyState.daylight, time: f.time, fogNear, fogFar }, dt);
     this.updateSelection(f.target);
     this.updateCracks(f.crack);

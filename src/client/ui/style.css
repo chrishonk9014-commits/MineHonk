@@ -3825,6 +3825,34 @@ body {
   margin-top: calc(var(--s) * 2);
 }
 
+/* V7 phase 2: Trick-or-Treat Villages' doors */
+.halloween-doors {
+  margin-top: calc(var(--s) * 2);
+}
+.halloween-door-list {
+  max-height: calc(var(--s) * 70);
+  overflow-y: auto;
+  margin-top: calc(var(--s) * 2);
+}
+.halloween-door {
+  display: grid;
+  grid-template-columns: calc(var(--s) * 12) calc(var(--s) * 34) 1fr auto;
+  align-items: center;
+  gap: calc(var(--s) * 2);
+  padding: calc(var(--s) * 0.5) 0;
+  font-size: calc(var(--s) * 4.5);
+}
+.halloween-door.trick .halloween-door-kind {
+  color: #c27aff;
+}
+.halloween-door.candy .halloween-door-kind {
+  color: #ffa630;
+}
+.btn.chip.tiny {
+  padding: calc(var(--s) * 0.5) calc(var(--s) * 2);
+  min-height: 0;
+}
+
 /* V7: the title screen while the Halloween season lasts */
 .logo.halloween {
   color: #ff9c2a;

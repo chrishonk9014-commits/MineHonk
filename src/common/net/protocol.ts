@@ -11,7 +11,7 @@ import type { GameMode, Difficulty, GodHearts } from '../game/gamemode';
 import type { DimensionId } from '../data/biomes';
 import type { HalloweenState } from '../halloween/season';
 
-export const PROTOCOL_VERSION = 6;
+export const PROTOCOL_VERSION = 7;
 
 // ---------------------------------------------------------------------------
 // Client -> Server
@@ -176,6 +176,8 @@ export type S2C =
   | { t: 'world_info'; world: WorldInfo }
   /** V7: a Halloween ghost drifts past now (the Admin Panel; ghosts otherwise come by themselves on the client). */
   | { t: 'ghost' }
+  /** V7 phase 2: the player is in (or near) an Abandoned Village: ghosts drift over it day and night (null: left it). */
+  | { t: 'haunted_area'; area: { x0: number; z0: number; x1: number; z1: number; y: number } | null }
   | { t: 'pong'; time: number }
   | { t: 'take_item'; item: number; by: number }
   | { t: 'use_result'; seq: number; ok: boolean }

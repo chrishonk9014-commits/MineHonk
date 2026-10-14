@@ -34,6 +34,7 @@ import { raycastBlocks } from '../../common/physics/raycast';
 import { newBody } from '../../common/physics/movement';
 import { el } from '../ui/dom';
 import { attachPlayerPreview } from '../render/PlayerPreview';
+import { WEARABLE_BLOCKS } from '../../common/halloween/heads';
 import { chunkIndex } from '../../common/world/constants';
 import { enchantLevel } from '../../common/game/enchanting';
 import type { AdminAction } from '../../common/game/admin';
@@ -118,6 +119,8 @@ export class Game {
   private readonly digitalHud: DigitalHud;
   /** The Haunting: how far the dark has closed in (eased towards the server's word), and its jumpscare. */
   private haunt = 0;
+  /** V7 phase 2: the Abandoned Village the player is in or near (its server says so). */
+  hauntedArea: { x0: number; z0: number; x1: number; z1: number; y: number } | null = null;
   private hauntTarget = 0;
   private readonly jumpscare: Jumpscare;
   /** The lair ending's cutscene: what lies over the view, and the step the camera follows (the drag's path). */
@@ -324,6 +327,12 @@ export class Game {
     });
   }
 
+  /** V7: the block worn on the head (a costume head, a carved pumpkin), for the inventory doll. */
+  private wornHead(): string | undefined {
+    const id = items[this.invSlots[HELMET]?.id ?? -1]?.id;
+    return id && WEARABLE_BLOCKS.includes(id) ? id : undefined;
+  }
+
   /**
    * How dark the view is: blindness is total; the Darkness effect (Warden,
    * shriekers) pulses between dim and nearly black. The pulsing strength is
@@ -472,7 +481,7 @@ export class Game {
       playerSlots: () => this.invSlots,
       onClose: () => this.closeWindow(true),
       advancedTooltips: this.debug,
-      attachPreview: (host: HTMLElement) => attachPlayerPreview(host, this.playerName, () => this.wornArmor()),
+      attachPreview: (host: HTMLElement) => attachPlayerPreview(host, this.playerName, () => this.wornArmor(), () => this.wornHead()),
     });
     this.root.append(this.screen.root);
     this.input.enabled = false;
@@ -817,6 +826,10 @@ export class Game {
       case 'ghost':
         // V7: the Admin Panel's "Show a ghost now"
         this.renderer.ghosts.showNow();
+        break;
+      case 'haunted_area':
+        // V7 phase 2: in or near an Abandoned Village
+        this.hauntedArea = m.area;
         break;
       case 'admin_result':
         this.onAdminResult(m);
@@ -2011,6 +2024,7 @@ export class Game {
       nausea: this.effectLevel('nausea') > 0 && !this.settings.reduceMotion ? 1 : 0,
       portalColor: this.portalKind === 'far_portal' ? 0x2ad7c2 : this.portalKind === 'expansion_portal' ? 0x9ad8ff : 0x8a2be2,
       halloween: !!this.worldInfo?.halloween?.active,
+      hauntedArea: this.hauntedArea,
     };
     if (this.sceneCam) this.sceneCamera(fs, alpha);
     // Lines (fishing, leads) end at the local player's hand: lower right of the view

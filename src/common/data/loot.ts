@@ -86,6 +86,13 @@ export const LOOT_TABLES: Record<string, LootTable> = {
     ],
   },
   'mob/husk': { xp: 5, pools: [{ rolls: 1, entries: [mob('rotten_flesh', 0, 2)] }] },
+  'mob/zombie_villager': {
+    xp: 5,
+    pools: [
+      { rolls: 1, entries: [mob('rotten_flesh', 0, 2)] },
+      { rolls: 1, conditions: [{ c: 'killed_by_player' }, { c: 'chance', chance: 0.05, lootingBonus: 0.01 }], entries: [e('emerald', 2), e('iron_ingot', 1), e('carrot', 1), e('potato', 1)] },
+    ],
+  },
   'mob/drowned': { xp: 5, pools: [{ rolls: 1, entries: [mob('rotten_flesh', 0, 2)] }, { rolls: 1, conditions: [{ c: 'killed_by_player' }, { c: 'chance', chance: 0.11, lootingBonus: 0.02 }], entries: [e('copper_ingot', 1)] }] },
   'mob/skeleton': { xp: 5, pools: [{ rolls: 1, entries: [mob('arrow', 0, 2)] }, { rolls: 1, entries: [mob('bone', 0, 2)] }] },
   'mob/stray': { xp: 5, pools: [{ rolls: 1, entries: [mob('arrow', 0, 2)] }, { rolls: 1, entries: [mob('bone', 0, 2)] }] },
@@ -313,6 +320,28 @@ export const LOOT_TABLES: Record<string, LootTable> = {
   },
   'chest/jungle_temple': {
     pools: [{ rolls: [2, 6], entries: [e('diamond', 3, [1, 3]), e('iron_ingot', 10, [1, 5]), e('gold_ingot', 15, [2, 7]), e('emerald', 2, [1, 3]), e('bone', 20, [4, 6]), e('rotten_flesh', 16, [3, 7]), e('saddle', 3), book(1), e('bamboo', 15, [1, 3])] }],
+  },
+  // V7 phase 2: Abandoned Villages. Rarer than anything else on the surface, and worth the trip: every
+  // house's chest is better than a village's, the smithy holds the guards' old gear, and the finest house
+  // keeps the village's last treasure.
+  'chest/abandoned_village': {
+    pools: [
+      { rolls: [4, 7], entries: [e('emerald', 10, [2, 6]), e('gold_ingot', 10, [2, 5]), e('iron_ingot', 12, [2, 6]), e('bread', 10, [1, 4]), e('golden_carrot', 6, [2, 5]), e('experience_bottle', 6, [2, 6]), e('name_tag', 3), e('lead', 4), e('saddle', 3), e('candle', 6, [1, 3]), e('cobweb', 6, [1, 4]), e('bone', 10, [2, 6]), e('rotten_flesh', 8, [2, 6]), e('diamond', 3, [1, 2]), e('ender_pearl', 4, [1, 2])] },
+      { rolls: 1, entries: [book(10), ench('iron_sword', 6, [10, 25]), ench('iron_chestplate', 4, [10, 25]), ench('bow', 4, [10, 25]), e('golden_apple', 4), e('skeleton_skull', 2), e('zombie_head', 2), none(8)] },
+    ],
+  },
+  'chest/abandoned_village_smithy': {
+    pools: [
+      { rolls: [4, 7], entries: [e('iron_ingot', 14, [3, 8]), e('gold_ingot', 8, [2, 5]), e('coal', 10, [3, 8]), e('iron_block', 2), e('diamond', 4, [1, 3]), e('flint', 6, [2, 5]), e('arrow', 8, [6, 16])] },
+      { rolls: [1, 2], entries: [ench('iron_sword', 8, [15, 30]), ench('iron_axe', 5, [15, 30]), ench('iron_helmet', 6, [15, 30]), ench('iron_chestplate', 6, [15, 30]), ench('iron_leggings', 6, [15, 30]), ench('iron_boots', 6, [15, 30]), ench('crossbow', 4, [15, 30]), ench('diamond_sword', 1, [20, 30]), e('shield', 5)] },
+    ],
+  },
+  'chest/abandoned_village_treasure': {
+    pools: [
+      { rolls: 1, entries: [e('diamond', 10, [3, 7]), e('emerald_block', 6, [1, 2]), ench('diamond_chestplate', 3, [25, 39]), ench('diamond_sword', 3, [25, 39]), e('enchanted_golden_apple', 1), e('totem_of_undying', 2)] },
+      { rolls: [4, 7], entries: [e('emerald', 14, [4, 10]), e('gold_ingot', 10, [3, 8]), e('golden_apple', 8, [1, 2]), e('experience_bottle', 10, [6, 14]), book(12), e('music_disc_hollow', 2), e('ender_pearl', 6, [2, 4]), e('name_tag', 4)] },
+      { rolls: 1, entries: [e('skeleton_skull', 4), e('zombie_head', 4), e('creeper_head', 2), none(6)] },
+    ],
   },
   'chest/village': {
     pools: [

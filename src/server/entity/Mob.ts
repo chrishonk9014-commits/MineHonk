@@ -272,7 +272,8 @@ export class Mob extends LivingEntity {
       if (this.fireTicks === 0 || this.fireTicks % 20 === 19) this.metaDirty = true;
     }
     // Sunlight burning for undead
-    if (this.def.burnsInDay && this.age % 20 === 0 && !this.baby && this.dim.rules.hasSky && this.isDaytime() && !b.inWater) {
+    // (V7: an Abandoned Village's undead guardians never burn)
+    if (this.def.burnsInDay && !this.data.guard && this.age % 20 === 0 && !this.baby && this.dim.rules.hasSky && this.isDaytime() && !b.inWater) {
       const bx = Math.floor(this.x);
       const by = Math.floor(this.y + this.eyeHeight);
       const bz = Math.floor(this.z);
@@ -499,6 +500,8 @@ export class Mob extends LivingEntity {
     if (this.def.fireImmune && (src === 'fire' || src === 'lava' || src === 'in_fire' || src === 'magma')) return 0;
     // Emerging or burrowing Wardens (and other scripted moments) can't be hurt
     if (this.data.untouchable && src !== 'void' && src !== 'kill') return 0;
+    // V7: the undead of one Abandoned Village never hurt each other (a stray arrow starts no feud)
+    if (this.data.guard && info.attacker instanceof Mob && sameGuard(this, info.attacker)) return 0;
     // The Error shrugs off most of a hit unless its core is exposed
     if (this.type === 'the_error') {
       amount = this.dim.server.errorBoss?.scaleDamage(this, amount, info) ?? amount;
@@ -695,4 +698,11 @@ export function approachAngle(cur: number, target: number, max: number): number 
   if (d > Math.PI) d -= Math.PI * 2;
   if (d < -Math.PI) d += Math.PI * 2;
   return cur + Math.max(-max, Math.min(max, d));
+}
+
+/** Whether two mobs keep to the same guard area (V7: the undead of one Abandoned Village). */
+function sameGuard(a: Mob, b: Mob): boolean {
+  const ga = a.data.guard as { x0?: number; z0?: number } | undefined;
+  const gb = b.data.guard as { x0?: number; z0?: number } | undefined;
+  return !!ga && !!gb && ga.x0 === gb.x0 && ga.z0 === gb.z0;
 }

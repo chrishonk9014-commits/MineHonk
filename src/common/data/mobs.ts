@@ -228,6 +228,8 @@ mob({ id: 'void_orb', name: 'Void Orb', category: 'boss', width: 0.8, height: 0.
 mob({ id: 'minecart', name: 'Minecart', category: 'ambient', width: 0.98, height: 0.7, health: 6, speed: 0, brain: 'vehicle', model: 'minecart', egg: [0x6a6a6a, 0x3a3a3a], vehicle: 'minecart', mount: { seat: 0.3, control: 'vehicle', tame: false }, idleInterval: 1000000 });
 mob({ id: 'void_skiff', name: 'Void Skiff', category: 'ambient', width: 1.6, height: 0.9, health: 20, speed: 0, brain: 'vehicle', model: 'void_skiff', egg: [0x3a2a4a, 0xb080ff], vehicle: 'skiff', fireImmune: true, flying: true, mount: { seat: 0.45, control: 'vehicle', tame: false }, idleInterval: 1000000 });
 mob({ id: 'ender_dragon', name: 'Ender Dragon', category: 'boss', width: 16, height: 8, health: 200, speed: 0.3, damage: 10, knockbackRes: 1, followRange: 150, brain: 'dragon', model: 'ender_dragon', egg: [0x1c1c1c, 0xe079fa], fireImmune: true, flying: true });
+// V7 phase 2: the villagers of Abandoned Villages (and the undead keeping watch there never burn: see Mob.guard)
+mob({ id: 'zombie_villager', name: 'Zombie Villager', category: 'monster', width: 0.6, height: 1.95, health: 20, speed: 0.1, damage: 3, armor: 2, followRange: 35, brain: 'zombie', model: 'zombie_villager', egg: [0x563c33, 0x799c65], undead: true, burnsInDay: true, babyChance: 0.05, maxSpawnLight: 0 });
 
 export const MOB_DEFS: readonly MobDef[] = M;
 export const MOB_BY_ID = new Map(M.map((d) => [d.id, d]));

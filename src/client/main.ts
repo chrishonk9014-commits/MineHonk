@@ -1,7 +1,8 @@
 /** Browser entry point. */
 import './render/colorSetup';
 import './ui/style.css';
-import { initItems, itemById } from '../common/registry/items';
+import { initItems, itemById, items } from '../common/registry/items';
+import { ClientEntity } from './game/ClientEntity';
 import { stateFromString, blockById, STATE_BLOCK } from '../common/registry/blocks';
 import { loadSettings, loadProfile } from './settings';
 import { loadAssets, applyUiTextures } from './assets/loadAssets';
@@ -38,7 +39,7 @@ async function boot(): Promise<void> {
     }
     const app = new App(canvas, ui, assets, settings, profile, audio, input);
     // Developer handle: only in development builds and automated test browsers
-    if (import.meta.env.DEV || navigator.webdriver) Object.assign(window, { minehonk: app, minehonkState: stateFromString, minehonkRegistry: { itemById, blockById, blockOfState: (st: number) => STATE_BLOCK[st] }, minehonkNet: { compatKey } });
+    if (import.meta.env.DEV || navigator.webdriver) Object.assign(window, { minehonk: app, minehonkState: stateFromString, minehonkRegistry: { itemById, blockById, blockOfState: (st: number) => STATE_BLOCK[st], itemOf: (num: number) => items[num] }, minehonkNet: { compatKey }, minehonkClientEntity: ClientEntity });
   } catch (e) {
     console.error(e);
     setStatus(`Failed to start: ${(e as Error).message}`);

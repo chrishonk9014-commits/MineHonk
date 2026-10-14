@@ -6,9 +6,11 @@ deterministic. The server is authoritative. There are four dimensions: the
 Overworld, the Nether, the End and the Farlands (and, since Version 5.5,
 somewhere you can only get to through a computer).
 
-**Now: V7 - The Halloween Update** (phase 1 of 5). Until November 7, 2026,
-12:00 AM PST, every dimension grows pumpkins, ghosts drift by on dark nights
-and the title screen is haunted. See [below](#version-7---the-halloween-update).
+**Now: V7 - The Halloween Update** (phase 2 of 5). Until November 7, 2026,
+12:00 AM PST, villages dress up for trick-or-treating, every dimension grows
+pumpkins, ghosts drift by on dark nights and the title screen is haunted; all
+year round, extremely rare Abandoned Villages wait in the wild. See
+[below](#version-7---the-halloween-update).
 
 ## Quick start
 
@@ -583,9 +585,9 @@ Update Log itself.
 
 V7 comes in five phases. **Phase 1** (version 7.0.0-phase1) is the
 foundation: the season, the pumpkins, ghosts, the title screen and the Admin
-Panel's Halloween tab. Villages, trick-or-treating, new hauntings and
-advancements follow in phases 2 to 5. Design notes:
-[docs/HALLOWEEN.md](docs/HALLOWEEN.md).
+Panel's Halloween tab. **Phase 2** (version 7.0.0-phase2) brings the villages
+and the costume heads. Trick-or-treating, new hauntings and advancements
+follow in phases 3 to 5. Design notes: [docs/HALLOWEEN.md](docs/HALLOWEEN.md).
 
 - **The Halloween season** runs until **November 7, 2026, 12:00 AM PST**
   (`2026-11-07T08:00:00Z`): one moment for everyone, never the player's own
@@ -619,11 +621,38 @@ advancements follow in phases 2 to 5. Design notes:
 - **The title screen**, all season: Halloween nights built from real terrain,
   a new one every 40 seconds: a foggy forest path lit by pumpkins with
   Herobrine at its end, a glowing pumpkin patch with scarecrows, and ghosts
-  over a misty marsh. After the season it goes back to the End Expansion.
+  over a misty marsh; and since phase 2, a Trick-or-Treat Village and an
+  Abandoned Village. After the season it goes back to the End Expansion.
+- **Trick-or-Treat Villages** (phase 2; worlds made in V7 or later, world
+  generator 9): while Halloween is on, two villages in three are dressed for
+  the night: Hallow Pumpkins and skulls on fence posts by the doors, orange
+  and purple factory lights along the houses, jack o'lanterns on the lamp
+  posts, scarecrows in the fields, a few cobwebs. Villagers live there as
+  usual. Every house door is a Candy Home or a Trick Home (2 to 4 Trick Homes a
+  village, identical from outside; what they do comes in phase 3). A village
+  is dressed if Halloween is on when it is first explored, recorded with the
+  world, and then stays as it is for good, every chunk of it.
+- **Abandoned Villages** (phase 2, not seasonal): about one village in 40,
+  so extremely rare. Ruins with collapsed walls and roofs, broken windows,
+  doors and fences, rubble, cobwebs, vines and no lights; ghosts drift over
+  them day and night; zombie villagers (a new mob) walk the streets and
+  undead guardians (zombies and skeletons, husks or strays by the climate)
+  keep watch: they never burn in daylight, never despawn and never leave the
+  village. Excellent loot, the finest house holding the village's last
+  treasure.
+- **Costume heads** (phase 2): Skeleton Skull, Zombie Head, Creeper Head and
+  Herobrine Head. Placeable (they drop themselves) and wearable in the
+  helmet slot, as is a carved pumpkin; everyone sees what you wear. None can
+  be crafted: the first three are found on fence posts in Trick-or-Treat
+  Villages (and in Abandoned Villages' chests). A head halves how far its own
+  kind of mob notices you.
 - **Admin Panel**: a Halloween tab shows whether Halloween content is on in
   the world and why, shows a ghost now, places any pumpkin (or one of each)
-  and simulates "after the cutoff" or "always on" for testing (never saved).
-  As always, nothing done there counts towards advancements.
+  and simulates "after the cutoff" or "always on" for testing (never saved);
+  builds a Trick-or-Treat or Abandoned Village around you in any world, and
+  lists the nearest Trick-or-Treat Village's doors (which are Trick Homes,
+  with a button to go to each). The Teleport tab finds both villages. As
+  always, nothing done there counts towards advancements.
 
 ### Recipe Book
 
@@ -666,8 +695,9 @@ show a **Cheats ON** badge in the Friends and Public lists and when joining.
 - **Performance**: client FPS, frame time, chunks and meshes, server TPS,
   tick time, entities and memory.
 - **Halloween** (V7): whether Halloween content is on in this world and why,
-  a ghost now, every dimension pumpkin, and simulating the end of the season
-  (or Halloween always on) for testing.
+  a ghost now, every dimension pumpkin, simulating the end of the season (or
+  Halloween always on) for testing, building a Trick-or-Treat or Abandoned
+  Village around you, and the nearest Trick-or-Treat Village's doors.
 - **Haunting**: Herobrine haunts the world, the way the old creepypastas tell
   it. Choose how long it lasts, from the first sighting to the end (30 minutes
   unless changed, 1 to 180), and how it ends, then press Start. Nobody is told
@@ -746,6 +776,7 @@ npm run test:e2e:v4       # the World Update: Error Biome, Glitched Structure, a
 npm run test:e2e:v6       # the End Expansion: the portal, travel, every biome, the mobs, ores and armor, every structure, the Constructs and the Dragon's Nest (screenshots)
 npm run test:e2e:haunting # the Haunting: a two-minute haunting to the fake ban and the deleted world, talking to him, and the lair ending (screenshots)
 npm run test:e2e:halloween # V7: the Halloween title scenes and their rotation, the world option, pumpkins in every dimension, ghosts, the Admin Panel tab, worlds after the cutoff, the Update Log's V7 and V6.5 tabs (screenshots)
+npm run test:e2e:villages  # V7 phase 2: Trick-or-Treat and Abandoned Villages, the heads worn, zombie villagers and guardians, the Admin Panel's villages and doors, the village title scenes (screenshots)
 ```
 
 ### Performance tools

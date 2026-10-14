@@ -277,3 +277,85 @@ export function registerV7Blocks(r: PainterRegistry): void {
     if (f < 2) t.rect(11, 12, 2, 1, hex(0x8affb6));
   });
 }
+
+/**
+ * V7 phase 2: the costume heads (painted as 8 x 8 pixel art, two texels a
+ * pixel, so they match the 8-pixel box they cover) and the factory light in
+ * Halloween orange and purple.
+ */
+export function registerV7Phase2Blocks(r: PainterRegistry): void {
+  /** One art pixel (2 x 2 texels), a little varied so it isn't flat. */
+  const px = (t: Tex, x: number, y: number, c: RGB, vary = 0.06): void => {
+    for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 2; dx++) t.set(x * 2 + dx, y * 2 + dy, shade(c, 1 - vary / 2 + t.rng.next() * vary));
+  };
+  /** Paints an 8 x 8 grid: each character a colour from the key ('.' leaves the base). */
+  const art = (t: Tex, rows: string[], key: Record<string, RGB>, base: RGB[], vary = 0.06): void => {
+    for (let y = 0; y < 8; y++)
+      for (let x = 0; x < 8; x++) {
+        const ch = rows[y]?.[x] ?? '.';
+        px(t, x, y, key[ch] ?? base[(x * 3 + y * 5 + t.rng.int(base.length)) % base.length]!, vary);
+      }
+  };
+  const PLAIN = ['........', '........', '........', '........', '........', '........', '........', '........'];
+
+  // ---------------------------------------------------------------- Skeleton Skull
+  const BONE = [hex(0xd8d4c4), hex(0xe2ded0), hex(0xccc8b6)];
+  const boneKey = { D: hex(0x262422), d: hex(0x56524a), b: hex(0xb4b0a0), w: hex(0xeeeae0) };
+  r.add('skeleton_skull_front', (t) => art(t, ['w.......', '.b....b.', '.DD..DD.', '.DD..DD.', '...dd...', 'b......b', '.D.DD.D.', '........'], boneKey, BONE));
+  r.add('skeleton_skull_side', (t) => art(t, ['w.......', '........', '......b.', '.....b..', '........', '..b.....', '........', '.b......'], boneKey, BONE));
+  r.add('skeleton_skull_top', (t) => art(t, ['..w.....', '........', '...b....', '...b....', '....b...', '........', '.....w..', '........'], boneKey, BONE));
+  r.add('skeleton_skull_back', (t) => art(t, PLAIN.map((row, y) => (y === 3 ? '..b.....' : row)), boneKey, BONE));
+  r.add('skeleton_skull_bottom', (t) => art(t, PLAIN, boneKey, BONE.map((c) => shade(c, 0.85))));
+
+  // ---------------------------------------------------------------- Zombie Head
+  const SKIN = [hex(0x4a8a3a), hex(0x528f40), hex(0x447e34)];
+  const zKey = { H: hex(0x2e5a26), h: hex(0x3a6a30), E: hex(0x16241a), s: hex(0x3c7230), M: hex(0x2a4a22) };
+  r.add('zombie_head_front', (t) => art(t, ['HHhHHHhH', 'H......H', '........', '.EE..EE.', '...ss...', '..MMMM..', '........', '........'], zKey, SKIN));
+  r.add('zombie_head_side', (t) => art(t, ['HHhHHHHH', 'HHH.....', 'H.......', '........', '......s.', '........', '........', '........'], zKey, SKIN));
+  r.add('zombie_head_top', (t) => art(t, ['HHhHHHHH', 'HHHHhHHH', 'HhHHHHHH', 'HHHHHHhH', 'HHHhHHHH', 'HHHHHHHH', 'hHHHHhHH', 'HHHHHHHH'], zKey, SKIN));
+  r.add('zombie_head_back', (t) => art(t, ['HHHHhHHH', 'HHhHHHHH', 'HHHHHHHH', 'H.HHHH.H', '........', '........', '........', '........'], zKey, SKIN));
+  r.add('zombie_head_bottom', (t) => art(t, PLAIN, zKey, SKIN.map((c) => shade(c, 0.8))));
+
+  // ---------------------------------------------------------------- Creeper Head
+  const CREEP = [hex(0x5cb048), hex(0x4a9a3a), hex(0x72c85a), hex(0x3e8a32), hex(0x86d470)];
+  const cKey = { K: hex(0x0e120e), k: hex(0x1e2a1c) };
+  r.add('creeper_head_front', (t) => art(t, ['........', '........', '.KK..KK.', '.KK..KK.', '...KK...', '..KKKK..', '..KkkK..', '..K..K..'], cKey, CREEP, 0.1));
+  for (const f of ['side', 'top', 'back']) r.add(`creeper_head_${f}`, (t) => art(t, PLAIN, cKey, CREEP, 0.1));
+  r.add('creeper_head_bottom', (t) => art(t, PLAIN, cKey, CREEP.map((c) => shade(c, 0.8)), 0.1));
+
+  // ---------------------------------------------------------------- Herobrine Head
+  const FACE = [hex(0xb07a5a), hex(0xa87252), hex(0xb88262)];
+  const hKey = { H: hex(0x3a2414), h: hex(0x4a3020), W: hex(0xffffff), n: hex(0x8a5a3e), m: hex(0x5a3a24), b: hex(0x6a4630) };
+  r.add('herobrine_head_front', (t) => {
+    art(t, ['HHHHHHHH', 'HhHHHHhH', 'H......H', '.WW..WW.', '...nn...', '..m..m..', '..mmmm..', '........'], hKey, FACE);
+    // The eyes glow: no pupils, and a faint halo round them
+    for (const [x, y] of [[2, 6], [3, 6], [10, 6], [11, 6], [2, 7], [11, 7]] as const) t.set(x, y, mix(t.get(x, y) as unknown as RGB, hex(0xffffff), 0.35));
+  });
+  r.add('herobrine_head_side', (t) => art(t, ['HHHHHHHH', 'HHHHHHHH', 'HHHHHH..', 'HHHH....', 'HHH..b..', 'HH......', 'H.......', '........'], hKey, FACE));
+  r.add('herobrine_head_top', (t) => art(t, ['HHHHHHHH', 'HhHHHHHH', 'HHHHhHHH', 'HHHHHHHH', 'HHHHHHhH', 'HHhHHHHH', 'HHHHHHHH', 'HHHHHHHH'], hKey, FACE));
+  r.add('herobrine_head_back', (t) => art(t, ['HHHHHHHH', 'HHHhHHHH', 'HHHHHHHH', 'HHHHHHhH', 'HhHHHHHH', 'HHHHHHHH', 'HHHHHHHH', 'H.HHHH.H'], hKey, FACE));
+  r.add('herobrine_head_bottom', (t) => art(t, PLAIN, hKey, FACE.map((c) => shade(c, 0.8))));
+
+  // ---------------------------------------------------------------- Halloween factory lights
+  const light = (t: Tex, core: RGB, edge: RGB): void => {
+    // The factory light's steel housing, its lens glowing in colour
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) t.set(x, y, shade(hex(0x6a6e74), 0.92 + t.rng.next() * 0.12));
+    for (let i = 0; i < 16; i++) {
+      t.set(i, 0, hex(0x8a8e94));
+      t.set(0, i, hex(0x8a8e94));
+      t.set(i, 15, hex(0x3a3e44));
+      t.set(15, i, hex(0x3a3e44));
+    }
+    for (let y = 2; y < 14; y++)
+      for (let x = 2; x < 14; x++) {
+        const d = Math.min(1, Math.hypot(x - 7.5, y - 7.5) / 7.5);
+        t.set(x, y, mix(core, edge, d * d));
+      }
+    for (let i = 2; i < 14; i++) {
+      t.set(i, 7, mix(edge, core, 0.4));
+      t.set(7, i, mix(edge, core, 0.4));
+    }
+  };
+  r.add('factory_light_orange', (t) => light(t, hex(0xffe0a0), hex(0xff8a1e)));
+  r.add('factory_light_purple', (t) => light(t, hex(0xf0c8ff), hex(0xa040f0)));
+}

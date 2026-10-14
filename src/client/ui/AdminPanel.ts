@@ -19,7 +19,7 @@ import type { DimensionId } from '../../common/data/biomes';
 import { ENDINGS } from '../../common/data/endings';
 import { DIMENSION_PUMPKINS } from '../../common/halloween/pumpkins';
 import { HALLOWEEN_SETTING_NAMES, type HalloweenSimulation } from '../../common/halloween/season';
-import type { HalloweenStatus } from '../../common/game/admin';
+import type { HalloweenStatus, VillageDoorsInfo } from '../../common/game/admin';
 
 export interface AdminReply {
   ok: boolean;
@@ -943,7 +943,7 @@ export function adminScreen(host: AdminHost): Screen {
       state.append(el('div', { class: 'muted small halloween-why' }, d.text));
       for (const c of simRow.children) c.classList.toggle('active', (c as HTMLElement).dataset.sim === d.state.sim);
     };
-    const op = (action: Parameters<typeof send>[0]): void => void send(action).then((r) => showState(r.data as HalloweenStatus));
+    const op = (action: Parameters<typeof send>[0]): void => void send(action).then((r) => (r.data as HalloweenStatus | undefined)?.state && showState(r.data as HalloweenStatus));
     for (const sm of SIMS) {
       const b = btn(sm.label, () => op({ a: 'halloween', op: 'simulate', sim: sm.id }), 'btn chip');
       b.dataset.sim = sm.id;
@@ -957,6 +957,37 @@ export function adminScreen(host: AdminHost): Screen {
       b.append(el('span', {}, p.name));
       b.title = `${p.name} (${p.where}): ${p.look}`;
       return b;
+    };
+    // V7 phase 2: the nearest Trick-or-Treat Village's doors
+    const doorsBox = el('div', { class: 'halloween-doors' }, el('div', { class: 'muted small' }, 'Every house door is a Candy Home or a Trick Home (2 to 4 of them). They look the same from outside.'));
+    const showDoors = (r: AdminReply): void => {
+      clear(doorsBox);
+      const info = (r.data as { doors?: VillageDoorsInfo | null } | undefined)?.doors;
+      if (!r.ok || !info) {
+        doorsBox.append(el('div', { class: 'error-text' }, r.text));
+        return;
+      }
+      const tricks = info.doors.filter((d) => d.kind === 'trick').length;
+      doorsBox.append(
+        el('div', { class: 'admin-kv' }, el('span', { class: 'muted' }, 'Village'), el('span', {}, `${info.distance.toLocaleString()} blocks away${info.built ? '' : ' (not built yet)'}${info.cheat ? ' (cheat-made)' : ''}`)),
+        el('div', { class: 'admin-kv' }, el('span', { class: 'muted' }, 'Doors'), el('span', {}, `${info.doors.length}: ${tricks} Trick Homes, ${info.doors.length - tricks} Candy Homes`)),
+      );
+      const list = el('div', { class: 'halloween-door-list' });
+      for (const d of info.doors) {
+        const go = btn('Go', () => void send({ a: 'halloween', op: 'door_tp', door: d.id }).then((res) => res.ok && host.close()), 'btn chip tiny');
+        go.title = `Teleport in front of door ${d.id + 1}`;
+        list.append(
+          el(
+            'div',
+            { class: `halloween-door ${d.kind}` },
+            el('span', { class: 'halloween-door-n' }, `#${d.id + 1}`),
+            el('span', { class: 'halloween-door-kind' }, d.kind === 'trick' ? 'Trick Home' : 'Candy Home'),
+            el('span', { class: 'muted' }, `${d.design}, ${d.distance} m${d.used ? ', used' : ''}`),
+            go,
+          ),
+        );
+      }
+      doorsBox.append(list);
     };
     void host.request({ a: 'halloween', op: 'status' }).then((r) => !destroyed && showState(r.data as HalloweenStatus));
     perfTimer = setInterval(() => {
@@ -974,10 +1005,16 @@ export function adminScreen(host: AdminHost): Screen {
         { class: 'admin-col' },
         section('Halloween in this world', state),
         section('Test the season', el('div', { class: 'muted small' }, 'Simulate the end of the season, or Halloween always on. Never saved: it ends when the world closes.'), simRow),
+        section(
+          'Villages',
+          el('div', { class: 'muted small' }, 'Builds one around you, in any world (Overworld only). Everything in it is cheat-made.'),
+          el('div', { class: 'admin-chips' }, btn('Build a Trick-or-Treat Village', () => op({ a: 'halloween', op: 'spawn_trick_village' }), 'btn chip halloween-spawn-trick'), btn('Build an Abandoned Village', () => op({ a: 'halloween', op: 'spawn_abandoned_village' }), 'btn chip halloween-spawn-abandoned')),
+        ),
       ),
       el(
         'div',
         { class: 'admin-col' },
+        section('Trick-or-Treat doors', btn('Show the nearest village\'s doors', () => void send({ a: 'halloween', op: 'village_doors' }).then((r) => !destroyed && showDoors(r)), 'btn chip halloween-doors-btn'), doorsBox),
         section('Ghosts', el('div', { class: 'muted small' }, 'They drift past now and then on Halloween nights. This shows you one now, day or night.'), btn('Show a ghost now', () => op({ a: 'halloween', op: 'ghost' }), 'btn chip halloween-ghost')),
         section('Dimension pumpkins', el('div', { class: 'muted small' }, 'Placed in front of you, facing you (cheat-made).'), el('div', { class: 'admin-chips' }, ...DIMENSION_PUMPKINS.map(pumpkinBtn)), btn('Place one of each', () => op({ a: 'halloween', op: 'place_all' }), 'btn chip halloween-place-all')),
       ),

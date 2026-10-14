@@ -7,6 +7,8 @@
  */
 import { DIMENSION_PUMPKINS } from '../../common/halloween/pumpkins';
 import { HALLOWEEN_ENDS_TEXT } from '../../common/halloween/season';
+import { COSTUME_HEADS } from '../../common/halloween/heads';
+import { ABANDONED_ONE_IN, TRICK_HOMES_MIN, TRICK_HOMES_MAX } from '../../common/halloween/villages';
 import type { UpdateEntry, Card } from './updateLog';
 
 const pumpkinCards: Card[] = DIMENSION_PUMPKINS.map((p) => ({
@@ -19,7 +21,7 @@ const pumpkinCards: Card[] = DIMENSION_PUMPKINS.map((p) => ({
 export const V7_LOG: UpdateEntry = {
   version: 'V7',
   name: 'The Halloween Update',
-  tagline: 'Pumpkins in every dimension, ghosts at night, and a haunted title screen. Phase 1 of 5.',
+  tagline: 'Trick-or-Treat Villages, Abandoned Villages, costume heads, pumpkins in every dimension and ghosts at night. Phases 1 and 2 of 5.',
   hero: 'title-haunted-forest',
   sections: [
     // ------------------------------------------------------------------ overview
@@ -30,11 +32,22 @@ export const V7_LOG: UpdateEntry = {
       blocks: [
         {
           k: 'p',
-          text: `Halloween has come to MineHonk. **V7 arrives in five phases**, and the first is here: the Halloween season itself, a pumpkin for every dimension, ghosts drifting by on dark nights, and a title screen of haunted nights. The season lasts until **${HALLOWEEN_ENDS_TEXT}**.`,
+          text: `Halloween has come to MineHonk. **V7 arrives in five phases**, and two are here. Phase 1 brought the Halloween season itself, a pumpkin for every dimension, ghosts drifting by on dark nights, and a title screen of haunted nights. **Phase 2 brings the villages:** Trick-or-Treat Villages dressed for the season, eerie Abandoned Villages, and costume heads to wear. The season lasts until **${HALLOWEEN_ENDS_TEXT}**.`,
+        },
+        { k: 'img', img: 'trick-village', caption: 'A Trick-or-Treat Village on a Halloween night.' },
+        {
+          k: 'cards',
+          title: 'Phase 2 at a glance',
+          items: [
+            { icon: 'hallow_pumpkin', title: 'Trick-or-Treat Villages', text: 'Pumpkins, orange and purple lights, skulls by the doors.', link: 'villages' },
+            { icon: 'cobweb', title: 'Abandoned Villages', text: 'Extremely rare ruins, haunted day and night.', link: 'abandoned' },
+            { icon: 'skeleton_skull', title: 'Costume heads', text: 'Skulls and heads to place and wear.', link: 'heads' },
+            { icon: 'redstone_torch', title: 'Admin Panel: villages', text: 'Build either village, see every door.', link: 'admin' },
+          ],
         },
         {
           k: 'cards',
-          title: 'Phase 1 at a glance',
+          title: 'Phase 1',
           items: [
             { icon: 'clock', title: 'The Halloween season', text: `Until ${HALLOWEEN_ENDS_TEXT}, or for good in worlds that want it.`, link: 'season' },
             { icon: 'hallow_pumpkin', title: 'A pumpkin in every dimension', text: 'Five new glowing pumpkins, from the Overworld to inside the computer.', link: 'pumpkins' },
@@ -46,8 +59,7 @@ export const V7_LOG: UpdateEntry = {
         {
           k: 'list',
           items: [
-            '**Next:** Trick-or-Treat Villages and Abandoned Villages.',
-            '**Then:** trick-or-treating: a sack, candy, costume heads, and knocking on doors.',
+            '**Next:** trick-or-treating: a sack, candy, and knocking on the doors of Trick-or-Treat Villages.',
             '**Later:** hauntings that come by themselves, new characters to meet, and Halloween advancements.',
           ],
         },
@@ -146,7 +158,7 @@ export const V7_LOG: UpdateEntry = {
       title: 'A Haunted Title Screen',
       icon: 'jack_o_lantern',
       blocks: [
-        { k: 'p', text: 'All season long, the title screen shows Halloween nights, built from real terrain like every title scene, a new one every 40 seconds. After the season, it goes back to the End Expansion.' },
+        { k: 'p', text: 'All season long, the title screen shows Halloween nights, built from real terrain like every title scene, a new one every 40 seconds: a haunted forest, a pumpkin patch, a misty marsh and, since phase 2, a Trick-or-Treat Village and an Abandoned Village. After the season, it goes back to the End Expansion.' },
         {
           k: 'gallery',
           items: [
@@ -156,6 +168,96 @@ export const V7_LOG: UpdateEntry = {
             { img: 'title-menu', caption: 'The title screen.' },
           ],
         },
+      ],
+    },
+
+    // ------------------------------------------------------------------ Trick-or-Treat Villages
+    {
+      id: 'villages',
+      title: 'Trick-or-Treat Villages',
+      icon: 'hallow_pumpkin',
+      blocks: [
+        { k: 'p', text: 'While Halloween is on, **two villages in three** are Trick-or-Treat Villages: the same villages, the same villagers, dressed for the night. Hallow Pumpkins glow by the doors, strings of orange and purple lights run along the houses, skulls watch from fence posts, jack o\'lanterns sit on the lamp posts, and there are scarecrows in the fields and pumpkins piled by the bell.' },
+        {
+          k: 'gallery',
+          items: [
+            { img: 'trick-village-door', caption: 'A house door: pumpkins, a head on a fence post, lights along the eaves.' },
+            { img: 'trick-village-day', caption: 'The same village by day.' },
+          ],
+        },
+        {
+          k: 'list',
+          items: [
+            '**Not rare:** villages are spread out, and the season is short, so most villages you find during it are Trick-or-Treat Villages. Ordinary villages are still out there.',
+            `**Every house door is a Candy Home or a Trick Home.** Each village has ${TRICK_HOMES_MIN} to ${TRICK_HOMES_MAX} Trick Homes, and from outside they look exactly the same. What waits behind them comes in phase 3.`,
+            '**Only new villages,** only in worlds made in V7 or later: a village is dressed if Halloween is on when it is first explored. It stays dressed for good (even the parts explored after the season), and one first found after the season stays an ordinary village. Nothing is ever taken down.',
+            'The lights are the Engineering Update\'s Factory Light in two new colours: make them at the Engineering Crafting Table from a Factory Light and orange or purple dye.',
+          ],
+        },
+        { k: 'items', title: 'New blocks', ids: ['factory_light_orange', 'factory_light_purple'] },
+        { k: 'img', img: 'title-trick-village', caption: 'A Trick-or-Treat Village on the title screen.' },
+      ],
+    },
+
+    // ------------------------------------------------------------------ Abandoned Villages
+    {
+      id: 'abandoned',
+      title: 'Abandoned Villages',
+      icon: 'cobweb',
+      blocks: [
+        { img: 'abandoned-village', caption: 'An Abandoned Village. Something is still living here.', k: 'img' },
+        { k: 'p', text: `Somewhere out there, very far apart, are villages nobody lives in any more. **Abandoned Villages are extremely rare**: about one village in ${ABANDONED_ONE_IN}, so most worlds have only a few within thousands of blocks of spawn. They are not seasonal: they are there all year.` },
+        {
+          k: 'list',
+          items: [
+            '**Ruins:** houses with fallen walls and missing roofs, broken windows, doors hanging open or gone, broken fences, rubble, cobwebs, vines and moss. Almost every light has gone out.',
+            '**Ghosts** drift over them day and night.',
+            '**Zombie villagers** walk the streets: the villagers who never left.',
+            '**Undead guardians** keep watch: zombies and skeletons (husks in the desert, strays in the snow) that never burn in the sun, never despawn, and never leave the village. Lead them away and they turn back at its edge.',
+            '**Excellent loot:** every chest is better than an ordinary village\'s, the smithy keeps the guards\' old gear, and the finest house still holds the village\'s last treasure.',
+          ],
+        },
+        {
+          k: 'gallery',
+          items: [
+            { img: 'abandoned-inside', caption: 'Inside: rubble, cobwebs, and the light gone.' },
+            { img: 'abandoned-guardians', caption: 'A zombie villager and the guardians.' },
+          ],
+        },
+        {
+          k: 'table',
+          title: 'Advancements',
+          head: ['Advancement', 'How'],
+          rows: [
+            ['**Trick or Treat!**', 'Find a Trick-or-Treat Village'],
+            ['**Ghost Town**', 'Find an Abandoned Village'],
+          ],
+        },
+        { k: 'tip', text: 'Walking into either for the first time shows its name, like the End\'s great structures do.' },
+        { k: 'img', img: 'title-abandoned-village', caption: 'An Abandoned Village on the title screen.' },
+      ],
+    },
+
+    // ------------------------------------------------------------------ costume heads
+    {
+      id: 'heads',
+      title: 'Costume Heads',
+      icon: 'skeleton_skull',
+      blocks: [
+        { k: 'img', img: 'heads', caption: 'The four heads.' },
+        { k: 'p', text: 'Four heads to collect, place and wear. None of them can be crafted.' },
+        { k: 'cards', items: COSTUME_HEADS.map((h) => ({ icon: h.id, title: h.name, text: h.look })) },
+        { k: 'items', title: 'The heads', ids: COSTUME_HEADS.map((h) => h.id) },
+        {
+          k: 'list',
+          items: [
+            '**Skulls, zombie heads and creeper heads** sit on fence posts by the doors of Trick-or-Treat Villages: break one to take it (it drops itself). Abandoned Villages\' chests hide a few too.',
+            '**The Herobrine Head** is not found anywhere yet.',
+            '**Wear one** (or a carved pumpkin): put it in your helmet slot, or use it with nothing in front of you. Everyone sees it on you.',
+            'A head fools its own kind: zombies only notice someone wearing a zombie head from half as far, skeletons a skull, creepers a creeper head.',
+          ],
+        },
+        { k: 'img', img: 'heads-worn', caption: 'Dressed up for the night.' },
       ],
     },
 
@@ -173,10 +275,14 @@ export const V7_LOG: UpdateEntry = {
             '**Show a ghost now**, day or night.',
             'Place any pumpkin, or one of each, in front of you.',
             'Simulate **after the cutoff** or **always on**, to test the season. A simulation is never saved: it ends when the world closes.',
+            '**Build a Trick-or-Treat Village or an Abandoned Village** around you, in any world, in or out of the season.',
+            '**Show the doors** of the nearest Trick-or-Treat Village: which are Trick Homes, and a button to go to each.',
+            'Find or teleport to the nearest of either village from the **Teleport** tab.',
           ],
         },
+        { k: 'img', img: 'admin-villages', caption: "The nearest Trick-or-Treat Village's doors." },
         { k: 'img', img: 'admin-simulated', caption: 'Simulating the end of the season.' },
-        { k: 'tip', text: 'Like every cheat, nothing done here earns advancements, and the pumpkins it places count as cheat-made.' },
+        { k: 'tip', text: 'Like every cheat, nothing done here earns advancements, and the pumpkins and villages it places count as cheat-made.' },
       ],
     },
   ],

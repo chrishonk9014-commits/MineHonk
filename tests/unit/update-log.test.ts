@@ -18,9 +18,9 @@ describe('the Update Log', () => {
     expect(new Set(UPDATE_LOG.map((e) => e.version.toLowerCase())).size).toBe(UPDATE_LOG.length);
   });
 
-  it("V7 covers phase 1: the season, the pumpkins, ghosts, the title screen and the Admin Panel's tab", () => {
+  it("V7 covers phases 1 and 2: the season, the pumpkins, ghosts, the title screen, the villages, the heads and the Admin Panel's tab", () => {
     const ids = UPDATE_LOG[0]!.sections.map((s) => s.id);
-    for (const id of ['overview', 'season', 'pumpkins', 'ghosts', 'menu', 'admin']) expect(ids).toContain(id);
+    for (const id of ['overview', 'season', 'pumpkins', 'ghosts', 'menu', 'villages', 'abandoned', 'heads', 'admin']) expect(ids).toContain(id);
     expect(new Set(ids).size).toBe(ids.length);
   });
 

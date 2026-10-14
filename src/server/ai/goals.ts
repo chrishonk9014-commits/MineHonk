@@ -9,6 +9,8 @@ import type { Entity } from '../entity/Entity';
 import { items } from '../../common/registry/items';
 import { STATE_FLUID, S, STATE_BLOCK, blocks } from '../../common/registry/blocks';
 import { raycastBlocks } from '../../common/physics/raycast';
+import { inGuardArea, type GuardArea } from '../../common/halloween/villages';
+import { HEAD_MOB } from '../../common/halloween/heads';
 
 export type GoalFlag = 'move' | 'look' | 'target' | 'jump';
 
@@ -100,6 +102,9 @@ export class WanderGoal implements Goal {
     if (m.sitting) return false;
     if (m.rng.next() > this.chance) return false;
     const t = m.pathfinder.randomTarget(m.x, m.y, m.z, this.radius, 4, m.pathOptions(), () => m.rng.next());
+    // V7: a guardian only wanders inside its village
+    const guard = guardOf(m);
+    if (t && guard && !inGuardArea(guard, t.x, t.z, -1)) return false;
     return !!t && m.navigateTo(t.x + 0.5, t.y, t.z + 0.5, this.speed);
   }
   canContinue(m: Mob): boolean {
@@ -305,6 +310,84 @@ export class FleeSunGoal implements Goal {
   }
   canContinue(m: Mob): boolean {
     return m.navigating;
+  }
+}
+
+/** A chase may lead a guardian this far out of its village (blocks)... */
+export const GUARD_LEASH = 6;
+/** ...and it lets a target go once that is farther out than this. */
+export const GUARD_TARGET_LEASH = 10;
+/** Outside this long (ticks) with nobody near to see, a guardian that can't find its way back is returned to its post. */
+const GUARD_STUCK_TICKS = 1200;
+
+/** Whether a guardian may go after a target (anything, for a mob that guards nothing). */
+export function guardAllows(m: Mob, t: Entity): boolean {
+  const a = guardOf(m);
+  return !a || inGuardArea(a, t.x, t.z, GUARD_TARGET_LEASH);
+}
+
+/** The area a mob keeps to (V7: Abandoned Villages' guardians and zombie villagers). */
+export function guardOf(m: Mob): GuardArea | null {
+  const g = m.data.guard as GuardArea | undefined;
+  return g && typeof g.x0 === 'number' && typeof g.x1 === 'number' && typeof g.z0 === 'number' && typeof g.z1 === 'number' ? g : null;
+}
+
+/**
+ * V7 phase 2: the undead of an Abandoned Village keep to it. Outside it (or
+ * more than GUARD_LEASH out while chasing) they walk back to the nearest point
+ * well inside; no sudden jumps. Only one that has been stuck outside for a
+ * minute, with no player within 32 blocks to see it, is put back at its post.
+ */
+export class GuardAreaGoal implements Goal {
+  flags: GoalFlag[] = ['move'];
+  private repath = 0;
+  canUse(m: Mob): boolean {
+    const a = guardOf(m);
+    if (!a) return false;
+    if (!m.data.home && inGuardArea(a, m.x, m.z, -1)) m.data.home = [Math.floor(m.x), Math.floor(m.y), Math.floor(m.z)];
+    // A target that has left the village is let go
+    if (m.target && !guardAllows(m, m.target)) {
+      m.target = null;
+      m.metaDirty = true;
+    }
+    if (inGuardArea(a, m.x, m.z, m.target ? GUARD_LEASH : 0)) {
+      m.data.outside = 0;
+      return false;
+    }
+    return true;
+  }
+  canContinue(m: Mob): boolean {
+    const a = guardOf(m);
+    return !!a && !inGuardArea(a, m.x, m.z, -2);
+  }
+  start(): void {
+    this.repath = 0;
+  }
+  tick(m: Mob): void {
+    const a = guardOf(m)!;
+    const out = ((m.data.outside as number | undefined) ?? 0) + 2;
+    m.data.outside = out;
+    const home = m.data.home as [number, number, number] | undefined;
+    if (out > GUARD_STUCK_TICKS && home) {
+      let seen = false;
+      for (const p of m.dim.server.players.values()) if (p.dim === m.dim && (p.x - m.x) ** 2 + (p.z - m.z) ** 2 < 32 * 32) seen = true;
+      if (!seen && m.dim.isLoaded(home[0], home[2])) {
+        m.setPos(home[0] + 0.5, home[1], home[2] + 0.5);
+        m.stopNavigation();
+        m.data.outside = 0;
+        return;
+      }
+    }
+    if (--this.repath > 0 && m.navigating) return;
+    this.repath = 10;
+    // The nearest point a few blocks inside
+    const hx = Math.max(a.x0 + 3, Math.min(a.x1 - 3, Math.floor(m.x)));
+    const hz = Math.max(a.z0 + 3, Math.min(a.z1 - 3, Math.floor(m.z)));
+    const hy = m.dim.isLoaded(hx, hz) ? m.dim.getHeight(hx, hz) : Math.floor(m.y);
+    if (!m.navigateTo(hx + 0.5, hy, hz + 0.5, 1.1)) m.wantPos = { x: hx + 0.5, y: hy, z: hz + 0.5, speed: 1.1 };
+  }
+  stop(m: Mob): void {
+    m.stopNavigation();
   }
 }
 
@@ -619,10 +702,10 @@ export class HurtByTargetGoal implements Goal {
     const r = m.revengeTarget;
     if (!r || !isAlive(r) || r === m.target) return false;
     if (isPlayer(r) && m.owner === r.uuid) return false;
-    return true;
+    return guardAllows(m, r);
   }
   canContinue(m: Mob): boolean {
-    return !!m.target && isAlive(m.target) && distSq(m, m.target) < 48 * 48;
+    return !!m.target && isAlive(m.target) && distSq(m, m.target) < 48 * 48 && guardAllows(m, m.target);
   }
   start(m: Mob): void {
     m.target = m.revengeTarget;
@@ -655,6 +738,7 @@ export class NearestTargetGoal implements Goal {
     if (m.dim.server.level.difficulty === 'peaceful' && m.def.category === 'monster') return false;
     const t = this.pick(m);
     if (!t || (this.mustSee && !canSee(m, t))) return false;
+    if (!guardAllows(m, t)) return false;
     m.target = t;
     m.metaDirty = true;
     return true;
@@ -663,6 +747,7 @@ export class NearestTargetGoal implements Goal {
     const t = m.target;
     if (!t || !isAlive(t)) return false;
     if (m.dim.server.level.difficulty === 'peaceful' && m.def.category === 'monster') return false;
+    if (!guardAllows(m, t)) return false;
     return distSq(m, t) < ((m.def.followRange ?? 32) * stormFollow(m) + 4) ** 2;
   }
   stop(m: Mob): void {
@@ -672,7 +757,21 @@ export class NearestTargetGoal implements Goal {
 }
 
 export function nearestPlayerTarget(range: number, pred?: (m: Mob, p: Target) => boolean): (m: Mob) => Target | null {
-  return (m) => nearest(m, players(m, range * stormFollow(m)).filter((p) => !pred || pred(m, p)));
+  return (m) => nearest(m, players(m, range * stormFollow(m)).filter((p) => (!pred || pred(m, p)) && !disguised(m, p, range * stormFollow(m))));
+}
+
+/** Mobs whose heads fool them (V7): a zombie's head fools zombies and their kin, and so on. */
+const HEAD_KIN: Record<string, string[]> = { zombie: ['zombie', 'husk', 'drowned', 'zombie_villager'], skeleton: ['skeleton', 'stray'], creeper: ['creeper'] };
+
+/**
+ * V7 phase 2: a player wearing a mob's head (a costume) is only noticed by
+ * that kind of mob from half as far.
+ */
+function disguised(m: Mob, p: Target, range: number): boolean {
+  if (!isPlayer(p)) return false;
+  const helmet = p.inventory.get(39);
+  const kin = helmet ? HEAD_KIN[HEAD_MOB[items[helmet.id]?.id ?? ''] ?? ''] : undefined;
+  return !!kin?.includes(m.type) && distSq(m, p) > (range * 0.5) ** 2;
 }
 
 /** V6 phase 5: in a Void Storm, Void Stalkers and Chorus Beasts follow half as far again. */

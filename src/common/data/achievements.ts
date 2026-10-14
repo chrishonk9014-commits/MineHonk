@@ -110,6 +110,9 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: 'sleep_bed', title: 'Sweet Dreams', description: 'Sleep in a bed to change your respawn point', icon: 'red_bed', parent: 'root', category: 'adventure' },
   { id: 'trade', title: "What a Deal!", description: 'Successfully trade with a Villager', icon: 'emerald', parent: 'root', category: 'adventure' },
   { id: 'find_village', title: 'Neighbourhood Watch', description: 'Find a village', icon: 'bell', parent: 'root', category: 'adventure' },
+  // V7 phase 2
+  { id: 'find_trick_village', title: 'Trick or Treat!', description: 'Find a Trick-or-Treat Village', icon: 'hallow_pumpkin', parent: 'find_village', category: 'adventure' },
+  { id: 'find_abandoned_village', title: 'Ghost Town', description: 'Find an Abandoned Village', icon: 'skeleton_skull', parent: 'find_village', category: 'adventure' },
   { id: 'find_temple', title: 'Tomb Raider', description: 'Find a temple', icon: 'chiseled_sandstone', parent: 'root', category: 'adventure' },
   { id: 'find_sky_shrine', title: 'Above the Clouds', description: 'Discover a Sky Shrine', icon: 'sky_ray_membrane', parent: 'root', category: 'adventure', secret: true },
   { id: 'level_30', title: 'Experienced', description: 'Reach experience level 30', icon: 'experience_bottle', parent: 'root', category: 'adventure' },

@@ -18,8 +18,21 @@ import { PUMPKIN_IDS } from '../halloween/pumpkins';
 export const ADMIN_DIMENSIONS: DimensionId[] = ['overworld', 'nether', 'end', 'farlands', 'computer'];
 
 /** V7: the Admin Panel's Halloween tab (all cheats; the simulations are never saved). */
-export type HalloweenOp = 'status' | 'ghost' | 'place' | 'place_all' | 'simulate';
-export const HALLOWEEN_OPS: readonly HalloweenOp[] = ['status', 'ghost', 'place', 'place_all', 'simulate'];
+export type HalloweenOp = 'status' | 'ghost' | 'place' | 'place_all' | 'simulate' | 'spawn_trick_village' | 'spawn_abandoned_village' | 'village_doors' | 'door_tp';
+export const HALLOWEEN_OPS: readonly HalloweenOp[] = ['status', 'ghost', 'place', 'place_all', 'simulate', 'spawn_trick_village', 'spawn_abandoned_village', 'village_doors', 'door_tp'];
+
+/** V7 phase 2: the doors of the nearest Trick-or-Treat Village, as the Halloween tab lists them. */
+export interface VillageDoorsInfo {
+  x: number;
+  y: number;
+  z: number;
+  distance: number;
+  /** Already built (its record made); otherwise it would be dressed if built now. */
+  built: boolean;
+  /** The Admin Panel made it (or a simulation did). */
+  cheat: boolean;
+  doors: { id: number; design: string; kind: 'candy' | 'trick'; x: number; y: number; z: number; out: [number, number, number]; used: boolean; distance: number }[];
+}
 
 /** What the Halloween tab shows. */
 export interface HalloweenStatus {
@@ -35,6 +48,8 @@ export interface HalloweenStatus {
 
 export const STRUCTURE_NAMES: Record<string, string> = {
   village: 'Village',
+  trick_village: 'Trick-or-Treat Village',
+  abandoned_village: 'Abandoned Village',
   desert_temple: 'Desert Temple',
   jungle_temple: 'Jungle Temple',
   witch_hut: 'Witch Hut',
@@ -226,7 +241,7 @@ export type AdminAction =
   /** The Haunting (every world): Herobrine over `minutes`; `erase` deletes the world at the end (its owner only). */
   | { a: 'haunt'; op: HauntOp; minutes?: number; erase?: boolean; ending?: HauntEnding }
   /** V7: Halloween (the season's state, a ghost now, the pumpkins, test simulations). */
-  | { a: 'halloween'; op: HalloweenOp; pumpkin?: string; sim?: HalloweenSimulation };
+  | { a: 'halloween'; op: HalloweenOp; pumpkin?: string; sim?: HalloweenSimulation; door?: number };
 
 export type AdminActionName = AdminAction['a'];
 
@@ -288,6 +303,10 @@ export function describeAdmin(a: AdminAction): string | null {
       if (a.op === 'ghost') return 'show a ghost';
       if (a.op === 'place') return `place a ${(a.pumpkin ?? 'pumpkin').replace(/_/g, ' ')}`;
       if (a.op === 'place_all') return 'place every dimension pumpkin';
+      if (a.op === 'spawn_trick_village') return 'build a Trick-or-Treat Village';
+      if (a.op === 'spawn_abandoned_village') return 'build an Abandoned Village';
+      if (a.op === 'village_doors') return null;
+      if (a.op === 'door_tp') return `teleport to door ${(a.door ?? 0) + 1} of a Trick-or-Treat Village`;
       return a.sim === 'expired' ? 'simulate the end of the Halloween season' : a.sim === 'always' ? 'simulate Halloween always on' : 'stop simulating the Halloween season';
     case 'reload_chunks':
       return 'reload chunks';
@@ -321,6 +340,7 @@ export function validateAdmin(raw: unknown): AdminAction | null {
       if (!HALLOWEEN_OPS.includes(m.op as HalloweenOp)) return null;
       if (m.op === 'place') return typeof m.pumpkin === 'string' && PUMPKIN_IDS.includes(m.pumpkin) ? { a: 'halloween', op: 'place', pumpkin: m.pumpkin } : null;
       if (m.op === 'simulate') return HALLOWEEN_SIMULATIONS.includes(m.sim as HalloweenSimulation) ? { a: 'halloween', op: 'simulate', sim: m.sim as HalloweenSimulation } : null;
+      if (m.op === 'door_tp') return Number.isInteger(m.door) && (m.door as number) >= 0 && (m.door as number) < 256 ? { a: 'halloween', op: 'door_tp', door: m.door as number } : null;
       return { a: 'halloween', op: m.op as HalloweenOp };
     }
     case 'haunt': {

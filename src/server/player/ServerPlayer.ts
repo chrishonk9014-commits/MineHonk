@@ -10,6 +10,8 @@ import type { AbilitiesMsg, PlayerStats, S2C } from '../../common/net/protocol';
 import type { Slot } from '../../common/game/itemstack';
 import type { DimensionId } from '../../common/data/biomes';
 import { itemById } from '../../common/registry/items';
+import { WEARABLE_BLOCKS } from '../../common/halloween/heads';
+
 
 let elytraNum = -1;
 /** Item number of the Elytra (resolved once). */
@@ -254,6 +256,9 @@ export class ServerPlayer extends Entity {
       return a && a.material !== 'elytra' ? a.material : '';
     });
     if (worn.some(Boolean)) m.armor = worn;
+    // V7: a block worn on the head (a costume head, a carved pumpkin) is drawn in place of the head
+    const hat = items[this.inventory.get(39)?.id ?? -1]?.id;
+    if (hat && WEARABLE_BLOCKS.includes(hat)) m.headwear = hat;
     return m;
   }
 

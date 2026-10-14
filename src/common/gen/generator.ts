@@ -21,6 +21,8 @@ import { VILLAGE } from './structures/village';
 import { SURFACE_STRUCTURES, SURFACE_STRUCTURES_V3, SURFACE_STRUCTURES_V4 } from './structures/misc';
 import { V4_STRUCTURES, BUNKER } from './v4/structures';
 import { VILLAGE_V4 } from './v4/village';
+import { VILLAGE_V9 } from './v9/village';
+import { villageVariant } from '../halloween/villages';
 import { BUNKER_V5 } from './v5/bunker';
 import { JUNGLE_TEMPLE_V5, V5_TEMPLES } from './v5/temples';
 import { MINESHAFT, STRONGHOLD } from './structures/underground';
@@ -77,14 +79,17 @@ export class OverworldGenerator implements DimensionGenerator {
       }
       return { y, water };
     };
+    this.ground = ground;
     const v4 = this.terrain.version >= 4;
     const v5 = this.terrain.version >= 5;
+    this.villages = opts.villages;
     this.structures = new StructureManager(
       seed,
       // V2 adds its underground structures after the V1 list, so V1 placements never move.
       // V4 has its own villages, slightly more common temples and outposts, and its new structures last.
+      // Generator 9's villages plan exactly as V4's (and in the same place), adding their variants.
       v4
-        ? [VILLAGE_V4, ...(v5 ? SURFACE_STRUCTURES_V5 : SURFACE_STRUCTURES_V4), MINESHAFT, STRONGHOLD, ...CAVE_STRUCTURES, ANCIENT_CITY, ...(v5 ? V5_STRUCTURES : V4_STRUCTURES)]
+        ? [this.terrain.version >= 9 ? VILLAGE_V9 : VILLAGE_V4, ...(v5 ? SURFACE_STRUCTURES_V5 : SURFACE_STRUCTURES_V4), MINESHAFT, STRONGHOLD, ...CAVE_STRUCTURES, ANCIENT_CITY, ...(v5 ? V5_STRUCTURES : V4_STRUCTURES)]
         : [VILLAGE, ...(this.terrain.corrupted ? SURFACE_STRUCTURES_V3 : SURFACE_STRUCTURES), MINESHAFT, STRONGHOLD, ...(this.terrain.carver ? [...CAVE_STRUCTURES, ANCIENT_CITY] : [])],
       {
         seed,
@@ -94,6 +99,7 @@ export class OverworldGenerator implements DimensionGenerator {
         estimateHeight: (x, z) => this.terrain.estimateHeight(x, z),
         estimateBiome: (x, z) => biomeOf(this.terrain.estimateBiome(x, z)),
         deepDark: (x, z) => this.terrain.caveBiomes?.deepDarkStrength(x, z) ?? -1,
+        villages: opts.villages,
       },
       () => opts.structures !== false,
       v4,
@@ -103,6 +109,38 @@ export class OverworldGenerator implements DimensionGenerator {
   /** V4: structures with objectives whose bounds hold chunk (cx, cz). */
   questStartsAt(cx: number, cz: number): import('./structures/manager').Start[] {
     return this.v4 ? this.structures.startsFor(cx, cz).filter((s) => s.quest) : [];
+  }
+
+  /** V7: the server's answers about villages. */
+  readonly villages: GeneratorOptions['villages'];
+  /** Top solid block of a column in the pure terrain, and whether liquid lies over it. */
+  readonly ground: (x: number, z: number) => { y: number; water: boolean };
+
+  /** Generator 9 or later: Trick-or-Treat and Abandoned Villages (V7). */
+  get v9(): boolean {
+    return this.terrain.version >= 9;
+  }
+
+  /** The village (any variant) whose bounds hold a column, if any. */
+  villageAt(x: number, z: number): import('./structures/manager').Start | null {
+    for (const s of this.structures.startsFor(x >> 4, z >> 4)) {
+      if (!s.village) continue;
+      const b = s.bounds;
+      if (x >= b.x0 && x <= b.x1 && z >= b.z0 && z <= b.z1) return s;
+    }
+    return null;
+  }
+
+  /**
+   * V7: nearest village of a variant ('trick_village': dressed, or would be if
+   * built now; 'abandoned_village'). Only regions whose start is that variant
+   * are planned, which keeps the search for the rare Abandoned Villages cheap.
+   */
+  *villageSteps(kind: 'trick_village' | 'abandoned_village', x: number, z: number, maxRegions?: number): Generator<void, import('./structures/manager').Start | null> {
+    if (!this.v9) return null;
+    const want = kind === 'trick_village' ? 'trick' : 'abandoned';
+    const seed = this.seed;
+    return yield* this.structures.nearestSteps('village', x, z, maxRegions ?? (kind === 'trick_village' ? 16 : 40), (s) => (want === 'trick' ? s.village?.variant === 'trick' && (this.villages?.trickNow?.(s) ?? false) : s.village?.variant === 'abandoned'), (cx, cz) => villageVariant(seed, cx, cz) === want);
   }
 
   /** World generator version 4 or later (the World Update). */
@@ -264,11 +302,15 @@ export class OverworldGenerator implements DimensionGenerator {
   }
 
   structureTypes(): string[] {
-    return [...this.structures.typeIds(), 'dungeon', ...(this.terrain.corrupted ? ['glitched_portal'] : []), ...(this.v4 ? ['error_biome', 'glitched_structure'] : [])];
+    return [...this.structures.typeIds(), ...(this.v9 ? ['trick_village', 'abandoned_village'] : []), 'dungeon', ...(this.terrain.corrupted ? ['glitched_portal'] : []), ...(this.v4 ? ['error_biome', 'glitched_structure'] : [])];
   }
 
   *locateSteps(type: string, x: number, z: number): Generator<void, { x: number; y: number; z: number } | null> {
     if (type === 'dungeon') return yield* this.dungeonSteps(x, z);
+    if (type === 'trick_village' || type === 'abandoned_village') {
+      const v = yield* this.villageSteps(type, x, z);
+      return v ? { x: v.x, y: v.y, z: v.z } : null;
+    }
     if (type === 'error_biome' || type === 'glitched_structure') return errorLocation(this.nearestErrorChunk(x, z), type);
     if (type === 'glitched_portal') return this.terrain.corrupted?.nearestPortal(x, z) ?? null;
     const s = yield* this.structures.nearestSteps(type, x, z);
@@ -366,6 +408,12 @@ export class OverworldGenerator implements DimensionGenerator {
   }
 
   locate(type: string, x: number, z: number): { x: number; y: number; z: number } | null {
+    if (type === 'trick_village' || type === 'abandoned_village') {
+      const it = this.villageSteps(type, x, z);
+      let r = it.next();
+      while (!r.done) r = it.next();
+      return r.value ? { x: r.value.x, y: r.value.y, z: r.value.z } : null;
+    }
     if (type === 'error_biome' || type === 'glitched_structure') return errorLocation(this.nearestErrorChunk(x, z), type);
     if (type === 'glitched_portal') return this.terrain.corrupted?.nearestPortal(x, z) ?? null;
     if (type === 'corrupted_caves') {

@@ -793,6 +793,16 @@ function custom(def: BlockDef, state: number): ModelQuad[] {
       }
       return q;
     }
+    // V7 phase 2: costume heads, an 8 x 8 x 8 box on the floor of the block, each face a whole texture
+    case 'skeleton_skull':
+    case 'zombie_head':
+    case 'creeper_head':
+    case 'herobrine_head': {
+      const t = def.tex;
+      const full = (tex: string): { tex: string; uv: [number, number, number, number] } => ({ tex, uv: [0, 0, 16, 16] });
+      const q = element([4, 0, 4], [12, 8, 12], { up: full(t.top!), down: full(t.bottom!), north: full(t.front!), south: full(t.back!), west: full(t.all!), east: full(t.all!) });
+      return rotY(q, facingDeg(getProp(state, 'facing')));
+    }
     case 'end_guardian_head': {
       const side = def.tex.all!;
       const q = box([3, 0, 3], [13, 10, 13], { up: side, down: side, north: def.tex.front!, south: side, west: side, east: side });

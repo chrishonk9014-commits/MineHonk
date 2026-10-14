@@ -31,7 +31,9 @@ const ONLY = process.env.ONLY ?? '';
 const part = (p) => !ONLY || ONLY.split(',').includes(p);
 const IN_SEASON = '2026-10-31T23:00:00Z';
 const AFTER = '2026-11-07T08:01:00Z';
-const HALLOWEEN_SCENES = ['haunted_forest', 'pumpkin_patch', 'ghost_marsh'];
+// Phase 2 adds the two villages to the rotation (their scenes are photographed by tests/e2e/villages.mjs)
+const PHASE1_SCENES = ['haunted_forest', 'pumpkin_patch', 'ghost_marsh'];
+const HALLOWEEN_SCENES = [...PHASE1_SCENES, 'trick_village', 'abandoned_village'];
 const END_SCENES = ['expanded_end', 'crystal_fields', 'void_citadel', 'end_eclipse'];
 const PUMPKINS = { overworld: 'hallow_pumpkin', nether: 'ember_pumpkin', end: 'ender_pumpkin', farlands: 'glitched_pumpkin', computer: 'data_pumpkin' };
 
@@ -204,7 +206,7 @@ if (part('title')) {
   check(`the next Halloween scene follows (${first} -> ${second.scene}) and fades back in`, HALLOWEEN_SCENES.includes(second.scene) && second.scene !== first && second.opacity !== '0');
   await page.close();
 
-  for (const scene of HALLOWEEN_SCENES) {
+  for (const scene of PHASE1_SCENES) {
     const p = await newPage();
     await p.goto(`http://localhost:${PORT}/?clock=${IN_SEASON}&title=${scene}`);
     await p.getByText('Singleplayer').waitFor({ timeout: 30000 });
@@ -487,7 +489,7 @@ if (part('log')) {
   const sections = async () => page.evaluate(() => [...document.querySelectorAll('.ul-nav-item')].map((n) => n.dataset.section));
   // V7
   const v7 = await sections();
-  check(`V7's sections: ${v7.join(', ')}`, ['overview', 'season', 'pumpkins', 'ghosts', 'menu', 'admin'].every((s) => v7.includes(s)));
+  check(`V7's sections: ${v7.join(', ')}`, ['overview', 'season', 'pumpkins', 'ghosts', 'menu', 'villages', 'abandoned', 'heads', 'admin'].every((s) => v7.includes(s)));
   for (const id of v7) {
     await page.locator(`.ul-nav-item[data-section="${id}"]`).click();
     await page.waitForTimeout(500);

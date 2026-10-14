@@ -7,6 +7,7 @@
  *   UPDATE_LOG_SHOTS=1 node tests/e2e/haunting.mjs      V6.5, the Haunting
  *   node tests/e2e/auto-optimize.mjs                    V6.5, Auto Optimize
  *   UPDATE_LOG_SHOTS=1 node tests/e2e/halloween.mjs     V7, the Halloween Update
+ *   UPDATE_LOG_SHOTS=1 node tests/e2e/villages.mjs      V7 phase 2: the villages and the heads
  *   node tools/update-log/build-images.mjs [v6 v6.5 v7] resize, brighten and encode (all, or just those)
  *
  * Encoding runs in the Chromium that Playwright already uses, so nothing else
@@ -71,6 +72,17 @@ add('pumpkins-day', 'clean/halloween-pumpkins-day.png', { filter: '' });
 add('pumpkins-night', 'clean/halloween-pumpkins-night.png');
 add('ghost', 'clean/halloween-ghost.png');
 for (const n of ['admin', 'admin-simulated', 'world-option', 'creative-tab']) add(n, `clean/halloween-${n}.png`, { filter: '' });
+// Phase 2: the villages and the heads (tests/e2e/villages.mjs)
+for (const t of ['trick_village', 'abandoned_village']) add(`title-${t.replace('_', '-')}`, `clean/halloween-scene-${t}.png`);
+add('trick-village', 'clean/villages-trick-village.png');
+add('trick-village-day', 'clean/villages-trick-village-day.png', { filter: '' });
+add('trick-village-door', 'clean/villages-trick-village-door.png');
+add('abandoned-village', 'clean/villages-abandoned-village.png', { filter: '' });
+add('abandoned-inside', 'clean/villages-abandoned-inside.png');
+add('abandoned-guardians', 'clean/villages-abandoned-guardians.png', { filter: '' });
+add('heads', 'clean/villages-heads.png', { filter: '' });
+add('heads-worn', 'clean/villages-heads-worn.png', { filter: '' });
+add('admin-villages', 'clean/halloween-admin-villages.png', { filter: '' });
 
 if (only.length) shots.splice(0, shots.length, ...shots.filter((s) => only.includes(s.version)));
 // A list of sources: the first one there is used

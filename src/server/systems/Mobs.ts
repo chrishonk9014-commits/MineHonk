@@ -68,6 +68,12 @@ const CAVE_WATER: Record<number, SpawnEntry[]> = {
 };
 
 const STRUCTURE_SPAWNS: Record<string, SpawnEntry[]> = {
+  // V7: the dark of an Abandoned Village draws more of the undead at night (these burn and wander off as usual)
+  abandoned_village: [
+    { mob: 'zombie', weight: 8, min: 1, max: 2 },
+    { mob: 'zombie_villager', weight: 6, min: 1, max: 2 },
+    { mob: 'skeleton', weight: 4, min: 1, max: 2 },
+  ],
   nether_fortress: [
     { mob: 'blaze', weight: 10, min: 2, max: 3 },
     { mob: 'wither_skeleton', weight: 8, min: 1, max: 3 },
@@ -165,6 +171,10 @@ export class MobSystem {
       }
       case 'pufferfish':
         m.data.puff = 0;
+        break;
+      case 'zombie_villager':
+        // V7: what it was before it turned (its robe keeps the colour)
+        m.data.profession = (opts.data?.profession as string | undefined) ?? (r.chance(0.3) ? 'none' : PROFESSIONS[r.int(PROFESSIONS.length)]!);
         break;
     }
     if (opts.data) for (const [k, v] of Object.entries(opts.data)) if (k !== 'profession') m.data[k] = v;

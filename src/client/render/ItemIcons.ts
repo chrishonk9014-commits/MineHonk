@@ -143,6 +143,8 @@ export class ItemIcons {
         top = def.tex.top ?? def.tex.all ?? def.tex.side ?? 'missing_block';
         left = def.tex.side ?? def.tex.all ?? top;
         right = left;
+        // V7: a costume head shows its face
+        if (def.data?.wearable && def.tex.front) left = def.tex.front;
       }
       const hFrac = def.model === 'slab' ? 0.5 : def.model === 'carpet' || def.model === 'pressure_plate' ? 0.1 : def.model === 'snow_layer' ? 0.15 : def.model === 'farmland' || def.model === 'path' ? 0.94 : def.model === 'enchanting_table' ? 0.75 : 1;
       const faceTint = (name: string): string | undefined => {

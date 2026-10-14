@@ -192,6 +192,12 @@ function computeShape(state: number, collision: boolean): Shape {
         }
         case 'flower_pot':
           return [box(5, 0, 5, 11, 6, 11)];
+        // V7: costume heads
+        case 'skeleton_skull':
+        case 'zombie_head':
+        case 'creeper_head':
+        case 'herobrine_head':
+          return [box(4, 0, 4, 12, 8, 12)];
         case 'stonecutter':
           return [box(0, 0, 0, 16, 9, 16)];
         case 'sculk_sensor':

@@ -20,6 +20,8 @@ import { FACE_DX, FACE_DZ } from '../../common/world/constants';
 import { isSurvivalLike } from '../../common/game/gamemode';
 import { rollLoot } from '../../common/game/loot';
 import { Random } from '../../common/math/rng';
+import { WEARABLE_BLOCKS } from '../../common/halloween/heads';
+
 
 export interface WSlot {
   get(): Slot;
@@ -81,8 +83,9 @@ function armorOk(slot: string) {
   return (s: ItemStack): boolean => {
     const a = items[s.id]?.def.armor;
     if (a) return a.slot === slot;
-    const id = items[s.id]?.id;
-    return slot === 'head' && (id === 'carved_pumpkin' || id === 'turtle_helmet');
+    const id = items[s.id]?.id ?? '';
+    // A carved pumpkin and the costume heads (V7) are worn as helmets too
+    return slot === 'head' && (WEARABLE_BLOCKS.includes(id) || id === 'turtle_helmet');
   };
 }
 
@@ -807,7 +810,7 @@ export class Containers {
     const g = slot.group;
     const inPlayer = g === 'main' || g === 'hotbar' || g === 'armor' || g === 'offhand';
     if (w.kind === 'player') {
-      const armor = items[stack.id]?.def.armor;
+      const armor = items[stack.id]?.def.armor ?? (WEARABLE_BLOCKS.includes(items[stack.id]?.id ?? '') ? { slot: 'head' } : undefined);
       if (g === 'main' || g === 'hotbar') {
         if (armor) {
           const ai = idx('armor').find((i) => w.slots[i]!.mayPlace(stack) && !w.slots[i]!.get());

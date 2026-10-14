@@ -6,10 +6,11 @@ import { normalizeGodHearts, GAME_MODES, DIFFICULTIES } from '../../common/game/
 import { seedFromString } from '../../common/math/rng';
 import type { DimensionId } from '../../common/data/biomes';
 import { normalizeHalloweenSetting, type HalloweenSetting } from '../../common/halloween/season';
+import { sanitizeVillageRecords, type VillageRecord } from '../../common/halloween/villages';
 
 export const LEVEL_VERSION = 1;
 /** Worlds created from V2 on generate with the Caves Update terrain (see GeneratorOptions.version). */
-export const GENERATOR_VERSION = 8;
+export const GENERATOR_VERSION = 9;
 
 export interface GameRules {
   doDaylightCycle: boolean;
@@ -95,6 +96,8 @@ export interface LevelData {
   herobrine: HerobrineWorld;
   /** V7: "Halloween content" chosen at creation (worlds from before V7: Seasonal). */
   halloween: HalloweenSetting;
+  /** V7 phase 2: Trick-or-Treat Villages (and their doors), keyed by start chunk; the Admin Panel's villages too. */
+  villages: Record<string, VillageRecord>;
 }
 
 /** V5.5: every drive's files, kept with the world (the drive item carries its disk's id). */
@@ -363,6 +366,7 @@ export function createLevelData(o: NewWorldOptions): LevelData {
     digital: { next: 1, disks: {} },
     herobrine: newHerobrineWorld(),
     halloween: normalizeHalloweenSetting(o.halloween),
+    villages: {},
   };
 }
 
@@ -425,6 +429,7 @@ export function sanitizeLevelData(raw: unknown, fallbackId: string): LevelData |
   out.herobrine = sanitizeHerobrine(r.herobrine);
   // V7 (older saves have none: Seasonal)
   out.halloween = normalizeHalloweenSetting(r.halloween);
+  out.villages = sanitizeVillageRecords(r.villages);
   if (r.admin && typeof r.admin === 'object') {
     const a = r.admin as NonNullable<LevelData['admin']>;
     out.admin = { sky: a.sky === true, blocks: a.blocks && typeof a.blocks === 'object' ? a.blocks : {}, chunks: a.chunks && typeof a.chunks === 'object' ? a.chunks : {} };

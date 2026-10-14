@@ -24,6 +24,12 @@ function inDarkness(m: Mob, p: Entity): boolean {
 }
 
 export function installBrain(m: Mob): void {
+  brainFor(m);
+  // V7 phase 2: Abandoned Villages' undead keep to their village
+  if (G.guardOf(m)) m.addGoal(0, new G.GuardAreaGoal());
+}
+
+function brainFor(m: Mob): void {
   const d = m.def;
   const breed = d.breedItems ?? [];
   switch (d.brain) {
@@ -173,7 +179,7 @@ export function installBrain(m: Mob): void {
       break;
     case 'villager':
       m.addGoal(0, new G.FloatGoal());
-      m.addGoal(1, new G.AvoidGoal((e) => ['zombie', 'husk', 'drowned', 'pillager', 'glitch_zombie', 'zombified_piglin'].includes(e.type), 8, 1.5));
+      m.addGoal(1, new G.AvoidGoal((e) => ['zombie', 'husk', 'drowned', 'zombie_villager', 'pillager', 'glitch_zombie', 'zombified_piglin'].includes(e.type), 8, 1.5));
       m.addGoal(2, new G.PanicGoal(1.5));
       m.addGoal(3, new G.FollowParentGoal());
       m.addGoal(5, new G.WanderGoal(0.8, 1 / 80, 8));
@@ -198,7 +204,7 @@ export function installBrain(m: Mob): void {
       m.addGoal(0, new G.FloatGoal());
       if (d.brain === 'piglin' && m.held && items[m.held.id]!.id === 'crossbow') m.addGoal(2, new G.RangedAttackGoal('crossbow', 40, 12));
       else m.addGoal(2, new G.MeleeAttackGoal(d.brain === 'cave_stalker' ? 1.5 : d.brain === 'ember_beast' ? 1.3 : 1.2));
-      if (d.burnsInDay) m.addGoal(1, new G.FleeSunGoal());
+      if (d.burnsInDay && !G.guardOf(m)) m.addGoal(1, new G.FleeSunGoal());
       if (d.brain === 'hoglin') m.addGoal(3, new G.BreedGoal());
       m.addGoal(5, new G.WanderGoal(d.brain === 'wanderer' ? 0.7 : 1, d.brain === 'wanderer' ? 1 / 20 : 1 / 60));
       m.addGoal(6, new G.LookAtPlayerGoal(8));
@@ -226,7 +232,7 @@ export function installBrain(m: Mob): void {
       const bow = !!m.held && ['bow', 'crossbow'].includes(items[m.held.id]!.id);
       if (bow) m.addGoal(2, new G.RangedAttackGoal(d.brain === 'pillager' ? 'crossbow' : 'arrow', d.brain === 'pillager' ? 50 : 30, 15));
       else m.addGoal(2, new G.MeleeAttackGoal(1.2));
-      if (d.burnsInDay) m.addGoal(1, new G.FleeSunGoal());
+      if (d.burnsInDay && !G.guardOf(m)) m.addGoal(1, new G.FleeSunGoal());
       m.addGoal(1, new G.AvoidGoal((e) => e.type === 'wolf' && !!(e as Mob).owner, 6, 1.3));
       m.addGoal(5, new G.WanderGoal(1));
       m.addGoal(6, new G.LookAtPlayerGoal(8));

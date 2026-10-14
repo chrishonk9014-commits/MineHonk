@@ -1130,6 +1130,7 @@ const EFFECTS: Record<string, { dur: number; recipe: Recipe }> = {
 const VOICES: Record<string, { f: number; formants: [number, number]; rough: number; dur: number; gain?: number; crush?: boolean; bell?: boolean; mech?: boolean }> = {
   zombie: { f: 95, formants: [450, 900], rough: 0.25, dur: 0.9 },
   husk: { f: 80, formants: [400, 800], rough: 0.35, dur: 1 },
+  zombie_villager: { f: 110, formants: [520, 1050], rough: 0.3, dur: 0.9 },
   drowned: { f: 90, formants: [350, 700], rough: 0.3, dur: 0.9 },
   skeleton: { f: 400, formants: [1800, 3200], rough: 0.6, dur: 0.35 },
   spider: { f: 180, formants: [1500, 3000], rough: 0.9, dur: 0.5 },

@@ -85,7 +85,7 @@ export class HalloweenSystem {
     return { state: s, text: halloweenReasonText(s), endsAt: HALLOWEEN_ENDS_AT, now: this.server.clock(), placed: this.placed };
   }
 
-  admin(p: ServerPlayer, op: HalloweenOp, pumpkin?: string, sim?: HalloweenSimulation): { ok: boolean; text: string; data?: unknown } {
+  admin(p: ServerPlayer, op: HalloweenOp, pumpkin?: string, sim?: HalloweenSimulation, door?: number): { ok: boolean; text: string; data?: unknown } {
     const reply = (ok: boolean, text: string): { ok: boolean; text: string; data: HalloweenStatus } => ({ ok, text, data: this.status() });
     switch (op) {
       case 'status':
@@ -102,6 +102,25 @@ export class HalloweenSystem {
         const n = this.placeInFront(p, ids);
         if (!n) return reply(false, 'There is no room in front of you.');
         return reply(true, op === 'place' ? `Placed a ${DIMENSION_PUMPKINS.find((d) => d.id === ids[0])!.name} in front of you.` : `Placed ${n} pumpkin${n === 1 ? '' : 's'} in front of you, one of each.`);
+      }
+      case 'spawn_trick_village':
+      case 'spawn_abandoned_village': {
+        if (!this.server.villages) return reply(false, 'Villages are not available.');
+        const r = this.server.villages.spawnAt(p, op === 'spawn_trick_village' ? 'trick' : 'abandoned');
+        return reply(r.ok, r.text);
+      }
+      case 'village_doors': {
+        const info = this.server.villages?.doorsNear(p) ?? null;
+        if (!info) return { ok: false, text: p.dim.id !== 'overworld' ? 'Trick-or-Treat Villages are in the Overworld.' : 'No Trick-or-Treat Village nearby.', data: { doors: null } };
+        const tricks = info.doors.filter((d) => d.kind === 'trick').length;
+        return { ok: true, text: `Nearest Trick-or-Treat Village: ${info.distance} blocks away, ${info.doors.length} doors, ${tricks} Trick Homes.`, data: { doors: info } };
+      }
+      case 'door_tp': {
+        const info = this.server.villages?.doorsNear(p);
+        const d = info?.doors.find((x) => x.id === door);
+        if (!info || !d) return reply(false, 'That door is not there any more.');
+        this.server.admin.moveTo(p, 'overworld', d.out[0] + 0.5, d.out[1], d.out[2] + 0.5);
+        return reply(true, `At door ${d.id + 1} (${d.design}): a ${d.kind === 'trick' ? 'Trick' : 'Candy'} Home.`);
       }
       case 'simulate': {
         this.sim = sim ?? 'none';

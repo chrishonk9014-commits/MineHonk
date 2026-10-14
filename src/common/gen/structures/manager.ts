@@ -9,6 +9,7 @@ import type { EndQuestSpec } from '../../endExpansion/quests';
 import { Random, hashInts } from '../../math/rng';
 import type { DecorView } from '../decorate/view';
 import type { Biome } from '../../registry/biomes';
+import type { VillageMeta, VillageHooks } from '../../halloween/villages';
 
 export interface Box {
   x0: number;
@@ -37,6 +38,8 @@ export interface Start {
   entities?: { type: string; x: number; y: number; z: number; data?: Record<string, unknown> }[];
   /** V4: the structure's objective (puzzles, the bunker), with world positions. */
   quest?: QuestSpec;
+  /** V7 (generator 9): which kind of village it is, its doors and its guard area. */
+  village?: VillageMeta;
 }
 
 type Pos = [number, number, number];
@@ -108,6 +111,8 @@ export interface PlanContext {
   estimateBiome(x: number, z: number): Biome;
   /** How strongly a column lies in the deep dark (V2 worlds; > ~0.36 is deep dark). */
   deepDark?(x: number, z: number): number;
+  /** V7: the server's answers about villages (Trick-or-Treat Villages). */
+  villages?: VillageHooks;
 }
 
 export interface StructureType {
@@ -293,7 +298,7 @@ export class StructureManager {
    * each ring so a caller can spread the work over several ticks. Stops once
    * no unvisited ring can hold anything closer than the best start found.
    */
-  *nearestSteps(typeId: string, x: number, z: number, maxRegions = 24, accept?: (s: Start) => boolean): Generator<void, Start | null> {
+  *nearestSteps(typeId: string, x: number, z: number, maxRegions = 24, accept?: (s: Start) => boolean, startOk?: (cx: number, cz: number) => boolean): Generator<void, Start | null> {
     const t = this.types.find((tt) => tt.id === typeId);
     if (!t) return null;
     if (t.fixed) return this.nearest(typeId, x, z);
@@ -305,6 +310,8 @@ export class StructureManager {
       for (let rx = rcx - ring; rx <= rcx + ring; rx++)
         for (let rz = rcz - ring; rz <= rcz + ring; rz++) {
           if (Math.max(Math.abs(rx - rcx), Math.abs(rz - rcz)) !== ring) continue;
+          // A cheap check on the start chunk first (V7: a village's variant needs no plan)
+          if (startOk && !startOk(...this.startChunk(t, rx, rz))) continue;
           const s = this.startAt(t, rx, rz);
           if (!s || (accept && !accept(s))) continue;
           const d = (s.x - x) ** 2 + (s.z - z) ** 2;

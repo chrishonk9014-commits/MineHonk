@@ -103,6 +103,8 @@ interface Ghost {
   /** 0..1: a shy ghost fades out quickly. */
   leaving: number;
   alpha: number;
+  /** One of an Abandoned Village's own. */
+  village?: boolean;
 }
 
 export interface GhostView {
@@ -136,6 +138,12 @@ export class Ghosts {
   ambientArea: { x: number; y: number; z: number; r: number } | null = null;
   /** Real seconds until the next ambient ghost may come. */
   private ambientWait = 0;
+  /**
+   * V7 phase 2: the Abandoned Village the player is in (its server says so):
+   * ghosts drift over it day and night, a few at a time. Not seasonal.
+   */
+  village: { x0: number; z0: number; x1: number; z1: number; y: number } | null = null;
+  private villageWait = 0;
   private lastAt = 0;
 
   constructor(
@@ -226,9 +234,32 @@ export class Ghosts {
     });
   }
 
+  /** A ghost of an Abandoned Village: somewhere ahead inside it, low over the ruins. */
+  private spawnVillage(v: GhostView): void {
+    const a = this.village;
+    if (!a || this.list.length >= MAX_GHOSTS) return;
+    const calm = this.settings.reduceMotion;
+    const ang = v.yaw + (Math.random() - 0.5) * 2.4;
+    const dist = 8 + Math.random() * 24;
+    const x = Math.max(a.x0, Math.min(a.x1, v.x - Math.sin(ang) * dist));
+    const z = Math.max(a.z0, Math.min(a.z1, v.z - Math.cos(ang) * dist));
+    const drift = Math.random() * Math.PI * 2;
+    const speed = calm ? 0.3 : 0.4 + Math.random() * 0.6;
+    const over = 1.4 + Math.random() * 3;
+    this.list.push({ x, y: this.ground(x, z, a.y) + over, z, vx: Math.cos(drift) * speed, vz: Math.sin(drift) * speed, over, age: 0, life: (calm ? 14 : 10) + Math.random() * 8, size: 1.2 + Math.random() * 0.7, phase: Math.random() * 6.28, leaving: 0, alpha: 0, village: true });
+  }
+
   update(v: GhostView, dt: number): void {
     dt = Math.min(0.1, Math.max(0, dt));
     const calm = this.settings.reduceMotion;
+    // An Abandoned Village's ghosts: day or night, up to three at once, every few seconds
+    if (this.village && (v.x >= this.village.x0 - 16 && v.x <= this.village.x1 + 16 && v.z >= this.village.z0 - 16 && v.z <= this.village.z1 + 16)) {
+      this.villageWait -= dt;
+      if (this.villageWait <= 0) {
+        if (this.list.filter((g) => g.village).length < 3) this.spawnVillage(v);
+        this.villageWait = 5 + Math.random() * 9;
+      }
+    } else this.villageWait = Math.min(this.villageWait, 2);
     // Ghosts by themselves: a Halloween night, now and then
     const night = v.haunted && v.daylight < NIGHT;
     if (!night) this.wait = NaN;

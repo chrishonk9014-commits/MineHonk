@@ -15,6 +15,7 @@ const KILL_ACHIEVEMENTS: Record<string, string> = {
 
 const STRUCTURE_ACHIEVEMENTS: Record<string, string> = {
   village: 'find_village',
+  abandoned_village: 'find_village',
   desert_temple: 'find_temple',
   jungle_temple: 'find_temple',
   sky_shrine: 'find_sky_shrine',

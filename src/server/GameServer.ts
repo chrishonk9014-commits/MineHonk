@@ -112,6 +112,13 @@ export class GameServer {
   haunting: import('./herobrine/Haunting').HauntingSystem | null = null;
   /** V7: the Halloween Update's seasonal content (installed by gameplay). */
   halloween: import('./systems/Halloween').HalloweenSystem | null = null;
+  /** V7 phase 2: Trick-or-Treat and Abandoned Villages (installed by gameplay). */
+  villages: import('./systems/Villages').VillageSystem | null = null;
+  /** What world generation asks the server about villages (answered by `villages` once installed). */
+  readonly villageHooks: import('../common/halloween/villages').VillageHooks = {
+    trick: (s) => this.villages?.trick(s) ?? false,
+    trickNow: (s) => this.villages?.trickNow(s) ?? false,
+  };
   /**
    * The Haunting: where Herobrine's answers come from when players talk to him
    * (the cloud hub, or Claude with a dedicated server's own key). Null: only

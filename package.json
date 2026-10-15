@@ -1,6 +1,6 @@
 {
   "name": "minehonk",
-  "version": "7.0.0-phase3",
+  "version": "7.0.0-phase4",
   "private": true,
   "description": "MineHonk - a multiplayer voxel survival sandbox",
   "type": "module",
@@ -28,6 +28,7 @@
     "test:e2e:halloween": "node tests/e2e/halloween.mjs",
     "test:e2e:villages": "node tests/e2e/villages.mjs",
     "test:e2e:trick": "node tests/e2e/trick-or-treat.mjs",
+    "test:e2e:haunting4": "node tests/e2e/haunting4.mjs",
     "update-log:images": "node tools/update-log/build-images.mjs",
     "bench": "node tests/perf/bench.mjs"
   },

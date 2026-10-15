@@ -109,18 +109,23 @@ includes 1,000 GB of TURN traffic a month for free.
 
 ## Optional: Herobrine's voice (Claude)
 
-In the Haunting (Admin Panel), players can talk to Herobrine once he starts
-speaking. Without this step he answers with his scripted lines. With it, the
-hub asks Claude for each answer, in character, from what he knows about the
-player (their name, what they hold, where they are). The game falls back to
-his scripted lines whenever Claude can't answer.
+In the Haunting, players can talk to whoever is haunting the world once it
+starts talking back: Herobrine, and since V7 phase 4 Null, Green Steve and
+the Cave Dweller. Without this step they answer with their scripted lines.
+With it, the hub asks Claude for each answer, in that character's own voice,
+from what it knows about the player in the game (their name in the game,
+what they hold, where they are, the stage, what they have been doing). The
+game falls back to the scripted lines whenever Claude can't answer. The
+instructions for each character stay on the hub; the game only sends which
+character it is (one of the four) and the facts.
 
 **Cost.** This is billed separately from any Claude.ai subscription and never
 uses its weekly limits. You pay for what Herobrine actually says, from credit
 you add in advance. With the model the hub uses (`claude-haiku-5-5`), one
 answer costs about $0.0002, so less than a cent for a whole haunting. The hub
-stops at 200 answers a day across everyone (about 4 cents a day at most), then
-uses the scripted lines until the next day.
+stops at 200 answers a day across everyone and every character together
+(about 4 cents a day at most), then uses the scripted lines until the next
+day.
 
 1. Open the Claude Console at **platform.claude.com** and sign in (your
    Claude.ai email works; it is a separate account).

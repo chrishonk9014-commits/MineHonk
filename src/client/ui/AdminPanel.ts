@@ -60,9 +60,10 @@ const DIM_NAMES: Record<string, string> = { overworld: 'Overworld', nether: 'Net
 const MOB_CATEGORY_NAMES: Record<string, string> = { monster: 'Hostile', creature: 'Animals', water: 'Water', ambient: 'Ambient', npc: 'Villagers', boss: 'Bosses' };
 
 /** Remembered between openings during a session. */
-const memory: { tab: Tab; itemQuery: string; itemTab: string; mobQuery: string; mobCat: string; dim: DimensionId; structure: string; biome: string; cave: string; count: number; hauntMinutes: number; hauntErase: boolean; hauntEnding: Record<HauntCharacter, string>; hauntChar: HauntCharacter } = {
+const memory: { tab: Tab; itemQuery: string; itemTab: string; mobQuery: string; mobCat: string; dim: DimensionId; structure: string; biome: string; cave: string; count: number; hauntMinutes: number; hauntMinutesSet: boolean; hauntErase: boolean; hauntEnding: Record<HauntCharacter, string>; hauntChar: HauntCharacter } = {
   tab: 'items',
   hauntMinutes: 0,
+  hauntMinutesSet: false,
   hauntErase: true,
   hauntEnding: { herobrine: 'random', null: 'erased', green_steve: 'random', cave_dweller: 'random' },
   hauntChar: 'herobrine',
@@ -1092,7 +1093,7 @@ export function adminScreen(host: AdminHost): Screen {
       const rows: [string, string][] = d.active
         ? [
             ['Haunting', castName(c)],
-            ['Started', d.auto ? 'By itself (the automatic haunting)' : 'From the Admin Panel'],
+            ['Started', d.auto ? 'By itself' : 'From the Admin Panel'],
             ['Stage', st ? st.name : '-'],
             ['Time', `${mmss(d.elapsed)} / ${mmss(d.total)}`],
             ['Time left', mmss(d.total - d.elapsed)],
@@ -1133,10 +1134,12 @@ export function adminScreen(host: AdminHost): Screen {
       }
       if (d.autoState === 'waiting') controls.append(el('div', { class: 'admin-chips' }, btn('Start the automatic haunting now', () => op('restart'), 'btn chip haunt-restart')));
       if (!d.canErase) memory.hauntErase = false;
-      memory.hauntMinutes ||= cast.defaultMinutes;
+      // Each character's own length until one is chosen
+      if (!memory.hauntMinutesSet) memory.hauntMinutes = cast.defaultMinutes;
       const minutes = field({ type: 'number', min: HAUNT_MIN_MINUTES, max: HAUNT_MAX_MINUTES, value: String(memory.hauntMinutes), class: 'field admin-num haunt-minutes' });
       minutes.addEventListener('change', () => {
         memory.hauntMinutes = Math.max(HAUNT_MIN_MINUTES, Math.min(HAUNT_MAX_MINUTES, Math.round(Number(minutes.value) || cast.defaultMinutes)));
+        memory.hauntMinutesSet = true;
         minutes.value = String(memory.hauntMinutes);
       });
       const presets = el(
@@ -1145,6 +1148,7 @@ export function adminScreen(host: AdminHost): Screen {
         ...[5, 10, 15, 20, 30, 60].map((m) =>
           btn(`${m} min`, () => {
             memory.hauntMinutes = m;
+            memory.hauntMinutesSet = true;
             minutes.value = String(m);
           }, 'btn chip'),
         ),
@@ -1252,8 +1256,8 @@ export function adminScreen(host: AdminHost): Screen {
     return el(
       'div',
       { class: 'admin-cols' },
-      el('div', { class: 'admin-col' }, section('Who', picker, blurb), section('The Haunting', controls), section('Tests', tests)),
-      el('div', { class: 'admin-col' }, section('Status', state), section('What happens', stages)),
+      el('div', { class: 'admin-col' }, section('Who', picker), section('The Haunting', controls), section('Tests', tests)),
+      el('div', { class: 'admin-col' }, section('Status', state), section('About', blurb), section('What happens', stages)),
     );
   };
 

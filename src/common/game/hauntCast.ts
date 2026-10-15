@@ -171,7 +171,7 @@ const GREEN_STEVE: HauntCharacterDef = {
     { at: 0.72, text: 'Hello, brother.', loud: true },
     { at: 0.8, text: 'we look the same now, {name}', loud: true },
     { at: 0.88, text: 'stay with me', loud: true },
-    { at: 0.95, text: 'Hello, brother.', loud: true },
+    // (and "Hello, brother." once more, at the end, in the bedrock room)
   ],
 };
 

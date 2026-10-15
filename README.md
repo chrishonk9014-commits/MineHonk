@@ -76,8 +76,8 @@ it.
 | `MAX_PLAYERS`  | `16`    | Players per world                                          |
 | `TRUST_PROXY`  | off     | `1` behind a reverse proxy (client IP from X-Forwarded-For) |
 | `CORS_ORIGINS` | none    | Comma-separated sites that may call the API                |
-| `ANTHROPIC_API_KEY` | none | Herobrine answers players through Claude in the Haunting (billed to this key) |
-| `HEROBRINE_MODEL` | `claude-haiku-5-5` | The Claude model he answers with                |
+| `ANTHROPIC_API_KEY` | none | Whoever haunts the world (Herobrine, Null, Green Steve, the Cave Dweller) answers players through Claude (billed to this key) |
+| `HEROBRINE_MODEL` | `claude-haiku-5-5` | The Claude model they answer with               |
 
 Put it behind HTTPS (for example, a reverse proxy) for anything other than a
 LAN. Operators can add words to the chat filter in
@@ -588,7 +588,9 @@ V7 comes in five phases. **Phase 1** (version 7.0.0-phase1) is the
 foundation: the season, the pumpkins, ghosts, the title screen and the Admin
 Panel's Halloween tab. **Phase 2** (version 7.0.0-phase2) brings the villages
 and the costume heads. **Phase 3** (version 7.0.0-phase3) brings
-trick-or-treating. New hauntings and advancements follow in phases 4 and 5.
+trick-or-treating. **Phase 4** (version 7.0.0-phase4) brings new hauntings
+(not seasonal): Herobrine coming back by himself, and three more characters
+from the old stories in the Admin Panel. Advancements follow in phase 5.
 Design notes: [docs/HALLOWEEN.md](docs/HALLOWEEN.md).
 
 - **The Halloween season** runs until **November 7, 2026, 12:00 AM PST**
@@ -684,6 +686,42 @@ Design notes: [docs/HALLOWEEN.md](docs/HALLOWEEN.md).
 - **The Trick or Treat! quest** (phase 3): get a sack, get a costume, wear it,
   find a Trick-or-Treat Village, knock on a door, collect 10 candy; each step
   read off the real game (cheat items do not count), saved per player.
+- **Herobrine comes back by himself** (phase 4, not seasonal, the automatic
+  haunting). Beat him for real (the final fight in his cave, no cheats) and
+  this device remembers it; each new world you make after that has one chance
+  in ten, rolled once when the world is made and kept in it, that he haunts it
+  some day. Nothing says so. After 20 to 40 minutes of play (only time with
+  someone in the world counts) the signs begin quietly, and over about 45
+  minutes he comes closer, the same haunting as the panel's. He notices what
+  you do: breaking a lot of blocks, placing torches (he turns them red),
+  running, staying underground, sleeping, with lines of his own from *Closer*
+  on. It ends the usual way (the ban screen, or his lair one time in four),
+  **the world is always kept**, and it never comes back to that world. In a
+  hosted world it is the host's world that rolls; on a dedicated server the
+  player creating the world tells the server. The Admin Panel shows it and
+  can end it for good or reset it.
+- **Three more hauntings** (phase 4, Admin Panel only, never by themselves),
+  each from a well-known Minecraft creepypasta and each playing differently;
+  all of them talk back, can be talked to through Claude, and end on their
+  own screen. Kid-friendly horror: nothing gory, nobody hurt.
+  - **Null** takes things away while nobody is looking: the torches and
+    blocks you placed, clean square holes in the ground, then the sound and
+    the colour; *null* on signs and in chat; a black figure that never moves
+    while watched. At the end the world is erased around everyone, then
+    **Connection Lost: Disconnected: null**. Everything it took is put back.
+  - **Green Steve** joins the world, waves from far off and builds you little
+    houses (*FOR MY BROTHER*) with blue clay in the floor over a bedrock room;
+    then copies of you and your friends wearing your names, messages they
+    never sent, creepers hissing behind you that puff into smoke. At the end
+    everyone wakes in a bedrock room full of creepers turning to look,
+    *Hello, brother.*, or watches from outside themselves as he walks away
+    wearing their name (**Ending**: Random, The bedrock room, Replaced).
+  - **The Cave Dweller**: skittering in the walls and heavy breathing; a tall,
+    pale shape at the edge of the light that freezes when looked at and runs
+    on all fours; doors opening, torches knocked off walls, crawl holes; it
+    follows closer whenever you look away and lunges (a shove, never a
+    wound). At the end every light goes out and it hunts everyone (**Ending**:
+    Random, Taken: dragged into its den, Dawn: the sun comes up first).
 - **Admin Panel**: a Halloween tab shows whether Halloween content is on in
   the world and why, shows a ghost now, places any pumpkin (or one of each)
   and simulates "after the cutoff" or "always on" for testing (never saved);
@@ -740,10 +778,15 @@ show a **Cheats ON** badge in the Friends and Public lists and when joining.
   Halloween always on) for testing, building a Trick-or-Treat or Abandoned
   Village around you, the nearest Trick-or-Treat Village's doors, and (phase
   3) sacks, candy, knocking, Trick Homes of any kind and resetting doors.
-- **Haunting**: Herobrine haunts the world, the way the old creepypastas tell
-  it. Choose how long it lasts, from the first sighting to the end (30 minutes
-  unless changed, 1 to 180), and how it ends, then press Start. Nobody is told
-  in chat.
+- **Haunting**: pick who haunts the world (Herobrine, or since V7 phase 4
+  Null, Green Steve or the Cave Dweller; see
+  [Version 7](#version-7---the-halloween-update)), how long it lasts from the
+  first sign to the end (30 minutes for Herobrine and 20 for the others unless
+  changed, 1 to 180) and how it ends, then press Start. Nobody is told in
+  chat. Below that, two tests that need no haunting: **Show it near me** (the
+  chosen character appears a little way off for a few seconds) and **Talk to
+  it** (say something; the answer shows with who gave it: *Claude*, or *the
+  scripted lines* and why). Herobrine's haunting, as before:
   - *He is watching*: a white-eyed figure far off in the fog, gone when you
     look again, and a redstone torch nobody placed.
   - *Signs*: cobblestone crosses floating in the air, 2x2 tunnels that lead
@@ -771,19 +814,43 @@ show a **Cheats ON** badge in the Friends and Public lists and when joining.
       a death screen, **SERVER MEMORY CORRUPTED**, then the title screen.
 
   Talking to him: from *He speaks* on, he answers some of what players say
-  in chat (nearly always when it is said to him). On the online version he
-  answers through Claude when the hub has an Anthropic key (see
-  [docs/ONLINE_SETUP.md](docs/ONLINE_SETUP.md)), and with his scripted
+  in chat (nearly always when it is said to him); the other characters
+  answer from their own talking-back stage. See **The haunting voices**
+  below.
+
+  **The haunting voices (AI).** On the online version each character answers
+  through Claude (`claude-haiku-5-5`) when the hub has an Anthropic key (see
+  [docs/ONLINE_SETUP.md](docs/ONLINE_SETUP.md)), and with its own scripted
   lines otherwise. A dedicated Node server can use its own key
-  (`ANTHROPIC_API_KEY`, and optionally `HEROBRINE_MODEL`). His answers go
-  through the chat filter.
+  (`ANTHROPIC_API_KEY`, and optionally `HEROBRINE_MODEL`). How it is kept
+  safe:
+  - The key stays on the server (the hub's `ANTHROPIC_API_KEY` secret); each
+    character's instructions live only there too. The game names the
+    character (one of four; the hub refuses any other) and sends only things
+    in the game: the player's name in the game, the stage, what they hold,
+    where they are, what they did lately, the other players' names in the
+    game, the last lines of chat. Never an email, an IP, account details or a
+    friends list.
+  - What comes back is only ever one line of chat: cleaned, cut short, put
+    through the chat filter, and never read for commands. It cannot run,
+    grant, delete or change anything.
+  - Errors, timeouts (10 seconds), refusals, the rate limits and the daily cap
+    (200 answers a day for every character together) all fall back to the
+    character's scripted lines.
+  - The instructions keep each character in character and child-safe, with
+    nothing about the real world.
 
   Only the world owner can choose **At the end: Delete the world** (it asks
   for a second click). The owner's game then deletes the world, after either
   ending, from this browser and from the cloud hub if it was hosted.
-  Otherwise the world is kept. Dedicated Node servers never delete their
-  world files. While it runs, the tab shows the stage and time left and can
-  **Skip to the next stage** or **Stop**. Stop removes him and his monsters,
+  Otherwise the world is kept (an automatic haunting never deletes anything;
+  the other characters' endings follow the same choice). Dedicated Node
+  servers never delete their world files. While it runs, the tab shows who,
+  whether it began by itself, the stage, the time gone and left, when the end
+  comes, the ending and when it talks back, and can **Skip to the next
+  stage**, go **Straight to the end**, set **The end begins in** a number of
+  minutes, or **Stop** (for an automatic haunting **End it**, for good, or
+  **Reset** it to the beginning). Stop removes him and his monsters,
   puts back every block he placed or took and the time and weather, and
   brings anyone in his lair back. Nobody loses their things to a death while
   the world is haunted, and his monsters drop nothing. The haunting is saved
@@ -820,6 +887,7 @@ npm run test:e2e:haunting # the Haunting: a two-minute haunting to the fake ban 
 npm run test:e2e:halloween # V7: the Halloween title scenes and their rotation, the world option, pumpkins in every dimension, ghosts, the Admin Panel tab, worlds after the cutoff, the Update Log's V7 and V6.5 tabs (screenshots)
 npm run test:e2e:villages  # V7 phase 2: Trick-or-Treat and Abandoned Villages, the heads worn, zombie villagers and guardians, the Admin Panel's villages and doors, the village title scenes (screenshots)
 npm run test:e2e:trick     # V7 phase 3: the sack's window, the candies (in the sack, in hand, on the ground), costumes, knocking, Candy and Trick Homes, the quest, the Admin Panel, after the season (screenshots)
+npm run test:e2e:haunting4 # V7 phase 4: the Haunting tab's picker and tests, Null, Green Steve and the Cave Dweller from start to end screen, an automatic haunting (screenshots)
 ```
 
 ### Performance tools

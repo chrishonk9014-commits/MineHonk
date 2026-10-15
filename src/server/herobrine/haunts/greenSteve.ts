@@ -428,13 +428,12 @@ export class GreenSteveHaunt implements HauntPart {
           if (r.ok) this.fillRoom(e, p.dim, r);
         }
         if (!r.ok) continue;
-        // In a ring round him, facing the middle
+        // In a row at one end, facing him at the other
         const i = e.from.size;
-        const a = (i / Math.max(1, players.length)) * Math.PI * 2;
-        const x = r.cx + 0.5 + Math.sin(a) * 2.2;
-        const z = r.cz + 0.5 + Math.cos(a) * 2.2;
+        const x = r.cx + 0.5 - 2.5;
+        const z = r.cz + 0.5 + (i % 6 - (Math.min(6, players.length) - 1) / 2) * 1.3;
         e.from.set(p.uuid, [p.dim.id, p.x, p.y, p.z, p.yaw]);
-        s.teleport(p, x, r.cy, z, Math.atan2(-(r.cx + 0.5 - x), -(r.cz + 0.5 - z)));
+        s.teleport(p, x - Math.floor(i / 6), r.cy, z, -Math.PI / 2);
       }
     }
     if (t === 50) for (const p of players) p.send({ t: 'fx', kind: 'scene', text: 'rise', ticks: 60 });
@@ -482,17 +481,15 @@ export class GreenSteveHaunt implements HauntPart {
     return room;
   }
 
-  /** Creepers all round the walls (facing them), and him in the middle. */
+  /** Creepers along both walls (facing them), and him at the far end, facing everyone. */
   private fillRoom(e: End, dim: Dimension, r: { cx: number; cy: number; cz: number }): void {
-    for (let i = 0; i < 10; i++) {
-      const a = (i / 10) * Math.PI * 2;
-      const x = r.cx + 0.5 + Math.sin(a) * 3.6;
-      const z = r.cz + 0.5 + Math.cos(a) * 3.6;
-      // Facing the wall, until they turn
-      const m = this.h.apparition(dim, 'creeper', x, r.cy, z, Math.atan2(Math.sin(a), Math.cos(a)) + Math.PI, 'stare');
-      if (m) e.figs.push(m);
-    }
-    const g = this.h.apparition(dim, 'green_steve', r.cx + 0.5, r.cy, r.cz + 0.5, 0, 'stare');
+    for (const side of [-1, 1])
+      for (const dx of [-3, -1.5, 0, 1.5, 3]) {
+        // Facing the wall, until they turn
+        const m = this.h.apparition(dim, 'creeper', r.cx + 0.5 + dx, r.cy, r.cz + 0.5 + side * 3.5, side > 0 ? Math.PI : 0, 'stare');
+        if (m) e.figs.push(m);
+      }
+    const g = this.h.apparition(dim, 'green_steve', r.cx + 0.5 + 3.2, r.cy, r.cz + 0.5, Math.PI / 2, 'stare');
     if (g) {
       g.customName = 'Green Steve';
       e.figs.push(g);

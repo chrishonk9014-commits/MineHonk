@@ -9,6 +9,7 @@
  *   UPDATE_LOG_SHOTS=1 node tests/e2e/halloween.mjs     V7, the Halloween Update
  *   UPDATE_LOG_SHOTS=1 node tests/e2e/villages.mjs      V7 phase 2: the villages and the heads
  *   UPDATE_LOG_SHOTS=1 node tests/e2e/trick-or-treat.mjs V7 phase 3: trick-or-treating
+ *   UPDATE_LOG_SHOTS=1 node tests/e2e/haunting4.mjs     V7 phase 4: the hauntings
  *   node tools/update-log/build-images.mjs [v6 v6.5 v7] resize, brighten and encode (all, or just those)
  *
  * Encoding runs in the Chromium that Playwright already uses, so nothing else
@@ -95,6 +96,15 @@ add('admin-trick', 'clean/trick-admin.png', { filter: '' });
 add('trick-fight', 'trick-home-fight.png');
 add('trick-herobrine', 'trick-home-herobrine.png');
 add('quest', 'trick-quest.png');
+// Phase 4: the hauntings (tests/e2e/haunting4.mjs)
+for (const c of ['null', 'green_steve', 'cave_dweller']) add(`appear-${c}`, `clean/haunting4-appear-${c}.png`);
+add('auto-sighting', 'clean/haunting4-auto-sighting.png');
+for (const n of ['null-figure', 'null-sign', 'null-erase', 'green-friend', 'green-house', 'green-copy', 'green-room', 'green-replaced', 'dweller-watch', 'dweller-drag', 'dweller-dawn']) add(n, `clean/haunting4-${n}.png`);
+// Whichever of its moves the run caught
+add('dweller-crawl', ['clean/haunting4-dweller-crawl.png', 'clean/haunting4-dweller-lunge.png']);
+add('dweller-eyes', 'clean/haunting4-dweller-eyes.png', { filter: '' });
+// The panel, the end screens, and those that keep the HUD (the chat) or the colour drained out
+for (const [name, src] of [['haunt-tab', 'haunting4-tab-null'], ['haunt-talk', 'haunting4-talk-green_steve'], ['null-end', 'haunting4-null-end'], ['auto-status', 'haunting4-auto-status'], ['null-drain', 'haunting4-null-drain'], ['auto-notice', 'haunting4-auto-notice']]) add(name, `${src}.png`, { filter: '' });
 
 if (only.length) shots.splice(0, shots.length, ...shots.filter((s) => only.includes(s.version)));
 // A list of sources: the first one there is used

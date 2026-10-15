@@ -2338,7 +2338,7 @@ V.cave_dweller = {
     if (ra) ra.rotation.z = 0.06;
     if (la) la.rotation.z = -0.06;
   },
-  minLight: 0.38,
+  minLight: 0.55,
   nameY: 3.1,
 };
 

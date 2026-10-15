@@ -1,9 +1,9 @@
 /**
  * The Update Log's V7 entry: The Halloween Update. It comes in five phases;
- * this is what is in so far, one section each, and later phases add theirs
- * (hauntings, advancements). Pictures are screenshots of the game itself
+ * this is what is in so far, one section each, and phase 5 adds its own
+ * (advancements). Pictures are screenshots of the game itself
  * (public/updatelog/v7, made by tools/update-log/ from tests/e2e/halloween.mjs,
- * villages.mjs and trick-or-treat.mjs).
+ * villages.mjs, trick-or-treat.mjs and haunting4.mjs).
  */
 import { DIMENSION_PUMPKINS } from '../../common/halloween/pumpkins';
 import { HALLOWEEN_ENDS_TEXT } from '../../common/halloween/season';
@@ -12,6 +12,8 @@ import { ABANDONED_ONE_IN, TRICK_HOMES_MIN, TRICK_HOMES_MAX } from '../../common
 import { CANDY_HOME_ODDS, CANDY_NAMES, CANDY_KINDS, SACK_CAPACITY, KING_OUTCOMES } from '../../common/halloween/candy';
 import { TEMP_ENCHANT_TICKS } from '../../common/halloween/tempEnchant';
 import { TRICK_ENCOUNTERS, TRICK_KINDS, TRICK_ODDS, QUEST_STEPS, QUEST_CANDY } from '../../common/halloween/trickOrTreat';
+import { AUTO_HAUNT_CHANCE, AUTO_HAUNT_MINUTES, AUTO_HAUNT_DELAY_MIN, AUTO_HAUNT_DELAY_MAX } from '../../common/game/haunting';
+import { HAUNT_CAST } from '../../common/game/hauntCast';
 import type { UpdateEntry, Card } from './updateLog';
 
 const pct = (n: number): string => `${n}%`;
@@ -26,7 +28,7 @@ const pumpkinCards: Card[] = DIMENSION_PUMPKINS.map((p) => ({
 export const V7_LOG: UpdateEntry = {
   version: 'V7',
   name: 'The Halloween Update',
-  tagline: 'Trick-or-treating: a sack, four candies, Candy Homes and Trick Homes. Trick-or-Treat Villages, Abandoned Villages, costume heads, pumpkins in every dimension and ghosts at night. Phases 1 to 3 of 5.',
+  tagline: 'New hauntings: Herobrine comes back by himself, and Null, Green Steve and the Cave Dweller. Trick-or-treating, Trick-or-Treat and Abandoned Villages, costume heads, pumpkins in every dimension and ghosts at night. Phases 1 to 4 of 5.',
   hero: 'title-trick-or-treat',
   sections: [
     // ------------------------------------------------------------------ overview
@@ -37,12 +39,24 @@ export const V7_LOG: UpdateEntry = {
       blocks: [
         {
           k: 'p',
-          text: `Halloween has come to MineHonk. **V7 arrives in five phases**, and three are here. Phase 1 brought the Halloween season itself, a pumpkin for every dimension, ghosts drifting by on dark nights, and a title screen of haunted nights. Phase 2 brought the villages: Trick-or-Treat Villages dressed for the season, eerie Abandoned Villages, and costume heads to wear. **Phase 3 brings trick-or-treating:** put on a costume, take a sack, and knock on doors. The season lasts until **${HALLOWEEN_ENDS_TEXT}**.`,
+          text: `Halloween has come to MineHonk. **V7 arrives in five phases**, and four are here. Phase 1 brought the Halloween season itself, a pumpkin for every dimension, ghosts drifting by on dark nights, and a title screen of haunted nights. Phase 2 brought the villages: Trick-or-Treat Villages dressed for the season, eerie Abandoned Villages, and costume heads to wear. Phase 3 brought trick-or-treating. **Phase 4 brings new hauntings:** Herobrine can come back by himself, and three more characters from the old stories join the Admin Panel's Haunting. The season lasts until **${HALLOWEEN_ENDS_TEXT}**; hauntings are never seasonal.`,
         },
-        { k: 'img', img: 'candy-home-give', caption: 'Trick or treat! A Candy Home answers the door.' },
+        { k: 'img', img: 'dweller-watch', caption: 'Something is watching from the edge of the light.' },
         {
           k: 'cards',
-          title: 'Phase 3 at a glance',
+          title: 'Phase 4 at a glance',
+          items: [
+            { img: 'auto-sighting', title: 'Herobrine comes back', text: 'Beat him, and he may come back by himself to a new world.', link: 'auto-haunting' },
+            { img: 'appear-null', title: 'Null', text: 'It takes things away while nobody is looking.', link: 'null' },
+            { img: 'appear-green_steve', title: 'Green Steve', text: 'Hello, brother. He built you a house.', link: 'green-steve' },
+            { img: 'appear-cave_dweller', title: 'The Cave Dweller', text: 'It lives in the dark under the world, and it follows you.', link: 'cave-dweller' },
+            { icon: 'book', title: 'They talk back', text: 'Each one answers in its own voice.', link: 'voices' },
+            { icon: 'redstone_torch', title: 'Admin Panel: the Haunting', text: 'Pick who haunts the world, test them, watch it go.', link: 'haunt-admin' },
+          ],
+        },
+        {
+          k: 'cards',
+          title: 'Phase 3',
           items: [
             { icon: 'trick_or_treat_sack', title: 'The Trick-or-Treat Sack', text: `Holds ${SACK_CAPACITY} candy. Use it to look inside.`, link: 'sack' },
             { icon: 'king_sized_candy', title: 'Four candies', text: 'Mild, big, King-Sized... and poisoned.', link: 'candy' },
@@ -76,8 +90,7 @@ export const V7_LOG: UpdateEntry = {
         {
           k: 'list',
           items: [
-            '**Next:** hauntings that come by themselves, and new characters to meet.',
-            '**Later:** Halloween advancements, and more.',
+            '**Next (phase 5):** Halloween advancements, and more.',
           ],
         },
         { k: 'tip', text: 'Halloween only adds. When the season ends, nothing is taken away: pumpkins already out there stay, and so does everything you have: your sack, your candy, your costume.' },
@@ -431,6 +444,174 @@ export const V7_LOG: UpdateEntry = {
         { k: 'img', img: 'quest', caption: 'The quest tracker, on its first step.' },
         { k: 'p', text: 'While Halloween is on, the quest tracker walks you through trick-or-treating. Each step is checked against what you really have and do, and your progress is saved. It works in Creative too (the advancements along the way still only come from playing it for real).' },
         { k: 'list', items: QUEST_STEPS.map((q, i) => `**${i + 1}.** ${q.text}${q.id === 'candy' ? ` (${QUEST_CANDY} of them)` : ''}`) },
+      ],
+    },
+
+    // ------------------------------------------------------------------ phase 4: the automatic haunting
+    {
+      id: 'auto-haunting',
+      title: 'Herobrine Comes Back',
+      icon: 'redstone_torch',
+      blocks: [
+        { k: 'img', img: 'auto-sighting', caption: 'Far off, in a world he was never asked to.' },
+        {
+          k: 'p',
+          text: `Beat Herobrine for real (the final fight in his cave, no cheats) and your device remembers. After that, **every new world you make has a ${Math.round(AUTO_HAUNT_CHANCE * 100)}% chance** that he haunts it some day, all by himself. The chance is rolled once, when the world is made, and kept in the world: it is never rolled again.`,
+        },
+        {
+          k: 'list',
+          items: [
+            `**Nothing says so.** After ${AUTO_HAUNT_DELAY_MIN / 1200} to ${AUTO_HAUNT_DELAY_MAX / 1200} minutes of play (only time with someone in the world counts, about the first night or two), the signs begin quietly: a figure in the fog, a redstone torch nobody placed.`,
+            `**It lasts about ${AUTO_HAUNT_MINUTES} minutes** of play, the same stages as the Haunting from the Admin Panel: watching, signs, closer, he speaks, the end. Close the world and it carries on where it was next time.`,
+            '**He notices what you do.** Breaking a lot of blocks, placing torches (he turns them red), running, staying underground, sleeping: from *Closer* on, he has something to say about it.',
+            '**The world is always kept.** It ends the usual way: the ban screen, or one time in four his lair inside the computer. Then it is over, for good: he never haunts that world again.',
+            "**In multiplayer:** a world someone hosts from their browser rolls when its host makes it. On a dedicated server, the player who makes the world counts. Everyone in the world sees it.",
+          ],
+        },
+        {
+          k: 'gallery',
+          items: [
+            { img: 'auto-notice', caption: 'He noticed you running.' },
+            { img: 'auto-status', caption: 'In the Admin Panel: it began by itself.' },
+          ],
+        },
+        { k: 'tip', text: 'Your win over him from before this update counts too, if it was in a world saved on this device.' },
+      ],
+    },
+
+    // ------------------------------------------------------------------ phase 4: Null
+    {
+      id: 'null',
+      title: 'Null',
+      icon: 'sign',
+      blocks: [
+        { k: 'img', img: 'null-figure', caption: 'It does not move while you look at it.' },
+        { k: 'p', text: `From the old story of a pitch-black figure that writes **null** on signs and changes the world while nobody is looking. **Null takes things away.** ${HAUNT_CAST.null.stages.map((x) => `*${x.name}*`).join(', ')}.` },
+        {
+          k: 'list',
+          items: HAUNT_CAST.null.stages.map((x) => `**${x.name}:** ${x.what}`),
+        },
+        {
+          k: 'gallery',
+          items: [
+            { img: 'null-sign', caption: 'Where your torch was.' },
+            { img: 'null-drain', caption: 'The colour goes out of everything.' },
+          ],
+        },
+        {
+          k: 'gallery',
+          items: [
+            { img: 'null-erase', caption: 'The world, erased around you.' },
+            { img: 'null-end', caption: 'Connection Lost. Disconnected: null.' },
+          ],
+        },
+        { k: 'tip', text: 'Everything Null took is put back afterwards: your blocks, your torches, the ground.' },
+      ],
+    },
+
+    // ------------------------------------------------------------------ phase 4: Green Steve
+    {
+      id: 'green-steve',
+      title: 'Green Steve',
+      icon: 'blue_terracotta',
+      blocks: [
+        { k: 'img', img: 'green-friend', caption: 'Green Steve joined the world.' },
+        { k: 'p', text: 'From the old story of a player who looks like Steve, but green, who joins worlds uninvited and greets you with **"Hello, brother."** He is far too friendly, and nothing he does is what it looks like.' },
+        { k: 'list', items: HAUNT_CAST.green_steve.stages.map((x) => `**${x.name}:** ${x.what}`) },
+        {
+          k: 'gallery',
+          items: [
+            { img: 'green-house', caption: 'FOR MY BROTHER. Mind the blue clay.' },
+            { img: 'green-copy', caption: 'That is not you. It is wearing your name.' },
+          ],
+        },
+        {
+          k: 'table',
+          title: 'How it ends',
+          head: ['Ending', 'What happens'],
+          rows: HAUNT_CAST.green_steve.endings.filter((e) => e.id !== 'random').map((e) => [`**${e.name}**`, e.help]),
+        },
+        {
+          k: 'gallery',
+          items: [
+            { img: 'green-room', caption: 'The bedrock room. They all turn to look.' },
+            { img: 'green-replaced', caption: 'Replaced: he walks away as you.' },
+          ],
+        },
+        { k: 'tip', text: 'His creepers never explode, his rooms are always taken away again, and nobody is ever left in one.' },
+      ],
+    },
+
+    // ------------------------------------------------------------------ phase 4: the Cave Dweller
+    {
+      id: 'cave-dweller',
+      title: 'The Cave Dweller',
+      icon: 'bone',
+      blocks: [
+        { k: 'img', img: 'dweller-watch', caption: 'Tall, pale, and frozen while you look at it.' },
+        { k: 'p', text: 'From the story of a very tall, thin, pale creature that lives in the dark caves under the world. First you only hear it, skittering in the walls, breathing. Then you see it, at the edge of the light. **It stalks.**' },
+        { k: 'list', items: HAUNT_CAST.cave_dweller.stages.map((x) => `**${x.name}:** ${x.what}`) },
+        {
+          k: 'gallery',
+          items: [
+            { img: 'dweller-crawl', caption: 'It runs on all fours.' },
+            { img: 'dweller-drag', caption: 'Taken: dragged down into the dark.' },
+          ],
+        },
+        {
+          k: 'table',
+          title: 'How the hunt ends',
+          head: ['Ending', 'What happens'],
+          rows: HAUNT_CAST.cave_dweller.endings.filter((e) => e.id !== 'random').map((e) => [`**${e.name}**`, e.help]),
+        },
+        {
+          k: 'gallery',
+          items: [
+            { img: 'dweller-eyes', caption: 'Its den.' },
+            { img: 'dweller-dawn', caption: 'Dawn: it goes back down.' },
+          ],
+        },
+        { k: 'tip', text: 'Its lunges only push you. It never wounds anyone.' },
+      ],
+    },
+
+    // ------------------------------------------------------------------ phase 4: their voices
+    {
+      id: 'voices',
+      title: 'They Talk Back',
+      icon: 'book',
+      blocks: [
+        { k: 'p', text: 'Once a haunting reaches its talking stage, say something in chat and whoever is haunting the world may answer, **each in its own voice**: Herobrine in cold capitals, Null in as few lowercase words as it can, Green Steve like your best friend, the Cave Dweller in whispers, with your own words.' },
+        { k: 'img', img: 'haunt-talk', caption: 'Talking to Green Steve from the Admin Panel (no haunting needed).' },
+        {
+          k: 'list',
+          items: [
+            'On the online version they answer through Claude; otherwise, and whenever Claude cannot, with their own scripted lines.',
+            'They are only ever told things in the game: your name in the game, what you hold, where you are, what you have been doing. Never anything about you.',
+            'What they say is only ever a line of chat, through the same filter as everyone else\'s. It cannot do anything in the game.',
+          ],
+        },
+      ],
+    },
+
+    // ------------------------------------------------------------------ phase 4: the Admin Panel's Haunting tab
+    {
+      id: 'haunt-admin',
+      title: 'Admin Panel: the Haunting',
+      icon: 'redstone_torch',
+      blocks: [
+        { k: 'img', img: 'haunt-tab', caption: 'Pick who haunts the world.' },
+        {
+          k: 'list',
+          items: [
+            '**Who:** Herobrine, Null, Green Steve or the Cave Dweller. The three new ones only ever come from here, never by themselves.',
+            'How long it lasts, and how it ends: each character has its own endings. Only the world owner can have the world deleted at the end.',
+            '**Show it near me** and **Talk to it**, to test them without any haunting. The answer says who gave it: Claude, or the scripted lines (and why).',
+            'While it runs: who, whether it began by itself, the stage, the time gone and left, when the end comes, when it talks back; **Skip**, **Straight to the end**, **The end begins in...**, and **Stop**, which puts everything back.',
+            'The automatic haunting shows here too: waiting, running, or over. **End it** (for good) or **Reset** it.',
+          ],
+        },
+        { k: 'tip', text: 'Like every cheat, nothing done here earns advancements. An automatic haunting moved along from the panel no longer counts as having been through one.' },
       ],
     },
 

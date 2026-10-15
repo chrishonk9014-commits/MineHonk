@@ -12,8 +12,10 @@ Design notes. V7 comes in five phases:
 3. **Trick-or-treating** (7.0.0-phase3): the Trick-or-Treat Sack (128
    candy), four candies, costumes, knocking on doors, Candy Homes' cutscene,
    Trick Home fights, the Herobrine Head, the Trick or Treat! quest.
-4. **Hauntings**: an automatic 45-minute haunting, and three new creepypasta
-   characters in the Admin Panel, each with their own AI conversations.
+4. **Hauntings** (7.0.0-phase4, not seasonal): the automatic haunting
+   (Herobrine comes back by himself, about 45 minutes), and three more
+   creepypasta characters in the Admin Panel (Null, Green Steve, the Cave
+   Dweller), each with their own AI conversations.
 5. **Admin Panel controls, advancements, full tests and polish.**
 
 ## The season (`src/common/halloween/season.ts`)
@@ -635,9 +637,174 @@ Everything they make is cheat-marked. A forced knock or trick never uses up a
 real door, and its chest is cheat-marked. The status op also lists the
 cutscenes and fights that are running.
 
+## Phase 4: hauntings
+
+Hauntings are not seasonal: everything here works in every world, all year.
+
+### The shared core and the characters' parts (`src/server/herobrine/Haunting.ts`, `haunts/`)
+
+The Haunting was split into a core and a part per character, without
+changing Herobrine's: his part (`haunts/herobrine.ts`) is the old code moved
+over, and his tests (`haunting.test.ts`, `haunting2.test.ts`) pass unchanged.
+
+- **The core** (`HauntingSystem`) runs what every haunting shares: the saved
+  timeline (`level.flags.haunt`, only moving while someone is there), the
+  stages (`HAUNT_CAST[c].stages`, fractions of the whole), each stage's
+  budget of random events per player rolled every 10 ticks, the character's
+  lines and fake joins (each once), figures (untouchable, AI-less, never
+  saved), every block change recorded (`level.flags.hauntBlocks`) and
+  cheat-marked, monsters marked (`hauntMob`: no loot, no XP), keepInventory
+  while haunted, talking back, the end (kicks, the owner-only deletion), Stop.
+- **A part** (`haunts/types.ts`, `HauntPart`) says what happens: its budget,
+  `event`, `oneOffs`, `atmosphere` (every 20 ticks), `everyTick`, `finale`,
+  `stepFigure`/`vanish`, `appear` (the panel's test), `notice` (what players
+  did), `reset('stop' | 'end')`, `holds` (a cutscene has a player),
+  `silent` (not answering now) and `chatText` (Null erasing words).
+- **Data** (`src/common/game/hauntCast.ts`): each character's name, chat
+  speaker, mob, stages, talking-back and end moments, endings, lines, signs
+  and end screens. Herobrine's comes from `haunting.ts` as before.
+- **Shared helpers** (`haunts/shared.ts`): `seenByAnyone`, `soundAround`,
+  `openDoor`, `steady` and `safeToTake` (a block is only taken when nothing
+  rests on it, hangs off it, falls or flows in, so Stop puts back exactly
+  what was there and nothing drops), and `putCell`/`undoCells` (blocks a part
+  removes again itself).
+- **A reload in the end** goes back to the start of the end (checked once,
+  on the server's first tick), keeping the ending already decided
+  (`st.final`). A cutscene is never resumed half way.
+
+### The automatic haunting
+
+- **Eligibility: a real win.** The client records `minehonk.herobrineBeaten`
+  in localStorage when the `defeat_final_herobrine` advancement arrives
+  (`src/client/hauntRecord.ts`). That advancement is only ever granted
+  without cheats (`Interaction.grant` refuses in a cheat context, and the
+  fight skips it for an Admin-Panel fight). Wins from before V7: once per
+  start, if nothing is recorded, the IndexedDB `players` store is searched
+  for this profile's uuid with that advancement (`anyPlayerHas`). The hub
+  keeps no per-account progress, so nothing is stored there.
+- **The roll** (`rollAutoHaunt`, `AUTO_HAUNT_CHANCE` 0.1) is made in
+  `createLevelData` when `NewWorldOptions.hauntEligible` is set, with
+  `crypto.getRandomValues` (`realRandom`), never the seed. It is saved as
+  `level.flags.autoHaunt` (`AutoHauntRoll`: `haunted`, `after`, `played`,
+  `at`, later `begun`, `over`). Worlds made before have no roll and never get
+  one (`sanitizeLevelData` does not roll).
+- **Multiplayer:** a browser-hosted world is created by its host's client
+  (`App.createWorld`, `hostFromMenu`), so the host's eligibility counts;
+  joining players never cause a roll. On a dedicated server the creating
+  player's client sends `hauntEligible` with `POST /worlds`
+  (`HubApi.createWorld` to `Worlds.create`) and the server rolls; it is
+  self-reported, which is acceptable because all it can do is haunt that
+  player's own new world.
+- **The delay:** `after` is 20 to 40 minutes of play (`AUTO_HAUNT_DELAY_MIN`,
+  `_MAX`), counted only while someone is in the world (`played`). A
+  Minecraft day is 20 minutes: by then the first night or two have passed
+  and the world has become someone's home (a shelter, a mine), which is when
+  a haunting means something; it still comes within the first evening or two
+  of play. A manual haunting running at that moment makes it wait.
+- **The haunting** (`beginAuto`) is Herobrine's usual timeline over
+  `AUTO_HAUNT_MINUTES` (45), `ending: 'random'` (the lair one time in four),
+  `erase: false`, `auto: true`. `finish` never deletes when `st.auto` (even if
+  `erase` were set). At the end, or when ended from the panel, `roll.over` is
+  set: never again in that world.
+- **Noticing** (automatic hauntings only, so the manual one is unchanged):
+  `onBlock` (from `Mining.breakBlock` and `Interaction` placing) and
+  `watchPlayers` (sprinting 8 s, underground 90 s, asleep, a death) call
+  `HerobrineHaunt.react`. Each kind is noticed at most every 4 minutes; a
+  remark (scripted, `HEROBRINE_NOTICES`, never the AI) at most once a minute
+  and only from *Closer* on; before that only a sign of him (a sound behind
+  you; a placed torch turned red; a figure while running; a sign by the bed).
+- **The flag for phase 5:** an automatic haunting seen through to its end
+  without being moved along from the panel (`st.touched` is set by skip,
+  finale, finale_in and restart) adds the stat **`haunting.experienced`** to
+  every player there who is not in a cheat context. Manual hauntings never
+  count.
+
+### The characters
+
+Picked from well-known Minecraft creepypastas, each playing differently
+from Herobrine and from each other (and none like the ERROR storyline).
+Entity 303 was considered (USC Digital Folklore Archives, ExpertBeacon) and
+left out: a hostile white-eyed figure who griefs and kills is too close to
+Herobrine himself.
+
+| Character | What it does | Sources |
+| --- | --- | --- |
+| **Null** (`null_entity`) | Takes things away while nobody is looking (blocks you placed, torches, clean holes, the sound, the colour); never moves while watched; erases chat words. Ending: the world erased around everyone, Connection Lost, *Disconnected: null*; everything put back. | Sportskeeda, "Minecraft myths: Null"; CyberPost, "Who is Null in Minecraft?" (Null as a glitch, the "null" signs) |
+| **Green Steve** (`green_steve`) | Deceives: fake joins, a friend waving, gift houses with blue clay traps over bedrock rooms, copies wearing players' names, fake chat, creepers that only puff. Endings: the bedrock room ("Hello, brother."), or replaced. | Sportskeeda, "Minecraft myths: Green Steve"; ExpertBeacon on Green Steve; Sportskeeda's list of the most famous Minecraft creepypastas |
+| **The Cave Dweller** (`cave_dweller`) | Stalks: skittering and breathing (louder underground and at night), a tall pale figure at the edge of the light that freezes when watched and runs on all fours, doors, torches, crawl holes, lunges (a shove). Ending: the hunt, then taken (dragged into its den) or dawn. | The Cave Dweller mod's pages (CurseForge, Modrinth, ModBay) and the CurseForge blog's Cave Dweller FAQ; WePC's write-up |
+
+- **Models** (`src/client/render/entities/mobs.ts`): Null is a faceless
+  black humanoid that drops a frame now and then; Green Steve is Steve gone
+  green (`wave`, `stare`, `idle`); the Cave Dweller is tall, thin and pale,
+  with long arms and hollow eyes (`stare`, `crawl`, `lunge`, `drag`), never
+  darker than `minLight`. All three are `figure: true` mobs: no spawn eggs,
+  not in the Admin Panel's spawn list, never natural, and killing one (only
+  `/kill` can) leaves nothing.
+- **Effects:** fx `drain` (the colour going: a CSS grayscale over the view,
+  eased; with `ticks`, a pulse), `silence`/`unsilence`, the darkness, the
+  new chat kinds `null`, `greensteve`, `dweller`, and the scene steps
+  `erase`, `flash`, `rise`, `eyes`, `watch` (`HauntScene.ts`; the camera in
+  `Game.sceneCamera`). The Cave Dweller's drag reuses the drag cutscene
+  (`dragWay`, the `grab` and `drag` steps).
+- **End screens:** the kick carries `screen: HauntEndScreen` (`style`,
+  `title`, `reason`, `note`, `deleted`); `App.quitToTitle` shows
+  `S.hauntEndScreen`. The owner-only "Delete the world" choice applies to
+  every character's ending exactly as to Herobrine's.
+- **What stays:** Null puts back everything it changed when it ends.
+  Herobrine and Green Steve leave their marks (his houses stay, cheat-marked)
+  but Green Steve's bedrock rooms are always removed (`undoCells`) and
+  nobody is ever left in one; a trapped player is let out after 8 seconds.
+  Stop puts back everything, for every character.
+
+### The voices (`src/hub/herobrineVoice.ts`, `src/common/game/herobrineVoice.ts`, `hauntBrains.ts`)
+
+- A `VoiceRequest` names a `character` (missing = Herobrine; anything not in
+  `HAUNT_CHARACTERS` is refused by `parseVoiceRequest`, so the hub answers
+  400). New facts: `stage`, `broken`, `placed`, `torches`, `slept`,
+  `running`. Only things in the game are sent (the voice request is built in
+  `HauntingSystem.voiceRequest`; a test checks its keys).
+- The hub: `POST /api/voice` for every character, `POST /api/herobrine`
+  kept (forced to Herobrine) for tabs opened before the update. Both share
+  the per-IP limiters and **one daily cap** (`herobrine_usage`,
+  `HEROBRINE_DAILY_LIMIT` 200) for all characters together. The answer is
+  `{ text }` or `{ text: null, reason }` (`off`, `busy`, `limit`, `none`,
+  `unsaid`).
+- Each character has its own system prompt (server side only:
+  `VOICE_SYSTEMS`), its own cleaning (`VOICE_STYLE`: capitals, lowercase,
+  plain, whisper; a leading `/` is always stripped) and its own scripted
+  brain (`BRAINS`). The model is `claude-haiku-5-5`, `effort: 'low'`.
+- In the game the line goes through the chat filter again; if it would be
+  masked, or no answer came within 10 seconds, the scripted brain answers.
+  The line is only ever sent as chat. The Admin Panel's `talk` op returns
+  `{ line, source: 'claude' | 'scripted', reason }`.
+
+### Admin Panel (`a: 'haunt'`)
+
+New ops and fields: `character` (start, appear, talk), `ending` (any of
+the character's), `finale` (straight to the end), `finale_in` (`minutes`
+until the end begins), `restart` (an automatic haunting from the
+beginning, or starting a waiting one now), `appear` (the character near
+you, for a few seconds), `talk` (`text`; answered asynchronously). The
+status adds `character`, `auto`, `autoState` (`none`, `waiting`, `running`,
+`over`) and `autoIn`. All of it runs in the admin context: nothing earns
+advancements, and an automatic haunting touched from here does not count.
+
+### Notes for phase 5
+
+- The flag for the advancement: the per-player stat `haunting.experienced`
+  (automatic hauntings seen through honestly, see above). The world's roll
+  is `level.flags.autoHaunt` (`over: true` once it has happened).
+- The Admin Panel's Haunting tab is in `AdminPanel.renderHaunt`: *Who* (the
+  picker and blurb), *The Haunting* (start or the running controls),
+  *Tests* (show it, talk to it), and on the right *Status* and *What
+  happens*.
+- Left for polish: the characters' figures are shown to everyone nearby
+  (like Herobrine's); Green Steve's copies wear a player's name but not
+  their skin; the Cave Dweller's crawl holes need natural walls nearby.
+
 ## Protocol
 
-`PROTOCOL_VERSION` 8 (phase 3; 7 was phase 2, 6 phase 1).
+`PROTOCOL_VERSION` 9 (phase 4; 8 was phase 3, 7 phase 2, 6 phase 1).
 
 - **Phase 1 and 2:** `WorldInfo.halloween` (`HalloweenState`), the `ghost`
   and `haunted_area` messages, the Admin Panel's `halloween` action, and the
@@ -647,3 +814,10 @@ cutscenes and fights that are running.
   - S2C: `speech`, `knock_doors`.
   - The scene step `look` and the `skip` flag on scene `fx`.
   - The new Admin Panel ops.
+- **Phase 4 adds:**
+  - The kick's `screen` (`HauntEndScreen`).
+  - fx `drain`; scene steps `erase`, `flash`, `rise`, `eyes`, `watch`.
+  - Chat kinds `null`, `greensteve`, `dweller`.
+  - The mobs `null_entity`, `green_steve`, `cave_dweller` (so the registry
+    hash changes).
+  - The `haunt` action's new ops and fields, and `HauntStatus`'s new fields.

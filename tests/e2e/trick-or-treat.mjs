@@ -10,11 +10,12 @@
  *    answer, a Trick Home's grab, drag and slam, the fight, its chest; Herobrine
  *    in one (from the Admin Panel);
  *  - the Trick or Treat! quest tracker, the Admin Panel's controls;
+ *  - the quest in Creative (switched to by command), from the creative menu;
  *  - after the season: no prompt, nobody answers, the sack still works.
  * Screenshots: tests/e2e/out/trick-*.png (UPDATE_LOG_SHOTS=1 also keeps clean
  * copies for the Update Log in tests/e2e/out/clean).
  *
- *   npx vite build && node tests/e2e/trick-or-treat.mjs   (ONLY=title|sack|costumes|knock|quest|after for one part)
+ *   npx vite build && node tests/e2e/trick-or-treat.mjs   (ONLY=title|sack|costumes|knock|quest|creative|after for one part)
  *
  * The world is seed "test-seed" (generator 9): its Trick-or-Treat eligible
  * desert village at (-136, 952) is dressed when built in the season.
@@ -672,6 +673,62 @@ if (part('knock') || part('quest')) {
     await page.screenshot({ path: `${OUT}/trick-admin.png`, keepMenu: true });
     await page.keyboard.press('Escape');
   }
+  await page.close();
+}
+
+// ======================================================================== the quest in Creative
+if (part('creative')) {
+  const page = await newPage();
+  const { cmd, admin, waitChunks } = helpers(page);
+  await page.goto(`http://localhost:${PORT}/?clock=${IN_SEASON}`);
+  await page.getByText('Singleplayer').waitFor({ timeout: 30000 });
+  await page.evaluate(() => (window.minehonk.settings.renderDistance = 6));
+  await newWorld(page, 'Creative Quest', SEED);
+  await waitChunks(3000);
+  const tracker = () => page.evaluate(() => document.querySelector('.quest-tracker:not(.hidden)')?.textContent ?? '');
+  const waitStep = (re) => page.waitForFunction((src) => new RegExp(src).test(document.querySelector('.quest-tracker:not(.hidden)')?.textContent ?? ''), re.source, { timeout: 20000 }).catch(() => {});
+  // Creative by command (a cheat in a survival world), the sack and a pumpkin from the creative menu
+  await cmd('/gamemode creative', 800);
+  const gm = await page.evaluate(() => window.minehonk.game.player.gamemode);
+  await page.evaluate(([sack, pumpkin]) => {
+    const g = window.minehonk.game;
+    g.send({ t: 'creative_set', slot: 36, item: { id: sack, count: 1 } });
+    g.send({ t: 'creative_set', slot: 37, item: { id: pumpkin, count: 1 } });
+  }, [await num(page, 'trick_or_treat_sack'), await num(page, 'carved_pumpkin')]);
+  await waitStep(/Wear your costume/);
+  check(`in ${gm}, a sack and a pumpkin from the creative menu move the quest on ("${await tracker()}")`, gm === 'creative' && /Wear your costume/.test(await tracker()));
+  // Put on by using it
+  await page.evaluate(() => {
+    const g = window.minehonk.game;
+    g.send({ t: 'hotbar', slot: 1 });
+    g.selected = 1;
+  });
+  await page.waitForTimeout(400);
+  await page.evaluate(() => window.minehonk.game.send({ t: 'use', hand: 0, action: 'start' }));
+  await waitStep(/Find a Trick-or-Treat Village/);
+  check(`wearing it: "${await tracker()}"`, /Find a Trick-or-Treat Village/.test(await tracker()));
+  // Teleported to the village (another cheat)
+  await cmd(`/tp ${TRICK.x} 120 ${TRICK.z}`, 2500);
+  await waitChunks(9000);
+  const doors = (await admin('village_doors')).data?.doors?.doors ?? [];
+  const d = doors.find((x) => x.kind === 'candy');
+  if (d) await cmd(`/tp ${d.out[0] + 0.5} ${d.out[1]} ${d.out[2] + 0.5}`, 1500);
+  await waitStep(/Knock on a door/);
+  check(`teleported into the village: "${await tracker()}"`, !!d && /Knock on a door/.test(await tracker()));
+  // Knocking (from the hotbar's sack)
+  if (d) {
+    await page.evaluate(([d]) => {
+      const g = window.minehonk.game;
+      g.send({ t: 'hotbar', slot: 0 });
+      g.selected = 0;
+      g.send({ t: 'knock', x: d.x, y: d.y, z: d.z });
+    }, [d]);
+  }
+  await waitStep(/Collect candy/);
+  await page.waitForFunction(() => !window.minehonk.game.hauntScene.active, null, { timeout: 15000 }).catch(() => {});
+  await page.waitForTimeout(800);
+  check(`a Candy Home answered: "${await tracker()}"`, /Collect candy from Candy Homes \([1-3]\/10\)/.test(await tracker()));
+  await page.screenshot({ path: `${OUT}/trick-quest-creative.png`, noClean: true });
   await page.close();
 }
 

@@ -170,10 +170,10 @@ export const QUEST_CANDY = 10;
 export interface HalloweenProgress {
   /** Quest steps done, in order (they stay done). */
   steps: QuestStep[];
-  /** Doors answered (Candy and Trick Homes), and candies Candy Homes gave (no cheats). */
+  /** Doors answered (Candy and Trick Homes), and candies Candy Homes gave: for the quest, so cheats count too. */
   knocks: number;
   candy: number;
-  /** Trick Homes beaten. */
+  /** Trick Homes beaten (honest wins only). */
   tricks: number;
   /** The quest was finished. */
   done: boolean;

@@ -29,7 +29,7 @@ import { Mob } from '../entity/Mob';
 import { Random } from '../../common/math/rng';
 import { stateOf, getProp, withProp, STATE_BLOCK, STATE_SOLID, STATE_FLUID, blocks } from '../../common/registry/blocks';
 import { items } from '../../common/registry/items';
-import { isAdminStack, stackOf, markAdmin } from '../../common/game/itemstack';
+import { stackOf, markAdmin } from '../../common/game/itemstack';
 import { WEARABLE_BLOCKS } from '../../common/halloween/heads';
 import { CANDY_ITEM, CANDY_NAMES, rollCandyHome, type CandyKind } from '../../common/halloween/candy';
 import {
@@ -65,6 +65,8 @@ import type { DoorRecord, VillageRecord } from '../../common/halloween/villages'
 import { floorNear, sendGrab, sendDrag, sendSceneEnd, ease } from '../world/drag';
 import type { QuestInfo, SpeechTone } from '../../common/net/protocol';
 
+/** In a Trick-or-Treat Village, for the quest: this near one of its doors (blocks). */
+const QUEST_VILLAGE_NEAR = 24;
 /** How often (ticks) the doors near each player and the quest are looked at. */
 const CHECK_TICKS = 10;
 /** Village records further than this from a player (blocks) are not searched for doors. */
@@ -202,11 +204,10 @@ export class TrickOrTreatSystem {
     return false;
   }
 
-  /** Whether the player wears a costume (and whether it is an honest one). */
-  costume(p: ServerPlayer): { on: boolean; honest: boolean } {
+  /** Whether the player wears a costume (a head or a carved pumpkin on their head). */
+  costumed(p: ServerPlayer): boolean {
     const hat = p.inventory.get(39);
-    const on = !!hat && WEARABLE_BLOCKS.includes(items[hat.id]?.id ?? '');
-    return { on, honest: on && !isAdminStack(hat) };
+    return !!hat && WEARABLE_BLOCKS.includes(items[hat.id]?.id ?? '');
   }
 
   // ------------------------------------------------------------------ knocking
@@ -244,14 +245,15 @@ export class TrickOrTreatSystem {
     if (this.candyRuns.has(id)) return voice(BUSY_LINES);
     if (!force) {
       if (trick && d.used) return voice(EMPTY_LINES);
-      if (!this.costume(p).on) return voice(NO_COSTUME_LINES);
+      if (!this.costumed(p)) return voice(NO_COSTUME_LINES);
       const candy = s.candy!;
       if (!candy.hasSack(p)) return voice(NO_SACK_LINES);
       if (candy.room(p) <= 0) return voice(FULL_SACK_LINES);
       if (!trick && d.got?.includes(p.uuid)) return voice(ALREADY_LINES);
     }
     const cheat = force || !!ref.rec.cheat || s.admin.inContext(p);
-    if (!cheat) p.halloween.knocks++;
+    // (the quest counts every answered door, cheats too: it is a guide, and rewards nothing)
+    p.halloween.knocks++;
     if (trick) {
       this.startTrick(p, ref, trickKindFor(d.seed), force, cheat);
       return { ok: true, text: `Knocked on a Trick Home: ${TRICK_ENCOUNTERS[trickKindFor(d.seed)].name}.` };
@@ -292,8 +294,8 @@ export class TrickOrTreatSystem {
       d.used = true;
       s.villages?.markDirty();
     }
+    p.halloween.candy += kinds.length;
     if (!cheat) {
-      p.halloween.candy += kinds.length;
       s.interaction.grant(p, 'first_candy');
       if (s.candy!.fullSack(p)) s.interaction.grant(p, 'full_sack');
     }
@@ -870,26 +872,31 @@ export class TrickOrTreatSystem {
 
   // ------------------------------------------------------------------ the quest
 
-  /** Whether a quest step is done right now, read off the game (honest things only). */
+  /**
+   * Whether a quest step is done right now, read off the game. The quest is a
+   * guide (it rewards nothing), so it works in Creative and with cheats like
+   * the other trackers: a sack or a costume from the creative menu or the
+   * Admin Panel counts, and so does an Admin Panel village. The advancements
+   * along the way stay honest (Interaction.grant).
+   */
   stepDone(p: ServerPlayer, step: QuestStep): boolean {
-    const s = this.server;
-    const candy = s.candy!;
-    const honest = (pred: (id: string) => boolean): boolean => {
+    const candy = this.server.candy!;
+    const has = (pred: (id: string) => boolean): boolean => {
       for (let i = 0; i <= 40; i++) {
         const st = p.inventory.get(i);
-        if (st && pred(items[st.id]!.id) && !isAdminStack(st)) return true;
+        if (st && pred(items[st.id]!.id)) return true;
       }
       return false;
     };
     switch (step) {
       case 'sack':
-        return honest((id) => id === items[candy.sackNum]!.id);
+        return has((id) => id === items[candy.sackNum]!.id);
       case 'costume':
-        return honest((id) => WEARABLE_BLOCKS.includes(id));
+        return has((id) => WEARABLE_BLOCKS.includes(id));
       case 'wear':
-        return this.costume(p).honest;
+        return this.costumed(p);
       case 'village':
-        return p.achievements.has('find_trick_village');
+        return p.achievements.has('find_trick_village') || (p.dim.id === 'overworld' && this.doorsAround(p.x, p.z, QUEST_VILLAGE_NEAR).length > 0);
       case 'knock':
         return p.halloween.knocks > 0;
       case 'candy':
@@ -912,7 +919,7 @@ export class TrickOrTreatSystem {
   private quest(p: ServerPlayer): void {
     const s = this.server;
     const pr = p.halloween;
-    if (this.active && !s.admin.inContext(p)) {
+    if (this.active && !p.dead && p.gamemode !== 'spectator') {
       for (let step = currentStep(pr); step && this.stepDone(p, step); step = currentStep(pr)) pr.steps.push(step);
       if (!currentStep(pr) && !pr.done) {
         pr.done = true;

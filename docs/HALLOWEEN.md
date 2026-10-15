@@ -581,8 +581,15 @@ others see it on your head.
   5. Knock.
   6. Collect 10 candies from Candy Homes.
 - **How steps are checked:** each step is read off the real game every 10
-  ticks (`stepDone`). Only honest things count, so a cheat-made sack or head
-  does not. Steps are done in order, and once done they stay done.
+  ticks (`stepDone`). Steps are done in order, and once done they stay done.
+- **Creative and cheats:** the quest is a guide that rewards nothing, so like
+  the game's other trackers it works in any mode. A sack or costume from the
+  creative menu or the Admin Panel counts. Being near the doors of any
+  Trick-or-Treat Village counts as finding one (within 24 blocks, Admin Panel
+  villages and teleports included). Every answered knock and every Candy Home
+  candy counts, the Admin Panel's forced knock too. The advancements along
+  the way still only come from honest play (`Interaction.grant`), and candy
+  from cheats stays cheat-made.
 - **Saved per player** in `PlayerData.halloween`: steps, knocks, candy,
   tricks and done (`sanitizeProgress`).
 - **The tracker** is the V4 quest tracker. It shows only while Halloween is

@@ -429,7 +429,7 @@ export const V7_LOG: UpdateEntry = {
       icon: 'candy',
       blocks: [
         { k: 'img', img: 'quest', caption: 'The quest tracker, on its first step.' },
-        { k: 'p', text: 'While Halloween is on, the quest tracker walks you through trick-or-treating. Each step is checked against what you really have and do (things made by cheats do not count), and your progress is saved.' },
+        { k: 'p', text: 'While Halloween is on, the quest tracker walks you through trick-or-treating. Each step is checked against what you really have and do, and your progress is saved. It works in Creative too (the advancements along the way still only come from playing it for real).' },
         { k: 'list', items: QUEST_STEPS.map((q, i) => `**${i + 1}.** ${q.text}${q.id === 'candy' ? ` (${QUEST_CANDY} of them)` : ''}`) },
       ],
     },

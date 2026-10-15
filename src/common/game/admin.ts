@@ -11,7 +11,8 @@ import { expansionGiveSets } from '../endExpansion/resources';
 import { END_QUEST_IDS } from '../endExpansion/quests';
 import { RARE_END_LOOT } from '../endExpansion/guardian';
 import { DRAGON_TESTS } from '../endExpansion/dragon';
-import { HAUNT_OPS, HAUNT_MIN_MINUTES, HAUNT_MAX_MINUTES, HAUNT_ENDINGS, type HauntOp, type HauntEnding } from './haunting';
+import { HAUNT_OPS, HAUNT_MIN_MINUTES, HAUNT_MAX_MINUTES, HAUNT_CHARACTERS, type HauntOp, type HauntCharacter } from './haunting';
+import { castEnding } from './hauntCast';
 import { HALLOWEEN_SIMULATIONS, type HalloweenSimulation, type HalloweenState } from '../halloween/season';
 import { PUMPKIN_IDS } from '../halloween/pumpkins';
 import { CANDY_KINDS, type CandyKind } from '../halloween/candy';
@@ -257,7 +258,8 @@ export type AdminAction =
   /** V6: the End Expansion (tp_biome names one of the Expanded End's biomes). */
   | { a: 'v6'; op: V6Op; biome?: string; set?: string; structure?: string; quest?: string; spot?: string; test?: string }
   /** The Haunting (every world): Herobrine over `minutes`; `erase` deletes the world at the end (its owner only). */
-  | { a: 'haunt'; op: HauntOp; minutes?: number; erase?: boolean; ending?: HauntEnding }
+  /** V7 phase 4: `character` (Herobrine when left out), `text` (op talk), `minutes` also for finale_in. */
+  | { a: 'haunt'; op: HauntOp; minutes?: number; erase?: boolean; ending?: string; character?: HauntCharacter; text?: string }
   /** V7: Halloween (the season's state, a ghost now, the pumpkins, test simulations). */
   | { a: 'halloween'; op: HalloweenOp; pumpkin?: string; sim?: HalloweenSimulation; door?: number; candy?: CandyKind; trick?: TrickKind };
 
@@ -371,10 +373,28 @@ export function validateAdmin(raw: unknown): AdminAction | null {
     }
     case 'haunt': {
       if (!HAUNT_OPS.includes(m.op as HauntOp)) return null;
-      if (m.op !== 'start') return { a: 'haunt', op: m.op as HauntOp };
-      if (!isInt(m.minutes) || m.minutes < HAUNT_MIN_MINUTES || m.minutes > HAUNT_MAX_MINUTES || typeof m.erase !== 'boolean') return null;
-      if (m.ending !== undefined && !HAUNT_ENDINGS.includes(m.ending as HauntEnding)) return null;
-      return { a: 'haunt', op: 'start', minutes: m.minutes, erase: m.erase, ...(m.ending !== undefined ? { ending: m.ending as HauntEnding } : {}) };
+      // Who: one of the fixed few, or Herobrine when left out
+      if (m.character !== undefined && !HAUNT_CHARACTERS.includes(m.character as HauntCharacter)) return null;
+      const c = (m.character ?? 'herobrine') as HauntCharacter;
+      const who = c !== 'herobrine' ? { character: c } : {};
+      switch (m.op) {
+        case 'start':
+          if (!isInt(m.minutes) || m.minutes < HAUNT_MIN_MINUTES || m.minutes > HAUNT_MAX_MINUTES || typeof m.erase !== 'boolean') return null;
+          if (m.ending !== undefined && (typeof m.ending !== 'string' || !castEnding(c, m.ending))) return null;
+          return { a: 'haunt', op: 'start', minutes: m.minutes, erase: m.erase, ...(m.ending !== undefined ? { ending: m.ending as string } : {}), ...who };
+        case 'finale_in':
+          if (!isInt(m.minutes) || m.minutes < 0 || m.minutes > HAUNT_MAX_MINUTES) return null;
+          return { a: 'haunt', op: 'finale_in', minutes: m.minutes };
+        case 'appear':
+          return { a: 'haunt', op: 'appear', ...who };
+        case 'talk': {
+          if (typeof m.text !== 'string') return null;
+          const text = m.text.trim().slice(0, 200);
+          return text ? { a: 'haunt', op: 'talk', text, ...who } : null;
+        }
+        default:
+          return { a: 'haunt', op: m.op as HauntOp };
+      }
     }
     case 'v6':
       if (!V6_OPS.includes(m.op as V6Op)) return null;

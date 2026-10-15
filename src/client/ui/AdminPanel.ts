@@ -1060,7 +1060,7 @@ export function adminScreen(host: AdminHost): Screen {
         ? [
             ['Stage', st ? st.name : '-'],
             ['Time', `${mmss(d.elapsed)} / ${mmss(d.total)}`],
-            ['Ending', HAUNT_ENDING_NAMES[d.ending]],
+            ['Ending', HAUNT_ENDING_NAMES[d.ending as HauntEnding] ?? d.ending],
             // He only answers in chat from "He speaks" on
             ['Talks back', d.elapsed >= Math.floor(d.total * HAUNT_TALK_AT) ? 'Yes: talk to him in chat' : `From "He speaks", in ${mmss(Math.floor(d.total * HAUNT_TALK_AT) - d.elapsed)}`],
             ['At the end', d.erase ? 'The world is deleted' : 'The world is kept (a fake deletion)'],

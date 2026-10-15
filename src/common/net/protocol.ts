@@ -12,7 +12,7 @@ import type { GameMode, Difficulty, GodHearts } from '../game/gamemode';
 import type { DimensionId } from '../data/biomes';
 import type { HalloweenState } from '../halloween/season';
 
-export const PROTOCOL_VERSION = 8;
+export const PROTOCOL_VERSION = 9;
 
 // ---------------------------------------------------------------------------
 // Client -> Server
@@ -133,7 +133,7 @@ export interface EntitySpawn {
 export type S2C =
   | { t: 'welcome'; entityId: number; name: string; uuid: string; dimension: DimensionId; gamemode: GameMode; world: WorldInfo; x: number; y: number; z: number; yaw: number; pitch: number; time: number; dayTime: number; abilities: AbilitiesMsg; spawn: [number, number, number] }
   /** `ban`: the Haunting's fake ban screen (`deleted`: the world is gone); `erase`: the world's owner deletes it. */
-  | { t: 'kick'; reason: string; ban?: FakeBan; erase?: boolean; /** The Haunting's lair ending: straight back to the title (it already said SERVER MEMORY CORRUPTED). */ corrupted?: boolean }
+  | { t: 'kick'; reason: string; ban?: FakeBan; erase?: boolean; /** The Haunting's lair ending: straight back to the title (it already said SERVER MEMORY CORRUPTED). */ corrupted?: boolean; /** V7 phase 4: another character's end, on its own screen. */ screen?: HauntEndScreen }
   | { t: 'chunk'; data: Uint8Array }
   | { t: 'unload_chunk'; cx: number; cz: number }
   | { t: 'block'; x: number; y: number; z: number; state: number }
@@ -263,7 +263,31 @@ export interface FakeBan {
   deleted?: boolean;
 }
 
-export type ChatKind = 'chat' | 'system' | 'join' | 'leave' | 'death' | 'announce' | 'error' | 'achievement' | 'whisper' | 'herobrine';
+/** V7 phase 4: the screen a haunting by Null, Green Steve or the Cave Dweller ends on. */
+export interface HauntEndScreen {
+  style: 'null' | 'green_steve' | 'cave_dweller';
+  title: string;
+  reason: string;
+  note: string;
+  /** The world's owner chose to have it deleted. */
+  deleted?: boolean;
+}
+
+export type ChatKind =
+  | 'chat'
+  | 'system'
+  | 'join'
+  | 'leave'
+  | 'death'
+  | 'announce'
+  | 'error'
+  | 'achievement'
+  | 'whisper'
+  | 'herobrine'
+  // V7 phase 4: the other characters' voices (lowercase grey, a player's chat in green, a whisper)
+  | 'null'
+  | 'greensteve'
+  | 'dweller';
 
 /**
  * Screen/world effect kinds (V3).
@@ -334,6 +358,11 @@ export type FxKind =
   | 'haunt'
   /** He reached you: his face fills the screen with a scream, then black (ticks). */
   | 'jumpscare'
+  /**
+   * V7 phase 4 (Null): the colour drains out of the world (strength 0..1,
+   * eased; with ticks, a pulse that fades back to the level it was at).
+   */
+  | 'drain'
   /**
    * A cutscene step, for ticks (text = grab, drag, black, wake, shock, die,
    * corrupt, or end to stop): the Haunting's lair ending, and (V7 phase 3)

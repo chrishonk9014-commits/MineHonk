@@ -293,20 +293,23 @@ async function ticket(hub: Hub, account: AccountInfo, worldId: string, compat: s
   return { ticket: t, host: hosted.host, hostName: hosted.hostName, relayOnly: relay, iceServers: await iceServers(hub.env), world: await hub.worlds.summary(e, account.uuid, role) };
 }
 
-// ------------------------------------------------------------------ Herobrine's voice
+// ------------------------------------------------------------------ the haunting voices
 
 /**
- * The Haunting: one line from Claude for something a player said to him.
- * Needs no account (single player worlds are not signed in), so it is held
- * to this site, a few answers a minute per address and a daily limit for
- * everyone; anything else gets `text: null` and the game uses his scripted
- * lines.
+ * The Haunting: one line from Claude for something a player said to whoever
+ * haunts their world. Needs no account (single player worlds are not signed
+ * in), so it is held to this site, a few answers a minute per address and
+ * one daily limit for everyone and every character together; anything else
+ * gets `text: null` and the game uses the character's scripted lines.
+ * POST /api/herobrine is always Herobrine (as it was before V7 phase 4, for
+ * tabs still open from then); POST /api/voice takes the character from the
+ * request, one of a fixed list (any other is refused).
  */
-async function herobrine(req: Request, env: Env, ip: string, b: Record<string, unknown>): Promise<unknown> {
+async function herobrine(req: Request, env: Env, ip: string, b: Record<string, unknown>, route: 'herobrine' | 'voice'): Promise<unknown> {
   if (!allowedOrigin(req.headers.get('Origin'), env)) throw new HttpError(403, 'Not allowed from this site');
+  const r = parseVoiceRequest(route === 'herobrine' ? { ...b, character: 'herobrine' } : b);
+  if (!r || (route === 'voice' && typeof b.character !== 'string')) throw new HttpError(400, 'Bad request');
   if (!env.ANTHROPIC_API_KEY) return { text: null, reason: 'off' };
-  const r = parseVoiceRequest(b);
-  if (!r) throw new HttpError(400, 'Bad request');
   if (!voiceLimiter.take(ip) || !voiceHourLimiter.take(ip)) return { text: null, reason: 'busy' };
   const limit = Math.max(0, Number(env.HEROBRINE_DAILY_LIMIT ?? HEROBRINE_DAILY_LIMIT) || 0);
   const day = new Date().toISOString().slice(0, 10);
@@ -399,7 +402,8 @@ async function api(req: Request, url: URL, env: Env): Promise<unknown | Response
   // `now`: the hub's clock, which the Halloween season goes by online (V7)
   if (route === 'GET /health') return { ok: true, name: 'MineHonk', protocol: 1, kind: 'cloud', auth: 'stretched-v1', now: Date.now() };
   if (route === 'GET /hub-key') return { alg: 'ES256', jwk: (await ticketKey(env)).publicJwk };
-  if (route === 'POST /herobrine') return herobrine(req, env, ip, b);
+  if (route === 'POST /herobrine') return herobrine(req, env, ip, b, 'herobrine');
+  if (route === 'POST /voice') return herobrine(req, env, ip, b, 'voice');
   if (route === 'POST /register' || route === 'POST /login') {
     if (!authLimiter.take(ip)) throw new HttpError(429, 'Too many attempts. Wait a minute.');
     if (route === 'POST /register') return hub.accounts.register(str(b.name), str(b.password), (n) => !filter.mask(n).changed);

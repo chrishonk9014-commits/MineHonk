@@ -1,5 +1,5 @@
 /**
- * The Haunting (Admin Panel, every world): Herobrine, the way the old
+ * The Haunting (every world; not seasonal): Herobrine, the way the old
  * stories tell it. A white-eyed figure far off in the fog who is gone when
  * you look again; redstone torches nobody placed; cobblestone crosses in
  * the air; 2x2 tunnels that lead nowhere; trees stripped of their leaves;
@@ -13,7 +13,12 @@
  *
  * The whole thing runs on a timeline of the length the Admin Panel chose
  * (30 minutes unless changed); every moment below is a fraction of it.
- * Plain data shared by the server, the client and the tests.
+ *
+ * V7 phase 4: Herobrine also comes by himself, once, to some worlds made by
+ * players who beat him for real (the automatic haunting, below), and the
+ * Admin Panel can send three more characters from the old stories (their
+ * data is in hauntCast.ts). Plain data shared by the server, the client and
+ * the tests.
  */
 
 export const HAUNT_DEFAULT_MINUTES = 30;
@@ -100,7 +105,14 @@ export const HAUNT_BAN = {
 /** What the Admin Panel shows. */
 export interface HauntStatus {
   active: boolean;
-  stage: HauntStage | null;
+  /** The stage's id (for Herobrine one of HauntStage; the other characters have their own, see hauntCast.ts). */
+  stage: string | null;
+  /** V7 phase 4: who is haunting (Herobrine unless the panel chose another). */
+  character: HauntCharacter;
+  /** Started by itself (the automatic haunting), not from the Admin Panel. */
+  auto: boolean;
+  /** An automatic haunting waiting to begin: seconds of play left until it does (the panel only). */
+  autoIn?: number;
   /** Seconds in, and of the whole. */
   elapsed: number;
   total: number;
@@ -110,9 +122,62 @@ export interface HauntStatus {
   changes: number;
   /** Whether the person asking may arm the deletion (the world's owner). */
   canErase: boolean;
-  /** How it will end (as chosen; a random one is not given away). */
-  ending: HauntEnding;
+  /** How it will end (as chosen; a random one is not given away): one of the character's endings. */
+  ending: string;
 }
 
-export type HauntOp = 'status' | 'start' | 'stop' | 'skip';
-export const HAUNT_OPS: readonly HauntOp[] = ['status', 'start', 'stop', 'skip'];
+/**
+ * status, start, stop (puts everything back), skip (to the next stage),
+ * V7 phase 4: finale (straight to the end), finale_in (`minutes` until the
+ * end begins), restart (an automatic haunting from its beginning), appear
+ * (the chosen character, near you, briefly: a test), talk (say `text` to the
+ * chosen character without any haunting: a test of its voice).
+ */
+export type HauntOp = 'status' | 'start' | 'stop' | 'skip' | 'finale' | 'finale_in' | 'restart' | 'appear' | 'talk';
+export const HAUNT_OPS: readonly HauntOp[] = ['status', 'start', 'stop', 'skip', 'finale', 'finale_in', 'restart', 'appear', 'talk'];
+
+/** V7 phase 4: who can haunt a world (Herobrine by himself; the others only from the Admin Panel). */
+export type HauntCharacter = 'herobrine' | 'null' | 'green_steve' | 'cave_dweller';
+export const HAUNT_CHARACTERS: readonly HauntCharacter[] = ['herobrine', 'null', 'green_steve', 'cave_dweller'];
+
+// ------------------------------------------------------------------ the automatic haunting (V7 phase 4)
+
+/**
+ * Herobrine comes by himself to one world in ten made by a player who has
+ * beaten him for real (the boss fight, no cheats, not from the Admin Panel)
+ * in an earlier world. The roll is made once, when the world is created,
+ * with a real random number (not the seed), and kept in the world; nothing
+ * shows it. It begins after this much play (a random time in between, set
+ * at the roll; only time with someone in the world counts): long enough
+ * that the world has become someone's home (a Minecraft day is 20 minutes:
+ * the first night or two have passed and there is a shelter), short enough
+ * to come within the first evening or two of play.
+ */
+export const AUTO_HAUNT_CHANCE = 0.1;
+export const AUTO_HAUNT_DELAY_MIN = 20 * 60 * 20;
+export const AUTO_HAUNT_DELAY_MAX = 40 * 60 * 20;
+/** It lasts about 45 minutes, through the same stages as the panel's. */
+export const AUTO_HAUNT_MINUTES = 45;
+/** How it ends: the usual pick (the lair one time in four); the world is always kept. */
+export const AUTO_HAUNT_ENDING: HauntEnding = 'random';
+
+/** What a world keeps of its roll (level.flags.autoHaunt): made once, at creation; never made again. */
+export interface AutoHauntRoll {
+  /** The roll came up: Herobrine will come. */
+  haunted: boolean;
+  /** Ticks of play before he does, and played so far. */
+  after: number;
+  played: number;
+  /** When the roll was made (ms since 1970). */
+  at: number;
+  /** It began, and it is over (for good). */
+  begun?: boolean;
+  over?: boolean;
+}
+
+/** The roll, for a world being created by an eligible player. `rnd` must be a real random source. */
+export function rollAutoHaunt(rnd: () => number, now: number): AutoHauntRoll {
+  const haunted = rnd() < AUTO_HAUNT_CHANCE;
+  const after = Math.round(AUTO_HAUNT_DELAY_MIN + rnd() * (AUTO_HAUNT_DELAY_MAX - AUTO_HAUNT_DELAY_MIN));
+  return { haunted, after, played: 0, at: now };
+}

@@ -472,7 +472,16 @@ export class AdminService {
         return this.server.halloween.admin(p, a.op, a.pumpkin, a.sim, a.door, a.candy, a.trick);
       case 'haunt':
         if (!this.server.haunting) return { ok: false, text: 'The haunting is not available.' };
-        return this.server.haunting.admin(p, a.op, a.minutes, a.erase, a.ending);
+      {
+        const out = this.server.haunting.admin(p, a.op, a.minutes, a.erase, a.ending, a.character, a.text);
+        if (!(out instanceof Promise)) return out;
+        // A test of its voice: the answer comes when it comes
+        void out.then(
+          (o) => p.send({ t: 'admin_result', req, ok: o.ok, text: o.text, data: o.data }),
+          (e: Error) => p.send({ t: 'admin_result', req, ok: false, text: `Failed: ${e.message}` }),
+        );
+        return null;
+      }
       case 'v6':
         if (!this.server.endExpansion) return { ok: false, text: 'The End Expansion is not running.' };
         return expansionAdmin(

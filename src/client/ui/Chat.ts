@@ -18,6 +18,10 @@ const COLORS: Record<ChatKind, string> = {
   achievement: '#ffffff',
   whisper: '#aaaaaa',
   herobrine: '#ff3030',
+  // V7 phase 4: the other hauntings' voices
+  null: '#8c8c8c',
+  greensteve: '#55ff55',
+  dweller: '#c8c0b0',
 };
 
 export class Chat {

@@ -592,7 +592,7 @@ export class Mob extends LivingEntity {
     if (this.owner) m.tame = true;
     if (this.fuse >= 0) m.fuse = this.fuse;
     if (this.angryAt || this.target) m.angry = true;
-    for (const k of ['tele', 'slip', 'stun', 'shield', 'awake', 'color', 'sheared', 'size', 'profession', 'variant', 'charged', 'carried', 'phase', 'open', 'saddle', 'leashPos', 'puff', 'dancing', 'playDead', 'rolling', 'eating', 'trusting', 'tongue', 'emerge', 'dig', 'angerLevel', 'sonic', 'listen', 'sniff', 'voidbound', 'errorPhase', 'errorAnim', 'clone', 'malware', 'hbAnim', 'hbKind', 'apparition', 'lit', 'eclipsed', 'state', 'attack', 'inhale', 'rear']) if (this.data[k] !== undefined) m[k] = this.data[k];
+    for (const k of ['tele', 'slip', 'stun', 'shield', 'awake', 'color', 'sheared', 'size', 'profession', 'variant', 'charged', 'carried', 'phase', 'open', 'saddle', 'leashPos', 'puff', 'dancing', 'playDead', 'rolling', 'eating', 'trusting', 'tongue', 'emerge', 'dig', 'angerLevel', 'sonic', 'listen', 'sniff', 'voidbound', 'errorPhase', 'errorAnim', 'clone', 'malware', 'hbAnim', 'hbKind', 'apparition', 'headwear', 'lit', 'eclipsed', 'state', 'attack', 'inhale', 'rear']) if (this.data[k] !== undefined) m[k] = this.data[k];
     if (this.data.glowTicks) m.glowing = true;
     if (this.data.leash && this.metaHolder) m.leash = this.metaHolder;
     if (this.rider) m.rider = this.rider.id;

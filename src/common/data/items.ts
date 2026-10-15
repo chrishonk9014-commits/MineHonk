@@ -15,6 +15,7 @@ import { COLORS } from './blocks';
 import { engineeringItemDefs } from '../engineering/catalog';
 import { expansionItemDefs } from '../endExpansion/resources';
 import { ancientItemDefs } from '../endExpansion/ancient';
+import { SACK_ID, CANDY_KINDS, CANDY_ITEM, CANDY_NAMES, CANDY_LOOK, CANDY_FOOD } from '../halloween/candy';
 
 const defs: ItemDef[] = [];
 const add = (d: ItemDef): ItemDef => {
@@ -385,5 +386,12 @@ for (const d of questItemDefs()) add(d);
 for (const d of eventItemDefs()) add(d);
 for (const d of citadelItemDefs()) add(d);
 for (const d of guardianItemDefs()) add(d);
+
+// V7 - The Halloween Update, phase 3: the Trick-or-Treat Sack and the four candies (see halloween/candy.ts)
+add({ id: SACK_ID, name: 'Trick-or-Treat Sack', maxStack: 1, use: 'sack', creative: 'halloween', tooltip: 'Holds 128 candy. Use it to look inside.' });
+for (const k of CANDY_KINDS) {
+  const f = CANDY_FOOD[k];
+  food(CANDY_ITEM[k], f.hunger, f.saturation, { name: CANDY_NAMES[k], creative: 'halloween', tooltip: CANDY_LOOK[k], ...(k === 'king' ? { rarity: 'rare' as const } : k === 'big' ? { rarity: 'uncommon' as const } : {}), data: { candy: k } }, { alwaysEdible: true, eatTime: f.eatTime, special: 'candy' });
+}
 
 export const ITEM_DEFS: readonly ItemDef[] = defs;

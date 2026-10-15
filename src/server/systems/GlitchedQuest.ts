@@ -107,6 +107,11 @@ export class GlitchedQuestSystem {
   }
 
   /** The Error chunk a player stands in, if any. */
+  /** Whether this system's quest tracker is on the player's screen (V7 phase 3: the Trick or Treat! quest gives way to it). */
+  showing(p: ServerPlayer): boolean {
+    return !!this.shown.get(p);
+  }
+
   errorAt(p: ServerPlayer): ErrorChunk | null {
     const g = p.dim.generator;
     return g.errorChunk?.(Math.floor(p.x) >> 4, Math.floor(p.z) >> 4) ?? null;

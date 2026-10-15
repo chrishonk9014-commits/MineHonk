@@ -21,6 +21,8 @@ import { halloweenReasonText, halloweenState, HALLOWEEN_ENDS_AT, type HalloweenS
 import { DIMENSION_PUMPKINS, decoratePumpkins } from '../../common/halloween/pumpkins';
 import { STATE_REPLACEABLE, STATE_SOLID, STATE_FLUID, stateOf } from '../../common/registry/blocks';
 import type { HalloweenOp, HalloweenStatus } from '../../common/game/admin';
+import type { CandyKind } from '../../common/halloween/candy';
+import type { TrickKind } from '../../common/halloween/trickOrTreat';
 
 /** How often (ticks) the season is looked at again. */
 const CHECK_TICKS = 20;
@@ -85,7 +87,7 @@ export class HalloweenSystem {
     return { state: s, text: halloweenReasonText(s), endsAt: HALLOWEEN_ENDS_AT, now: this.server.clock(), placed: this.placed };
   }
 
-  admin(p: ServerPlayer, op: HalloweenOp, pumpkin?: string, sim?: HalloweenSimulation, door?: number): { ok: boolean; text: string; data?: unknown } {
+  admin(p: ServerPlayer, op: HalloweenOp, pumpkin?: string, sim?: HalloweenSimulation, door?: number, candy?: CandyKind, trick?: TrickKind): { ok: boolean; text: string; data?: unknown } {
     const reply = (ok: boolean, text: string): { ok: boolean; text: string; data: HalloweenStatus } => ({ ok, text, data: this.status() });
     switch (op) {
       case 'status':
@@ -121,6 +123,27 @@ export class HalloweenSystem {
         if (!info || !d) return reply(false, 'That door is not there any more.');
         this.server.admin.moveTo(p, 'overworld', d.out[0] + 0.5, d.out[1], d.out[2] + 0.5);
         return reply(true, `At door ${d.id + 1} (${d.design}): a ${d.kind === 'trick' ? 'Trick' : 'Candy'} Home.`);
+      }
+      // V7 phase 3: trick-or-treating (cheat-made, and never using up a real door)
+      case 'give_sack':
+      case 'give_full_sack':
+      case 'give_candy': {
+        const tt = this.server.trickOrTreat;
+        if (!tt) return reply(false, 'Trick-or-treating is not available.');
+        const r = tt.adminGive(p, op === 'give_sack' ? 'sack' : op === 'give_full_sack' ? 'full_sack' : candy ?? 'regular');
+        return reply(r.ok, r.text);
+      }
+      case 'knock': {
+        const r = this.server.trickOrTreat?.adminKnock(p) ?? { ok: false, text: 'Trick-or-treating is not available.' };
+        return reply(r.ok, r.text);
+      }
+      case 'trick': {
+        const r = this.server.trickOrTreat?.adminTrick(p, trick ?? 'zombie_villagers') ?? { ok: false, text: 'Trick-or-treating is not available.' };
+        return reply(r.ok, r.text);
+      }
+      case 'reset_doors': {
+        const r = this.server.trickOrTreat?.adminReset(p) ?? { ok: false, text: 'Trick-or-treating is not available.' };
+        return reply(r.ok, r.text);
       }
       case 'simulate': {
         this.sim = sim ?? 'none';

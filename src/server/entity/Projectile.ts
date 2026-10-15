@@ -3,6 +3,7 @@
  * bullets, rift bolts) and primed TNT. Collision against blocks uses a
  * raycast along the motion; against entities a swept AABB test.
  */
+import { activeTemp } from '../../common/halloween/tempEnchant';
 import { Entity } from './Entity';
 import { raycastBlocks } from '../../common/physics/raycast';
 import { AABB } from '../../common/physics/aabb';
@@ -280,7 +281,7 @@ export class Projectile extends Entity {
     if (this.potion) m.item = this.potion.id;
     if (this.crit) m.crit = true;
     if (this.data?.spectral) m.spectral = true;
-    if (this.item?.tag?.ench && Object.keys(this.item.tag.ench).length) m.glint = true;
+    if ((this.item?.tag?.ench && Object.keys(this.item.tag.ench).length) || activeTemp(this.item)) m.glint = true;
     return m;
   }
 

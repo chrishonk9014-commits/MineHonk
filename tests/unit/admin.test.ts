@@ -3,6 +3,7 @@
  * and the rule that cheats never progress advancements (directly or through
  * a chain of events) while normal play still does.
  */
+import { ONLY_WON } from '../../src/common/halloween/heads';
 import { describe, it, expect } from 'vitest';
 import { makeServer, join, tick, FakeConn, hello } from '../helpers/testServer';
 import { items, itemById } from '../../src/common/registry/items';
@@ -130,6 +131,11 @@ describe('admin tools', () => {
       player.inventory.clear();
       const out = server.admin.give(player, it.id, 1);
       const got = player.inventory.slots.some((s) => s && s.id === it.num && isAdminStack(s));
+      // V7 phase 3: the Herobrine Head is only ever won, never given
+      if (ONLY_WON.has(it.id)) {
+        if (out.ok || got) failed.push(it.id);
+        continue;
+      }
       if (!out.ok || !got) failed.push(it.id);
     }
     expect(failed).toEqual([]);

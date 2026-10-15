@@ -2,6 +2,7 @@
 import { items, itemById } from '../registry/items';
 import { POTION_BY_ID } from '../data/potions';
 import { ENCHANT_BY_ID } from '../data/enchantments';
+import { stripExpiredTemp } from '../halloween/tempEnchant';
 
 export interface ItemTag {
   /** Enchantments id -> level. */
@@ -18,6 +19,8 @@ export interface ItemTag {
   lore?: string;
   /** Created by cheats (Admin Panel or commands): never counts towards advancements. */
   admin?: boolean;
+  /** V7 phase 3: a temporary enchantment (a King-Sized Candy's), until a world time (see halloween/tempEnchant.ts). */
+  temp?: { id: string; lvl: number; until: number };
 }
 
 export interface ItemStack {
@@ -99,7 +102,11 @@ export function fromSaved(s: SavedStack | null | undefined): Slot {
   const count = Math.max(1, Math.min(it.maxStack, Math.floor(Number(s.count) || 1)));
   const out: ItemStack = { id: it.num, count };
   if (s.damage && Number.isFinite(s.damage)) out.damage = Math.max(0, Math.floor(s.damage));
-  if (s.tag && typeof s.tag === 'object') out.tag = s.tag;
+  if (s.tag && typeof s.tag === 'object') {
+    out.tag = s.tag;
+    // V7 phase 3: a temporary enchantment that ran out while it lay here is gone
+    stripExpiredTemp(out);
+  }
   return out;
 }
 

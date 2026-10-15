@@ -1334,6 +1334,8 @@ export class MobSystem {
     const byPlayer = !!killer || (info.attacker instanceof Mob && !!info.attacker.owner);
     // V6 phase 4: a Crystal Vault's Bulwark falling clears its vault
     if (m.data.vault) s.endQuests?.onMobDeath(m);
+    // V7 phase 3: one of a Trick Home's monsters (Herobrine's there too) falls
+    if (m.data.trickHome) s.trickOrTreat?.onMobDeath(m, killer, info.source === 'kill');
     if (m.def.category === 'boss' && this.onBossDeath?.(m, killer, info)) {
       if (killer) {
         killer.addStat('killed.' + m.type);
@@ -1344,7 +1346,8 @@ export class MobSystem {
     const weapon = killer ? killer.inventory.get(killer.selectedSlot) : null;
     const looting = enchantLevel(weapon, 'looting');
     // The Haunting's monsters leave nothing behind
-    if (!m.baby && s.level.rules.doMobLoot && !m.data.hauntMob) {
+    // (V7 phase 3: and neither do a Trick Home's: its chest is the reward)
+    if (!m.baby && s.level.rules.doMobLoot && !m.data.hauntMob && !m.data.noDrops) {
       const drops = rollLoot('mob/' + (m.type === 'sheep' || m.type === 'glitched_sheep' ? m.type : m.type), { rng: m.rng, looting, killedByPlayer: byPlayer, onFire: m.fireTicks > 0, difficulty: s.level.difficulty });
       if ((m.type === 'sheep' || m.type === 'glitched_sheep') && !m.data.sheared) drops.push(stackOf(`${String(m.data.color ?? 'white')}_wool`, 1));
       if (m.held && m.rng.next() < 0.085 + looting * 0.01) drops.push({ ...cloneStack(m.held), damage: Math.floor(m.rng.next() * (items[m.held.id]!.def.durability ?? 0) * 0.8) || undefined });
@@ -1361,7 +1364,7 @@ export class MobSystem {
         break;
       }
     }
-    if (byPlayer && !m.baby && !m.data.hauntMob) {
+    if (byPlayer && !m.baby && !m.data.hauntMob && !m.data.noDrops) {
       const xp = m.def.xp ?? (m.def.category === 'monster' ? 5 : m.def.category === 'boss' ? 500 : 1 + m.rng.int(3));
       // A sculk catalyst nearby drinks the experience and spreads sculk instead
       if (!s.sculk?.onDeath(m.dim, m.x, m.y, m.z, xp)) s.mining.dropXp(m.dim, m.x, m.y + 0.5, m.z, xp, m.admin);
@@ -1490,6 +1493,8 @@ export class MobSystem {
   // ------------------------------------------------------------------ interactions
   interact(p: ServerPlayer, target: Entity, hand: 0 | 1): boolean {
     if (!(target instanceof Mob) || target.dead) return false;
+    // V7 phase 3: a Candy Home's villager at the door is only there to hand out candy
+    if (target.data.trickScene) return true;
     // Visitors can trade but not shear, milk, tame, breed or name other players' animals
     if (this.server.roleOf(p) === 'visitor' && target.type !== 'villager') return false;
     const s = this.server;

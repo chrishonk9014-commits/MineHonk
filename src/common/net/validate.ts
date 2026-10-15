@@ -6,6 +6,7 @@ import type { C2S, ClickMode } from './protocol';
 import { LIMITS } from './protocol';
 import { sanitizeStack } from '../game/itemstack';
 import { validateAdmin } from '../game/admin';
+import { CANDY_KINDS, SACK_CAPACITY, type CandyKind } from '../halloween/candy';
 
 const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 const isInt = (v: unknown): v is number => Number.isInteger(v);
@@ -125,6 +126,18 @@ export function validateC2S(raw: unknown): C2S | null {
     case 'elytra':
       if (m.a !== 'burst' && m.a !== 'blink') return null;
       return { t: 'elytra', a: m.a };
+    case 'knock':
+      if (!isInt(m.x) || !inRange(m.y, -512, 1024) || !isInt(m.y) || !isInt(m.z) || !inRange(m.x, -COORD, COORD) || !inRange(m.z, -COORD, COORD)) return null;
+      return { t: 'knock', x: m.x, y: m.y, z: m.z };
+    case 'sack': {
+      if (!isInt(m.slot) || m.slot < 0 || m.slot > 40 || (m.slot > 35 && m.slot !== 40)) return null;
+      if (m.op !== 'take' && m.op !== 'eat' && m.op !== 'fill') return null;
+      if (m.op !== 'fill' && !CANDY_KINDS.includes(m.kind as CandyKind)) return null;
+      if (m.n !== undefined && (!isInt(m.n) || m.n < 1 || m.n > SACK_CAPACITY)) return null;
+      return { t: 'sack', slot: m.slot, op: m.op, ...(m.op !== 'fill' ? { kind: m.kind as CandyKind } : {}), ...(m.n !== undefined ? { n: m.n } : {}) };
+    }
+    case 'scene_skip':
+      return { t: 'scene_skip' };
     default:
       return null;
   }

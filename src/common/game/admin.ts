@@ -14,12 +14,30 @@ import { DRAGON_TESTS } from '../endExpansion/dragon';
 import { HAUNT_OPS, HAUNT_MIN_MINUTES, HAUNT_MAX_MINUTES, HAUNT_ENDINGS, type HauntOp, type HauntEnding } from './haunting';
 import { HALLOWEEN_SIMULATIONS, type HalloweenSimulation, type HalloweenState } from '../halloween/season';
 import { PUMPKIN_IDS } from '../halloween/pumpkins';
+import { CANDY_KINDS, type CandyKind } from '../halloween/candy';
+import { TRICK_KINDS, type TrickKind } from '../halloween/trickOrTreat';
 
 export const ADMIN_DIMENSIONS: DimensionId[] = ['overworld', 'nether', 'end', 'farlands', 'computer'];
 
 /** V7: the Admin Panel's Halloween tab (all cheats; the simulations are never saved). */
-export type HalloweenOp = 'status' | 'ghost' | 'place' | 'place_all' | 'simulate' | 'spawn_trick_village' | 'spawn_abandoned_village' | 'village_doors' | 'door_tp';
-export const HALLOWEEN_OPS: readonly HalloweenOp[] = ['status', 'ghost', 'place', 'place_all', 'simulate', 'spawn_trick_village', 'spawn_abandoned_village', 'village_doors', 'door_tp'];
+export type HalloweenOp =
+  | 'status'
+  | 'ghost'
+  | 'place'
+  | 'place_all'
+  | 'simulate'
+  | 'spawn_trick_village'
+  | 'spawn_abandoned_village'
+  | 'village_doors'
+  | 'door_tp'
+  // V7 phase 3: trick-or-treating (a sack, empty or full; candy of a kind; knock on the nearest door; a Trick Home's encounter; the nearest village's doors reset)
+  | 'give_sack'
+  | 'give_full_sack'
+  | 'give_candy'
+  | 'knock'
+  | 'trick'
+  | 'reset_doors';
+export const HALLOWEEN_OPS: readonly HalloweenOp[] = ['status', 'ghost', 'place', 'place_all', 'simulate', 'spawn_trick_village', 'spawn_abandoned_village', 'village_doors', 'door_tp', 'give_sack', 'give_full_sack', 'give_candy', 'knock', 'trick', 'reset_doors'];
 
 /** V7 phase 2: the doors of the nearest Trick-or-Treat Village, as the Halloween tab lists them. */
 export interface VillageDoorsInfo {
@@ -241,7 +259,7 @@ export type AdminAction =
   /** The Haunting (every world): Herobrine over `minutes`; `erase` deletes the world at the end (its owner only). */
   | { a: 'haunt'; op: HauntOp; minutes?: number; erase?: boolean; ending?: HauntEnding }
   /** V7: Halloween (the season's state, a ghost now, the pumpkins, test simulations). */
-  | { a: 'halloween'; op: HalloweenOp; pumpkin?: string; sim?: HalloweenSimulation; door?: number };
+  | { a: 'halloween'; op: HalloweenOp; pumpkin?: string; sim?: HalloweenSimulation; door?: number; candy?: CandyKind; trick?: TrickKind };
 
 export type AdminActionName = AdminAction['a'];
 
@@ -307,6 +325,12 @@ export function describeAdmin(a: AdminAction): string | null {
       if (a.op === 'spawn_abandoned_village') return 'build an Abandoned Village';
       if (a.op === 'village_doors') return null;
       if (a.op === 'door_tp') return `teleport to door ${(a.door ?? 0) + 1} of a Trick-or-Treat Village`;
+      if (a.op === 'give_sack') return 'give an empty Trick-or-Treat Sack';
+      if (a.op === 'give_full_sack') return 'give a full Trick-or-Treat Sack';
+      if (a.op === 'give_candy') return `give ${(a.candy ?? 'regular') === 'regular' ? 'Candy' : (a.candy ?? '').replace('king', 'King-Sized').replace(/^./, (c) => c.toUpperCase()) + ' Candy'}`;
+      if (a.op === 'knock') return 'knock on the nearest Trick-or-Treat door';
+      if (a.op === 'trick') return `start a Trick Home (${(a.trick ?? 'zombie_villagers').replace(/_/g, ' ')})`;
+      if (a.op === 'reset_doors') return "reset a Trick-or-Treat Village's doors";
       return a.sim === 'expired' ? 'simulate the end of the Halloween season' : a.sim === 'always' ? 'simulate Halloween always on' : 'stop simulating the Halloween season';
     case 'reload_chunks':
       return 'reload chunks';
@@ -341,6 +365,8 @@ export function validateAdmin(raw: unknown): AdminAction | null {
       if (m.op === 'place') return typeof m.pumpkin === 'string' && PUMPKIN_IDS.includes(m.pumpkin) ? { a: 'halloween', op: 'place', pumpkin: m.pumpkin } : null;
       if (m.op === 'simulate') return HALLOWEEN_SIMULATIONS.includes(m.sim as HalloweenSimulation) ? { a: 'halloween', op: 'simulate', sim: m.sim as HalloweenSimulation } : null;
       if (m.op === 'door_tp') return Number.isInteger(m.door) && (m.door as number) >= 0 && (m.door as number) < 256 ? { a: 'halloween', op: 'door_tp', door: m.door as number } : null;
+      if (m.op === 'give_candy') return CANDY_KINDS.includes(m.candy as CandyKind) ? { a: 'halloween', op: 'give_candy', candy: m.candy as CandyKind } : null;
+      if (m.op === 'trick') return TRICK_KINDS.includes(m.trick as TrickKind) ? { a: 'halloween', op: 'trick', trick: m.trick as TrickKind } : null;
       return { a: 'halloween', op: m.op as HalloweenOp };
     }
     case 'haunt': {

@@ -7,6 +7,7 @@ import type { ServerPlayer } from '../player/ServerPlayer';
 import { STATE_FLUID, blocks, STATE_BLOCK } from '../../common/registry/blocks';
 import { beltUnder } from '../../common/engineering/conveyor';
 import { isEnderAlloy } from '../../common/endExpansion/resources';
+import { activeTemp } from '../../common/halloween/tempEnchant';
 
 export const ITEM_DESPAWN_TICKS = 6000;
 
@@ -28,7 +29,7 @@ export class ItemEntity extends Entity {
   }
 
   override meta(): Record<string, unknown> {
-    return { item: this.stack.id, count: this.stack.count, ench: !!this.stack.tag?.ench };
+    return { item: this.stack.id, count: this.stack.count, ench: !!this.stack.tag?.ench || !!activeTemp(this.stack) };
   }
 
   override tick(): void {

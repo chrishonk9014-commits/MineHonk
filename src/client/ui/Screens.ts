@@ -544,6 +544,7 @@ const KEY_LABELS: Record<keyof KeyBinds, string> = {
   screenshot: 'Take Screenshot',
   achievements: 'Advancements',
   adminPanel: 'Admin Panel (cheats)',
+  knock: 'Knock on a Door (Halloween)',
 };
 
 export function keyName(code: string): string {

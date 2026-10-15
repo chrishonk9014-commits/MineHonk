@@ -36,6 +36,8 @@ import { EndCitadelSystem } from './systems/EndCitadel';
 import { EndGuardianSystem } from './systems/EndGuardian';
 import { HalloweenSystem } from './systems/Halloween';
 import { VillageSystem } from './systems/Villages';
+import { CandySystem } from './systems/Candy';
+import { TrickOrTreatSystem } from './systems/TrickOrTreat';
 import { itemIdOf, type ItemStack } from '../common/game/itemstack';
 import { Mob } from './entity/Mob';
 import type { ServerPlayer } from './player/ServerPlayer';
@@ -155,6 +157,11 @@ export function installGameplay(server: GameServer): void {
   // V7 phase 2: Trick-or-Treat and Abandoned Villages (the season's decision, discovery, haunted areas)
   const villages = new VillageSystem(server);
   server.villages = villages;
+  // V7 phase 3: candy and the Trick-or-Treat Sack; knocking, Candy Homes, Trick Homes and the quest
+  const candy = new CandySystem(server);
+  server.candy = candy;
+  const trickOrTreat = new TrickOrTreatSystem(server);
+  server.trickOrTreat = trickOrTreat;
   mobs.onBossDeath = (m, killer, info) => {
     if (m.type === 'ender_dragon') end.fight.onDeath(m, killer, info);
     else if (m.type === 'the_error') errorBoss.onDeath(m, killer, info);
@@ -206,6 +213,8 @@ export function installGameplay(server: GameServer): void {
     haunting.tick();
     halloween.tick();
     villages.tick();
+    candy.tick();
+    trickOrTreat.tick();
     far.tick();
     gadgets.tick();
     mounts.tick();

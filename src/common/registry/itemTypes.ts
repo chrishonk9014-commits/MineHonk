@@ -12,7 +12,8 @@ export interface FoodDef {
   effects?: { effect: string; duration: number; amplifier?: number; chance?: number }[];
   /** Item left over after eating (bowl). */
   remainder?: string;
-  special?: 'chorus_teleport' | 'milk';
+  /** V7 phase 3: candy (its effects come from halloween/candy.ts). */
+  special?: 'chorus_teleport' | 'milk' | 'candy';
 }
 
 export type UseKind =
@@ -69,7 +70,9 @@ export type UseKind =
   /** V6 phase 4: teaches a recipe (the Void Skiff blueprint). */
   | 'blueprint'
   /** V6 phase 4: stills the Guardian Constructs around. */
-  | 'silent_bell';
+  | 'silent_bell'
+  /** V7 phase 3: the Trick-or-Treat Sack (opens what is inside). */
+  | 'sack';
 
 export interface ItemDef {
   id: string;

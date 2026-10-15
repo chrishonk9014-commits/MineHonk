@@ -3,9 +3,31 @@ import { ENCHANTMENTS, ENCHANT_BY_ID, type EnchantDef, type EnchantTarget } from
 import { items } from '../registry/items';
 import type { ItemStack } from './itemstack';
 import type { Random } from '../math/rng';
+import { activeTemp } from '../halloween/tempEnchant';
 
+/** An enchantment's level on a stack: its own, or (V7 phase 3) a temporary one while it lasts, whichever is higher. */
 export function enchantLevel(s: ItemStack | null | undefined, id: string): number {
-  return s?.tag?.ench?.[id] ?? 0;
+  const own = s?.tag?.ench?.[id] ?? 0;
+  const t = activeTemp(s);
+  return t && t.id === id ? Math.max(own, t.lvl) : own;
+}
+
+/**
+ * V7 phase 3: a temporary enchantment gives way to real ones: it is dropped
+ * once the item has (from a table or an anvil) one it conflicts with, or the
+ * same one at least as high. Keeps every item within the normal limits.
+ */
+export function tidyTemp<T extends ItemStack>(s: T): T {
+  const t = s.tag?.temp;
+  if (!t) return s;
+  const own = s.tag?.ench ?? {};
+  if ((own[t.id] ?? 0) >= t.lvl || Object.keys(own).some((k) => k !== t.id && !compatible(k, t.id))) {
+    const tag = { ...s.tag };
+    delete tag.temp;
+    s.tag = Object.keys(tag).length ? tag : undefined;
+    if (!s.tag) delete s.tag;
+  }
+  return s;
 }
 
 export function itemTargets(s: ItemStack): Set<EnchantTarget> {

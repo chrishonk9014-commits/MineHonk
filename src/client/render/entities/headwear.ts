@@ -23,7 +23,12 @@ export interface HeadwearOverlay {
 /** Inflated a little beyond the 8 x 8 x 8 head, so the hair and hat layers stay inside. */
 const SIZE = 9.2;
 
-export function headwearOverlay(model: BoxModel, texture?: (name: string) => THREE.Texture): HeadwearOverlay {
+/**
+ * `head`: the head part's size in pixels (a player's is 8 x 8 x 8; a
+ * villager's is 8 x 10 x 8, so the block sits over all of it, V7 phase 3).
+ * Parts named in `hide` (a villager's nose) are hidden while something is worn.
+ */
+export function headwearOverlay(model: BoxModel, texture?: (name: string) => THREE.Texture, head: [number, number, number] = [8, 8, 8], hide: string[] = []): HeadwearOverlay {
   let key = '';
   let mesh: THREE.Mesh | null = null;
   let mats: THREE.MeshBasicMaterial[] = [];
@@ -43,8 +48,12 @@ export function headwearOverlay(model: BoxModel, texture?: (name: string) => THR
       clear();
       const tex = texture ?? shared;
       const def = id ? blockById.get(id)?.def : undefined;
-      const head = model.part('head');
-      if (!def || !tex || !head) return;
+      const part = model.part('head');
+      for (const n of hide) {
+        const h = model.part(n);
+        if (h) h.visible = !def;
+      }
+      if (!def || !tex || !part) return;
       const t = def.tex;
       const side = t.side ?? t.all ?? t.top ?? 'missing_block';
       const front = t.front ?? side;
@@ -59,10 +68,11 @@ export function headwearOverlay(model: BoxModel, texture?: (name: string) => THR
         m.color.setScalar(shade[i]! * bright);
         return m;
       });
-      mesh = new THREE.Mesh(new THREE.BoxGeometry(SIZE / 16, SIZE / 16, SIZE / 16), mats);
-      // The head part's box spans y 0..8 and x, z -4..4 (pixels) from its pivot
-      mesh.position.set(0, 4 / 16, 0);
-      head.add(mesh);
+      const size = SIZE + Math.max(0, Math.max(head[0], head[1], head[2]) - 8);
+      mesh = new THREE.Mesh(new THREE.BoxGeometry(size / 16, size / 16, size / 16), mats);
+      // The head part's box spans y 0..h and x, z -w/2..w/2 (pixels) from its pivot
+      mesh.position.set(0, head[1] / 2 / 16, 0);
+      part.add(mesh);
     },
     setBrightness(v) {
       bright = v;

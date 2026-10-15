@@ -35,6 +35,7 @@ import { biomeOf } from '../../common/registry/biomes';
 import { canSurvive } from '../../common/game/placement';
 import { Random } from '../../common/math/rng';
 import { ChatFilter } from '../moderation/ChatFilter';
+import { dragWay, floorNear as floorAt, openAt, solidGround as solidAt } from '../world/drag';
 import { cleanVoiceLine, scriptedReply, type VoiceRequest } from '../../common/game/herobrineVoice';
 import {
   HAUNT_STAGES,
@@ -107,8 +108,6 @@ interface Scene {
 
 /** Ground he may dig a tunnel through (never anything a player made). */
 const NATURAL = /^(stone|dirt|grass_block|coarse_dirt|rooted_dirt|podzol|mycelium|sand|red_sand|sandstone|red_sandstone|gravel|granite|diorite|andesite|deepslate|tuff|calcite|clay|terracotta|[a-z_]+_terracotta|snow_block|mud|moss_block|netherrack|end_stone)$/;
-/** What a figure may stand on, or a cross float over, as ground. */
-const PLANT = /(^|_)(grass|fern|flower|dandelion|poppy|tulip|orchid|allium|bluet|daisy|cornflower|lily_of_the_valley|bush|sapling|mushroom|snow|marigold|reeds?|sprouts|roots|petals|clover|vine|vines)$/;
 
 type Budget = 'sight' | 'torch' | 'cross' | 'tunnel' | 'tree' | 'pyramid' | 'sign' | 'dark' | 'sound' | 'glitch' | 'glitchy' | 'chaos' | 'mob';
 /** Events per player over each stage (spread at random through it): more and more as it goes on. */
@@ -840,7 +839,7 @@ export class HauntingSystem {
         if (p.dead || p.gamemode === 'spectator') continue;
         // Right in front of them, on the way he will drag them (open, level ground; in a tight
         // spot he stays close and pulls without getting anywhere)
-        const [dir, clear] = this.dragWay(p);
+        const [dir, clear] = dragWay(p);
         const len = Math.max(0, Math.min(8, clear - 2.5));
         const lead = Math.max(1, Math.min(1.7, clear - len - 0.3));
         const fx = p.x + dir[0] * lead;
@@ -965,35 +964,6 @@ export class HauntingSystem {
       }
   }
 
-  /**
-   * Which way he drags a player: the way they face if the ground there is
-   * open and level for a good way, otherwise the most open way round.
-   * Returns the direction and how far it is clear (blocks).
-   */
-  private dragWay(p: ServerPlayer): [[number, number], number] {
-    let best: [number, number] = [-Math.sin(p.yaw), -Math.cos(p.yaw)];
-    let most = -1;
-    for (let i = 0; i < 16; i++) {
-      const a = p.yaw + (i % 2 ? 1 : -1) * Math.ceil(i / 2) * (Math.PI / 8);
-      const ux = -Math.sin(a);
-      const uz = -Math.cos(a);
-      const y0 = Math.floor(p.y);
-      let clear = 0;
-      for (let step = 1; step <= 11; step++) {
-        // Level ground (a block up or down at most) with room above it
-        const fy = this.floorNear(p.dim, Math.floor(p.x + ux * step), Math.floor(p.z + uz * step), y0, 1);
-        if (fy === null || Math.abs(fy - y0) > 1 || STATE_SOLID[p.dim.getState(Math.floor(p.x + ux * step), fy + 2, Math.floor(p.z + uz * step))]) break;
-        clear = step;
-      }
-      if (clear >= 11) return [[ux, uz], 11];
-      if (clear > most) {
-        most = clear;
-        best = [ux, uz];
-      }
-    }
-    return [best, Math.max(0, most)];
-  }
-
   /** The lair ending stops: his figures gone; `restore` puts everyone he took back where they were; `tell` clears their screen. */
   private endScene(restore: boolean, tell: boolean): void {
     const sc = this.scene;
@@ -1057,13 +1027,11 @@ export class HauntingSystem {
 
   /** Air, or a plant or snow layer that can be replaced. */
   private open(dim: Dimension, x: number, y: number, z: number): boolean {
-    const st = dim.getState(x, y, z);
-    return st === 0 || (!STATE_SOLID[st] && !STATE_FLUID[st] && PLANT.test(blocks[STATE_BLOCK[st]!]!.id));
+    return openAt(dim, x, y, z);
   }
 
   private solidGround(dim: Dimension, x: number, y: number, z: number): boolean {
-    const st = dim.getState(x, y, z);
-    return !!STATE_SOLID[st] && !STATE_FLUID[st] && !/leaves$/.test(blocks[STATE_BLOCK[st]!]!.id);
+    return solidAt(dim, x, y, z);
   }
 
   /**
@@ -1071,12 +1039,7 @@ export class HauntingSystem {
    * searched from `range` above the hint downwards (the surface, or a cave floor).
    */
   private floorNear(dim: Dimension, x: number, z: number, yHint: number, range: number): number | null {
-    if (!dim.isLoaded(x, z)) return null;
-    const top = Math.min(dim.getHeight(x, z) + 1, yHint + range);
-    for (let y = top; y >= Math.max(1, yHint - range); y--) {
-      if (this.solidGround(dim, x, y - 1, z) && this.open(dim, x, y, z) && this.open(dim, x, y + 1, z)) return y;
-    }
-    return null;
+    return floorAt(dim, x, z, yHint, range);
   }
 
   /** A spot around a player, mostly behind or beside them (so it is there when they turn round). */

@@ -2,6 +2,9 @@
  * Application shell: menu screen stack, world management and the game
  * lifecycle (start integrated server, join, save & quit).
  */
+import { SackPanel } from './ui/SackScreen';
+import { itemById } from '../common/registry/items';
+import { CANDY_KINDS, CANDY_ITEM } from '../common/halloween/candy';
 import { LorePanel, GlyphPanel } from './ui/LorePage';
 import { adminScreen } from './ui/AdminPanel';
 import { EngineeringBookPanel } from './ui/EngineeringBook';
@@ -845,6 +848,34 @@ export class App implements GameHost, S.ScreenHost {
       if (e.target === root) this.pop();
     });
     this.push({ root });
+  }
+
+  /** V7 phase 3: the Trick-or-Treat Sack in inventory slot `slot` (0-8 the hotbar, 40 the offhand). */
+  openSack(slot: number): void {
+    const game = this.game;
+    if (!game || this.screenOpen) return;
+    // Inventory slot -> the client's window-0 slot
+    const win = slot === 40 ? 45 : slot < 9 ? 36 + slot : slot;
+    const candyNums = new Set(CANDY_KINDS.map((k) => itemById.get(CANDY_ITEM[k])!.num));
+    const panel = new SackPanel({
+      sack: () => game.invSlots[win] ?? null,
+      act: (op, kind, n) => {
+        game.send({ t: 'sack', slot, op, ...(kind ? { kind } : {}), ...(n ? { n } : {}) });
+        game.audio.play(op === 'eat' ? 'eat' : op === 'take' ? 'sack.remove' : 'sack.insert', NaN, NaN, NaN, 0.6, 1, 'ui');
+      },
+      close: () => this.pop(),
+      carried: () => game.invSlots.reduce((a, st, i) => a + (st && i >= 9 && candyNums.has(st.id) ? st.count : 0), 0),
+    });
+    const root = el('div', { class: 'screen dim sack-screen' }, panel.root);
+    root.addEventListener('mousedown', (e) => {
+      if (e.target === root) this.pop();
+    });
+    // Redrawn from what the server sends; closed if the sack is no longer there
+    const timer = setInterval(() => {
+      if (!root.isConnected) clearInterval(timer);
+      else if (!panel.refresh() && this.stack[this.stack.length - 1]?.root === root) this.pop();
+    }, 100);
+    this.push({ root, onClose: () => clearInterval(timer) });
   }
 
   /** V5.5: the Witch's Grimoire, from the item. */

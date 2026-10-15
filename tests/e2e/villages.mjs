@@ -200,13 +200,14 @@ if (part('title')) {
   await p.getByText('Singleplayer').waitFor({ timeout: 30000 });
   await panoramaReady(p, 500);
   const seen = new Set([await p.evaluate(() => window.minehonk.panorama.sceneName)]);
-  for (let i = 0; i < 5; i++) {
+  for (let i = 0; i < 6; i++) {
     const was = await p.evaluate(() => window.minehonk.panorama.sceneName);
     await p.evaluate(() => (window.minehonk.panorama.sceneStart = -1e9));
     await p.waitForFunction((was) => window.minehonk.panorama.ready && window.minehonk.panorama.sceneName !== was, was, { timeout: 180000 });
     seen.add(await p.evaluate(() => window.minehonk.panorama.sceneName));
   }
-  check(`the title screen's five Halloween scenes take turns (${[...seen].join(', ')})`, seen.size === 5 && seen.has('trick_village') && seen.has('abandoned_village'));
+  // (six since V7 phase 3's trick-or-treater at a door)
+  check(`the title screen's six Halloween scenes take turns (${[...seen].join(', ')})`, seen.size === 6 && seen.has('trick_village') && seen.has('abandoned_village') && seen.has('trick_or_treat'));
   await p.close();
 }
 

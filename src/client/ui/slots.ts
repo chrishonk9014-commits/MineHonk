@@ -5,7 +5,9 @@ import { el } from './dom';
 import type { ItemIcons } from '../render/ItemIcons';
 import { type Slot, maxDurability } from '../../common/game/itemstack';
 import { items, itemById } from '../../common/registry/items';
-import { romanNumeral } from '../../common/data/enchantments';
+import { romanNumeral, ENCHANT_BY_ID } from '../../common/data/enchantments';
+import { activeTemp, tempLeft } from '../../common/halloween/tempEnchant';
+import { CANDY_ITEM, CANDY_KINDS, CANDY_NAMES, SACK_ID, SACK_CAPACITY, sackContents, sackTotal, sackLine } from '../../common/halloween/candy';
 import { enchantName } from '../../common/game/enchanting';
 import { blockById } from '../../common/registry/blocks';
 import { POTION_BY_ID } from '../../common/data/potions';
@@ -19,8 +21,9 @@ export function iconEl(stack: Slot, showCount = true): HTMLElement | null {
   if (!stack || !icons) return null;
   const it = items[stack.id];
   if (!it) return null;
-  const glint = !!(stack.tag?.ench && Object.keys(stack.tag.ench).length) || !!stack.tag?.stored || !!it.def.glint;
-  const icon = el('div', { class: 'item-icon' + (glint ? ' glint' : '') });
+  // (V7 phase 3: a temporary enchantment glints too, while it lasts)
+  const glint = !!(stack.tag?.ench && Object.keys(stack.tag.ench).length) || !!stack.tag?.stored || !!it.def.glint || !!activeTemp(stack);
+  const icon = el('div', { class: 'item-icon' + (glint ? ' glint' : '') + (it.id === CANDY_ITEM.poisoned ? ' poisoned' : '') });
   const url = icons.iconFor(stack);
   icon.style.backgroundImage = `url(${url})`;
   if (glint) {
@@ -37,6 +40,15 @@ export function iconEl(stack: Slot, showCount = true): HTMLElement | null {
     bar.style.width = `${f * 100}%`;
     bar.style.background = `hsl(${Math.round(f * 120)}, 100%, 50%)`;
     wrap.append(el('div', { class: 'durability' }, bar));
+  }
+  // V7 phase 3: how full a Trick-or-Treat Sack is, as a bar like a bundle's
+  if (it.id === SACK_ID) {
+    const n = sackTotal(sackContents(stack));
+    if (n > 0) {
+      const bar = el('div', { class: n >= SACK_CAPACITY ? 'full' : '' });
+      bar.style.width = `${(n / SACK_CAPACITY) * 100}%`;
+      wrap.append(el('div', { class: 'durability sack-fill' }, bar));
+    }
   }
   void frag;
   return wrap;
@@ -71,6 +83,8 @@ function ticksToTime(t: number): string {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
 
+export { ticksToTime };
+
 const HARMFUL = new Set(['slowness', 'poison', 'instant_damage', 'weakness', 'wither', 'hunger', 'nausea', 'blindness', 'darkness', 'levitation', 'mining_fatigue']);
 
 const tooltipEl = el('div', { class: 'tooltip hidden' });
@@ -87,9 +101,18 @@ export function showTooltip(stack: Slot, x: number, y: number, advanced = false)
   }
   const it = items[stack.id]!;
   tooltipEl.innerHTML = '';
-  const rarity = it.def.rarity && it.def.rarity !== 'common' ? `rarity-${it.def.rarity}` : stack.tag?.ench ? 'rarity-rare' : '';
+  const rarity = it.id === CANDY_ITEM.poisoned ? 'poisoned-text' : it.def.rarity && it.def.rarity !== 'common' ? `rarity-${it.def.rarity}` : stack.tag?.ench ? 'rarity-rare' : '';
   tooltipEl.append(el('div', { class: rarity + (stack.tag?.name ? ' italic' : '') }, itemDisplayName(stack)));
   for (const [id, lvl] of Object.entries(stack.tag?.ench ?? {})) tooltipEl.append(el('div', { class: 'ench' }, `${enchantName(id)}${lvl > 1 || id !== 'silk_touch' ? ' ' + romanNumeral(lvl) : ''}`));
+  // V7 phase 3: a King-Sized Candy's temporary enchantment, and how long it has left
+  const temp = activeTemp(stack);
+  if (temp) tooltipEl.append(el('div', { class: 'ench temp' }, `${enchantName(temp.id)}${(ENCHANT_BY_ID.get(temp.id)?.maxLevel ?? 1) > 1 ? ' ' + romanNumeral(temp.lvl) : ''} (temporary, ${ticksToTime(tempLeft(stack))})`));
+  // ...and what a Trick-or-Treat Sack holds
+  if (it.id === SACK_ID) {
+    const c = sackContents(stack);
+    tooltipEl.append(el('div', { class: sackTotal(c) >= SACK_CAPACITY ? 'yellow' : '' }, sackLine(c)));
+    for (const k of CANDY_KINDS) if (c.counts[k] > 0) tooltipEl.append(el('div', { class: k === 'poisoned' ? 'poisoned-text' : 'dim' }, ` ${CANDY_NAMES[k]} x${c.counts[k]}`));
+  }
   for (const [id, lvl] of Object.entries(stack.tag?.stored ?? {})) tooltipEl.append(el('div', { class: 'yellow' }, `${enchantName(id)} ${romanNumeral(lvl)}`));
   if (stack.tag?.potion) {
     const p = POTION_BY_ID.get(stack.tag.potion);

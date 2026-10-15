@@ -4,8 +4,9 @@
  * scale, sheep wool colour, creeper fuse flash, sitting pets...).
  */
 import * as THREE from 'three';
-import { BoxModel } from './BoxModel';
+import { BoxModel, type PartDef } from './BoxModel';
 import { registerVisual, boxVisual, animateHumanoid, type EntityVisual, type VisualContext } from './EntityRenderer';
+import { headwearOverlay, type HeadwearOverlay } from './headwear';
 import { kitModel, humanoidParts, quadParts, eyes, type KitPart, type FacePainter } from './modelKit';
 import type { ClientEntity } from '../../game/ClientEntity';
 import { MOB_DEFS, MOB_BY_ID } from '../../../common/data/mobs';
@@ -2894,6 +2895,16 @@ function makeVisual(def: MobVisualDef, e: ClientEntity, ctx: VisualContext): Ent
     },
     { name, nameY: def.nameY ?? 2.1 },
   );
+  // V7 phase 3: a costume head on a mob (a Candy Home's villager at the door)
+  const headPart = findPart(kit.def.parts, 'head');
+  let headwear: HeadwearOverlay | null = null;
+  const wear = (ent: ClientEntity): void => {
+    const id = typeof ent.meta.headwear === 'string' ? ent.meta.headwear : undefined;
+    if (!id && !headwear) return;
+    headwear ??= headwearOverlay(model, (n) => ctx.blockTexture(n), (headPart?.size as [number, number, number] | undefined) ?? [8, 8, 8], ['nose']);
+    headwear.set(id);
+  };
+  wear(e);
   // Held item in the right hand
   const held = Number(e.meta.held ?? 0);
   const arm = model.part('rightArm');
@@ -2915,6 +2926,7 @@ function makeVisual(def: MobVisualDef, e: ClientEntity, ctx: VisualContext): Ent
     const b = glow ? Math.max(v, 0.85) : v;
     baseSet(b);
     heldMat?.color.setScalar(b);
+    headwear?.setBrightness(b);
   };
   // Lead: a sagging rope to the holder's hand or a fence post
   const SEG = 10;
@@ -2931,6 +2943,7 @@ function makeVisual(def: MobVisualDef, e: ClientEntity, ctx: VisualContext): Ent
   const baseUpdate = visual.update.bind(visual);
   visual.update = (ent, alpha, time) => {
     baseUpdate(ent, alpha, time);
+    wear(ent);
     let to: [number, number, number] | null = null;
     const pos = ent.meta.leashPos as number[] | undefined;
     if (Array.isArray(pos)) to = [pos[0]! + 0.5, pos[1]! + 0.5, pos[2]! + 0.5];
@@ -2958,12 +2971,23 @@ function makeVisual(def: MobVisualDef, e: ClientEntity, ctx: VisualContext): Ent
   const baseDispose = visual.dispose.bind(visual);
   visual.dispose = () => {
     baseDispose();
+    headwear?.dispose();
     heldMat?.map?.dispose();
     heldMat?.dispose();
     leadGeo.dispose();
     leadMat.dispose();
   };
   return visual;
+}
+
+/** A part by name anywhere in a kit's part tree. */
+function findPart(parts: readonly PartDef[], name: string): PartDef | undefined {
+  for (const p of parts) {
+    if (p.name === name) return p;
+    const c = p.children ? findPart(p.children, name) : undefined;
+    if (c) return c;
+  }
+  return undefined;
 }
 
 for (const m of MOB_DEFS) {

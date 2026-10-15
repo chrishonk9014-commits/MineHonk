@@ -11,6 +11,7 @@ import type { Slot } from '../../common/game/itemstack';
 import type { DimensionId } from '../../common/data/biomes';
 import { itemById } from '../../common/registry/items';
 import { WEARABLE_BLOCKS } from '../../common/halloween/heads';
+import { newProgress, type HalloweenProgress } from '../../common/halloween/trickOrTreat';
 
 
 let elytraNum = -1;
@@ -161,6 +162,8 @@ export class ServerPlayer extends Entity {
   endEntry: { x: number; y: number; z: number } | null = null;
   /** Freeze build-up from powder snow (ticks, 0-140). */
   freezeTicks = 0;
+  /** V7 phase 3: trick-or-treating (the Trick or Treat! quest, doors answered, candy collected). */
+  halloween: HalloweenProgress = newProgress();
 
   constructor(
     readonly conn: Connection,

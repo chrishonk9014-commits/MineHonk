@@ -6,6 +6,7 @@
  * It is platform agnostic: the same class runs inside a Web Worker for
  * single player (integrated server) and inside Node for hosted worlds.
  */
+import { setTempClock } from '../common/halloween/tempEnchant';
 import { Dimension } from './world/Dimension';
 import type { WorldStorage } from './storage/Storage';
 import { type LevelData, createLevelData, sanitizeLevelData, type NewWorldOptions } from './world/LevelData';
@@ -114,6 +115,10 @@ export class GameServer {
   halloween: import('./systems/Halloween').HalloweenSystem | null = null;
   /** V7 phase 2: Trick-or-Treat and Abandoned Villages (installed by gameplay). */
   villages: import('./systems/Villages').VillageSystem | null = null;
+  /** V7 phase 3: candy, the Trick-or-Treat Sack and temporary enchantments (installed by gameplay). */
+  candy: import('./systems/Candy').CandySystem | null = null;
+  /** V7 phase 3: knocking, Candy Homes, Trick Homes and the Trick or Treat! quest (installed by gameplay). */
+  trickOrTreat: import('./systems/TrickOrTreat').TrickOrTreatSystem | null = null;
   /** What world generation asks the server about villages (answered by `villages` once installed). */
   readonly villageHooks: import('../common/halloween/villages').VillageHooks = {
     trick: (s) => this.villages?.trick(s) ?? false,
@@ -198,6 +203,8 @@ export class GameServer {
       level = createLevelData(create);
       await storage.writeLevel(level);
     }
+    // V7 phase 3: temporary enchantments run on this world's clock, set before any item is read
+    setTempClock(level.time);
     const server = new GameServer(storage, level, opts);
     await server.registries.load();
     return server;
@@ -542,6 +549,15 @@ export class GameServer {
       case 'elytra':
         this.elytra?.action(p, m.a);
         break;
+      case 'knock':
+        this.trickOrTreat?.knock(p, m.x, m.y, m.z);
+        break;
+      case 'sack':
+        this.candy?.handle(p, m.slot, m.op, m.kind, m.n);
+        break;
+      case 'scene_skip':
+        this.trickOrTreat?.skip(p);
+        break;
       case 'pc_cmd':
         if (!this.engineering?.computers.handleCmd(p, m.window, m.cmd, m.arg)) this.herobrine?.terminalCmd(p, m.window, m.cmd);
         break;
@@ -572,6 +588,7 @@ export class GameServer {
     this.endTransport?.onLeave(p);
     this.endQuests?.onLeave(p);
     this.elytra?.onLeave(p);
+    this.trickOrTreat?.onLeave(p);
     this.mounts?.dismount(p, true);
     this.interaction.closeWindow(p, p.windowId, true);
     p.dim.removeEntity(p);
@@ -900,6 +917,7 @@ export class GameServer {
     this.tickNo++;
     const level = this.level;
     level.time++;
+    setTempClock(level.time);
     if (level.rules.doDaylightCycle) {
       // dayLengthMinutes scales the cycle (20 = default)
       const speed = 20 / Math.max(1, level.rules.dayLengthMinutes);

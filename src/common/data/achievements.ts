@@ -113,6 +113,11 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   // V7 phase 2
   { id: 'find_trick_village', title: 'Trick or Treat!', description: 'Find a Trick-or-Treat Village', icon: 'hallow_pumpkin', parent: 'find_village', category: 'adventure' },
   { id: 'find_abandoned_village', title: 'Ghost Town', description: 'Find an Abandoned Village', icon: 'skeleton_skull', parent: 'find_village', category: 'adventure' },
+  // V7 phase 3
+  { id: 'first_candy', title: 'Sweet!', description: 'Get candy from a Candy Home', icon: 'candy', parent: 'find_trick_village', category: 'adventure' },
+  { id: 'full_sack', title: 'Sweet Tooth', description: 'Fill a Trick-or-Treat Sack to the top', icon: 'trick_or_treat_sack', parent: 'first_candy', category: 'adventure' },
+  { id: 'beat_trick_home', title: 'Who Goes There?', description: 'Fight your way out of a Trick Home', icon: 'jack_o_lantern', parent: 'find_trick_village', category: 'adventure' },
+  { id: 'herobrine_trick', title: 'He Was Never Here', description: 'Beat Herobrine in a Trick Home', icon: 'redstone_torch', parent: 'beat_trick_home', category: 'adventure', secret: true },
   { id: 'find_temple', title: 'Tomb Raider', description: 'Find a temple', icon: 'chiseled_sandstone', parent: 'root', category: 'adventure' },
   { id: 'find_sky_shrine', title: 'Above the Clouds', description: 'Discover a Sky Shrine', icon: 'sky_ray_membrane', parent: 'root', category: 'adventure', secret: true },
   { id: 'level_30', title: 'Experienced', description: 'Reach experience level 30', icon: 'experience_bottle', parent: 'root', category: 'adventure' },

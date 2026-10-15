@@ -48,6 +48,12 @@ export class Hud {
   private readonly questEl = el('div', { class: 'quest-tracker hidden' });
   /** V6 phase 4: Elytra upgrade meters over the hotbar. */
   private readonly wingsEl = el('div', { class: 'wings-meters hidden' });
+  /** V7 phase 3: an action the player can take where they stand (Knock), under the crosshair; tappable. */
+  private readonly promptEl = el('div', { class: 'act-prompt hidden' });
+  private promptKey = '';
+  private promptTap: (() => void) | null = null;
+  /** V7 phase 3: lines spoken on screen (a villager at the door, a voice behind it). */
+  private readonly speechEl = el('div', { class: 'speech-lines' });
   private lastWings = '';
   private itemNameTimer = 0;
   private lastSelectedName = '';
@@ -71,7 +77,14 @@ export class Hud {
     this.hotbarEl.append(this.selEl);
     this.xpbar.append(this.xpfill);
     this.bottom.append(this.hotbarEl, this.xpbar, this.xplevel, this.hearts, this.heartLabel, this.food, this.armor, this.air, this.itemName);
-    this.root.append(this.crosshair, this.bottom, this.bosses, this.title, this.debugLeft, this.debugRight, this.toastEl, this.subtitlesEl, this.cheatsEl, this.questEl, this.wingsEl);
+    this.root.append(this.crosshair, this.bottom, this.bosses, this.title, this.debugLeft, this.debugRight, this.toastEl, this.subtitlesEl, this.cheatsEl, this.questEl, this.wingsEl, this.promptEl, this.speechEl);
+    const tap = (e: Event): void => {
+      e.preventDefault();
+      e.stopPropagation();
+      this.promptTap?.();
+    };
+    this.promptEl.addEventListener('touchstart', tap, { passive: false });
+    this.promptEl.addEventListener('mousedown', tap);
     this.toastEl.append(el('div', { class: 't1' }), el('div', { class: 't2' }));
     this.title.style.opacity = '0';
   }
@@ -270,7 +283,7 @@ export class Hud {
       return;
     }
     if (!b) {
-      b = el('div', { class: color === 'glitch' ? 'boss-bar boss-glitch' : color === 'herobrine' ? 'boss-bar boss-herobrine' : 'boss-bar' }, el('div', { class: 'shadow', style: { textAlign: 'center' } }), el('div', { class: 'bar' }, el('div')));
+      b = el('div', { class: color === 'glitch' ? 'boss-bar boss-glitch' : color === 'herobrine' ? 'boss-bar boss-herobrine' : color === 'halloween' ? 'boss-bar boss-halloween' : 'boss-bar' }, el('div', { class: 'shadow', style: { textAlign: 'center' } }), el('div', { class: 'bar' }, el('div')));
       this.bossBars.set(id, b);
       this.bosses.append(b);
     }
@@ -293,6 +306,30 @@ export class Hud {
     }
     this.questEl.append(el('div', { class: 'quest-text' }, q.text));
     if (q.remaining !== undefined) this.questEl.append(el('div', { class: 'quest-left' }, `${q.remaining} remaining`));
+  }
+
+  /** V7 phase 3: shows (or hides, with null) an action prompt: "[G] Knock". `tap` runs it (touch screens tap the prompt). */
+  setPrompt(text: string | null, key = '', tap: (() => void) | null = null): void {
+    this.promptTap = tap;
+    const k = text ? `${key}|${text}` : '';
+    if (k === this.promptKey) return;
+    this.promptKey = k;
+    this.promptEl.classList.toggle('hidden', !text);
+    clear(this.promptEl);
+    if (text) this.promptEl.append(...(key ? [el('span', { class: 'key' }, key)] : []), el('span', {}, text));
+  }
+
+  get prompt(): string | null {
+    return this.promptKey ? this.promptKey.split('|')[1]! : null;
+  }
+
+  /** V7 phase 3: a spoken line for a while (`who` says it; the tone colours it). */
+  speech(text: string, who?: string, tone = 'info', ticks = 60): void {
+    const d = el('div', { class: `speech ${tone}` }, ...(who ? [el('span', { class: 'who' }, who + ': ')] : []), el('span', {}, text));
+    this.speechEl.append(d);
+    while (this.speechEl.childElementCount > 3) this.speechEl.firstElementChild?.remove();
+    setTimeout(() => d.classList.add('fade'), Math.max(500, (ticks / 20) * 1000));
+    setTimeout(() => d.remove(), Math.max(500, (ticks / 20) * 1000) + 600);
   }
 
   /** Where the hotbar is on screen (touch controls pick slots from it). */

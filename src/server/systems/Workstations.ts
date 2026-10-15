@@ -10,7 +10,7 @@ import { Inventory } from '../player/Inventory';
 import { items, itemById } from '../../common/registry/items';
 import { blocks, STATE_BLOCK, S, STATE_SOLID, STATE_FLUID, withProp, getProp } from '../../common/registry/blocks';
 import { Random } from '../../common/math/rng';
-import { selectEnchantments, tableCosts, canApply, compatible, enchantLevel } from '../../common/game/enchanting';
+import { selectEnchantments, tableCosts, canApply, compatible, enchantLevel, tidyTemp } from '../../common/game/enchanting';
 import { ENCHANT_BY_ID } from '../../common/data/enchantments';
 import { stackOf, cloneStack, type ItemStack, type Slot, toSaved, fromSaved, type SavedStack, isAdminStack, markAdmin, maxDurability } from '../../common/game/itemstack';
 import { POTION_BY_ID, brewResult, isIngredient } from '../../common/data/potions';
@@ -118,7 +118,7 @@ export class Workstations {
       const isBook = items[item.id]!.id === 'book';
       // Cheat items, lapis or levels make the result cheat-made too
       const cheat = isAdminStack(item) || isAdminStack(lapis) || p.cheat.xp > 0 || this.server.admin.inContext(p);
-      const result: ItemStack = isBook ? { id: itemById.get('enchanted_book')!.num, count: 1, tag: { stored: { ...o.ench }, ...(cheat ? { admin: true } : {}) } } : { ...cloneStack(item), tag: { ...(item.tag ?? {}), ench: { ...o.ench }, ...(cheat ? { admin: true } : {}) } };
+      const result: ItemStack = isBook ? { id: itemById.get('enchanted_book')!.num, count: 1, tag: { stored: { ...o.ench }, ...(cheat ? { admin: true } : {}) } } : tidyTemp({ ...cloneStack(item), tag: { ...(item.tag ?? {}), ench: { ...o.ench }, ...(cheat ? { admin: true } : {}) } });
       inv.set(0, result);
       if (!creative) {
         inv.set(1, lapis!.count > i + 1 ? { ...lapis!, count: lapis!.count - (i + 1) } : null);
@@ -291,7 +291,7 @@ export class Workstations {
     if (cost === 0) return { stack: null, cost: 0, material: 0 };
     cost += baseCost;
     result.tag = { ...(result.tag ?? {}), repairCost: baseCost * 2 + 1 };
-    return { stack: result, cost, material };
+    return { stack: tidyTemp(result), cost, material };
   }
 
   // ------------------------------------------------------------------ brewing

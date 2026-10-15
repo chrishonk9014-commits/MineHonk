@@ -343,6 +343,27 @@ export const LOOT_TABLES: Record<string, LootTable> = {
       { rolls: 1, entries: [e('skeleton_skull', 4), e('zombie_head', 4), e('creeper_head', 2), none(6)] },
     ],
   },
+  // V7 phase 3: a Trick Home's chest, there once it is beaten: candy (Big and King-Sized among it), useful
+  // things, and now and then something great. Herobrine's holds more, and his own pickaxe (never his head).
+  trick_home: {
+    pools: [
+      { rolls: 1, entries: [e('candy', 1, [3, 6])] },
+      { rolls: 1, entries: [e('big_candy', 7, [1, 3]), e('king_sized_candy', 3, 1)] },
+      { rolls: [2, 4], entries: [e('iron_ingot', 10, [2, 5]), e('gold_ingot', 6, [1, 4]), e('emerald', 6, [1, 3]), e('bread', 8, [2, 4]), e('pumpkin_pie', 8, [1, 3]), e('arrow', 6, [6, 12]), e('torch', 6, [8, 16]), e('experience_bottle', 5, [2, 5]), e('golden_carrot', 4, [2, 5]), e('ender_pearl', 3, [1, 2]), e('jack_o_lantern', 4, [1, 2])] },
+      { rolls: 1, entries: [none(76), e('diamond', 8, [1, 2]), book(6), e('golden_apple', 5), ench('iron_sword', 3, [10, 25], false), ench('bow', 2, [10, 25], false)] },
+    ],
+  },
+  trick_home_herobrine: {
+    pools: [
+      { rolls: 1, entries: [e('king_sized_candy', 1, [2, 4])] },
+      { rolls: 1, entries: [e('big_candy', 1, [3, 6])] },
+      { rolls: 1, entries: [e('diamond', 1, [3, 6])] },
+      { rolls: 1, entries: [e('enchanted_golden_apple', 1), e('golden_apple', 3, [2, 3])] },
+      { rolls: 1, entries: [book(1)] },
+      { rolls: 1, entries: [{ item: 'diamond_pickaxe', functions: [{ fn: 'name', name: "Herobrine's Pickaxe" }, { fn: 'set_enchant', id: 'efficiency', levels: [4, 4] }, { fn: 'set_enchant', id: 'unbreaking', levels: [3, 3] }] }] },
+      { rolls: 1, entries: [e('redstone_torch', 1, [3, 5])] },
+    ],
+  },
   'chest/village': {
     pools: [
       { rolls: [3, 8], entries: [e('honeycomb', 6, [1, 4]), e('iron_ingot', 10, [1, 5]), e('bread', 15, [1, 4]), e('apple', 15, [1, 5]), e('wheat', 10, [2, 8]), e('iron_pickaxe', 5), e('iron_sword', 5), e('iron_chestplate', 5), e('iron_helmet', 5), e('iron_leggings', 5), e('iron_boots', 5), e('obsidian', 5, [3, 7]), e('oak_sapling', 5, [3, 7]), e('emerald', 3, [1, 3]), e('potato', 10, [1, 7]), e('carrot', 10, [1, 7]), e('torch', 10, [2, 8])] },

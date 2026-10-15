@@ -8,6 +8,7 @@ import type { ServerPlayer } from '../player/ServerPlayer';
 import type { C2S } from '../../common/net/protocol';
 import { breakTicks, adventureMayBreak } from '../../common/game/mining';
 import { computeBlockDrops } from '../../common/game/drops';
+import { ONLY_WON } from '../../common/halloween/heads';
 import { enchantLevel } from '../../common/game/enchanting';
 import { blocks, STATE_BLOCK, getProp, S, STATE_FLUID, withProp } from '../../common/registry/blocks';
 import { items } from '../../common/registry/items';
@@ -165,7 +166,8 @@ export class Mining {
     if (survival) this.server.interaction.containers.materializeLoot(dim, x, y, z, 27, this.server.admin.inContext(p));
     const be = dim.getBlockEntity(x, y, z);
     // Breaking a cheat-placed block, or with a cheat tool, or under a cheat: the drops are cheat-made
-    const cheat = this.server.admin.blockMarked(dim, x, y, z) || this.server.interaction.isCheat(p, tool);
+    const placedByCheat = this.server.admin.blockMarked(dim, x, y, z);
+    const cheat = placedByCheat || this.server.interaction.isCheat(p, tool);
     dim.setBlock(x, y, z, replacement);
     this.server.admin.setBlockMark(dim, x, y, z, false);
     this.removeCompanion(dim, x, y, z, state);
@@ -179,6 +181,8 @@ export class Mining {
       const drops = computeBlockDrops(state, tool, rng);
       // Batteries keep their charge and tanks their contents
       this.server.engineering?.decorateDrops(be, drops.items);
+      // V7 phase 3: a Herobrine Head is only ever won from Herobrine, never broken out of a cheat-placed one
+      if (placedByCheat) drops.items = drops.items.filter((st) => !ONLY_WON.has(items[st.id]?.id ?? ''));
       if (cheat) for (const s of drops.items) markAdmin(s);
       for (const s of drops.items) this.dropItem(dim, x + 0.5, y + 0.3, z + 0.5, s);
       if (drops.xp > 0) this.dropXp(dim, x + 0.5, y + 0.5, z + 0.5, drops.xp, cheat);
@@ -250,8 +254,12 @@ export class Mining {
   /** Drops what a block yields when destroyed without a tool (explosions). */
   dropBlock(dim: Dimension, x: number, y: number, z: number, state: number, cheat = false): void {
     const drops = computeBlockDrops(state, null, this.dropRng);
-    const marked = cheat || this.server.admin.blockMarked(dim, x, y, z);
-    for (const st of drops.items) this.dropItem(dim, x + 0.5, y + 0.3, z + 0.5, marked ? markAdmin(st) : st);
+    const placedByCheat = this.server.admin.blockMarked(dim, x, y, z);
+    const marked = cheat || placedByCheat;
+    for (const st of drops.items) {
+      if (placedByCheat && ONLY_WON.has(items[st.id]?.id ?? '')) continue;
+      this.dropItem(dim, x + 0.5, y + 0.3, z + 0.5, marked ? markAdmin(st) : st);
+    }
   }
 
   private readonly dropRng = new Random();

@@ -21,6 +21,8 @@ export interface KeyBinds {
   screenshot: string;
   achievements: string;
   adminPanel: string;
+  /** V7 phase 3: knock on a Trick-or-Treat door. */
+  knock: string;
 }
 
 export interface Settings {
@@ -85,6 +87,7 @@ export const DEFAULT_KEYS: KeyBinds = {
   screenshot: 'F2',
   achievements: 'KeyL',
   adminPanel: 'F8',
+  knock: 'KeyG',
 };
 
 export const DEFAULT_SETTINGS: Settings = {

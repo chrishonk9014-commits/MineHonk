@@ -237,6 +237,12 @@ export class Particles {
         case 'happy':
           this.add({ x: x + ox, y: y + oy, z: z + oz, vy: 0.02, maxLife: 25, size: 0.1, r: 0.3, g: 1, b: 0.4, emissive: true });
           break;
+        case 'witch': {
+          // V7 phase 3: Poisoned Candy, sickly purple and yellow-brown wisps
+          const sick = Math.random() < 0.45;
+          this.add({ x: x + ox, y: y + oy, z: z + oz, vx: ox * 0.01, vy: 0.015 + Math.random() * 0.01, vz: oz * 0.01, maxLife: 18 + Math.random() * 14, size: 0.09, r: sick ? 0.62 : 0.5, g: sick ? 0.52 : 0.15, b: sick ? 0.12 : 0.6, fade: true, drag: 0.96 });
+          break;
+        }
         case 'heart':
           this.add({ x: x + ox, y: y + oy, z: z + oz, vy: 0.03, maxLife: 30, size: 0.18, r: 1, g: 0.2, b: 0.3, emissive: true });
           break;

@@ -79,8 +79,13 @@ export interface DoorSpot {
 
 /** A door as the server keeps it. */
 export interface DoorRecord extends DoorSpot {
-  /** Knocked on and given out (phase 3 fills this in). */
+  /**
+   * Phase 3: a Candy Home someone has had candy from; a Trick Home beaten and
+   * its chest given out (once, for everyone).
+   */
   used: boolean;
+  /** Phase 3, Candy Homes: who has had their candy here (player uuids; once each). */
+  got?: string[];
 }
 
 /** What the plan knows of a village (Start.village). */
@@ -102,6 +107,12 @@ export interface GuardArea {
   z1: number;
   /** Ground height of the village's centre. */
   y: number;
+  /**
+   * Phase 3: how far out (blocks) a guardian may chase or pick a target
+   * (default: GUARD_LEASH and GUARD_TARGET_LEASH); 0 keeps a Trick Home's
+   * monsters to its rooms.
+   */
+  leash?: number;
 }
 
 /**
@@ -145,7 +156,8 @@ export function sanitizeVillageRecords(raw: unknown): Record<string, VillageReco
         if (!d || !num(d.x) || !num(d.y) || !num(d.z) || !num(d.id) || (d.kind !== 'candy' && d.kind !== 'trick')) continue;
         const outPos = Array.isArray(d.out) && d.out.length === 3 && d.out.every(num) ? (d.out as [number, number, number]) : ([d.x, d.y, d.z] as [number, number, number]);
         const facing = (['north', 'south', 'west', 'east'] as const).find((f) => f === d.facing) ?? 'north';
-        doors.push({ id: d.id, x: d.x, y: d.y, z: d.z, facing, out: outPos, design: typeof d.design === 'string' ? d.design : 'house', kind: d.kind, seed: num(d.seed) ? d.seed >>> 0 : 0, used: d.used === true });
+        const got = Array.isArray(d.got) ? [...new Set((d.got as unknown[]).filter((u): u is string => typeof u === 'string' && u.length > 0 && u.length <= 64))].slice(0, 1024) : [];
+        doors.push({ id: d.id, x: d.x, y: d.y, z: d.z, facing, out: outPos, design: typeof d.design === 'string' ? d.design : 'house', kind: d.kind, seed: num(d.seed) ? d.seed >>> 0 : 0, used: d.used === true, ...(got.length ? { got } : {}) });
       }
     const a = o.area as Record<string, unknown> | undefined;
     const area = a && num(a.x0) && num(a.z0) && num(a.x1) && num(a.z1) && num(a.y) ? { x0: a.x0, z0: a.z0, x1: a.x1, z1: a.z1, y: a.y } : undefined;

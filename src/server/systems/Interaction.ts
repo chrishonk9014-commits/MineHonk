@@ -28,7 +28,7 @@ import type { Entity } from '../entity/Entity';
 import { LivingEntity } from '../entity/Living';
 import { growTree } from '../../common/gen/features/trees';
 import { OFFHAND, ARMOR_START } from '../player/Inventory';
-import { WEARABLE_BLOCKS } from '../../common/halloween/heads';
+import { WEARABLE_BLOCKS, ONLY_WON } from '../../common/halloween/heads';
 
 
 const rng = new Random();
@@ -768,6 +768,11 @@ export class Interaction {
     else this.survival.feed(p, f.hunger, f.saturation);
     for (const e of f.effects ?? []) if (e.chance === undefined || rng.chance(e.chance)) this.survival.addEffect(p, e.effect, e.amplifier ?? 0, e.duration);
     if (f.special === 'chorus_teleport') this.chorusTeleport(p);
+    // V7 phase 3: candy (its effects, a King-Sized Candy's gift, a Poisoned Candy's sickness)
+    if (f.special === 'candy') {
+      const kind = this.server.candy?.kindOf(stack);
+      if (kind) this.server.candy!.eat(p, kind, isAdminStack(stack) || this.server.admin.inContext(p));
+    }
     this.server.playSound(p.dim, 'burp', p.x, p.y + 1, p.z, 0.5, 1);
     if (p.gamemode !== 'creative') {
       if (f.remainder) this.replaceOne(p, slot, stackOf(f.remainder));
@@ -953,6 +958,8 @@ export class Interaction {
 
   handleCreativePick(p: ServerPlayer, item: Slot): void {
     if (p.gamemode !== 'creative' || !item) return;
+    // V7 phase 3: never a new Herobrine Head out of nothing
+    if (ONLY_WON.has(items[item.id]?.id ?? '')) return;
     // Put into hotbar: existing slot with same item, else empty slot, else current
     for (let i = 0; i < 9; i++) {
       const s = p.inventory.get(i);

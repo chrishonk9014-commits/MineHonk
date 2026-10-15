@@ -8,7 +8,7 @@
 import type { GameServer } from '../GameServer';
 import type { ServerPlayer } from '../player/ServerPlayer';
 import { Inventory, ARMOR_START, OFFHAND } from '../player/Inventory';
-import { type ItemStack, type Slot, canStack, cloneStack, maxStack, isEmpty, sameItem, toSaved, fromSaved, type SavedStack, itemIdOf, isAdminStack, markAdmin, maxDurability } from '../../common/game/itemstack';
+import { type ItemStack, type Slot, stackOf, canStack, cloneStack, maxStack, isEmpty, sameItem, toSaved, fromSaved, type SavedStack, itemIdOf, isAdminStack, markAdmin, maxDurability } from '../../common/game/itemstack';
 import { elytraSmith, elytraUpgrades, moduleUpgrade, ELYTRA } from '../../common/endExpansion/elytra';
 import { LOCKED_RECIPES } from '../../common/endExpansion/transport';
 import { items, itemById } from '../../common/registry/items';
@@ -20,7 +20,9 @@ import { FACE_DX, FACE_DZ } from '../../common/world/constants';
 import { isSurvivalLike } from '../../common/game/gamemode';
 import { rollLoot } from '../../common/game/loot';
 import { Random } from '../../common/math/rng';
-import { WEARABLE_BLOCKS } from '../../common/halloween/heads';
+import { WEARABLE_BLOCKS, ONLY_WON } from '../../common/halloween/heads';
+import { SEASONAL_RECIPES, SACK_ID } from '../../common/halloween/candy';
+import { stripExpiredTemp } from '../../common/halloween/tempEnchant';
 
 
 export interface WSlot {
@@ -148,6 +150,8 @@ export class Containers {
       // V6 phase 4: a recipe learned from a blueprint (the Void Skiff) needs learning first
       const lock = r ? LOCKED_RECIPES[items[r.result]!.id] : undefined;
       if (r && lock && !p.recipes.has(items[r.result]!.id) && p.gamemode !== 'creative') r = null;
+      // V7 phase 3: a seasonal recipe (the Trick-or-Treat Sack) only while Halloween is on here
+      if (r && SEASONAL_RECIPES[items[r.result]!.id] && !this.server.halloweenState().active) r = null;
       // Anything crafted from cheat items (or in a cheat context) is cheat-made
       const cheat = !!r && (grid.slots.some((s) => isAdminStack(s)) || this.server.admin.inContext(p));
       result.stack = r ? { id: r.result, count: r.count, ...(cheat ? { tag: { admin: true } } : {}) } : null;
@@ -732,13 +736,17 @@ export class Containers {
       case 'clone': {
         if (!creative || p.cursor) return;
         const cur = slot.get();
-        if (cur) p.cursor = { ...cloneStack(cur), count: maxStack(cur) };
+        // V7 phase 3: a cloned Trick-or-Treat Sack is an empty one (its candy is never copied)
+        if (cur && ONLY_WON.has(itemIdOf(cur))) return;
+        if (cur) p.cursor = itemIdOf(cur) === SACK_ID ? stackOf(SACK_ID) : { ...cloneStack(cur), count: maxStack(cur) };
         break;
       }
     }
   }
 
   private pickup(p: ServerPlayer, slot: WSlot, button: number): void {
+    // V7 phase 3: candy clicked onto a Trick-or-Treat Sack (or a sack onto candy) goes into the sack
+    if (this.server.candy?.click(p, () => slot.get(), (st) => slot.set(st), button)) return;
     const cur = slot.get();
     const cursor = p.cursor;
     if (!cursor) {
@@ -889,8 +897,18 @@ export class Containers {
       this.syncInventory(p);
       return;
     }
+    // V7 phase 3: a Herobrine Head is never in the creative menu: one can only be put back down (once) after being picked up
+    if (item && ONLY_WON.has(itemIdOf(item))) {
+      const held = this.creativeHand.get(p);
+      if (!held || held.id !== item.id) {
+        this.syncInventory(p);
+        return;
+      }
+      item = cloneStack(held);
+      this.creativeHand.delete(p);
+    }
     // Items taken from the creative menu under a cheat (e.g. cheat Creative mode) are cheat-made
-    if (item && this.server.admin.inContext(p)) markAdmin(item);
+    else if (item && this.server.admin.inContext(p)) markAdmin(item);
     if (slot === -1) {
       if (item) this.server.interaction.dropStack(p, item);
       return;
@@ -924,6 +942,15 @@ export class Containers {
     const k = this.keyOf(dim, x, y, z);
     this.live.delete(k);
     this.activeFurnaces.delete(k);
+  }
+
+  /** V7 phase 3: clears run-out temporary enchantments off items in the open containers. */
+  stripExpiredTemp(): void {
+    for (const inv of this.live.values())
+      for (let i = 0; i < inv.size; i++) {
+        const st = inv.get(i);
+        if (st?.tag?.temp && stripExpiredTemp(st)) inv.set(i, { ...st });
+      }
   }
 
   /** Drops cached container inventories for unloaded chunks. */

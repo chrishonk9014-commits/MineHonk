@@ -14,6 +14,7 @@
  * of events started by a cheat stays advancement-neutral. Normal play is
  * untouched.
  */
+import { ONLY_WON } from '../../common/halloween/heads';
 import { EXPANSION_BIOME_IDS, expansionBiomeIndex } from '../../common/endExpansion/biomes';
 import { EXPANSION_STRUCTURE_IDS } from '../../common/endExpansion/structures';
 import { inExpansion } from '../../common/endExpansion/region';
@@ -468,7 +469,7 @@ export class AdminService {
         return herobrineAdmin(this.server.herobrine, { moveTo: (pl, dim, x, y, z) => this.moveTo(pl, dim, x, y, z), give: (pl, id, n) => this.giveMarked(pl, id, n), safeSpot: (dim, x, y, z) => this.safeSpot(dim, x, y, z, false) }, p, a.op);
       case 'halloween':
         if (!this.server.halloween) return { ok: false, text: 'Halloween is not available.' };
-        return this.server.halloween.admin(p, a.op, a.pumpkin, a.sim, a.door);
+        return this.server.halloween.admin(p, a.op, a.pumpkin, a.sim, a.door, a.candy, a.trick);
       case 'haunt':
         if (!this.server.haunting) return { ok: false, text: 'The haunting is not available.' };
         return this.server.haunting.admin(p, a.op, a.minutes, a.erase, a.ending);
@@ -683,6 +684,8 @@ export class AdminService {
   give(t: ServerPlayer, id: string, count: number, opts: { potion?: string; enchant?: string; level?: number } = {}): { ok: boolean; text: string } {
     const it = itemById.get(id);
     if (!it || it.num === 0 || id === 'air') return { ok: false, text: `Unknown item ${id}.` };
+    // V7 phase 3: some things can only be won
+    if (ONLY_WON.has(id)) return { ok: false, text: `The ${it.def.name} can't be given: it is only ever won, from Herobrine himself.` };
     const proto: ItemStack = { id: it.num, count: 1 };
     if (opts.potion) {
       if (!POTION_BY_ID.has(opts.potion) || (it.id !== 'potion' && it.id !== 'splash_potion')) return { ok: false, text: 'That potion type does not exist.' };
@@ -795,12 +798,12 @@ export class AdminService {
   // ------------------------------------------------------------------ teleport
 
   /** Moves a player as a cheat (marks the arrival for advancement safety). */
-  moveTo(t: ServerPlayer, dim: DimensionId, x: number, y: number, z: number): void {
+  moveTo(t: ServerPlayer, dim: DimensionId, x: number, y: number, z: number, yaw?: number): void {
     const s = this.server;
     const cross = t.dim.id !== dim;
     this.onAdminArrival(t, dim, x, z, cross);
-    if (cross) s.changeDimension(t, dim, x, y, z, t.yaw, { admin: true });
-    else s.teleport(t, x, y, z);
+    if (cross) s.changeDimension(t, dim, x, y, z, yaw ?? t.yaw, { admin: true });
+    else s.teleport(t, x, y, z, yaw);
     t.spawnProtection = Math.max(t.spawnProtection, 60);
   }
 

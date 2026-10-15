@@ -3865,3 +3865,277 @@ body {
 .halloween-title .footer {
   color: #e8dcff;
 }
+
+/* V7 phase 3: a Trick-or-Treat Sack's fill, the Poisoned Candy's sickly look, temporary enchantments */
+.durability.sack-fill > div {
+  background: #ff9a2a;
+}
+.durability.sack-fill > div.full {
+  background: #ffd34a;
+}
+.poisoned-text {
+  color: #c2a843;
+  text-shadow: var(--s) var(--s) 0 #3a3008;
+  transform-origin: left center;
+  animation: poisonwobble 2.6s ease-in-out infinite;
+}
+@keyframes poisonwobble {
+  0%,
+  100% {
+    transform: skewX(-7deg);
+  }
+  50% {
+    transform: skewX(5deg) translateY(calc(var(--s) * 0.5));
+  }
+}
+.item-icon.poisoned {
+  filter: drop-shadow(0 0 calc(var(--s) * 0.8) rgba(160, 140, 30, 0.6));
+}
+.ench.temp {
+  color: #ffb866;
+}
+/* V7 phase 3: the Knock prompt, lines spoken at the door, a Trick Home's bar */
+.act-prompt {
+  position: absolute;
+  left: 50%;
+  top: calc(50% + var(--s) * 14);
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: calc(var(--s) * 3);
+  padding: calc(var(--s) * 2) calc(var(--s) * 5);
+  background: rgba(20, 10, 4, 0.72);
+  border: var(--s) solid #ff9a2a;
+  color: #ffe2b8;
+  font-size: calc(var(--s) * 8);
+  pointer-events: auto;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.act-prompt .key {
+  padding: 0 calc(var(--s) * 2);
+  background: #ff9a2a;
+  color: #2a1404;
+}
+.speech-lines {
+  position: absolute;
+  left: 50%;
+  bottom: calc(var(--s) * 76);
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(var(--s) * 2);
+  pointer-events: none;
+  width: min(92vw, calc(var(--s) * 260));
+}
+.speech {
+  background: rgba(10, 6, 14, 0.78);
+  padding: calc(var(--s) * 2) calc(var(--s) * 5);
+  font-size: calc(var(--s) * 8);
+  color: #fff;
+  text-align: center;
+  transition: opacity 0.6s;
+  border-left: calc(var(--s) * 2) solid #888;
+}
+.speech.fade {
+  opacity: 0;
+}
+.speech .who {
+  color: #aaa;
+}
+.speech.villager {
+  border-color: #6ad46a;
+}
+.speech.villager .who {
+  color: #9af09a;
+}
+.speech.door {
+  border-color: #c08a44;
+  font-style: italic;
+}
+.speech.door .who {
+  color: #e0b070;
+}
+.speech.warn {
+  border-color: #ffcc33;
+  color: #ffe066;
+}
+.speech.scare {
+  border-color: #ff3a2a;
+  color: #ffd0c8;
+  letter-spacing: 0.06em;
+}
+.speech.scare .who {
+  color: #ffffff;
+}
+.boss-halloween .shadow {
+  color: #ffcf8a;
+}
+.boss-halloween .bar > div {
+  background: linear-gradient(#ffb04a, #e0640e);
+}
+/* V7 phase 3: a Candy Home's letterbox and the Skip button */
+.hs-bars .hs-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 0;
+  background: #000;
+  transition: height 0.5s ease-out;
+}
+.hs-bars .hs-bar.top {
+  top: 0;
+}
+.hs-bars .hs-bar.bottom {
+  bottom: 0;
+}
+.hs-bars.in .hs-bar {
+  height: 11vh;
+}
+.haunt-scene > .hs-skip {
+  position: absolute;
+  inset: auto;
+  right: calc(var(--s) * 8);
+  bottom: calc(var(--s) * 8);
+  padding: calc(var(--s) * 2) calc(var(--s) * 6);
+  background: rgba(0, 0, 0, 0.55);
+  border: var(--s) solid rgba(255, 255, 255, 0.4);
+  color: #fff;
+  font-size: calc(var(--s) * 8);
+  pointer-events: auto;
+  cursor: pointer;
+  z-index: 5;
+}
+.hs-skip:hover {
+  background: rgba(255, 154, 42, 0.6);
+}
+/* V7 phase 3: the Trick-or-Treat Sack, opened */
+.screen.sack-screen {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.sack-panel {
+  width: min(94vw, calc(var(--s) * 330));
+  max-height: 90vh;
+  overflow-y: auto;
+  padding: calc(var(--s) * 7);
+  background: var(--panel);
+  border: var(--s) solid #000;
+  box-shadow: inset calc(var(--s) * 2) calc(var(--s) * 2) 0 var(--panel-light), inset calc(var(--s) * -2) calc(var(--s) * -2) 0 var(--panel-dark);
+  color: var(--gray-text);
+  pointer-events: auto;
+}
+.sack-panel .gui-title {
+  font-size: calc(var(--s) * 10);
+  margin-bottom: calc(var(--s) * 4);
+}
+.sack-count {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: calc(var(--s) * 2);
+}
+.sack-count .big {
+  font-size: calc(var(--s) * 12);
+  color: #3a2008;
+}
+.sack-bar {
+  height: calc(var(--s) * 4);
+  background: #3a2a1a;
+  border: var(--s) solid #2a1a0a;
+  margin-bottom: calc(var(--s) * 5);
+}
+.sack-bar > div {
+  height: 100%;
+  background: linear-gradient(#ffb04a, #e0640e);
+}
+.sack-bar.full > div {
+  background: linear-gradient(#ffe066, #e0a020);
+}
+.sack-empty {
+  padding: calc(var(--s) * 4) 0;
+  text-align: center;
+}
+.sack-row {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--s) * 3);
+  padding: calc(var(--s) * 1) 0;
+  border-top: var(--s) solid rgba(0, 0, 0, 0.12);
+}
+.sack-row .sack-icon {
+  position: relative;
+  flex: none;
+}
+.sack-row .sack-name {
+  flex: 1;
+  min-width: 0;
+}
+.sack-row .small {
+  font-size: calc(var(--s) * 6);
+}
+.sack-row .sack-n {
+  width: calc(var(--s) * 18);
+  text-align: right;
+}
+.sack-row.poisoned {
+  background: rgba(150, 130, 30, 0.12);
+}
+.sack-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: calc(var(--s) * 4);
+  margin-top: calc(var(--s) * 5);
+}
+@media (max-width: 600px) {
+  .sack-row {
+    flex-wrap: wrap;
+  }
+  .sack-row .sack-name {
+    flex-basis: 60%;
+  }
+}
+/* V7 phase 3: a costume from the inside: the mask's edge round two eye holes, in the costume's colour */
+.costume-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  background: var(--mask, rgba(30, 14, 4, 0.8));
+  opacity: 0.55;
+  -webkit-mask-image: radial-gradient(ellipse 36% 46% at 31% 52%, transparent 74%, #000 100%), radial-gradient(ellipse 36% 46% at 69% 52%, transparent 74%, #000 100%);
+  mask-image: radial-gradient(ellipse 36% 46% at 31% 52%, transparent 74%, #000 100%), radial-gradient(ellipse 36% 46% at 69% 52%, transparent 74%, #000 100%);
+  -webkit-mask-composite: source-in;
+  mask-composite: intersect;
+}
+.costume-overlay.carved_pumpkin {
+  --mask: radial-gradient(circle at 50% 50%, #c8640e, #5a2604);
+}
+.costume-overlay.skeleton_skull {
+  --mask: radial-gradient(circle at 50% 50%, #e8e2cc, #8a8676);
+}
+.costume-overlay.zombie_head {
+  --mask: radial-gradient(circle at 50% 50%, #4a8a3a, #1e3a16);
+}
+.costume-overlay.creeper_head {
+  --mask: radial-gradient(circle at 50% 50%, #5cb048, #22501a);
+}
+.costume-overlay.herobrine_head {
+  --mask: radial-gradient(circle at 50% 50%, #6a4a2a, #1a0e06);
+  box-shadow: inset 0 0 12vh rgba(255, 255, 255, 0.25);
+}
+.sack-panel .yellow {
+  color: #8a5a00;
+}
+.sack-panel .rarity-rare {
+  color: #13708e;
+}
+.sack-panel .poisoned-text {
+  color: #6e5e0a;
+  text-shadow: none;
+}
+.sack-panel .dim {
+  color: #5a5a5a;
+}

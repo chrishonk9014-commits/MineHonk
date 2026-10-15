@@ -67,6 +67,9 @@ import { EXPANSION_BIOMES } from '../../common/endExpansion/biomes';
 import { inExpansion } from '../../common/endExpansion/region';
 import { CITADEL, citadelCandidates, planCitadel } from '../../common/endExpansion/citadel';
 import { biomeOf } from '../../common/registry/biomes';
+import type { DoorSpot } from '../../common/halloween/villages';
+import { getProp, withProp } from '../../common/registry/blocks';
+import { itemById } from '../../common/registry/items';
 
 const RADIUS = 4;
 
@@ -74,8 +77,8 @@ type EngScene = 'factory' | 'power_plant' | 'mine' | 'farm' | 'control_room' | '
 type DigitalScene = 'digital_world' | 'herobrine_cave';
 type EndScene = 'expanded_end' | 'crystal_fields' | 'void_citadel' | 'end_eclipse';
 type HalloweenScene = 'haunted_forest' | 'pumpkin_patch' | 'ghost_marsh' | VillageScene;
-/** V7 phase 2: the two villages, at night. */
-type VillageScene = 'trick_village' | 'abandoned_village';
+/** V7 phase 2: the two villages, at night; phase 3: trick-or-treating at a door in one. */
+type VillageScene = 'trick_village' | 'abandoned_village' | 'trick_or_treat';
 type Scene = 'farlands' | 'end' | 'arena' | 'error_biome' | 'village' | 'dragon_malware' | EngScene | DigitalScene | EndScene | HalloweenScene;
 /** The Engineering Update's set scenes (built onto overworld terrain). */
 const ENG_SCENES: EngScene[] = ['factory', 'power_plant', 'mine', 'farm', 'control_room', 'computer_lab'];
@@ -83,14 +86,14 @@ const ENG_SCENES: EngScene[] = ['factory', 'power_plant', 'mine', 'farm', 'contr
 const END_SCENES: EndScene[] = ['expanded_end', 'crystal_fields', 'void_citadel', 'end_eclipse'];
 const RANDOM_SCENES: Scene[] = [...END_SCENES];
 /** V7: Halloween nights, in turn, while the season lasts. */
-const HALLOWEEN_SCENES: HalloweenScene[] = ['haunted_forest', 'trick_village', 'pumpkin_patch', 'abandoned_village', 'ghost_marsh'];
+const HALLOWEEN_SCENES: HalloweenScene[] = ['haunted_forest', 'trick_village', 'pumpkin_patch', 'trick_or_treat', 'abandoned_village', 'ghost_marsh'];
 /** Seconds each Halloween scene shows before the next. */
 const ROTATE_SECONDS = 40;
 const ALL_SCENES: Scene[] = [...HALLOWEEN_SCENES, ...END_SCENES, ...ENG_SCENES, 'digital_world', 'herobrine_cave', 'dragon_malware', 'error_biome', 'village', 'farlands', 'end', 'arena'];
 const isEndScene = (s: Scene): s is EndScene => (END_SCENES as Scene[]).includes(s);
 const isEng = (s: Scene): s is EngScene => (ENG_SCENES as Scene[]).includes(s);
 const isHalloween = (s: Scene): s is HalloweenScene => (HALLOWEEN_SCENES as Scene[]).includes(s);
-const isVillageScene = (s: Scene): s is VillageScene => s === 'trick_village' || s === 'abandoned_village';
+const isVillageScene = (s: Scene): s is VillageScene => s === 'trick_village' || s === 'abandoned_village' || s === 'trick_or_treat';
 
 /** V7: the biomes each Halloween scene is looked for in (best first). */
 const HALLOWEEN_BIOMES: Record<Exclude<HalloweenScene, VillageScene>, string[]> = {
@@ -106,6 +109,7 @@ const HALLOWEEN_FOG: Record<HalloweenScene, { color: number; density: number; am
   ghost_marsh: { color: 0x1a2628, density: 0.2, amount: 0.65 },
   trick_village: { color: 0x120e22, density: 0.5, amount: 0.22 },
   abandoned_village: { color: 0x1c2422, density: 0.25, amount: 0.7 },
+  trick_or_treat: { color: 0x140e24, density: 0.5, amount: 0.18 },
 };
 
 /** What each scene looks like: particles in the air, camera tilt, extra light. */
@@ -136,6 +140,8 @@ const LOOK: Record<Scene, { particle: string; pitch: number; nightVision: number
   ghost_marsh: { particle: 'none', pitch: 0.2, nightVision: 0.12, aside: 0.42 },
   trick_village: { particle: 'none', pitch: 0.32, nightVision: 0.06, aside: 0.45 },
   abandoned_village: { particle: 'none', pitch: 0.3, nightVision: 0.24, aside: 0.45 },
+  // Beside the door, the trick-or-treater and whoever answers right of the menu
+  trick_or_treat: { particle: 'none', pitch: 0.06, nightVision: 0.14, aside: 0.55 },
 };
 
 /** The Error's poses shown on the title screen, cycling. */
@@ -152,6 +158,11 @@ export class TitlePanorama {
   private orbit = 0;
   private scene: Scene = 'farlands';
   private boss: ClientEntity | null = null;
+  /** V7 phase 3: the other figures in a scene (a trick-or-treater, the villager at the door). */
+  private extras: ClientEntity[] = [];
+  /** V7 phase 3: the door the trick-or-treating scene is set at, and the village's other house doors (to try if its view is blocked). */
+  private door: DoorSpot | null = null;
+  private doors: DoorSpot[] = [];
   private gen: DimensionGenerator | null = null;
   /** A camera that looks one way (the lake inside the computer) instead of turning. */
   private fixedYaw: number | null = null;
@@ -300,12 +311,19 @@ export class TitlePanorama {
    * Abandoned Village (generator 9, every village that variant), a little per frame.
    */
   private findVillage(seed: number, scene: VillageScene): void {
-    const gen = new OverworldGenerator(seed, { villages: { force: scene === 'trick_village' ? 'trick' : 'abandoned' } });
+    const gen = new OverworldGenerator(seed, { villages: { force: scene === 'abandoned_village' ? 'abandoned' : 'trick' } });
     // Open country, so the trees don't hide it (plains, savanna, desert, cherry groves)
     const open = ['plains', 'savanna', 'desert', 'cherry'];
-    const search = (function* (): Generator<void, { x: number; y: number; z: number } | null> {
-      const s = yield* gen.structures.nearestSteps('village', Math.floor((Math.random() - 0.5) * 3000), Math.floor((Math.random() - 0.5) * 3000), 24, (v) => open.includes(v.village?.style ?? ''));
-      return s ? { x: s.x, y: s.y, z: s.z } : null;
+    const door = scene === 'trick_or_treat';
+    const search = (function* (): Generator<void, { x: number; y: number; z: number; door?: DoorSpot; doors?: DoorSpot[] } | null> {
+      const s = yield* gen.structures.nearestSteps('village', Math.floor((Math.random() - 0.5) * 3000), Math.floor((Math.random() - 0.5) * 3000), 24, (v) => open.includes(v.village?.style ?? '') && (!door || (v.village?.doors.length ?? 0) > 0));
+      if (!s) return null;
+      // V7 phase 3: a cottage's or a house's door (manors' stand too high off the road)
+      const homes = door ? (s.village?.doors ?? []).filter((x) => x.design === 'cottage' || x.design === 'house') : [];
+      const d = door ? homes[0] ?? s.village?.doors[0] : undefined;
+      // The others nearest it first
+      const rest = d ? (s.village?.doors ?? []).filter((x) => x !== d).sort((a, b) => Math.hypot(a.x - d.x, a.z - d.z) - Math.hypot(b.x - d.x, b.z - d.z)) : [];
+      return d ? { x: d.out[0], y: d.out[1], z: d.out[2], door: d, doors: [d, ...rest] } : { x: s.x, y: s.y, z: s.z };
     })();
     const step = (): void => {
       if (this.disposed) return;
@@ -316,8 +334,11 @@ export class TitlePanorama {
         this.raf = requestAnimationFrame(step);
         return;
       }
-      if (r.value) this.build(gen, r.value);
-      else {
+      if (r.value) {
+        this.door = r.value.door ?? null;
+        this.doors = r.value.doors ?? [];
+        this.build(gen, r.value);
+      } else {
         this.scene = 'pumpkin_patch';
         this.findHalloween(seed + 1, 'pumpkin_patch');
       }
@@ -699,6 +720,96 @@ export class TitlePanorama {
         this.orbit = this.scene === 'control_room' || this.scene === 'computer_lab' ? 17 : 21;
         break;
       }
+      case 'trick_or_treat': {
+        // V7 phase 3: a trick-or-treater in a pumpkin with a sack at an open door, a villager in a skull answering
+        const FACE = { north: [0, -1], south: [0, 1], west: [-1, 0], east: [1, 0] } as const;
+        // Somewhere in front of a door with a clear view of both of them: the best spot about
+        // six blocks out and off to one side (nothing in the way, crops and grass included)
+        const blocked = (x: number, y: number, z: number): boolean => w.getState(Math.floor(x), Math.floor(y), Math.floor(z)) !== 0;
+        const sees = (x: number, y: number, z: number, tx: number, ty: number, tz: number): boolean => {
+          const len = Math.hypot(tx - x, ty - y, tz - z);
+          const n = Math.ceil(len * 4);
+          for (let i = 1; i < n; i++) {
+            const k = i / n;
+            // The last stretch (the figure's own spot, the door's pumpkins) does not count
+            if (len * (1 - k) < 0.9) break;
+            if (blocked(x + (tx - x) * k, y + (ty - y) * k, z + (tz - z) * k)) return false;
+          }
+          return true;
+        };
+        const cameraFor = (d: DoorSpot): { x: number; y: number; z: number; b: number; score: number } | null => {
+          const f = FACE[d.facing];
+          const side = [-f[1], f[0]] as const;
+          const [ox, oy, oz] = d.out;
+          const kidHead: [number, number, number] = [ox + 0.5, oy + 1.5, oz + 0.5];
+          const hostHead: [number, number, number] = [d.x + 0.5, d.y + 1.6, d.z + 0.5];
+          let found: { x: number; y: number; z: number; b: number; score: number } | null = null;
+          for (let a = 2; a <= 8; a++)
+            for (let b = -6; b <= 6; b++)
+              for (const up of [1.6, 2.4, 3.3]) {
+                const x = ox + 0.5 + f[0] * a + side[0] * b;
+                const z = oz + 0.5 + f[1] * a + side[1] * b;
+                const y = oy + up;
+                if (blocked(x, y, z) || blocked(x, y - 1, z) || blocked(x, y + 1, z)) continue;
+                if (!sees(x, y, z, ...kidHead) || !sees(x, y, z, ...hostHead)) continue;
+                const dist = Math.hypot(a, b);
+                const angle = Math.atan2(Math.abs(b), a);
+                const score = Math.abs(dist - 6) + Math.abs(angle - 0.6) * 2 + (up - 1.6) * 1.2;
+                if (!found || score < found.score) found = { x, y, z, b, score };
+              }
+          return found;
+        };
+        // The chosen door first, then the village's other houses (all within the area built)
+        let d: DoorSpot | null = null;
+        let best: { x: number; y: number; z: number; b: number; score: number } | null = null;
+        for (const c of this.doors.filter((x) => Math.hypot(x.x - fx, x.z - fz) < 44)) {
+          best = cameraFor(c);
+          if (best) {
+            d = c;
+            break;
+          }
+        }
+        if (!d || !best) {
+          // No clear view of any door: the village from above instead
+          this.scene = 'trick_village';
+          this.frameScene(focus);
+          return;
+        }
+        this.door = d;
+        const f = FACE[d.facing];
+        const side = [-f[1], f[0]] as const;
+        const [ox, oy, oz] = d.out;
+        for (const dy of [0, 1]) {
+          const st = w.getState(d.x, d.y + dy, d.z);
+          if (st && getProp(st, 'open') === 'false') w.setBlock(d.x, d.y + dy, d.z, withProp(st, 'open', true));
+        }
+        const cx = best.x;
+        const cy = best.y;
+        const cz = best.z;
+        this.center = { x: cx, y: cy, z: cz };
+        this.orbit = 0;
+        const tx = d.x + 0.5 + f[0] * 0.6;
+        const tz = d.z + 0.5 + f[1] * 0.6;
+        this.fixedYaw = Math.atan2(-(tx - cx), -(tz - cz));
+        this.sway = 0.05;
+        const sack = itemById.get('trick_or_treat_sack')?.num ?? 0;
+        // The trick-or-treater a little to the side away from the camera, so the doorway shows past them
+        const away = best.b > 0 ? -0.55 : 0.55;
+        const kx = ox + 0.5 + side[0] * away;
+        const kz = oz + 0.5 + side[1] * away;
+        const hx = d.x + 0.5 + f[0] * 0.2;
+        const hz = d.z + 0.5 + f[1] * 0.2;
+        const kid = new ClientEntity(-2, 'player', kx, oy, kz, Math.atan2(-(hx - kx), -(hz - kz)), 0, { headwear: 'carved_pumpkin', held: sack, noTag: true });
+        const host = new ClientEntity(-3, 'villager', hx, d.y, hz, Math.atan2(-(kx - hx), -(kz - hz)), 0, { headwear: 'skeleton_skull', profession: 'farmer' });
+        for (const e of [kid, host]) {
+          e.headYaw = e.yaw;
+          this.renderer!.entities.add(e);
+          this.extras.push(e);
+        }
+        this.renderer!.ghosts.ambient = 1;
+        this.renderer!.ghosts.ambientArea = { x: d.x, y: d.y + 2, z: d.z, r: 8 };
+        break;
+      }
       case 'trick_village':
       case 'abandoned_village': {
         // Circling the plaza at night, low over the rooftops; ghosts over the ruins
@@ -777,6 +888,8 @@ export class TitlePanorama {
       }
       r.entities.update([boss], 1, t * 20, () => 1);
     }
+    // V7 phase 3: the figures standing in a scene (the trick-or-treater and the villager at the door)
+    if (this.extras.length) r.entities.update(this.extras, 1, t * 20, () => 1);
     const fs: FrameState = {
       x: cam.x,
       y: cam.y,
@@ -825,6 +938,10 @@ export class TitlePanorama {
       cancelAnimationFrame(this.raf);
       if (this.boss) this.renderer?.entities.remove(this.boss.id);
       this.boss = null;
+      for (const e of this.extras) this.renderer?.entities.remove(e.id);
+      this.extras = [];
+      this.door = null;
+      this.doors = [];
       this.figure = null;
       this.look = null;
       this.fixedYaw = null;
@@ -856,6 +973,8 @@ export class TitlePanorama {
     this.canvas.style.opacity = '';
     cancelAnimationFrame(this.raf);
     if (this.boss) this.renderer?.entities.remove(this.boss.id);
+    for (const e of this.extras) this.renderer?.entities.remove(e.id);
+    this.extras = [];
     this.world.clear();
     this.renderer?.dispose();
     this.renderer = null;

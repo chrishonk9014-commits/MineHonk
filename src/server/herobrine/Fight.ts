@@ -1157,6 +1157,8 @@ export class HerobrineFights {
   /** How much of a hit Herobrine takes (called from Mob.hurt). */
   scaleDamage(m: Mob, amount: number, info: HurtInfo): number {
     if (m.data.apparition) return info.source === 'kill' ? amount : 0;
+    // V7 phase 3: a Trick Home's Herobrine is a short fight of its own, hurt like anything else
+    if (m.data.trickHome) return amount;
     const f = this.fight;
     if (!f || f.boss !== m) return amount;
     if (info.source === 'kill' || info.source === 'void') return f.kind === 'first' && info.source === 'void' ? 0 : amount;
@@ -1188,7 +1190,7 @@ export class HerobrineFights {
   onDeath(m: Mob, killer: ServerPlayer | null, info: HurtInfo): void {
     void killer;
     void info;
-    if (m.data.apparition) {
+    if (m.data.apparition || m.data.trickHome) {
       m.remove();
       return;
     }

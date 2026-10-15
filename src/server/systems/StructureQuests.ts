@@ -239,6 +239,11 @@ export class StructureQuests {
     p.send({ t: 'quest', quest: q });
   }
 
+  /** Whether this system's quest tracker is on the player's screen (V7 phase 3: the Trick or Treat! quest gives way to it). */
+  showing(p: ServerPlayer): boolean {
+    return !!this.shown.get(p);
+  }
+
   onLeave(p: ServerPlayer): void {
     this.shown.delete(p);
   }

@@ -69,6 +69,11 @@ export class VillageSystem {
     return this.server.level.villages;
   }
 
+  /** A record changed (phase 3: a door knocked on): it reaches the save soon. */
+  markDirty(): void {
+    this.unsaved = true;
+  }
+
   /** A village's record (undefined: never built yet). */
   record(key: string): VillageRecord | undefined {
     return this.records[key];

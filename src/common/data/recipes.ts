@@ -501,6 +501,9 @@ for (const [a, b] of [
 // V6 - The End Expansion, phase 2: the Expanded End's resources
 addExpansionRecipes({ shaped, shapeless, smelt, cut, smith: (base, addition, result) => SMITHING.push({ base, addition, result }) });
 
+// V7 - The Halloween Update, phase 3: the Trick-or-Treat Sack (only while Halloween is on: SEASONAL_RECIPES)
+shaped('trick_or_treat_sack', 1, [' S ', 'W W', 'WWW'], { S: 'string', W: '#wool_any' });
+
 /** Furnace fuel values not derivable from item defs (ticks). */
 export const EXTRA_FUEL: Record<string, number> = {
   bamboo: 50,

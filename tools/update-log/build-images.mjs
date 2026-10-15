@@ -8,6 +8,7 @@
  *   node tests/e2e/auto-optimize.mjs                    V6.5, Auto Optimize
  *   UPDATE_LOG_SHOTS=1 node tests/e2e/halloween.mjs     V7, the Halloween Update
  *   UPDATE_LOG_SHOTS=1 node tests/e2e/villages.mjs      V7 phase 2: the villages and the heads
+ *   UPDATE_LOG_SHOTS=1 node tests/e2e/trick-or-treat.mjs V7 phase 3: trick-or-treating
  *   node tools/update-log/build-images.mjs [v6 v6.5 v7] resize, brighten and encode (all, or just those)
  *
  * Encoding runs in the Chromium that Playwright already uses, so nothing else
@@ -83,6 +84,17 @@ add('abandoned-guardians', 'clean/villages-abandoned-guardians.png', { filter: '
 add('heads', 'clean/villages-heads.png', { filter: '' });
 add('heads-worn', 'clean/villages-heads-worn.png', { filter: '' });
 add('admin-villages', 'clean/halloween-admin-villages.png', { filter: '' });
+// Phase 3: trick-or-treating (tests/e2e/trick-or-treat.mjs)
+add('title-trick-or-treat', 'trick-title-scene.png', { width: 1280 });
+for (const [name, src] of [['candy-home-give', 'trick-candy-home-give'], ['candy-home', 'trick-candy-home'], ['rejected', 'trick-rejected'], ['knock-prompt', 'trick-knock-prompt'], ['trick-grab', 'trick-home-grab'], ['trick-drag', 'trick-home-drag'], ['candy-ground', 'trick-candy-ground'], ['hand-poisoned', 'trick-hand-poisoned_candy'], ['costume-carved-pumpkin', 'trick-costume-carved_pumpkin'], ['costume-zombie-head', 'trick-costume-zombie_head']])
+  add(name, `clean/${src}.png`);
+for (const n of ['sack-partial', 'sack-full', 'sack-tooltip']) add(n, `clean/trick-${n}.png`, { filter: '' });
+add('trick-loot', 'clean/trick-home-loot.png', { filter: '' });
+add('admin-trick', 'clean/trick-admin.png', { filter: '' });
+// These keep the HUD: the boss bar, the quest tracker
+add('trick-fight', 'trick-home-fight.png');
+add('trick-herobrine', 'trick-home-herobrine.png');
+add('quest', 'trick-quest.png');
 
 if (only.length) shots.splice(0, shots.length, ...shots.filter((s) => only.includes(s.version)));
 // A list of sources: the first one there is used

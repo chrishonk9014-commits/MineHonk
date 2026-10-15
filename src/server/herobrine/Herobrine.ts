@@ -45,6 +45,7 @@ import type { Window } from '../systems/Containers';
 import type { HerobrineWorld } from '../world/LevelData';
 import type { PcView, UiBlock } from '../../common/digital/view';
 import { Mob, isPlayer } from '../entity/Mob';
+import { ItemEntity } from '../entity/ItemEntity';
 import { items } from '../../common/registry/items';
 import { blocks, STATE_BLOCK, getProp, S, stateOf } from '../../common/registry/blocks';
 import { stackOf, markAdmin, isAdminStack, type ItemStack } from '../../common/game/itemstack';
@@ -115,6 +116,8 @@ export class HerobrineSystem {
   /** When each player came in through the screen (he lets you look around first). */
   private readonly arrivedAt = new Map<ServerPlayer, number>();
   private readonly rng = new Random();
+  /** V7 phase 3: the Herobrine Head he dropped, and who it goes to if nobody picks it up before the hall falls. */
+  private head: { e: ItemEntity; heir: string } | null = null;
 
   constructor(readonly server: GameServer) {
     this.malware = new Malware(this);
@@ -198,7 +201,7 @@ export class HerobrineSystem {
   private adoptStrays(): void {
     for (const dim of this.server.dims.values())
       for (const e of dim.entities.values()) {
-        if (!(e instanceof Mob) || e.type !== 'herobrine' || e.dead || e.removed || e.data.apparition) continue;
+        if (!(e instanceof Mob) || e.type !== 'herobrine' || e.dead || e.removed || e.data.apparition || e.data.trickHome) continue;
         this.fights.adopt(e);
         return;
       }
@@ -839,6 +842,34 @@ export class HerobrineSystem {
     this.toComputerWorld({ t: 'fx', kind: 'glitch', strength: 0.9, ticks: 20 });
     const m = f.boss;
     if (m) s.playSound(f.dim, 'herobrine.death', m.x, m.y + 1, m.z, 6, 1);
+    // V7 phase 3: a real victory (no cheats, no Admin Panel, no stray he was spawned as) leaves his head where he fell
+    if (!cheat && m) this.dropHead(f, m);
+  }
+
+  /** One Herobrine Head, at the arena, the only way one is ever won. */
+  private dropHead(f: HbFight, m: Mob): void {
+    const party = this.fights.participants(f).filter((p) => !this.server.admin.inContext(p));
+    if (!party.length) return;
+    const e = new ItemEntity(stackOf('herobrine_head', 1));
+    e.setPos(m.x, m.y + 0.5, m.z);
+    e.body.vy = 0.25;
+    e.pickupDelay = 20;
+    f.dim.addEntity(e);
+    this.head = { e, heir: party[0]!.uuid };
+  }
+
+  /** The hall is coming down: a head nobody picked up goes to the one who was nearest when he fell. */
+  private handOverHead(): void {
+    const h = this.head;
+    this.head = null;
+    if (!h || h.e.removed) return;
+    const st = h.e.stack;
+    h.e.remove();
+    const heir = this.online(h.heir) ?? [...this.server.players.values()][0];
+    if (!heir) return;
+    const rem = heir.inventory.add(st);
+    if (rem) this.server.mining.dropItem(heir.dim, heir.x, heir.y + 0.3, heir.z, rem);
+    this.server.interaction.syncInventory(heir);
   }
 
   private toComputerWorld(msg: Parameters<ServerPlayer['send']>[0]): void {
@@ -885,6 +916,7 @@ export class HerobrineSystem {
       if (p.dead) continue;
       this.returnHome(p, true, cheat || s.admin.inContext(p));
     }
+    this.handOverHead();
     if (!cheat) w.completions++;
     this.resetRun(false);
   }

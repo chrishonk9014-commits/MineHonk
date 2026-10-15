@@ -359,3 +359,133 @@ export function registerV7Phase2Blocks(r: PainterRegistry): void {
   r.add('factory_light_orange', (t) => light(t, hex(0xffe0a0), hex(0xff8a1e)));
   r.add('factory_light_purple', (t) => light(t, hex(0xf0c8ff), hex(0xa040f0)));
 }
+
+// ---------------------------------------------------------------------------
+// Phase 3: the Trick-or-Treat Sack and the four candies (16 x 16 item icons)
+// ---------------------------------------------------------------------------
+
+/** Paints every texel a function returns a colour for (null: left clear). */
+function shape(t: Tex, fn: (x: number, y: number) => RGB | null): void {
+  for (let y = 0; y < 16; y++)
+    for (let x = 0; x < 16; x++) {
+      const c = fn(x, y);
+      if (c) t.set(x, y, c);
+    }
+}
+
+/** A dark rim round everything painted, so the icon reads on any background. */
+function outline(t: Tex, c: RGB): void {
+  const solid = (x: number, y: number): boolean => t.alpha(x, y) > 0;
+  const edge: [number, number][] = [];
+  for (let y = 0; y < 16; y++)
+    for (let x = 0; x < 16; x++) if (!solid(x, y) && (solid(x - 1, y) || solid(x + 1, y) || solid(x, y - 1) || solid(x, y + 1))) edge.push([x, y]);
+  for (const [x, y] of edge) t.set(x, y, c);
+}
+
+/** A wrapped sweet on its side: an oval in the middle, the paper twisted at both ends. `warp` bends it out of true. */
+function wrappedSweet(t: Tex, body: RGB[], stripe: RGB, paper: RGB[], warp = 0): void {
+  const bend = (x: number): number => (warp ? Math.round(Math.sin((x - 2) * 0.55) * warp + (x > 9 ? (x - 9) * 0.35 * warp : 0)) : 0);
+  shape(t, (x, y0) => {
+    const y = y0 - bend(x);
+    const dx = (x - 7.5) / 3.6;
+    const dy = (y - 8) / (2.7 + (warp ? Math.sin(x * 1.3) * 0.4 : 0));
+    if (dx * dx + dy * dy <= 1) {
+      // Stripes run on the slant; light from the top left
+      const lit = dy < -0.35 ? 2 : dy > 0.45 ? 0 : 1;
+      return (x + y) % 4 === 0 ? stripe : body[lit]!;
+    }
+    // The twisted ends: fans opening outwards
+    const end = x <= 3 ? 3.6 - x : x >= 12 ? x - 11.6 : -1;
+    if (end > 0 && Math.abs(y - 8) <= end * 0.9 + 0.4 && end < 3.4) return paper[(Math.abs(y - 8) + x) % 2 === 0 ? 1 : 0]!;
+    return null;
+  });
+}
+
+export function registerV7Phase3Items(r: PainterRegistry): void {
+  // Candy: orange paper, white stripes, the ends a paler twist
+  r.add('candy', (t) => {
+    wrappedSweet(t, [hex(0xc8560a), hex(0xe8741a), hex(0xff9a3a)], hex(0xfff2dc), [hex(0xf0a040), hex(0xffc870)]);
+    outline(t, hex(0x4a1c04));
+  });
+  // Big Candy: a swirl lollipop, orange and purple, on a stick
+  r.add('big_candy', (t) => {
+    const cx = 9.5;
+    const cy = 6.2;
+    shape(t, (x, y) => {
+      const dx = x - cx;
+      const dy = y - cy;
+      const d = Math.hypot(dx, dy);
+      if (d <= 5.2) {
+        const a = Math.atan2(dy, dx);
+        const swirl = Math.floor(((a + Math.PI) / (Math.PI * 2)) * 4 + d * 0.55) % 2;
+        const c = swirl ? hex(0x8a3ad8) : hex(0xff8a1a);
+        return dx + dy < -3.5 ? mix(c, hex(0xffffff), 0.35) : c;
+      }
+      // The stick, down to the bottom left
+      const k = (x - 2) / (6 - 2);
+      if (x >= 2 && x <= 6 && Math.abs(y - (14 - k * 4.2)) <= 0.6) return x % 2 ? hex(0xf2ece0) : hex(0xd8d0c0);
+      return null;
+    });
+    outline(t, hex(0x2a1236));
+  });
+  // King-Sized Candy: a chocolate bar, half in gold foil
+  r.add('king_sized_candy', (t) => {
+    shape(t, (x, y) => {
+      if (x < 1 || x > 14 || y < 4 || y > 11) return null;
+      if (x >= 7) {
+        // Gold foil, crinkled, a purple band with a crown
+        if (y >= 6 && y <= 9 && x >= 8 && x <= 13) {
+          const crown = (y === 7 && (x === 9 || x === 11 || x === 13)) || (y === 8 && x >= 9 && x <= 13);
+          return crown ? hex(0xffe066) : hex(0x5a1a8a);
+        }
+        const shine = (x * 3 + y * 5) % 7 === 0;
+        return shine ? hex(0xfff4b0) : y < 6 ? hex(0xf0c040) : hex(0xd8a020);
+      }
+      // Chocolate in squares, the bitten corner gone
+      if (x <= 2 && y <= 5) return null;
+      const seam = x === 4 || y === 7 || y === 10;
+      return seam ? hex(0x3a1e0e) : y === 5 || x === 1 ? hex(0x8a5230) : hex(0x6a3a1e);
+    });
+    outline(t, hex(0x26140a));
+  });
+  // Poisoned Candy: the same sweet gone wrong, warped, a sickly yellow-brown, oozing
+  r.add('poisoned_candy', (t) => {
+    wrappedSweet(t, [hex(0x86681c), hex(0xa8862a), hex(0xc8a844)], hex(0x6e7a22), [hex(0x9a7e34), hex(0xbaa04e)], 0.7);
+    // Mould spots and a drip hanging off the bottom
+    for (const [x, y] of [[6, 7], [9, 9], [8, 6]] as const) if (t.alpha(x, y)) t.set(x, y, hex(0x4a5a12));
+    let low = 0;
+    for (let y = 15; y >= 0; y--)
+      if (t.alpha(8, y)) {
+        low = y;
+        break;
+      }
+    t.set(8, low + 1, hex(0x8a8a20));
+    t.set(8, low + 2, hex(0x6a7016));
+    outline(t, hex(0x2a2006));
+  });
+  // The Trick-or-Treat Sack: burlap, tied with string, a jack-o'-lantern face printed on it
+  r.add('trick_or_treat_sack', (t) => {
+    shape(t, (x, y) => {
+      // The cloth bunched above the string, the string, the neck below it
+      if (y === 1) return Math.abs(x - 7.5) <= 2.5 && x !== 7 ? (x % 2 ? hex(0xa86a26) : hex(0xc8862e)) : null;
+      if (y === 2) return Math.abs(x - 7.5) <= 2 ? (x % 2 ? hex(0xb87424) : hex(0xd0903a)) : null;
+      if (y === 3) return Math.abs(x - 7.5) <= 1.5 ? hex(0xf0e0b8) : null;
+      if (y === 4) return Math.abs(x - 7.5) <= 2 ? (x % 2 ? hex(0x9a5e20) : hex(0xb07028)) : null;
+      if (y < 5 || y > 15) return null;
+      // The body: wider towards the bottom, rounded off
+      const half = 4.2 + (y - 5) * 0.45 - (y >= 14 ? (y - 13) * 1.4 : 0);
+      if (Math.abs(x - 7.5) > half) return null;
+      const weave = (x + y) % 2 === 0 ? hex(0xc8862e) : hex(0xb87424);
+      const lit = x < 6 && y < 10 ? mix(weave, hex(0xffd080), 0.2) : weave;
+      return lit;
+    });
+    // The printed face
+    const face: [number, number][] = [
+      [5, 8], [6, 8], [9, 8], [10, 8], [6, 9], [9, 9],
+      [7, 10], [8, 10],
+      [5, 12], [6, 12], [7, 12], [8, 12], [9, 12], [10, 12], [6, 13], [8, 13], [10, 13],
+    ];
+    for (const [x, y] of face) t.set(x, y, hex(0x2a1406));
+    outline(t, hex(0x3a2008));
+  });
+}

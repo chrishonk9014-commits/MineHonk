@@ -1,3 +1,4 @@
+import type { CandyKind } from '../halloween/candy';
 import type { EndEventsView } from '../endExpansion/events';
 import type { AdminAction } from '../game/admin';
 import type { WorldRole } from './multiplayer';
@@ -11,7 +12,7 @@ import type { GameMode, Difficulty, GodHearts } from '../game/gamemode';
 import type { DimensionId } from '../data/biomes';
 import type { HalloweenState } from '../halloween/season';
 
-export const PROTOCOL_VERSION = 7;
+export const PROTOCOL_VERSION = 8;
 
 // ---------------------------------------------------------------------------
 // Client -> Server
@@ -57,7 +58,21 @@ export type C2S =
   /** V6 phase 4: the Void Skiff pilot's controls (forward, sideways: -1..1; up/down: -1, 0, 1). */
   | { t: 'pilot'; f: number; s: number; v: number }
   /** V6 phase 4: an Elytra upgrade's move (Burst, Ender Blink); Hover is the move packet's sneak while gliding. */
-  | { t: 'elytra'; a: 'burst' | 'blink' | 'veil' };
+  | { t: 'elytra'; a: 'burst' | 'blink' | 'veil' }
+  /** V7 phase 3: knocking on a door of a Trick-or-Treat Village (its lower block). */
+  | { t: 'knock'; x: number; y: number; z: number }
+  /**
+   * V7 phase 3: the Trick-or-Treat Sack in inventory slot `slot` (0-35, 40 the
+   * offhand): take `n` candies of a kind out, eat one, or put in every candy
+   * carried. The server checks everything.
+   */
+  | { t: 'sack'; slot: number; op: SackOp; kind?: CandyKind; n?: number }
+  /** V7 phase 3: skip the cutscene playing (a Candy Home's, a Trick Home's drag). */
+  | { t: 'scene_skip' };
+
+export type SackOp = 'take' | 'eat' | 'fill';
+/** How a spoken line reads (V7 phase 3): a villager at the door, a voice behind it, a warning, a note. */
+export type SpeechTone = 'villager' | 'door' | 'warn' | 'info' | 'scare';
 
 export type ClickMode = 'pickup' | 'quick' | 'swap' | 'drop' | 'drag_start' | 'drag_add' | 'drag_end' | 'collect' | 'clone';
 
@@ -156,7 +171,7 @@ export type S2C =
    * corrupting, warning markers on the ground, lasers, shockwaves...
    * Positions are world coordinates; `id` ties a marker to its later updates.
    */
-  | { t: 'fx'; kind: FxKind; strength?: number; ticks?: number; text?: string; x?: number; y?: number; z?: number; r?: number; x1?: number; y1?: number; z1?: number; id?: number; color?: number }
+  | { t: 'fx'; kind: FxKind; strength?: number; ticks?: number; text?: string; x?: number; y?: number; z?: number; r?: number; x1?: number; y1?: number; z1?: number; id?: number; color?: number; skip?: boolean }
   | { t: 'teleport'; x: number; y: number; z: number; yaw?: number; pitch?: number; seq: number; keep?: boolean }
   | { t: 'dig_progress'; x: number; y: number; z: number; stage: number; by: number }
   | { t: 'gamemode'; mode: GameMode; abilities: AbilitiesMsg }
@@ -178,6 +193,10 @@ export type S2C =
   | { t: 'ghost' }
   /** V7 phase 2: the player is in (or near) an Abandoned Village: ghosts drift over it day and night (null: left it). */
   | { t: 'haunted_area'; area: { x0: number; z0: number; x1: number; z1: number; y: number } | null }
+  /** V7 phase 3: a line on screen (a villager at the door, a voice behind it, the sack): who says it, how it reads. */
+  | { t: 'speech'; text: string; who?: string; tone?: SpeechTone; ticks?: number }
+  /** V7 phase 3: the doors near the player that can be knocked on: lower block and the way it faces ([]: none). */
+  | { t: 'knock_doors'; doors: [number, number, number, string][] }
   | { t: 'pong'; time: number }
   | { t: 'take_item'; item: number; by: number }
   | { t: 'use_result'; seq: number; ok: boolean }
@@ -316,9 +335,13 @@ export type FxKind =
   /** He reached you: his face fills the screen with a scream, then black (ticks). */
   | 'jumpscare'
   /**
-   * The Haunting's lair ending: a cutscene step (text = grab, drag, black,
-   * wake, shock, die, corrupt, or end to stop), for ticks. The drag runs the
-   * camera along the ground from (x, y, z) to (x1, y1, z1).
+   * A cutscene step, for ticks (text = grab, drag, black, wake, shock, die,
+   * corrupt, or end to stop): the Haunting's lair ending, and (V7 phase 3)
+   * Trick Homes' grab and drag. The grab turns the camera to (x1, y1, z1);
+   * the drag runs it along the ground from (x, y, z) to (x1, y1, z1)
+   * (strength 0: nowhere to drag, on your feet). V7 phase 3 adds 'look': the
+   * camera holds at (x, y, z) watching (x1, y1, z1), letterboxed (a Candy
+   * Home's door). `skip`: the player may skip it (scene_skip).
    */
   | 'scene';
 export type WindowKind =

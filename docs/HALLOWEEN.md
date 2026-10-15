@@ -9,8 +9,9 @@ Design notes. V7 comes in five phases:
 2. **Villages** (7.0.0-phase2): Trick-or-Treat Villages (with 2-4 Trick
    Homes each), Abandoned Villages, zombie villagers and their undead
    guardians, the costume heads, the orange and purple factory lights.
-3. **Trick-or-treating**: the sack (128 candy), candy, costumes, knocking on
-   doors, Trick Home fights, the quest.
+3. **Trick-or-treating** (7.0.0-phase3): the Trick-or-Treat Sack (128
+   candy), four candies, costumes, knocking on doors, Candy Homes' cutscene,
+   Trick Home fights, the Herobrine Head, the Trick or Treat! quest.
 4. **Hauntings**: an automatic 45-minute haunting, and three new creepypasta
    characters in the Admin Panel, each with their own AI conversations.
 5. **Admin Panel controls, advancements, full tests and polish.**
@@ -233,7 +234,7 @@ without one. Ordinary villages remain, so they still feel like an event.
   `villages.force` says so.
 - Only an Admin Panel simulation made it Halloween: the record is `cheat`.
 
-### The door records (for phase 3)
+### The door records
 
 `LevelData.villages["cx,cz"]` is a `VillageRecord`:
 
@@ -255,7 +256,8 @@ DoorRecord = {
   design: 'cottage' | 'house' | 'manor' | 'workshop',
   kind: 'candy' | 'trick',
   seed: number,                // for whatever happens at this door
-  used: boolean,               // knocked on and given out (false until phase 3)
+  used: boolean,               // Candy Home: anyone got candy here; Trick Home: beaten and looted
+  got?: string[],              // phase 3, Candy Homes: uuids of the players given candy here
 }
 ```
 
@@ -264,9 +266,10 @@ storehouse or smithy) is one. The kinds are dealt by `dealDoors` from the
 seed: 2 to 4 Trick Homes (`TRICK_HOMES_MIN`, `TRICK_HOMES_MAX`), never all of
 a village's doors (a village needs 3 house doors to be eligible), the rest
 Candy Homes. Nothing outside tells them apart. Admin Panel villages are keyed
-`"admin@x,z"`. Phase 3 should look a door up by position in the nearest
-record (`VillageSystem.record(key)`, `doorsNear`), set `used`, and leave the
-format as it is (records are read back by `sanitizeVillageRecords`).
+`"admin@x,z"`. Phase 3 looks a door up by position in the records within
+220 blocks (`TrickOrTreatSystem.doorAt`), writes `got` and `used`, and calls
+`VillageSystem.markDirty()`; records are read back by
+`sanitizeVillageRecords` (which keeps `got`: strings only, no repeats, at most 1024).
 
 ### Abandoned Villages
 
@@ -324,8 +327,7 @@ creative tab. **No recipes.** How they are obtained:
 - skeleton skulls, zombie and creeper heads: on fence posts beside half the
   house doors of Trick-or-Treat Villages (45% / 35% / 20%), and now and then
   in Abandoned Villages' chests and treasure;
-- the Herobrine Head: nowhere yet (creative and the Admin Panel): phase 3 can
-  hand it out.
+- the Herobrine Head: only from beating Herobrine for real (phase 3, below).
 
 `WEARABLE_BLOCKS` (the heads and a carved pumpkin) go in the helmet slot
 (`Containers.armorOk`, shift-click) or on the head when used in the air
@@ -353,8 +355,280 @@ Abandoned Village shows its name as a title with the discovery sting (once a
 player a village), and grants **Trick or Treat!** (`find_trick_village`) or
 **Ghost Town** (`find_abandoned_village`); never in an Admin Panel context.
 
+## Phase 3: trick-or-treating
+
+The same season check as everything else (`server.halloweenState().active`).
+When Halloween is over, these stop: knocking, Candy Homes, Trick Homes,
+candy coming from anywhere, and the sack's recipe (`SEASONAL_RECIPES`; the
+recipe book hides it). These keep working: sacks and candy already owned,
+eating candy, the Herobrine Head, hauntings, Abandoned Villages and the
+Update Log. Nothing is ever deleted.
+
+### The Trick-or-Treat Sack (`src/common/halloween/candy.ts`, `src/server/systems/Candy.ts`)
+
+- `trick_or_treat_sack`: crafted from string over wool (only while Halloween
+  is on). It stacks to 1 and holds `SACK_CAPACITY` = 128 candies of every
+  kind together.
+- The contents live in the sack's own item data, so they go wherever the sack
+  goes (chests, the ground, a dead player's drops):
+  `tag.data.candy = {regular, big, king, poisoned}`, plus `tag.data.cheat`
+  with the same keys, counting how many of each are cheat-made. Read it only
+  through `sackContents()`: malformed data is cut back and anything over 128
+  is dropped.
+- Only `CandySystem` changes a sack, and always against the sack as the
+  server has it. Counts move between the sack and the inventory and are never
+  copied:
+  - **take**: only what fits in the inventory comes out; the rest stays in.
+  - **eat**: eats one straight from the sack.
+  - **fill**: puts every candy you carry in.
+  - Clicking candy onto a sack, or a sack onto candy, works in any inventory
+    window (`Containers` calls `click`).
+- Honest candy is taken out first, so cheat candy stays cheat-made and
+  nothing is laundered.
+- Nothing can forge a sack's contents:
+  - Creative mode drops a stack's data and temporary enchantment
+    (`sanitizeStack`).
+  - A sack put back down keeps the server's copy of its data.
+  - Creative pick-block or clone gives an empty sack.
+- The client: `SackPanel` (src/client/ui/SackScreen.ts) opens by using a sack.
+  It only asks (C2S `sack {slot, op, kind, n}`) and redraws from whatever the
+  server sends back. Tooltip: "n / 128 candy" and a line for each kind.
+- **Awards** (`CandySystem.award`): the candy goes into the player's sacks
+  first, then the inventory, then the ground at their feet, with "Your sack is
+  full!".
+
+### Candy
+
+| Candy | Food | What it does |
+| --- | --- | --- |
+| Candy (`candy`) | 1 | One of Speed, Jump Boost or Haste, for 20 s |
+| Big Candy (`big_candy`) | 2 | Two different ones of those, for 45 s |
+| King-Sized Candy (`king_sized_candy`) | 4 | 50%: strong buffs for a minute (Speed II, Haste II, Jump Boost II, Regeneration). 30%: a temporary enchantment. 20%: a payout (2-4 gold ingots, or 1 diamond in 3 of 10) |
+| Poisoned Candy (`poisoned_candy`) | 1 | One in three each: Poison and Blindness; Wither and Nausea; Blindness and 2 hearts lost at once. Never enough to kill from full health (`poisonWorstCase`, and a test plays each one out) |
+
+- Candy can be eaten at any hunger (a quick snack). Effects refresh rather
+  than stack (`addEffect` keeps the stronger or the longer of the two).
+- Poisoned Candy looks wrong everywhere it is shown:
+  - its item icon;
+  - in the hand and on the ground;
+  - the tooltip's colour;
+  - the sack panel's row;
+  - purple and yellow-brown 'witch' wisps when eaten.
+- What a Candy Home gives, per candy: regular 62%, big 25%, king 5%,
+  poisoned 8% (`CANDY_HOME_ODDS`). How many: 1 (40%), 2 (40%), 3 (20%), so
+  1.8 on average. The unit tests check that each table adds up to 100, and
+  sample the odds: 40,000 Candy Home handfuls, and 200,000 door seeds for the
+  Trick Home table.
+
+**Temporary enchantments** (`src/common/halloween/tempEnchant.ts`):
+
+- What it is: `tag.temp = {id, lvl, until}`, with `until` in world ticks.
+  There is one at a time, kept apart from `tag.ench`, and it lasts three
+  minutes.
+- How it is checked: `enchantLevel` counts it only while
+  `tempClock() < until`. That clock is a module value: the server sets it
+  from `level.time` every tick, and the client sets it from the time
+  messages. So it runs out wherever the item is (a chest, the ground, an
+  unloaded chunk).
+- How it is cleared: the server strips expired ones from the inventories and
+  open containers it touches (`stripExpiredTemp`).
+- It can never become permanent:
+  - nothing copies it into `ench`, and an anvil never carries over the
+    sacrifice's;
+  - it gives way when an enchanting table or an anvil adds a real enchantment
+    it conflicts with, or the same one at least as high (`tidyTemp`);
+  - anything claiming to last longer than three minutes counts as expired.
+- How it is picked (`enchantSomething`): the first item that can take one
+  (the main hand, the offhand, armour, then the hotbar). The enchantment is
+  one it could normally have, with no conflicts and no curses, and at most
+  its maximum level.
+
+### Costumes
+
+A costume is any `WEARABLE_BLOCKS` item (the four heads, or a carved pumpkin)
+in the helmet slot. You see it from inside as a mask overlay (`Hud`), and
+others see it on your head.
+
+**The Herobrine Head** (`ONLY_WON` in heads.ts):
+
+- It only ever drops from a real win in the Herobrine boss fight
+  (`Herobrine.dropHead`), and only when at least one player in the fight was
+  not in an Admin Panel context.
+- If nobody picks it up, it goes to the nearest of them when the hall comes
+  down.
+- It is never anywhere else:
+  - not in the creative menu, `/give` or the Admin Panel's give;
+  - not dropped by a block placed with cheats;
+  - not from a Trick Home's Herobrine;
+  - and a creative player can only put back down one they picked up.
+- It has no recipe (none of the heads do).
+
+### Knocking (`src/server/systems/TrickOrTreat.ts`, rules in `src/common/halloween/trickOrTreat.ts`)
+
+- **The prompt:** every 10 ticks the server sends each player the doors they
+  could knock on within 7 blocks (S2C `knock_doors`; empty when Halloween is
+  off). The client shows "Knock [G]" while you look at one within 4 blocks,
+  from outside. You knock with G or by tapping the prompt (C2S
+  `knock {x, y, z}`).
+- **Opening a door is unchanged:** right-clicking it still just opens it.
+- **The server checks** that it is a recorded Trick-or-Treat door, within
+  reach, and that you are on the outside.
+- **When it is not answered,** a voice behind the door says why. Each case has
+  2 to 4 lines (`*_LINES`):
+  - no costume;
+  - no sack;
+  - the sack is full;
+  - you already got candy here;
+  - the door is busy;
+  - there is a fight inside;
+  - the house was already beaten;
+  - Halloween is over.
+- **Lines on screen** use S2C `speech {text, who, tone}`: captions at the
+  bottom, styled by tone.
+
+### Candy Homes
+
+- **The candy:** it is rolled and awarded the moment the door answers
+  (`startCandy`), so skipping, leaving or dying cannot lose it or give it
+  twice.
+- **Once per player per home:** the knocker's uuid goes onto `door.got`, and
+  `door.used` becomes true.
+- **The cutscene** (`CANDY_TIMES`, about 6 s):
+  - The camera holds a step back from the door (scene step `look`,
+    letterboxed).
+  - The door opens and a villager in a costume steps into the doorway. It is
+    not saved, cannot be hurt, has no AI, and drops nothing. Its profession is
+    random; its costume comes with the way of answering.
+  - It says hello, hands over the candy and says goodbye, then shuts the
+    door.
+  - Four ways of answering (`CANDY_SCENES`), picked from the door's seed and
+    the knocker's uuid.
+- **Skipping:** Space, Esc or the Skip button sends C2S `scene_skip`. The
+  server ends the scene, tells you what you got, and shuts the door.
+- **Others nearby** see the door and the villager, but not the camera.
+
+### Trick Homes
+
+- **Which encounter:** each Trick Home's encounter is fixed by its door's
+  seed (`trickKindFor`, weights out of 100). Herobrine is 1 in 100:
+
+| Kind | Inside | Weight |
+| --- | --- | --- |
+| `zombie_villagers` | 3 zombie villagers | 25 |
+| `witch` | a witch and a zombie villager | 17 |
+| `skeletons` | 2 skeletons | 20 |
+| `undead` | zombie, skeleton, zombie villager | 21 |
+| `spiders` | spider, 2 cave spiders | 16 |
+| `herobrine` | Herobrine | 1 |
+
+- **The opening** (`TRICK_TIMES`): the door creaks open and the first monster
+  appears in the doorway. It grabs the knocker (scene `grab`) and walks
+  backwards into the house while the camera is dragged along the floor (scene
+  `drag`). Then the door slams and the rest appear deep in the house. The
+  drag can be skipped (straight to the slam).
+- **The house:** a flood fill of the floor behind the door (`house`): within
+  7 blocks, at most 160 cells, with feet and head clear. If the house has
+  been broken open, a fixed 4 x 5 box is used instead.
+- **The monsters** (`spawnTrickMob`):
+  - They carry `data.trickHome` (the run id), `data.noDrops` (no drops, no
+    XP) and `data.guard` with leash 0.
+  - Each tick they are held inside the house box: one found outside is put
+    back where it last stood inside.
+  - They are never saved, and only target players inside the house.
+- **Herobrine** here is not the boss:
+  - He has 40 health, plus 20 for each extra player inside.
+  - He blinks behind his target every 2.5 to 4 s and hits for 4.
+  - It is driven by `herobrineTurn`, with no AI. The Fight hooks see
+    `trickHome` and let him be hurt and die normally.
+  - His chest is `trick_home_herobrine`: rarer loot, and never the head.
+- **Getting out:** open or break the door. When nobody has been inside for 3
+  s (`TRICK_EMPTY_TICKS`), or the knocker dies or leaves during the opening,
+  the run ends: the monsters are removed, nothing is used up, and the house
+  can be tried again. If the monsters disappear some other way (peaceful
+  mode, a chunk unloading), that also ends it.
+- **Winning:** beat every monster and:
+  - the house goes quiet and the door opens;
+  - a chest appears on the floor as far from the door as there is room;
+  - its loot (`trick_home`) is rolled from the door's seed;
+  - `door.used` becomes true, so this happens once per home, for everyone.
+- **Multiplayer:**
+  - Everyone who walks in joins the fight (`party`); the monsters target the
+    nearest of them.
+  - A boss bar shows how many monsters are left to everyone within 24 blocks.
+  - Anyone in an Admin Panel context, or a cheat kill, makes the run cheat:
+    the chest is cheat-marked, and no stats or advancements are given.
+- **Advancements:**
+  - `first_candy`: get candy from a Candy Home.
+  - `full_sack`: fill a sack with honest candy.
+  - `beat_trick_home`.
+  - `herobrine_trick` (secret): beat a Trick Home's Herobrine.
+
+### The quest: "Trick or Treat!"
+
+- **The six steps** (`QUEST_STEPS`):
+  1. Get a sack.
+  2. Get a costume.
+  3. Wear it.
+  4. Find a Trick-or-Treat Village.
+  5. Knock.
+  6. Collect 10 candies from Candy Homes.
+- **How steps are checked:** each step is read off the real game every 10
+  ticks (`stepDone`). Only honest things count, so a cheat-made sack or head
+  does not. Steps are done in order, and once done they stay done.
+- **Saved per player** in `PlayerData.halloween`: steps, knocks, candy,
+  tricks and done (`sanitizeProgress`).
+- **The tracker** is the V4 quest tracker. It shows only while Halloween is
+  on, and gives way to any other tracker that needs the space (each system's
+  `showing(p)`). When the quest is finished it says so once.
+
+### The shared cutscene and drag (`src/server/world/drag.ts`) - for phase 4
+
+- **The drag module:** the Haunting's grab-and-drag lair ending was pulled out
+  into `drag.ts`:
+  - ground queries: `openAt`, `solidGround`, `floorNear`, `dragWay`;
+  - the scene steps: `sendGrab`, `sendDrag`, `sendSceneEnd`;
+  - `ease`.
+- **Who uses it:** the Haunting imports the ground queries from there. Trick
+  Homes use all of it.
+- **Each caller keeps its own timeline** and does the actual moving (the
+  server teleports the player at the end; the camera only plays it).
+- **The client:** `Game.playScene` / `sceneCamera` and
+  `src/client/ui/HauntScene.ts`. Scene `fx` messages carry `text` (the step),
+  `ticks`, `x/y/z`, `x1/y1/z1`, `strength` (now honoured on the client;
+  0 = nowhere to drag) and `skip`.
+- **Phase 3 added two things:**
+  - the `look` step: the camera is held at a point watching another,
+    letterboxed;
+  - skippable scenes: a Skip button, with Space and Esc also skipping, which
+    sends C2S `scene_skip`. The server decides what a skip means.
+- **For phase 4:** a new cutscene sends these steps on its own timeline and
+  handles `scene_skip` in its system (GameServer routes it).
+
+### Admin Panel (`a: 'halloween'`)
+
+New ops:
+
+- `give_sack` and `give_full_sack` (128 candy of mixed kinds).
+- `give_candy` (`candy`: a kind).
+- `knock`: the nearest door, ignoring the season, the costume, the sack and
+  once-each.
+- `trick` (`trick`: any kind): starts that encounter at the nearest Trick
+  Home.
+- `reset_doors`: clears `got` and `used` on the nearest village's doors.
+
+Everything they make is cheat-marked. A forced knock or trick never uses up a
+real door, and its chest is cheat-marked. The status op also lists the
+cutscenes and fights that are running.
+
 ## Protocol
 
-`PROTOCOL_VERSION` 7 (phase 2; 6 was phase 1): `WorldInfo.halloween`
-(`HalloweenState`), the `ghost` and `haunted_area` messages, the Admin Panel's
-`halloween` action, and the player meta `headwear`.
+`PROTOCOL_VERSION` 8 (phase 3; 7 was phase 2, 6 phase 1).
+
+- **Phase 1 and 2:** `WorldInfo.halloween` (`HalloweenState`), the `ghost`
+  and `haunted_area` messages, the Admin Panel's `halloween` action, and the
+  player meta `headwear`.
+- **Phase 3 adds:**
+  - C2S: `knock`, `sack`, `scene_skip`.
+  - S2C: `speech`, `knock_doors`.
+  - The scene step `look` and the `skip` flag on scene `fx`.
+  - The new Admin Panel ops.

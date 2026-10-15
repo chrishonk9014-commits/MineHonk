@@ -20,6 +20,8 @@ import { ENDINGS } from '../../common/data/endings';
 import { DIMENSION_PUMPKINS } from '../../common/halloween/pumpkins';
 import { HALLOWEEN_SETTING_NAMES, type HalloweenSimulation } from '../../common/halloween/season';
 import type { HalloweenStatus, VillageDoorsInfo } from '../../common/game/admin';
+import { CANDY_KINDS, CANDY_NAMES } from '../../common/halloween/candy';
+import { TRICK_KINDS, TRICK_ENCOUNTERS } from '../../common/halloween/trickOrTreat';
 
 export interface AdminReply {
   ok: boolean;
@@ -1009,6 +1011,26 @@ export function adminScreen(host: AdminHost): Screen {
           'Villages',
           el('div', { class: 'muted small' }, 'Builds one around you, in any world (Overworld only). Everything in it is cheat-made.'),
           el('div', { class: 'admin-chips' }, btn('Build a Trick-or-Treat Village', () => op({ a: 'halloween', op: 'spawn_trick_village' }), 'btn chip halloween-spawn-trick'), btn('Build an Abandoned Village', () => op({ a: 'halloween', op: 'spawn_abandoned_village' }), 'btn chip halloween-spawn-abandoned')),
+        ),
+        // V7 phase 3: trick-or-treating
+        section(
+          'Trick-or-treating',
+          el('div', { class: 'muted small' }, 'All cheat-made: nothing here counts for advancements or the quest, and no real door is used up.'),
+          el(
+            'div',
+            { class: 'admin-chips halloween-give' },
+            btn('Empty sack', () => op({ a: 'halloween', op: 'give_sack' }), 'btn chip halloween-give-sack'),
+            btn('Full sack', () => op({ a: 'halloween', op: 'give_full_sack' }), 'btn chip halloween-give-full'),
+            ...CANDY_KINDS.map((k) => btn(CANDY_NAMES[k], () => op({ a: 'halloween', op: 'give_candy', candy: k }), `btn chip halloween-give-${k}`)),
+          ),
+          el(
+            'div',
+            { class: 'admin-chips' },
+            btn('Knock on the nearest door', () => void send({ a: 'halloween', op: 'knock' }).then((r) => r.ok && host.close()), 'btn chip halloween-knock'),
+            btn("Reset the nearest village's doors", () => op({ a: 'halloween', op: 'reset_doors' }), 'btn chip halloween-reset-doors'),
+          ),
+          el('div', { class: 'muted small' }, 'Knocking ignores the costume, the sack and "once each". Start a Trick Home at the nearest door:'),
+          el('div', { class: 'admin-chips halloween-tricks' }, ...TRICK_KINDS.map((k) => btn(TRICK_ENCOUNTERS[k].name, () => void send({ a: 'halloween', op: 'trick', trick: k }).then((r) => r.ok && host.close()), `btn chip halloween-trick-${k}`))),
         ),
       ),
       el(

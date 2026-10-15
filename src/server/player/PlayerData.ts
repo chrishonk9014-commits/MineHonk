@@ -6,6 +6,7 @@ import { stackOf } from '../../common/game/itemstack';
 import { maxHealthFor, GAME_MODES, type GameMode } from '../../common/game/gamemode';
 import { loadAdminState } from '../admin/adminState';
 import { PHASE1_BIOME_IDS } from '../../common/endExpansion/biomes';
+import { sanitizeProgress } from '../../common/halloween/trickOrTreat';
 
 export const PLAYER_DATA_VERSION = 1;
 
@@ -77,6 +78,7 @@ export class PlayerData {
     p.freezeTicks = Math.max(0, Math.min(140, Math.floor(num(raw.freeze, 0))));
     if (typeof raw.endQuest === 'string' && raw.endQuest.length < 64) p.endQuest = raw.endQuest;
     p.recoverCooldown = Math.max(0, Math.min(6000, Math.floor(num(raw.recoverCooldown, 0))));
+    p.halloween = sanitizeProgress(raw.halloween);
     p.cheat = loadAdminState(raw.cheat);
     this.server.interaction.survival.updateArmor(p);
     return { found: true, dim };
@@ -123,6 +125,7 @@ export class PlayerData {
       endEntry: p.endEntry ?? undefined,
       freeze: p.freezeTicks || undefined,
       fire: (p as { fireTicks?: number }).fireTicks ?? 0,
+      halloween: p.halloween.steps.length || p.halloween.knocks || p.halloween.candy || p.halloween.tricks ? p.halloween : undefined,
       cheat: p.cheat,
       savedAt: Date.now(),
     };

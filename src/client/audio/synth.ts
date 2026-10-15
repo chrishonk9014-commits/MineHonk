@@ -376,6 +376,20 @@ const EFFECTS: Record<string, { dur: number; recipe: Recipe }> = {
   'door.close': { dur: 0.35, recipe: (s) => s.knock({ f: 150, gain: 1, decay: 0.06 }) },
   'chest.open': { dur: 0.6, recipe: (s) => (s.voice({ dur: 0.45, gain: 0.3, f0: 70, f1: 120, formants: [700, 1900], rough: 0.5 }), s.knock({ start: 0.4, f: 220, gain: 0.5, decay: 0.04 })) },
   'chest.close': { dur: 0.35, recipe: (s) => s.knock({ f: 170, gain: 1, decay: 0.05 }) },
+  // V7 phase 3: trick-or-treating
+  /** Three raps on a wooden door. */
+  'door.knock': { dur: 0.75, recipe: (s) => [0, 0.2, 0.4].forEach((t, i) => s.knock({ start: t, f: 210 - i * 6, gain: 1, decay: 0.045, noise: 0.25 })) },
+  /** A door opening slowly on dry hinges (a Trick Home). */
+  'door.creak': { dur: 1.4, recipe: (s) => (s.voice({ dur: 1.2, gain: 0.35, f0: 70, f1: 210, formants: [1100, 2700], rough: 0.85, vibrato: 0.08 }), s.knock({ start: 1.15, f: 160, gain: 0.5, decay: 0.05 })) },
+  /** Slammed shut behind you. */
+  'door.slam': { dur: 0.6, recipe: (s) => (s.knock({ f: 110, gain: 1, decay: 0.12, noise: 0.6 }), s.noise({ dur: 0.35, gain: 0.55, decay: 0.1, lp: 900 })) },
+  /** Candy into a sack, and out of it. */
+  'sack.insert': { dur: 0.3, recipe: (s) => (s.noise({ dur: 0.22, gain: 0.5, attack: 0.02, decay: 0.08, bp: [1800, 1.5] }), s.knock({ start: 0.12, f: 520, gain: 0.25, decay: 0.02 })) },
+  'sack.remove': { dur: 0.3, recipe: (s) => (s.noise({ dur: 0.2, gain: 0.45, attack: 0.04, decay: 0.07, bp: [2400, 1.5] }), s.knock({ start: 0.05, f: 620, gain: 0.2, decay: 0.02 })) },
+  /** A handful of candy handed over: a rustle and a bright chime. */
+  'candy.give': { dur: 0.8, recipe: (s) => (s.noise({ dur: 0.25, gain: 0.35, decay: 0.08, bp: [2000, 2] }), s.bell({ start: 0.1, f: 1568, ratios: [1, 2.01], gain: 0.25, decay: 0.25, dur: 0.6 }), s.bell({ start: 0.22, f: 2093, ratios: [1, 2.01], gain: 0.2, decay: 0.25, dur: 0.55 })) },
+  /** Something in the doorway that should not be there. */
+  'trick.sting': { dur: 1.2, recipe: (s) => (s.tone({ dur: 1, gain: 0.4, f0: 220, f1: 207, wave: 'saw', lp: 2400, attack: 0.01, decay: 0.5, vibrato: 0.04, vibratoRate: 9 }), s.tone({ dur: 1, gain: 0.3, f0: 233, f1: 220, wave: 'saw', lp: 2400, attack: 0.01, decay: 0.5 }), s.noise({ dur: 0.4, gain: 0.3, decay: 0.12, hp: 2000 })) },
   // V5 engineering
   'machine.done': { dur: 0.3, recipe: (s) => (s.tone({ dur: 0.12, gain: 0.35, f0: 880, f1: 880, wave: 'sine', decay: 0.08 }), s.tone({ start: 0.1, dur: 0.18, gain: 0.3, f0: 1320, f1: 1320, wave: 'sine', decay: 0.12 })) },
   'machine.switch': { dur: 0.15, recipe: (s) => (s.knock({ f: 900, gain: 0.6, decay: 0.02 }), s.tone({ dur: 0.08, gain: 0.25, f0: 500, f1: 300, wave: 'square', decay: 0.03, lp: 2000 })) },

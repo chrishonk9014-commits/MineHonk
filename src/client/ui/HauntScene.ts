@@ -5,6 +5,10 @@
  * CORRUPTED with the machine's memory spilling down the screen. The camera
  * and the controls are Game's; this is only what lies over the view.
  * With Reduce Motion the shocks are a dim tint instead of a flash.
+ *
+ * V7 phase 3 uses the same steps for a Trick Home's grab and drag, and adds
+ * 'look' (a Candy Home answering the door: black bars top and bottom) and a
+ * Skip button for the scenes that may be skipped.
  */
 import { el, clear } from './dom';
 import type { Settings } from '../settings';
@@ -34,8 +38,13 @@ export class HauntScene {
   private readonly die: HTMLElement;
   private readonly corrupt: HTMLElement;
   private readonly dump: HTMLElement;
+  private readonly bars: HTMLElement;
+  private readonly skipBtn: HTMLElement;
   private timers: ReturnType<typeof setTimeout>[] = [];
   private current = '';
+  /** V7 phase 3: the scene playing may be skipped (Game sends scene_skip). */
+  skippable = false;
+  onSkip: (() => void) | null = null;
 
   constructor(
     parent: HTMLElement,
@@ -49,7 +58,16 @@ export class HauntScene {
     this.die = el('div', { class: 'hs-die' }, el('div', { class: 'hs-die-title' }, 'You died!'), el('div', { class: 'hs-die-sub' }, 'Herobrine was the last thing you saw'));
     this.dump = el('div', { class: 'hs-dump' });
     this.corrupt = el('div', { class: 'hs-corrupt' }, el('div', { class: 'hs-corrupt-title', 'data-text': 'SERVER MEMORY CORRUPTED' }, 'SERVER MEMORY CORRUPTED'), this.dump);
-    this.root = el('div', { class: 'haunt-scene hidden' }, this.vignette, this.lids, this.flash, this.black, this.die, this.corrupt);
+    this.bars = el('div', { class: 'hs-bars' }, el('div', { class: 'hs-bar top' }), el('div', { class: 'hs-bar bottom' }));
+    this.skipBtn = el('div', { class: 'hs-skip hidden' }, 'Skip ▸');
+    const skip = (e: Event): void => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (this.skippable) this.onSkip?.();
+    };
+    this.skipBtn.addEventListener('mousedown', skip);
+    this.skipBtn.addEventListener('touchstart', skip, { passive: false });
+    this.root = el('div', { class: 'haunt-scene hidden' }, this.bars, this.vignette, this.lids, this.flash, this.black, this.die, this.corrupt, this.skipBtn);
     parent.append(this.root);
   }
 
@@ -62,13 +80,19 @@ export class HauntScene {
     return this.current;
   }
 
-  show(step: string, ticks: number): void {
+  show(step: string, ticks: number, skip = false): void {
     const ms = (ticks / 20) * 1000;
     this.root.classList.remove('hidden');
     this.root.classList.toggle('calm', this.settings.reduceMotion);
     this.current = step;
     this.root.dataset.step = step;
+    this.skippable = skip;
+    this.skipBtn.classList.toggle('hidden', !skip);
     switch (step) {
+      case 'look':
+        // A Candy Home answering: the screen goes cinematic
+        this.restart(this.bars, 'in');
+        break;
       case 'grab':
         this.restart(this.vignette, 'grab');
         break;
@@ -109,7 +133,9 @@ export class HauntScene {
     this.current = '';
     delete this.root.dataset.step;
     this.root.className = 'haunt-scene hidden';
-    for (const e of [this.vignette, this.lids, this.flash, this.die, this.corrupt]) e.className = e.className.split(' ')[0]!;
+    for (const e of [this.vignette, this.lids, this.flash, this.die, this.corrupt, this.bars]) e.className = e.className.split(' ')[0]!;
+    this.skippable = false;
+    this.skipBtn.classList.add('hidden');
     clear(this.dump);
   }
 

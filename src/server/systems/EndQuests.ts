@@ -1399,6 +1399,11 @@ export class EndQuestsSystem {
     return null;
   }
 
+  /** Whether this system's quest tracker is on the player's screen (V7 phase 3: the Trick or Treat! quest gives way to it). */
+  showing(p: ServerPlayer): boolean {
+    return !!this.shown.get(p);
+  }
+
   private hud(p: ServerPlayer, q: QuestInfo | null): void {
     const k = q ? JSON.stringify(q) : '';
     if ((this.shown.get(p) ?? '') === k) return;

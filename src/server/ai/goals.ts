@@ -323,7 +323,7 @@ const GUARD_STUCK_TICKS = 1200;
 /** Whether a guardian may go after a target (anything, for a mob that guards nothing). */
 export function guardAllows(m: Mob, t: Entity): boolean {
   const a = guardOf(m);
-  return !a || inGuardArea(a, t.x, t.z, GUARD_TARGET_LEASH);
+  return !a || inGuardArea(a, t.x, t.z, a.leash ?? GUARD_TARGET_LEASH);
 }
 
 /** The area a mob keeps to (V7: Abandoned Villages' guardians and zombie villagers). */
@@ -350,7 +350,7 @@ export class GuardAreaGoal implements Goal {
       m.target = null;
       m.metaDirty = true;
     }
-    if (inGuardArea(a, m.x, m.z, m.target ? GUARD_LEASH : 0)) {
+    if (inGuardArea(a, m.x, m.z, m.target ? (a.leash ?? GUARD_LEASH) : 0)) {
       m.data.outside = 0;
       return false;
     }

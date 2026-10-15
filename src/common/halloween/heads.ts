@@ -9,8 +9,10 @@
  * be crafted:
  *  - Skeleton Skull, Zombie Head, Creeper Head: found on fence posts by the
  *    doors of Trick-or-Treat Villages (and in Abandoned Villages' chests);
- *  - Herobrine Head: not found anywhere yet (creative and the Admin Panel);
- *    trick-or-treating (phase 3) gives it out.
+ *  - Herobrine Head (phase 3): only ever won, one per player who beats
+ *    Herobrine for real (the final fight, no cheats). Not in the creative
+ *    menu, not from /give or the Admin Panel, never from a Trick Home, and a
+ *    cheat-placed one breaks into nothing. One already in a world stays.
  */
 import type { BlockDef } from '../registry/blockTypes';
 
@@ -31,6 +33,9 @@ export const COSTUME_HEADS: readonly CostumeHead[] = [
 ];
 
 export const HEAD_IDS: readonly string[] = COSTUME_HEADS.map((h) => h.id);
+
+/** Heads only a real victory gives (V7 phase 3): never in the creative menu, from /give, the Admin Panel, or a cheat-placed block. */
+export const ONLY_WON: ReadonlySet<string> = new Set(['herobrine_head']);
 
 /** Everything worn in the helmet slot that is a block: the four heads and a carved pumpkin. */
 export const WEARABLE_BLOCKS: readonly string[] = [...HEAD_IDS, 'carved_pumpkin'];
@@ -55,7 +60,7 @@ export function headBlockDefs(): BlockDef[] {
     opacity: 0,
     place: 'needs_solid_below',
     mapColor: h.mapColor,
-    creative: 'halloween',
-    data: { tooltip: 'Halloween: wear it as a costume.', wearable: true },
+    creative: ONLY_WON.has(h.id) ? 'hidden' : 'halloween',
+    data: { tooltip: ONLY_WON.has(h.id) ? 'Won from Herobrine himself. Wear it as a costume.' : 'Halloween: wear it as a costume.', wearable: true },
   })) as BlockDef[];
 }

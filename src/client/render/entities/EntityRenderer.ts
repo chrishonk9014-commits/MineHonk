@@ -188,12 +188,37 @@ registerVisual('player', (e, ctx) => {
   // Worn armor (V6), in each piece's material, and a worn head or carved pumpkin (V7)
   const armor = armorOverlay(m);
   const headwear = headwearOverlay(m, (n) => ctx.blockTexture(n));
+  // V7 phase 3: what they hold, in the right hand (a Trick-or-Treat Sack, a sword...)
+  let heldId = 0;
+  let heldMat: THREE.MeshBasicMaterial | null = null;
+  let heldMesh: THREE.Mesh | null = null;
+  const setHeld = (id: number): void => {
+    if (id === heldId) return;
+    heldId = id;
+    heldMesh?.parent?.remove(heldMesh);
+    heldMesh?.geometry.dispose();
+    heldMat?.map?.dispose();
+    heldMat?.dispose();
+    heldMesh = null;
+    heldMat = null;
+    const arm = m.part('rightArm');
+    if (!id || !arm) return;
+    const tex = new THREE.CanvasTexture(ctx.icons.render(id));
+    tex.magFilter = THREE.NearestFilter;
+    tex.minFilter = THREE.NearestFilter;
+    heldMat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, alphaTest: 0.3, side: THREE.DoubleSide });
+    heldMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.55, 0.55), heldMat);
+    heldMesh.position.set(0, -0.68, 0.22);
+    heldMesh.rotation.set(-Math.PI / 2 + 0.4, Math.PI / 2, 0);
+    arm.add(heldMesh);
+  };
   const v = boxVisual(
     m,
     (mm, ee, a) => {
       animateHumanoid(mm, ee, a);
       armor.set(Array.isArray(ee.meta.armor) ? (ee.meta.armor as string[]) : undefined);
       headwear.set(typeof ee.meta.headwear === 'string' ? ee.meta.headwear : undefined);
+      setHeld(Number(ee.meta.held ?? 0));
       const gliding = ee.meta.glide === true;
       const hasWings = ee.meta.elytra === true;
       const ups = Array.isArray(ee.meta.wings) ? (ee.meta.wings as string[]) : [];
@@ -230,7 +255,8 @@ registerVisual('player', (e, ctx) => {
         if (la) la.rotation.set(0, 0, 0.25);
       } else mm.root.rotation.x = 0;
     },
-    { name: name ?? 'Player', nameY: 2.15 },
+    // (a figure in a title screen's scene has no name over it)
+    { name: e.meta.noTag ? undefined : name ?? 'Player', nameY: 2.15 },
   );
   const baseBright = v.setBrightness.bind(v);
   v.setBrightness = (b) => {
@@ -239,11 +265,13 @@ registerVisual('player', (e, ctx) => {
     for (const k of marks) k.mat.color.setHex(k.color).multiplyScalar(Math.max(b, 0.6));
     armor.setBrightness(b);
     headwear.setBrightness(b);
+    heldMat?.color.setScalar(b);
   };
   const baseDispose = v.dispose.bind(v);
   v.dispose = () => {
     armor.dispose();
     headwear.dispose();
+    setHeld(0);
     baseDispose();
     for (const w of wings) w.geometry.dispose();
     wingMat.dispose();

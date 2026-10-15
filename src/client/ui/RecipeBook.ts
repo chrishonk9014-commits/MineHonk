@@ -11,6 +11,7 @@ import type { Slot, ItemStack } from '../../common/game/itemstack';
 import { items, itemById } from '../../common/registry/items';
 import { recipeBook, entryState, countItems, itemName, filterBook, BOOK_CATEGORIES, STATION_NAMES, type BookEntry, type BookCategory, type EntryState } from '../../common/game/recipeBook';
 import { LOCKED_RECIPES } from '../../common/endExpansion/transport';
+import { SEASONAL_RECIPES } from '../../common/halloween/candy';
 
 type Filter = BookCategory | 'all';
 
@@ -38,9 +39,15 @@ function lockOf(e: BookEntry): string | null {
   return bp && !unlocked.has(id) ? bp : null;
 }
 
+/** V7 phase 3: whether Halloween is on in this world (seasonal recipes, the Trick-or-Treat Sack, only show while it is). */
+let halloween = false;
+export function setHalloweenRecipes(on: boolean): void {
+  halloween = on;
+}
+
 export class RecipeBookPanel {
   readonly root = el('div', { class: 'recipe-book gui-panel' });
-  private readonly entries = recipeBook();
+  private readonly entries = recipeBook().filter((e) => halloween || !SEASONAL_RECIPES[items[e.result.id]?.id ?? '']);
   private readonly states = new Map<string, EntryState>();
   private readonly rows = new Map<string, HTMLElement>();
   private readonly list = el('div', { class: 'rb-list' });

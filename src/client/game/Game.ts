@@ -23,7 +23,7 @@ import type { AudioEngine } from '../audio/Audio';
 import { MusicPlayer, discTitle } from '../audio/Audio';
 import { type Slot, type ItemStack, maxDurability } from '../../common/game/itemstack';
 import { elytraUpgrades, ELYTRA } from '../../common/endExpansion/elytra';
-import { setUnlockedRecipes } from '../ui/RecipeBook';
+import { setUnlockedRecipes, setHalloweenRecipes } from '../ui/RecipeBook';
 import type { GameMode } from '../../common/game/gamemode';
 import type { DimensionId } from '../../common/data/biomes';
 import { items, itemById } from '../../common/registry/items';
@@ -35,6 +35,8 @@ import { newBody } from '../../common/physics/movement';
 import { el } from '../ui/dom';
 import { attachPlayerPreview } from '../render/PlayerPreview';
 import { WEARABLE_BLOCKS } from '../../common/halloween/heads';
+import { setTempClock } from '../../common/halloween/tempEnchant';
+import { KNOCK_REACH } from '../../common/halloween/trickOrTreat';
 import { chunkIndex } from '../../common/world/constants';
 import { enchantLevel } from '../../common/game/enchanting';
 import type { AdminAction } from '../../common/game/admin';
@@ -66,6 +68,8 @@ export interface GameHost {
   openGrimoire(): void;
   /** V6 phase 3: a lore book's page; an Ender Glyph Stone's glyphs. */
   openLore(id: string): void;
+  /** V7 phase 3: the Trick-or-Treat Sack in inventory slot `slot`. */
+  openSack(slot: number): void;
   showGlyphs(seed: number, face: number): void;
   readonly screenOpen: boolean;
 }
@@ -100,6 +104,10 @@ export class Game {
   private readonly scopeOverlay = el('div', { class: 'spyglass-overlay hidden' });
   /** Frost creeping in from the edges while freezing, and white-out when buried in powder snow. */
   private readonly frostOverlay = el('div', { class: 'frost-overlay' });
+  /** V7 phase 3: a costume worn on the head, from the inside (the edges of the mask). */
+  private readonly costumeOverlay = el('div', { class: 'costume-overlay hidden' });
+  /** V7 phase 3: the Trick-or-Treat doors near the player that can be knocked on (from the server). */
+  private knockDoors: [number, number, number, string][] = [];
   private readonly powderOverlay = el('div', { class: 'powder-overlay hidden' });
   private scoping = false;
   private scopeZoom = 1;
@@ -261,7 +269,7 @@ export class Game {
       sound: (n, x, y, z, v, p) => this.audio.play(n, x, y, z, v, p),
       swing: () => this.swing(),
     });
-    this.root.append(this.scopeOverlay, this.frostOverlay, this.powderOverlay, this.hud.root, this.chat.root, this.chat.input, this.playerList.root);
+    this.root.append(this.scopeOverlay, this.frostOverlay, this.powderOverlay, this.costumeOverlay, this.hud.root, this.chat.root, this.chat.input, this.playerList.root);
     this.hud.root.append(this.navigator.root);
     this.touch = new TouchControls(this.input, {
       selectSlot: (i) => this.selectSlot(i),
@@ -282,6 +290,7 @@ export class Game {
     this.digitalHud = new DigitalHud(this.root, settings);
     this.jumpscare = new Jumpscare(this.root, settings, audio);
     this.hauntScene = new HauntScene(this.root, settings, audio);
+    this.hauntScene.onSkip = () => this.skipScene();
     this.chat.glitchFx = settings.glitchFx;
     this.endingCard = new EndingCard(this.root, settings);
     ui.append(this.root);
@@ -351,8 +360,12 @@ export class Game {
     return null;
   }
 
-  /** A step of the Haunting's lair ending ('end': back to the game). */
-  private playScene(step: string, ticks: number, from: [number, number, number], to: [number, number, number], strength = 1): void {
+  /**
+   * A cutscene step ('end': back to the game): the Haunting's lair ending,
+   * and (V7 phase 3) a Candy Home answering ('look') and a Trick Home's grab
+   * and drag. `skip`: it may be skipped (Space, Esc, or the Skip button).
+   */
+  private playScene(step: string, ticks: number, from: [number, number, number], to: [number, number, number], strength = 1, skip = false): void {
     if (step === 'end') {
       this.sceneCam = null;
       this.hauntScene.clear();
@@ -364,12 +377,13 @@ export class Game {
       this.closeScreenLocal();
       if (this.chat.open) this.chat.close();
     }
-    this.hauntScene.show(step, ticks);
+    this.hauntScene.show(step, ticks, skip);
     this.hud.visible = false;
+    this.hud.setPrompt(null);
     const prev = this.sceneCam;
     // A drag with nowhere to go (strength 0): still on your feet, facing him, as when he grabbed you
     const still = step === 'drag' && strength === 0;
-    const moves = (step === 'drag' && !still) || step === 'grab';
+    const moves = (step === 'drag' && !still) || step === 'grab' || step === 'look';
     this.sceneCam = { step: still ? 'grab' : step, start: still ? (prev?.start ?? this.tickNo) : this.tickNo, ticks, from: moves ? from : (prev?.from ?? from), to: moves ? to : (prev?.to ?? to) };
     if (step === 'drag') this.sceneY = NaN;
     if (step === 'shock' && !this.settings.reduceMotion) this.shake = 1;
@@ -385,7 +399,20 @@ export class Game {
     fs.bobAmount = 0;
     const calm = this.settings.reduceMotion;
     const t = this.tickNo + alpha;
-    if (c.step === 'grab') {
+    if (c.step === 'look') {
+      // V7 phase 3: a step back from the door, eyes on whoever answers it
+      const k = Math.min(1, Math.max(0, (t - c.start) / 10));
+      const e = k * k * (3 - 2 * k);
+      fs.x += (c.from[0] - fs.x) * e;
+      fs.y += (c.from[1] - fs.y) * e;
+      fs.z += (c.from[2] - fs.z) * e;
+      const [x1, y1, z1] = c.to;
+      const want = Math.atan2(-(x1 - fs.x), -(z1 - fs.z));
+      let d = want - fs.yaw;
+      d = Math.atan2(Math.sin(d), Math.cos(d));
+      fs.yaw += d * k;
+      fs.pitch += (-Math.atan2(y1 - fs.y, Math.hypot(x1 - fs.x, z1 - fs.z)) - fs.pitch) * k;
+    } else if (c.step === 'grab') {
       // Turned to face him as he takes hold
       const k = Math.min(1, Math.max(0, (t - c.start) / 8));
       const [x1, y1, z1] = c.to;
@@ -413,6 +440,35 @@ export class Game {
       // Wired into the chair
       fs.y -= 0.55;
     }
+  }
+
+  /** V7 phase 3: skips the cutscene playing (the server ends it). */
+  private skipScene(): void {
+    if (this.hauntScene.active && this.hauntScene.skippable) this.send({ t: 'scene_skip' });
+  }
+
+  /** V7 phase 3: the Trick-or-Treat door the player is looking at and could knock on (lower block), or null. */
+  private knockTarget(): [number, number, number] | null {
+    if (!this.knockDoors.length || this.hauntScene.active || this.player.dead || this.player.gamemode === 'spectator') return null;
+    const t = this.interaction.target;
+    if (!t) return null;
+    const d = this.knockDoors.find(([x, y, z]) => x === t.x && z === t.z && (t.y === y || t.y === y + 1));
+    if (!d) return null;
+    const [x, y, z, facing] = d;
+    const f = { north: [0, -1], south: [0, 1], west: [-1, 0], east: [1, 0] }[facing] ?? [0, 0];
+    const p = this.player;
+    const ey = p.body.y + p.eyeHeight;
+    if (Math.hypot(p.body.x - (x + 0.5), ey - (y + 1), p.body.z - (z + 0.5)) > KNOCK_REACH) return null;
+    // From outside: from inside, a door is just a door
+    if ((p.body.x - (x + 0.5)) * f[0]! + (p.body.z - (z + 0.5)) * f[1]! <= 0.2) return null;
+    return [x, y, z];
+  }
+
+  private knock(): void {
+    const d = this.knockTarget();
+    if (!d) return;
+    this.send({ t: 'knock', x: d[0], y: d[1], z: d[2] });
+    this.swing();
   }
 
   private effectDarkness(): number {
@@ -539,6 +595,7 @@ export class Game {
         this.player.flying = m.abilities.flying;
         this.worldInfo = m.world;
         this.updateCheatsIndicator();
+        setHalloweenRecipes(!!m.world.halloween?.active);
         this.setDimension(m.dimension);
         this.player.setPos(m.x, m.y, m.z);
         this.player.yaw = m.yaw;
@@ -701,6 +758,7 @@ export class Game {
         break;
       case 'time':
         this.time = m.time;
+        setTempClock(m.time);
         this.dayTime = m.dayTime;
         this.rain = m.rain;
         this.thunder = m.thunder;
@@ -822,6 +880,7 @@ export class Game {
       case 'world_info':
         this.worldInfo = m.world;
         this.updateCheatsIndicator();
+        setHalloweenRecipes(!!m.world.halloween?.active);
         break;
       case 'ghost':
         // V7: the Admin Panel's "Show a ghost now"
@@ -830,6 +889,13 @@ export class Game {
       case 'haunted_area':
         // V7 phase 2: in or near an Abandoned Village
         this.hauntedArea = m.area;
+        break;
+      case 'speech':
+        // V7 phase 3: a villager at the door, a voice behind it, the sack
+        this.hud.speech(m.text, m.who, m.tone ?? 'info', m.ticks ?? 60);
+        break;
+      case 'knock_doors':
+        this.knockDoors = m.doors;
         break;
       case 'admin_result':
         this.onAdminResult(m);
@@ -1152,6 +1218,8 @@ export class Game {
     // World time
     if (this.dayCycle) this.dayTime = (this.dayTime + 1) % 24000;
     this.time++;
+    // V7 phase 3: temporary enchantments run out on the world's clock
+    setTempClock(this.time);
     // Entities & effects
     for (const e of this.entities.values()) e.tick();
     // The mount this client steers is drawn where the local simulation has it
@@ -1185,6 +1253,8 @@ export class Game {
       this.pingTime = performance.now();
       this.send({ t: 'ping', time: this.pingTime });
     }
+    // V7 phase 3: "Knock" when looking at a Trick-or-Treat door from outside
+    if (this.tickNo % 2 === 0) this.hud.setPrompt(this.knockTarget() ? 'Knock' : null, keyName(this.settings.keys.knock), () => this.knock());
     this.hud.update(
       {
         stats: this.stats,
@@ -1463,7 +1533,7 @@ export class Game {
         this.hauntTarget = Math.max(0, Math.min(1, m.strength ?? 0));
         break;
       case 'scene':
-        this.playScene(m.text ?? '', m.ticks ?? 20, [m.x ?? 0, m.y ?? 0, m.z ?? 0], [m.x1 ?? 0, m.y1 ?? 0, m.z1 ?? 0]);
+        this.playScene(m.text ?? '', m.ticks ?? 20, [m.x ?? 0, m.y ?? 0, m.z ?? 0], [m.x1 ?? 0, m.y1 ?? 0, m.z1 ?? 0], m.strength ?? 1, m.skip === true);
         break;
       case 'jumpscare':
         this.jumpscare.play(m.ticks ?? 60);
@@ -1725,11 +1795,20 @@ export class Game {
       else void document.documentElement.requestFullscreen?.().catch(() => {});
       return;
     }
+    if (a === 'pause' && this.hauntScene.active && this.hauntScene.skippable) {
+      this.skipScene();
+      return;
+    }
     if (a === 'pause') {
       if (!this.uiBlocking && !this.player.dead) {
         this.input.unlock();
         this.host.openPause();
       }
+      return;
+    }
+    // V7 phase 3: a cutscene that may be skipped takes Esc, Space and the knock key
+    if (this.hauntScene.active && this.hauntScene.skippable && (a === 'jump' || a === 'knock' || a === 'attack' || a === 'use')) {
+      this.skipScene();
       return;
     }
     if (this.uiBlocking || this.player.dead || !this.joined) return;
@@ -1767,6 +1846,9 @@ export class Game {
         break;
       case 'swapHands':
         this.send({ t: 'swap_hands' });
+        break;
+      case 'knock':
+        this.knock();
         break;
       case 'debug':
         this.debug = !this.debug;
@@ -1913,6 +1995,12 @@ export class Game {
       this.host.openLore(held.tag.lore);
       return;
     }
+    if (def.use === 'sack') {
+      // V7 phase 3: the Trick-or-Treat Sack opens on what is inside (every change goes through the server)
+      this.input.unlock();
+      this.host.openSack(this.selected);
+      return;
+    }
     if (def.use === 'grimoire') {
       // The server notes the reading (an advancement); the pages open here
       this.send({ t: 'use', hand: 0, action: 'start' });
@@ -1990,6 +2078,9 @@ export class Game {
     const frost = this.stats?.freeze ?? 0;
     this.frostOverlay.style.opacity = frost > 0 && this.thirdPerson === 0 ? String(Math.min(1, frost)) : '0';
     this.powderOverlay.classList.toggle('hidden', !p.body.headInPowder || this.thirdPerson !== 0);
+    // V7 phase 3: a costume seen from inside it
+    const worn = this.thirdPerson === 0 && !this.sceneCam ? this.wornHead() : undefined;
+    this.costumeOverlay.className = worn ? `costume-overlay ${worn}` : 'costume-overlay hidden';
     const fs: FrameState = {
       x: ex,
       y: ey,

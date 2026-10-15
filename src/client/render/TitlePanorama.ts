@@ -756,7 +756,19 @@ export class TitlePanorama {
                 if (!sees(x, y, z, ...kidHead) || !sees(x, y, z, ...hostHead)) continue;
                 const dist = Math.hypot(a, b);
                 const angle = Math.atan2(Math.abs(b), a);
-                const score = Math.abs(dist - 6) + Math.abs(angle - 0.6) * 2 + (up - 1.6) * 1.2;
+                // Open around them too: a wall or a tree close by on either side would fill half the picture
+                const mx = (kidHead[0] + hostHead[0]) / 2 - x;
+                const mz = (kidHead[2] + hostHead[2]) / 2 - z;
+                const look = Math.atan2(mx, mz);
+                let crowded = 0;
+                for (const da of [-0.5, -0.3, 0.3, 0.5])
+                  for (const dy of [-0.6, 0.6])
+                    for (const r of [1.2, 2.4, 3.6])
+                      if (blocked(x + Math.sin(look + da) * r, y + dy, z + Math.cos(look + da) * r)) {
+                        crowded += 4.8 - r;
+                        break;
+                      }
+                const score = Math.abs(dist - 6) + Math.abs(angle - 0.6) * 2 + (up - 1.6) * 1.2 + crowded * 0.9;
                 if (!found || score < found.score) found = { x, y, z, b, score };
               }
           return found;
@@ -764,11 +776,15 @@ export class TitlePanorama {
         // The chosen door first, then the village's other houses (all within the area built)
         let d: DoorSpot | null = null;
         let best: { x: number; y: number; z: number; b: number; score: number } | null = null;
-        for (const c of this.doors.filter((x) => Math.hypot(x.x - fx, x.z - fz) < 44)) {
-          best = cameraFor(c);
-          if (best) {
-            d = c;
-            break;
+        // (the best view of any of them, the chosen one a little favoured)
+        const near = this.doors.filter((x) => Math.hypot(x.x - fx, x.z - fz) < 44);
+        for (let i = 0; i < near.length; i++) {
+          const cam = cameraFor(near[i]!);
+          if (!cam) continue;
+          const score = cam.score + (i ? 1 : 0);
+          if (!best || score < best.score) {
+            best = { ...cam, score };
+            d = near[i]!;
           }
         }
         if (!d || !best) {

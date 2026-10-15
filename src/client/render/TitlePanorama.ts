@@ -168,6 +168,8 @@ export class TitlePanorama {
   private fixedYaw: number | null = null;
   /** How far a fixed camera looks left and right (radians). */
   private sway = 0.35;
+  /** How far the camera drifts up and down (blocks). */
+  private bob = 1.5;
   private disposed = false;
   private lastTick = 0;
   /** V6: the Expanded End's air (sky and fog by biome) for the End Expansion's scenes. */
@@ -792,6 +794,8 @@ export class TitlePanorama {
         const tz = d.z + 0.5 + f[1] * 0.6;
         this.fixedYaw = Math.atan2(-(tx - cx), -(tz - cz));
         this.sway = 0.05;
+        // Barely drifting: the spot was picked for a clear view from just there (a block above and below it)
+        this.bob = 0.2;
         const sack = itemById.get('trick_or_treat_sack')?.num ?? 0;
         // The trick-or-treater a little to the side away from the camera, so the doorway shows past them
         const away = best.b > 0 ? -0.55 : 0.55;
@@ -853,7 +857,7 @@ export class TitlePanorama {
     const c = this.center;
     // The world inside the computer: a slow look left and right across the lake
     const yaw = this.fixedYaw !== null ? this.fixedYaw + Math.sin(t * 0.06) * this.sway : t * 0.045;
-    const cam = { x: c.x, y: c.y + Math.sin(t * 0.07) * 1.5, z: c.z };
+    const cam = { x: c.x, y: c.y + Math.sin(t * 0.07) * this.bob, z: c.z };
     if (this.orbit > 0) {
       // Forward is (-sin yaw, -cos yaw): standing here looks straight at the centre
       cam.x += Math.sin(yaw) * this.orbit;
@@ -946,6 +950,7 @@ export class TitlePanorama {
       this.look = null;
       this.fixedYaw = null;
       this.sway = 0.35;
+      this.bob = 1.5;
       this.orbit = 0;
       this.ready = false;
       this.world.clear();

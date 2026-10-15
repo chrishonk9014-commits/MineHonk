@@ -506,6 +506,10 @@ others see it on your head.
 - **Skipping:** Space, Esc or the Skip button sends C2S `scene_skip`. The
   server ends the scene, tells you what you got, and shuts the door.
 - **Others nearby** see the door and the villager, but not the camera.
+- **Residents:** the house's own villagers in the doorway, or the step inside
+  it, move to the far side of the house while the door is answered
+  (`clearResidents(..., 'in')`), so the costumed villager stands there
+  alone.
 
 ### Trick Homes
 
@@ -531,8 +535,8 @@ others see it on your head.
   been broken open, a fixed 4 x 5 box is used instead.
 - **Residents:** villagers inside the house or in its doorway are moved a few
   steps behind the knocker, out of sight of the door, at the knock and every
-  few ticks while it runs (`clearResidents`). Villagers never open doors, so
-  once it is shut they stay out.
+  few ticks while it runs (`clearResidents(..., 'out')`). Villagers never
+  open doors, so once it is shut they stay out.
 - **The monsters** (`spawnTrickMob`):
   - They carry `data.trickHome` (the run id), `data.noDrops` (no drops, no
     XP) and `data.guard` with leash 0.

@@ -101,6 +101,8 @@ interface CandyRun {
   kinds: CandyKind[];
   villager: Mob | null;
   told: boolean;
+  /** The house behind the door (null: not much of one), for keeping its people out of the doorway. */
+  box: HouseBox | null;
 }
 
 interface TrickRun {
@@ -296,8 +298,9 @@ export class TrickOrTreatSystem {
       if (s.candy!.fullSack(p)) s.interaction.grant(p, 'full_sack');
     }
     p.addStat('trick_or_treat.candy', kinds.length);
-    const run: CandyRun = { ref, id: this.idOf(ref), p, t: 0, scene: candySceneFor(d.seed, p.uuid), kinds, villager: null, told: false };
+    const run: CandyRun = { ref, id: this.idOf(ref), p, t: 0, scene: candySceneFor(d.seed, p.uuid), kinds, villager: null, told: false, box: this.house(p.dim, d) };
     this.candyRuns.set(run.id, run);
+    if (run.box) this.clearResidents(p.dim, d, run.box, 'in');
     const w = this.watch(p, d);
     p.send({ t: 'fx', kind: 'scene', text: 'look', ticks: CANDY_TIMES.end, x: w.eye[0], y: w.eye[1], z: w.eye[2], x1: w.at[0], y1: w.at[1], z1: w.at[2], skip: true });
     return kinds;
@@ -320,6 +323,7 @@ export class TrickOrTreatSystem {
     const inZ = d.z + 0.5 - fz * 0.9;
     const atX = d.x + 0.5 - fx * 0.25;
     const atZ = d.z + 0.5 - fz * 0.25;
+    if (run.box && t % 5 === 0 && t < T.close) this.clearResidents(dim, d, run.box, 'in', run.villager);
     if (t === T.open) this.setDoor(dim, d, true, 'door.open');
     if (t === T.appear) {
       const v = s.mobs?.spawn(dim, 'villager', inX, d.y, inZ, { reason: 'event', data: { trickScene: true, noDrops: true, untouchable: true, headwear: run.scene.head, profession: PROFESSIONS[this.rng.int(PROFESSIONS.length)] } });
@@ -478,37 +482,47 @@ export class TrickOrTreatSystem {
       hitAt: 0,
     };
     this.trickRuns.set(run.id, run);
-    this.clearResidents(run);
+    this.clearResidents(dim, d, box, 'out');
     return run;
   }
 
   /**
-   * Villagers who live in a Trick Home are out of it while it is haunted:
-   * anyone inside (or in the doorway) is put a few steps behind whoever
-   * knocked, out of sight of the door. Villagers never open doors, so once
-   * it is shut they stay out.
+   * The people who live behind a door, out of the way while it is answered
+   * (V7 phase 3). A Trick Home's go a few steps behind whoever knocked, out
+   * of sight of the door (`out`); a Candy Home's step back from the doorway
+   * into the house, so whoever answers stands there alone (`in`). Villagers
+   * never open doors, so once one is shut they stay where they are.
    */
-  private clearResidents(run: TrickRun): void {
-    const dim = run.p.dim;
-    const d = run.ref.door;
+  private clearResidents(dim: Dimension, d: DoorRecord, box: HouseBox, where: 'out' | 'in', keep?: Mob | null): void {
     const [fx, fz] = FACING[d.facing]!;
+    const players = [...this.server.players.values()].filter((p) => p.dim === dim);
+    const free = (x: number, z: number): boolean => !players.some((p) => Math.hypot(p.x - x, p.z - z) < 1.2);
+    let deeper = 0;
     for (const e of dim.entities.values()) {
-      if (!(e instanceof Mob) || e.removed || e.dead || e.type !== 'villager' || e.data.trickScene) continue;
+      if (!(e instanceof Mob) || e === keep || e.removed || e.dead || e.type !== 'villager' || e.data.trickScene) continue;
       if (Math.abs(e.x - d.x) > 12 || Math.abs(e.z - d.z) > 12 || Math.abs(e.y - d.y) > 6) continue;
       const doorway = Math.floor(e.x) === d.x && Math.floor(e.z) === d.z && Math.abs(e.y - d.y) < 2;
-      if (!doorway && !TrickOrTreatSystem.inHouse(run.box, e.x, e.y, e.z, 0.3)) continue;
+      const inside = TrickOrTreatSystem.inHouse(box, e.x, e.y, e.z, 0.3);
+      // (a Candy Home's own people only need to be out of the doorway and the step inside it)
+      if (where === 'in' ? !doorway && !(inside && Math.hypot(e.x - (d.x + 0.5), e.z - (d.z + 0.5)) < 2.2) : !doorway && !inside) continue;
       let spot: [number, number, number] | null = null;
-      for (const back of [4, 5, 3, 6]) {
-        for (const side of [0, 2, -2, 3, -3]) {
-          const x = d.x + fx * back - fz * side;
-          const z = d.z + fz * back + fx * side;
-          const y = floorNear(dim, x, z, d.y, 3);
-          if (y === null || TrickOrTreatSystem.inHouse(run.box, x + 0.5, y, z + 0.5, 1)) continue;
-          if ([...this.server.players.values()].some((p) => p.dim === dim && Math.hypot(p.x - (x + 0.5), p.z - (z + 0.5)) < 1.2)) continue;
-          spot = [x + 0.5, y, z + 0.5];
-          break;
+      if (where === 'out') {
+        for (const back of [4, 5, 3, 6]) {
+          for (const side of [0, 2, -2, 3, -3]) {
+            const x = d.x + fx * back - fz * side;
+            const z = d.z + fz * back + fx * side;
+            const y = floorNear(dim, x, z, d.y, 3);
+            if (y === null || TrickOrTreatSystem.inHouse(box, x + 0.5, y, z + 0.5, 1) || !free(x + 0.5, z + 0.5)) continue;
+            spot = [x + 0.5, y, z + 0.5];
+            break;
+          }
+          if (spot) break;
         }
-        if (spot) break;
+      } else {
+        // The far side of the house, one to a spot
+        const far = box.cells.filter((c) => Math.hypot(c[0] - d.x, c[2] - d.z) >= 2.5).sort((a, b) => Math.hypot(b[0] - d.x, b[2] - d.z) - Math.hypot(a[0] - d.x, a[2] - d.z));
+        const c = far[deeper++ % Math.max(1, far.length)];
+        if (c) spot = [c[0] + 0.5, c[1], c[2] + 0.5];
       }
       if (!spot) continue;
       e.stopNavigation();
@@ -565,7 +579,7 @@ export class TrickOrTreatSystem {
         return;
       }
       const [fx, fz] = FACING[d.facing]!;
-      if (t % 5 === 0) this.clearResidents(run);
+      if (t % 5 === 0) this.clearResidents(dim, d, run.box, 'out');
       if (t === T.creak) this.setDoor(dim, d, true, 'door.creak', 0.8);
       if (t === T.appear) {
         const g = this.spawnTrickMob(run, run.enc.grab, d.x + 0.5 - fx * 0.6, d.y, d.z + 0.5 - fz * 0.6);
@@ -621,7 +635,7 @@ export class TrickOrTreatSystem {
       if (s.admin.inContext(p)) run.cheat = true;
     }
     // (anyone opening the door to get out lets the street in)
-    if (t % 10 === 0) this.clearResidents(run);
+    if (t % 10 === 0) this.clearResidents(dim, d, run.box, 'out');
     run.empty = party.length ? 0 : run.empty + 1;
     if (run.empty >= TRICK_EMPTY_TICKS) {
       this.endTrick(run, 'left');

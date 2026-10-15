@@ -596,7 +596,15 @@ describe('knocking and Candy Homes', () => {
     atDoor(player, candyDoor);
     other.player.setPos(player.x + 2, player.y, player.z + 2);
     dress(player);
+    // Someone who lives there, standing right behind the door
+    const box = server.trickOrTreat!.house(player.dim, candyDoor)!;
+    const [cx, cy, cz] = box.cells[0]!;
+    const resident = server.mobs!.spawn(player.dim, 'villager', cx + 0.5, cy, cz + 0.5, { reason: 'event' })!;
     knock(server, conn, candyDoor);
+    // ...steps back into the house, so whoever answers stands in the doorway alone
+    const fromDoor = (): number => Math.hypot(resident.x - (candyDoor.x + 0.5), resident.z - (candyDoor.z + 0.5));
+    expect(fromDoor()).toBeGreaterThanOrEqual(2.2);
+    expect(TrickOrTreatSystem.inHouse(box, resident.x, resident.y, resident.z)).toBe(true);
     const got = total(candyOf(player));
     tick(server, CANDY_TIMES.greet + 2);
     const v = [...player.dim.entities.values()].find((e) => e instanceof Mob && e.data.trickScene) as Mob;
@@ -604,6 +612,8 @@ describe('knocking and Candy Homes', () => {
     expect(v.type).toBe('villager');
     expect(v.meta().headwear).toBeTruthy();
     expect(getProp(player.dim.getState(candyDoor.x, candyDoor.y, candyDoor.z), 'open')).toBe('true');
+    expect(fromDoor()).toBeGreaterThanOrEqual(2);
+    resident.remove();
     // Others nearby see the villager and the door, not the knocker's camera
     expect(other.conn.of('fx').some((m) => m.kind === 'scene')).toBe(false);
     tick(server, CANDY_TIMES.end);

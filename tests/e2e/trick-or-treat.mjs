@@ -635,6 +635,12 @@ if (part('knock') || part('quest')) {
     check(`the Admin Panel starts Herobrine's Trick Home (${hr.text})`, hr.ok);
     await page.waitForFunction(() => !window.minehonk.game.hauntScene.active && document.querySelector('.boss-herobrine'), null, { timeout: 20000 }).catch(() => {});
     await page.waitForTimeout(800);
+    // He blinks about the room: the world held still first, then faced where he stands
+    await page.evaluate(() => {
+      window.minehonk.conn?.setPaused?.(true);
+      window.minehonk.game.paused = true;
+    });
+    await page.waitForTimeout(200);
     const hb = await page.evaluate(() => [...window.minehonk.game.entities.values()].find((e) => e.type === 'herobrine'));
     if (hb) {
       const me = await page.evaluate(() => ({ x: window.minehonk.game.player.body.x, y: window.minehonk.game.player.body.y, z: window.minehonk.game.player.body.z }));
@@ -649,6 +655,10 @@ if (part('knock') || part('quest')) {
     }
     check(`Herobrine is in there (${hb ? 'yes' : 'no'})`, !!hb);
     await page.screenshot({ path: `${OUT}/trick-home-herobrine.png` });
+    await page.evaluate(() => {
+      window.minehonk.conn?.setPaused?.(false);
+      window.minehonk.game.paused = false;
+    });
     // The Admin Panel's trick-or-treat controls
     await page.evaluate(() => window.minehonk.openAdmin());
     await page.locator('.admin-panel').waitFor();

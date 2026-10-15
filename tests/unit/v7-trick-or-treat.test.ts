@@ -750,13 +750,15 @@ describe('Trick Homes', () => {
     friend.player.setPos(run.landing[0], run.landing[1], run.landing[2]);
     tick(server, 2);
     expect(run.party.has(friend.player)).toBe(true);
-    const before = [...player.dim.entities.values()].filter((e) => e instanceof ItemEntity).length;
+    // (items in the house only: elsewhere the world goes on, chickens lay and leaves drop saplings)
+    const loose = (): number => [...player.dim.entities.values()].filter((e) => e instanceof ItemEntity && TrickOrTreatSystem.inHouse(run.box, e.x, e.y, e.z, 1)).length;
+    const before = loose();
     for (const m of run.mobs) m.hurt(1000, { source: 'player', attacker: player } as never);
     tick(server, 3);
     expect(run.phase).toBe('won');
     expect(d.used).toBe(true);
     // Nothing dropped by them
-    expect([...player.dim.entities.values()].filter((e) => e instanceof ItemEntity).length).toBe(before);
+    expect(loose()).toBe(before);
     // The chest, rolled from the Trick Home table
     const chest = run.box.cells.find(([x, y, z]) => blocks[STATE_BLOCK[player.dim.getState(x, y, z)]!]!.id === 'chest')!;
     expect(chest).toBeTruthy();

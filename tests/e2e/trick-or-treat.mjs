@@ -498,6 +498,8 @@ if (part('knock') || part('quest')) {
     };
     void FACE;
     void facingOf;
+    // (no night-time zombies wandering in: a survival player stands still at doors for a while)
+    await cmd('/gamerule doMobSpawning false', 400);
     await cmd('/time set midnight', 500);
     // The prompt, then no costume: turned away
     const d0 = candy[0];

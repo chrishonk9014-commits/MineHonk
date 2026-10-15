@@ -66,26 +66,35 @@ async function newPage() {
     fs.mkdirSync(CLEAN, { recursive: true });
     const shoot = page.screenshot.bind(page);
     const HIDE = ['.hotbar', '.crosshair', '.debug', '.debug-right', '.quest-tracker', '.cheats-indicator', '.chat', '.xpbar', '.xplevel', '.stat-row', '.item-name', '.wings-meters', '.hp-label', '.toast', '.subtitles', '.boss-bars', '.title-overlay'];
+    // Two screenshots take seconds; the world (the server in the worker) holds still meanwhile, so a short cutscene is still there for both
+    const freeze = (paused) => page.evaluate((paused) => window.minehonk?.conn?.setPaused?.(paused), paused).catch(() => {});
     page.screenshot = async (opts = {}) => {
-      if (opts.path && !opts.noClean) {
-        const was = await page.evaluate((hide) => {
-          let st = document.getElementById('clean-shot');
-          if (!st) document.head.append((st = Object.assign(document.createElement('style'), { id: 'clean-shot' })));
-          st.textContent = hide.length ? hide.map((c) => `body.clean-shot ${c}`).join(',') + '{visibility:hidden!important}' : '';
-          document.body.classList.add('clean-shot');
-          const g = window.minehonk?.game;
-          const w = g?.hudHidden ?? false;
-          if (g) g.hudHidden = true;
-          return w;
-        }, opts.keepMenu ? [] : HIDE);
-        await page.waitForTimeout(300);
-        await shoot({ ...opts, path: path.join(CLEAN, path.basename(opts.path)) });
-        await page.evaluate((w) => {
-          document.body.classList.remove('clean-shot');
-          const g = window.minehonk?.game;
-          if (g) g.hudHidden = w;
-        }, was);
+      if (!opts.path || opts.noClean) return shoot(opts);
+      await freeze(true);
+      try {
+        return await clean(opts);
+      } finally {
+        await freeze(false);
       }
+    };
+    const clean = async (opts) => {
+      const was = await page.evaluate((hide) => {
+        let st = document.getElementById('clean-shot');
+        if (!st) document.head.append((st = Object.assign(document.createElement('style'), { id: 'clean-shot' })));
+        st.textContent = hide.length ? hide.map((c) => `body.clean-shot ${c}`).join(',') + '{visibility:hidden!important}' : '';
+        document.body.classList.add('clean-shot');
+        const g = window.minehonk?.game;
+        const w = g?.hudHidden ?? false;
+        if (g) g.hudHidden = true;
+        return w;
+      }, opts.keepMenu ? [] : HIDE);
+      await page.waitForTimeout(300);
+      await shoot({ ...opts, path: path.join(CLEAN, path.basename(opts.path)) });
+      await page.evaluate((w) => {
+        document.body.classList.remove('clean-shot');
+        const g = window.minehonk?.game;
+        if (g) g.hudHidden = w;
+      }, was);
       return shoot(opts);
     };
   }
@@ -487,7 +496,8 @@ if (part('knock') || part('quest')) {
     check(`looking at a Trick-or-Treat door: the Knock prompt ("${prompt}")`, /Knock/.test(prompt) && /G/.test(prompt));
     await page.screenshot({ path: `${OUT}/trick-knock-prompt.png` });
     await page.keyboard.press('KeyG');
-    await page.waitForTimeout(900);
+    await page.waitForFunction(() => document.querySelectorAll('.speech').length > 0, null, { timeout: 5000 }).catch(() => {});
+    await page.waitForTimeout(200);
     const said = await speech(page);
     check(`knocking with no costume: "${said.join(' / ')}"`, said.some((t) => /costume|dress up/i.test(t)));
     await page.screenshot({ path: `${OUT}/trick-rejected.png` });
@@ -518,8 +528,9 @@ if (part('knock') || part('quest')) {
     check(`the candy went straight into the sack (${sackCount})`, sackCount >= 1 && sackCount <= 3);
     // Again: once each
     await atDoor(d0);
+    await page.waitForFunction(() => window.minehonk.game.hud.prompt === 'Knock', null, { timeout: 15000 }).catch(() => {});
     await page.keyboard.press('KeyG');
-    await page.waitForTimeout(900);
+    await page.waitForFunction(() => [...document.querySelectorAll('.speech')].some((d) => /already|nice try|one handful/i.test(d.textContent ?? '')), null, { timeout: 5000 }).catch(() => {});
     check('knocking again: "You already got candy here!"', (await speech(page)).some((t) => /already|nice try|one handful/i.test(t)));
     // A Trick Home: the grab, the drag, the slam
     const t0 = tricks[0];

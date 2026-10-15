@@ -666,7 +666,16 @@ describe('Trick Homes', () => {
     const { conn, player } = await join(server, 'Ann', 'uuid-ann2');
     atDoor(player, d);
     dress(player);
+    // Someone lives there, just inside the door
+    const box = server.trickOrTreat!.house(player.dim, d)!;
+    const [cx, cy, cz] = box.cells[0]!;
+    const resident = server.mobs!.spawn(player.dim, 'villager', cx + 0.5, cy, cz + 0.5, { reason: 'event' })!;
+    expect(TrickOrTreatSystem.inHouse(box, resident.x, resident.y, resident.z)).toBe(true);
+    const [fx, fz] = ({ north: [0, -1], south: [0, 1], west: [-1, 0], east: [1, 0] } as const)[d.facing];
+    const outOfTheWay = (): boolean => !TrickOrTreatSystem.inHouse(box, resident.x, resident.y, resident.z, 0.3) && (resident.x - (d.x + 0.5)) * fx + (resident.z - (d.z + 0.5)) * fz > 2;
     knock(server, conn, d);
+    // ...and is out of the way at once: behind whoever knocked, out of sight of the door
+    expect(outOfTheWay()).toBe(true);
     expect(conn.of('fx').some((m) => m.kind === 'scene')).toBe(false);
     tick(server, TRICK_TIMES.grab + 1);
     expect(conn.of('fx').some((m) => m.kind === 'scene' && m.text === 'grab')).toBe(true);
@@ -677,6 +686,9 @@ describe('Trick Homes', () => {
     expect(run.phase).toBe('fight');
     expect(TrickOrTreatSystem.inHouse(run.box, player.x, player.y, player.z)).toBe(true);
     expect(getProp(player.dim.getState(d.x, d.y, d.z), 'open')).toBe('false');
+    // (and stayed out while the door stood open)
+    expect(TrickOrTreatSystem.inHouse(box, resident.x, resident.y, resident.z, 0.3)).toBe(false);
+    resident.remove();
     const mobs = run.mobs;
     expect(mobs.map((m) => m.type)).toEqual(TRICK_ENCOUNTERS[run.kind].mobs.slice());
     for (const m of mobs) {

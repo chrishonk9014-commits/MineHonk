@@ -478,7 +478,44 @@ export class TrickOrTreatSystem {
       hitAt: 0,
     };
     this.trickRuns.set(run.id, run);
+    this.clearResidents(run);
     return run;
+  }
+
+  /**
+   * Villagers who live in a Trick Home are out of it while it is haunted:
+   * anyone inside (or in the doorway) is put a few steps behind whoever
+   * knocked, out of sight of the door. Villagers never open doors, so once
+   * it is shut they stay out.
+   */
+  private clearResidents(run: TrickRun): void {
+    const dim = run.p.dim;
+    const d = run.ref.door;
+    const [fx, fz] = FACING[d.facing]!;
+    for (const e of dim.entities.values()) {
+      if (!(e instanceof Mob) || e.removed || e.dead || e.type !== 'villager' || e.data.trickScene) continue;
+      if (Math.abs(e.x - d.x) > 12 || Math.abs(e.z - d.z) > 12 || Math.abs(e.y - d.y) > 6) continue;
+      const doorway = Math.floor(e.x) === d.x && Math.floor(e.z) === d.z && Math.abs(e.y - d.y) < 2;
+      if (!doorway && !TrickOrTreatSystem.inHouse(run.box, e.x, e.y, e.z, 0.3)) continue;
+      let spot: [number, number, number] | null = null;
+      for (const back of [4, 5, 3, 6]) {
+        for (const side of [0, 2, -2, 3, -3]) {
+          const x = d.x + fx * back - fz * side;
+          const z = d.z + fz * back + fx * side;
+          const y = floorNear(dim, x, z, d.y, 3);
+          if (y === null || TrickOrTreatSystem.inHouse(run.box, x + 0.5, y, z + 0.5, 1)) continue;
+          if ([...this.server.players.values()].some((p) => p.dim === dim && Math.hypot(p.x - (x + 0.5), p.z - (z + 0.5)) < 1.2)) continue;
+          spot = [x + 0.5, y, z + 0.5];
+          break;
+        }
+        if (spot) break;
+      }
+      if (!spot) continue;
+      e.stopNavigation();
+      e.setPos(spot[0], spot[1], spot[2]);
+      e.body.vx = e.body.vz = 0;
+      e.metaDirty = true;
+    }
   }
 
   private fallbackBox(d: DoorRecord): HouseBox {
@@ -528,6 +565,7 @@ export class TrickOrTreatSystem {
         return;
       }
       const [fx, fz] = FACING[d.facing]!;
+      if (t % 5 === 0) this.clearResidents(run);
       if (t === T.creak) this.setDoor(dim, d, true, 'door.creak', 0.8);
       if (t === T.appear) {
         const g = this.spawnTrickMob(run, run.enc.grab, d.x + 0.5 - fx * 0.6, d.y, d.z + 0.5 - fz * 0.6);
@@ -582,6 +620,8 @@ export class TrickOrTreatSystem {
       if (!run.party.has(p)) run.party.add(p);
       if (s.admin.inContext(p)) run.cheat = true;
     }
+    // (anyone opening the door to get out lets the street in)
+    if (t % 10 === 0) this.clearResidents(run);
     run.empty = party.length ? 0 : run.empty + 1;
     if (run.empty >= TRICK_EMPTY_TICKS) {
       this.endTrick(run, 'left');

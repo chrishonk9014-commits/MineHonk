@@ -529,6 +529,10 @@ others see it on your head.
 - **The house:** a flood fill of the floor behind the door (`house`): within
   7 blocks, at most 160 cells, with feet and head clear. If the house has
   been broken open, a fixed 4 x 5 box is used instead.
+- **Residents:** villagers inside the house or in its doorway are moved a few
+  steps behind the knocker, out of sight of the door, at the knock and every
+  few ticks while it runs (`clearResidents`). Villagers never open doors, so
+  once it is shut they stay out.
 - **The monsters** (`spawnTrickMob`):
   - They carry `data.trickHome` (the run id), `data.noDrops` (no drops, no
     XP) and `data.guard` with leash 0.

@@ -66,8 +66,17 @@ async function newPage() {
     fs.mkdirSync(CLEAN, { recursive: true });
     const shoot = page.screenshot.bind(page);
     const HIDE = ['.hotbar', '.crosshair', '.debug', '.debug-right', '.quest-tracker', '.cheats-indicator', '.chat', '.xpbar', '.xplevel', '.stat-row', '.item-name', '.wings-meters', '.hp-label', '.toast', '.subtitles', '.boss-bars', '.title-overlay'];
-    // Two screenshots take seconds; the world (the server in the worker) holds still meanwhile, so a short cutscene is still there for both
-    const freeze = (paused) => page.evaluate((paused) => window.minehonk?.conn?.setPaused?.(paused), paused).catch(() => {});
+    // Two screenshots take seconds; the world (the server in the worker, and the game's own ticks) holds still meanwhile, so a short cutscene is still there for both
+    const freeze = (on) =>
+      page
+        .evaluate((on) => {
+          const app = window.minehonk;
+          const g = app?.game;
+          if (on) window.__shotPaused = g?.paused ?? false;
+          app?.conn?.setPaused?.(on);
+          if (g) g.paused = on || window.__shotPaused;
+        }, on)
+        .catch(() => {});
     page.screenshot = async (opts = {}) => {
       if (!opts.path || opts.noClean) return shoot(opts);
       await freeze(true);
@@ -78,16 +87,17 @@ async function newPage() {
       }
     };
     const clean = async (opts) => {
-      const was = await page.evaluate((hide) => {
+      const was = await page.evaluate(([hide, keep]) => {
         let st = document.getElementById('clean-shot');
         if (!st) document.head.append((st = Object.assign(document.createElement('style'), { id: 'clean-shot' })));
         st.textContent = hide.length ? hide.map((c) => `body.clean-shot ${c}`).join(',') + '{visibility:hidden!important}' : '';
         document.body.classList.add('clean-shot');
         const g = window.minehonk?.game;
         const w = g?.hudHidden ?? false;
-        if (g) g.hudHidden = true;
+        // (keepHand: the item in hand stays, the rest of the HUD goes)
+        if (g && !keep) g.hudHidden = true;
         return w;
-      }, opts.keepMenu ? [] : HIDE);
+      }, [opts.keepMenu ? [] : HIDE, !!opts.keepHand]);
       await page.waitForTimeout(300);
       await shoot({ ...opts, path: path.join(CLEAN, path.basename(opts.path)) });
       await page.evaluate((w) => {
@@ -339,7 +349,7 @@ if (part('sack') || part('costumes')) {
       await hold(page, id);
       await page.evaluate(() => (window.minehonk.game.player.pitch = 0.5));
       await page.waitForTimeout(900);
-      await page.screenshot({ path: `${OUT}/trick-hand-${id}.png` });
+      await page.screenshot({ path: `${OUT}/trick-hand-${id}.png`, keepHand: true });
     }
     const handPoison = await page.evaluate(() => {
       const g = window.minehonk.game;

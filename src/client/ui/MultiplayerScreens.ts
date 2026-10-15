@@ -6,6 +6,7 @@
 import { el, button, clear, cycle } from './dom';
 import { titled, wrapClick, messageScreen, confirmScreen, textPrompt, type Screen, type ScreenHost } from './Screens';
 import { HubApi } from '../net/HubApi';
+import { herobrineBeaten } from '../hauntRecord';
 import { normalizeJoinCode, validatePassword, validateUsername, type WorldDetails, type WorldSummary, type WorldRole, type FriendsResponse } from '../../common/net/multiplayer';
 import { GAME_MODE_INFO, GOD_HEART_PRESETS, type GameMode, type Difficulty, type GodHearts } from '../../common/game/gamemode';
 
@@ -327,7 +328,7 @@ export function createOnlineWorldScreen(host: ScreenHost, api: HubApi, created: 
   const go = async (): Promise<void> => {
     const n = name.value.trim();
     if (!n) return setStatus(s, 'Give your world a name', true);
-    const d = await busy([btn], s, () => api.createWorld({ name: n, seed: seed.value.trim(), mode: o.mode, difficulty: o.difficulty, visibility: o.visibility, godHearts: o.godHearts }));
+    const d = await busy([btn], s, () => api.createWorld({ name: n, seed: seed.value.trim(), mode: o.mode, difficulty: o.difficulty, visibility: o.visibility, godHearts: o.godHearts, hauntEligible: herobrineBeaten() }));
     if (d) {
       created();
       host.replace(messageScreen(host, 'World Created', `"${d.name}" is ready.\n\nJoin code: ${d.joinCode ?? 'none'}\nShare it with friends so they can join.`));

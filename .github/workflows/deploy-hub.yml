@@ -22,6 +22,8 @@ on:
       - 'src/common/game/gamemode.ts'
       - 'src/server/moderation/ChatFilter.ts'
       - 'src/common/game/herobrineVoice.ts'
+      - 'src/common/game/hauntBrains.ts'
+      - 'src/common/game/haunting.ts'
       - 'package-lock.json'
       - '.github/workflows/deploy-hub.yml'
 

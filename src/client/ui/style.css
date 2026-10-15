@@ -4139,3 +4139,150 @@ body {
 .sack-panel .dim {
   color: #5a5a5a;
 }
+
+/* V7 phase 4: the Haunting's other characters */
+/* Their voices in chat: Null flat and grey and small, Green Steve a player in green, the Cave Dweller a pale whisper */
+.chat .line.chat-null span:last-child {
+  color: #8c8c8c;
+  letter-spacing: 0.04em;
+}
+.chat .line.chat-null span:first-child {
+  color: #5a5a5a;
+}
+.chat .line.chat-greensteve span:first-child {
+  color: #55ff55;
+}
+.chat .line.chat-dweller span:last-child {
+  color: #c8c0b0;
+  font-style: italic;
+  opacity: 0.85;
+}
+.chat .line.chat-dweller span:first-child {
+  color: #8e8676;
+  font-style: italic;
+}
+/* Their end screens */
+.screen.haunt-end .haunt-end-reason {
+  color: #d0d0d0;
+  font-size: calc(var(--s) * 7);
+  text-shadow: var(--s) var(--s) 0 #2a2a2a;
+  text-align: center;
+  max-width: calc(var(--s) * 220);
+}
+.screen.haunt-end-null .title-text {
+  color: #a0a0a0;
+}
+.screen.haunt-end-green_steve {
+  background: radial-gradient(ellipse at center, #0e2a0e 0%, #030a03 75%);
+}
+.screen.haunt-end-cave_dweller {
+  background: radial-gradient(ellipse at center, #14110d 0%, #000 70%);
+}
+.haunt-end-title {
+  font-size: calc(var(--s) * 14);
+  text-align: center;
+  text-shadow: calc(var(--s) * 1.5) calc(var(--s) * 1.5) 0 #000;
+}
+.haunt-end-green_steve .haunt-end-title {
+  color: #6aff6a;
+}
+.haunt-end-cave_dweller .haunt-end-title {
+  color: #e8e0d0;
+  letter-spacing: 0.06em;
+}
+/* Cutscene steps: the world erased square by square (Null), a white flash that stays (Green Steve),
+   eyes opening on your feet (rise), eyes in the dark (the Cave Dweller's den), watching from outside yourself */
+.hs-erase {
+  display: none;
+}
+.hs-erase.go {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  grid-template-rows: repeat(8, 1fr);
+}
+.hs-erase > i {
+  background: #000;
+  opacity: 0;
+  animation: hs-erase-cell 0.15s steps(1) forwards;
+}
+@keyframes hs-erase-cell {
+  to {
+    opacity: 1;
+  }
+}
+.hs-white {
+  background: #fff;
+  opacity: 0;
+}
+.hs-white.go {
+  animation: hs-white 0.35s ease-out forwards;
+}
+.haunt-scene.calm .hs-white.go {
+  animation-duration: 1.2s;
+}
+@keyframes hs-white {
+  to {
+    opacity: 1;
+  }
+}
+.hs-eyes {
+  display: none;
+  background: #000;
+}
+.hs-eyes.go {
+  display: block;
+}
+.hs-eyes > i {
+  position: absolute;
+  width: 5%;
+  height: 2%;
+  opacity: 0;
+  animation: hs-eye 2.4s ease-in-out forwards;
+}
+.hs-eyes > i::before,
+.hs-eyes > i::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  width: 32%;
+  height: 100%;
+  background: #e8e2d0;
+  border-radius: 40%;
+  box-shadow: 0 0 calc(var(--s) * 3) rgba(232, 226, 208, 0.6);
+}
+.hs-eyes > i::before {
+  left: 0;
+}
+.hs-eyes > i::after {
+  right: 0;
+}
+@keyframes hs-eye {
+  0% {
+    opacity: 0;
+    transform: scaleY(0.1);
+  }
+  30% {
+    opacity: 1;
+    transform: scaleY(1);
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0.8;
+  }
+}
+/* V7 phase 4: the Admin Panel's Haunting tab */
+.haunt-blurb {
+  margin-top: calc(var(--s) * 3);
+}
+.haunt-talk-text {
+  flex: 1;
+  min-width: 0;
+}
+.haunt-talk-out {
+  margin-top: calc(var(--s) * 3);
+}
+.haunt-talk-line.haunt-talk-claude {
+  color: #ffd75a;
+}

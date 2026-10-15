@@ -11,7 +11,8 @@ import type { ItemStack } from '../../common/game/itemstack';
 import { POTIONS } from '../../common/data/potions';
 import { ENCHANTMENTS } from '../../common/data/enchantments';
 import { MOB_DEFS } from '../../common/data/mobs';
-import { HAUNT_STAGES, HAUNT_DEFAULT_MINUTES, HAUNT_MIN_MINUTES, HAUNT_MAX_MINUTES, HAUNT_ENDINGS, HAUNT_ENDING_NAMES, HAUNT_TALK_AT, type HauntStatus, type HauntEnding } from '../../common/game/haunting';
+import { HAUNT_MIN_MINUTES, HAUNT_MAX_MINUTES, HAUNT_CHARACTERS, type HauntStatus, type HauntOp, type HauntCharacter } from '../../common/game/haunting';
+import { HAUNT_CAST } from '../../common/game/hauntCast';
 import { structureName, inExpandedEnd, EXPANDED_END_SUFFIX, TIME_PRESETS, ADMIN_DIMENSIONS, type AdminAction, type AdminCatalog, type LocateResult, type V4Op, type V5Op, type V55Op, type V6Op } from '../../common/game/admin';
 import { EXPANSION_BIOMES } from '../../common/endExpansion/biomes';
 import { END_QUESTS } from '../../common/endExpansion/quests';
@@ -59,11 +60,12 @@ const DIM_NAMES: Record<string, string> = { overworld: 'Overworld', nether: 'Net
 const MOB_CATEGORY_NAMES: Record<string, string> = { monster: 'Hostile', creature: 'Animals', water: 'Water', ambient: 'Ambient', npc: 'Villagers', boss: 'Bosses' };
 
 /** Remembered between openings during a session. */
-const memory: { tab: Tab; itemQuery: string; itemTab: string; mobQuery: string; mobCat: string; dim: DimensionId; structure: string; biome: string; cave: string; count: number; hauntMinutes: number; hauntErase: boolean; hauntEnding: HauntEnding } = {
+const memory: { tab: Tab; itemQuery: string; itemTab: string; mobQuery: string; mobCat: string; dim: DimensionId; structure: string; biome: string; cave: string; count: number; hauntMinutes: number; hauntErase: boolean; hauntEnding: Record<HauntCharacter, string>; hauntChar: HauntCharacter } = {
   tab: 'items',
-  hauntMinutes: HAUNT_DEFAULT_MINUTES,
+  hauntMinutes: 0,
   hauntErase: true,
-  hauntEnding: 'random',
+  hauntEnding: { herobrine: 'random', null: 'erased', green_steve: 'random', cave_dweller: 'random' },
+  hauntChar: 'herobrine',
   itemQuery: '',
   itemTab: 'all',
   mobQuery: '',
@@ -260,7 +262,7 @@ export function adminScreen(host: AdminHost): Screen {
     const cats = el('div', { class: 'admin-chips' });
     const list = el('div', { class: 'admin-list' });
     const detail = el('div', { class: 'admin-detail' });
-    const mobs = catalog?.mobs ?? MOB_DEFS.map((m) => ({ id: m.id, name: m.name, category: m.category }));
+    const mobs = catalog?.mobs ?? MOB_DEFS.filter((m) => !m.figure).map((m) => ({ id: m.id, name: m.name, category: m.category }));
     const catsSeen = [...new Set(mobs.map((m) => m.category))];
     let selected: (typeof mobs)[number] | null = null;
     const chip = (id: string, name: string): HTMLElement => {
@@ -1047,52 +1049,100 @@ export function adminScreen(host: AdminHost): Screen {
   const renderHaunt = (): HTMLElement => {
     const state = el('div', { class: 'admin-stats' });
     const controls = el('div', {});
-    const mmss = (sec: number): string => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
+    const stages = el('div', {});
+    const blurb = el('div', { class: 'muted small haunt-blurb' });
+    const picker = el('div', { class: 'admin-chips haunt-picker' });
+    const mmss = (sec: number): string => `${Math.floor(Math.max(0, sec) / 60)}:${String(Math.max(0, sec) % 60).padStart(2, '0')}`;
     let last: HauntStatus | null = null;
     let armed = false;
+    /** Who the panel is showing: whoever is haunting, or the one picked. */
+    const shown = (): HauntCharacter => (last?.active ? last.character : memory.hauntChar);
+    const castName = (c: HauntCharacter): string => HAUNT_CAST[c].name;
+    const endingName = (c: HauntCharacter, id: string): string => HAUNT_CAST[c].endings.find((e) => e.id === id)?.name ?? id;
+    const renderPicker = (): void => {
+      clear(picker);
+      const locked = !!last?.active;
+      for (const c of HAUNT_CHARACTERS) {
+        const b = btn(castName(c), () => {
+          if (locked) return;
+          memory.hauntChar = c;
+          renderPicker();
+          renderControls();
+          renderStages();
+        }, `btn chip haunt-char haunt-char-${c}${shown() === c ? ' active' : ''}`);
+        b.disabled = locked && shown() !== c;
+        picker.append(b);
+      }
+      blurb.textContent = HAUNT_CAST[shown()].blurb + (shown() === 'herobrine' ? '' : ' (The Admin Panel only: never by itself.)');
+    };
+    const renderStages = (): void => {
+      clear(stages);
+      for (const x of HAUNT_CAST[shown()].stages) stages.append(el('div', { class: 'small' }, el('span', { class: 'yellow' }, `${x.name}: `), x.what));
+    };
     const showState = (d: HauntStatus | undefined): void => {
       if (!d) return;
-      const changed = !last || last.active !== d.active || last.canErase !== d.canErase;
+      const changed = !last || last.active !== d.active || last.canErase !== d.canErase || last.character !== d.character || last.auto !== d.auto || last.autoState !== d.autoState;
       last = d;
       clear(state);
-      const st = HAUNT_STAGES.find((x) => x.id === d.stage);
+      const c = d.character;
+      const cast = HAUNT_CAST[c];
+      const st = cast.stages.find((x) => x.id === d.stage);
+      const talkStage = cast.stages.find((x) => x.at === cast.talkAt) ?? cast.stages[0]!;
+      const finaleAt = Math.floor(d.total * cast.finaleAt);
       const rows: [string, string][] = d.active
         ? [
+            ['Haunting', castName(c)],
+            ['Started', d.auto ? 'By itself (the automatic haunting)' : 'From the Admin Panel'],
             ['Stage', st ? st.name : '-'],
             ['Time', `${mmss(d.elapsed)} / ${mmss(d.total)}`],
-            ['Ending', HAUNT_ENDING_NAMES[d.ending as HauntEnding] ?? d.ending],
-            // He only answers in chat from "He speaks" on
-            ['Talks back', d.elapsed >= Math.floor(d.total * HAUNT_TALK_AT) ? 'Yes: talk to him in chat' : `From "He speaks", in ${mmss(Math.floor(d.total * HAUNT_TALK_AT) - d.elapsed)}`],
-            ['At the end', d.erase ? 'The world is deleted' : 'The world is kept (a fake deletion)'],
-            ['Blocks he changed', String(d.changes)],
+            ['Time left', mmss(d.total - d.elapsed)],
+            ['The end', d.elapsed >= finaleAt ? 'Now' : `In ${mmss(finaleAt - d.elapsed)}`],
+            ['Ending', endingName(c, d.ending)],
+            // It only answers in chat from its "talks back" stage on
+            ['Talks back', d.elapsed >= Math.floor(d.total * cast.talkAt) ? `Yes: talk to ${c === 'herobrine' ? 'him' : 'it'} in chat` : `From "${talkStage.name}", in ${mmss(Math.floor(d.total * cast.talkAt) - d.elapsed)}`],
+            ['At the end', d.erase ? 'The world is deleted' : 'The world is kept'],
+            ['Blocks changed', String(d.changes)],
           ]
-        : [['Stage', 'Not haunted'], ...(d.changes ? ([['Blocks he changed', String(d.changes)]] as [string, string][]) : [])];
+        : [['Haunting', 'Nobody'], ...(d.changes ? ([['Blocks changed', String(d.changes)]] as [string, string][]) : [])];
+      if (d.autoState !== 'none')
+        rows.push(['Automatic haunting', d.autoState === 'waiting' ? `Waiting: Herobrine comes after ${mmss(d.autoIn ?? 0)} more play` : d.autoState === 'running' ? 'Running now' : 'Over, for good']);
       for (const [k, v] of rows) state.append(el('div', { class: 'row' }, el('span', { class: 'muted' }, k), el('span', {}, v)));
       if (st && d.active) state.append(el('div', { class: 'muted small' }, st.what));
-      if (changed) renderControls();
+      if (changed) {
+        renderPicker();
+        renderControls();
+        renderStages();
+      }
     };
-    const op = (o: 'status' | 'stop' | 'skip'): void => void send({ a: 'haunt', op: o }).then((r) => showState(r.data as HauntStatus));
+    const op = (o: HauntOp, extra: Partial<AdminAction & { a: 'haunt' }> = {}): void => void send({ a: 'haunt', op: o, ...extra } as AdminAction).then((r) => showState(r.data as HauntStatus));
     const renderControls = (): void => {
       clear(controls);
       const d = last;
       if (!d) return;
+      const c = shown();
+      const cast = HAUNT_CAST[c];
       if (d.active) {
+        const left = field({ type: 'number', min: 0, max: HAUNT_MAX_MINUTES, value: '1', class: 'field admin-num haunt-finale-in' });
         controls.append(
-          el('div', { class: 'admin-chips' }, btn('Skip to the next stage', () => op('skip'), 'btn chip'), btn('Stop (puts everything back)', () => op('stop'), 'btn chip')),
-          el('div', { class: 'muted small' }, 'Stop ends it at once and puts back every block he placed or took.'),
+          el('div', { class: 'admin-chips' }, btn('Skip to the next stage', () => op('skip'), 'btn chip haunt-skip'), btn('Straight to the end', () => op('finale'), 'btn chip haunt-to-end')),
+          el('div', { class: 'row' }, label_('The end begins in (minutes)'), left, btn('Set', () => op('finale_in', { minutes: Math.max(0, Math.min(HAUNT_MAX_MINUTES, Math.round(Number(left.value) || 0))) }), 'btn chip haunt-finale-in-set')),
+          el('div', { class: 'admin-chips' }, btn(d.auto ? 'End it (for good: puts everything back)' : 'Stop (puts everything back)', () => op('stop'), 'btn chip haunt-stop'), ...(d.auto ? [btn('Reset (from the beginning)', () => op('restart'), 'btn chip haunt-restart')] : [])),
+          el('div', { class: 'muted small' }, d.auto ? 'This is the automatic haunting. End stops it for good and puts back every block it changed; Reset starts it again from the beginning. Moving it along from here means it does not count as having been through it.' : 'Stop ends it at once and puts back every block it placed or took, its monsters, the time and the weather.'),
         );
         return;
       }
+      if (d.autoState === 'waiting') controls.append(el('div', { class: 'admin-chips' }, btn('Start the automatic haunting now', () => op('restart'), 'btn chip haunt-restart')));
       if (!d.canErase) memory.hauntErase = false;
+      memory.hauntMinutes ||= cast.defaultMinutes;
       const minutes = field({ type: 'number', min: HAUNT_MIN_MINUTES, max: HAUNT_MAX_MINUTES, value: String(memory.hauntMinutes), class: 'field admin-num haunt-minutes' });
       minutes.addEventListener('change', () => {
-        memory.hauntMinutes = Math.max(HAUNT_MIN_MINUTES, Math.min(HAUNT_MAX_MINUTES, Math.round(Number(minutes.value) || HAUNT_DEFAULT_MINUTES)));
+        memory.hauntMinutes = Math.max(HAUNT_MIN_MINUTES, Math.min(HAUNT_MAX_MINUTES, Math.round(Number(minutes.value) || cast.defaultMinutes)));
         minutes.value = String(memory.hauntMinutes);
       });
       const presets = el(
         'div',
         { class: 'admin-chips' },
-        ...[5, 10, 15, 30, 60].map((m) =>
+        ...[5, 10, 15, 20, 30, 60].map((m) =>
           btn(`${m} min`, () => {
             memory.hauntMinutes = m;
             minutes.value = String(m);
@@ -1107,13 +1157,13 @@ export function adminScreen(host: AdminHost): Screen {
           return;
         }
         armed = false;
-        void send({ a: 'haunt', op: 'start', minutes: memory.hauntMinutes, erase: memory.hauntErase, ending: memory.hauntEnding }).then((r) => showState(r.data as HauntStatus));
+        void send({ a: 'haunt', op: 'start', minutes: memory.hauntMinutes, erase: memory.hauntErase, ending: memory.hauntEnding[c], ...(c !== 'herobrine' ? { character: c } : {}) }).then((r) => showState(r.data as HauntStatus));
       }, 'btn haunt-start');
       const updateWarn = (): void => {
         armed = false;
-        start.textContent = 'Start the haunting';
+        start.textContent = `Start the haunting (${castName(c)})`;
         warn.className = 'small haunt-warn ' + (memory.hauntErase ? 'error-text' : 'muted');
-        warn.textContent = memory.hauntErase ? 'The world is permanently deleted at the end, for everyone. This cannot be undone.' : 'At the end everyone is thrown out (a fake ban, or SERVER MEMORY CORRUPTED), but the world is kept.';
+        warn.textContent = memory.hauntErase ? 'The world is permanently deleted at the end, for everyone. This cannot be undone.' : 'At the end everyone is thrown out on its end screen, but the world is kept.';
       };
       const finale = el('button', { class: 'btn haunt-finale', disabled: !d.canErase }) as HTMLButtonElement;
       const label = (): string => `At the end: ${memory.hauntErase ? 'Delete the world' : 'Keep the world'}`;
@@ -1125,28 +1175,26 @@ export function adminScreen(host: AdminHost): Screen {
         finale.textContent = label();
         updateWarn();
       });
-      // How it ends: the fake ban, his lair inside the computer, or either (the lair one time in four)
+      // How it ends: one of the character's own endings (random picks among them)
       const ending = el('button', { class: 'btn haunt-ending' }) as HTMLButtonElement;
-      const endingLabel = (): string => `Ending: ${HAUNT_ENDING_NAMES[memory.hauntEnding]}`;
       const endingHelp = el('div', { class: 'muted small haunt-ending-help' });
+      const ids = cast.endings.map((e) => e.id);
+      if (!ids.includes(memory.hauntEnding[c])) memory.hauntEnding[c] = ids[0]!;
       const updateEnding = (): void => {
-        ending.textContent = endingLabel();
-        endingHelp.textContent =
-          memory.hauntEnding === 'random'
-            ? 'Usually the jumpscare and the fake ban; one time in four he drags everyone into his lair inside the computer instead.'
-            : memory.hauntEnding === 'ban'
-              ? 'He chases everyone down: a jumpscare, then a fake ban screen.'
-              : 'He drags everyone into his lair inside the computer: wired into chairs, shocked, SERVER MEMORY CORRUPTED, back to the title.';
+        const e = cast.endings.find((x) => x.id === memory.hauntEnding[c])!;
+        ending.textContent = `Ending: ${e.name}`;
+        ending.disabled = ids.length < 2;
+        endingHelp.textContent = e.help;
       };
       ending.addEventListener('click', (e) => {
         e.stopPropagation();
-        memory.hauntEnding = HAUNT_ENDINGS[(HAUNT_ENDINGS.indexOf(memory.hauntEnding) + 1) % HAUNT_ENDINGS.length]!;
+        memory.hauntEnding[c] = ids[(ids.indexOf(memory.hauntEnding[c]) + 1) % ids.length]!;
         updateEnding();
       });
       updateEnding();
       updateWarn();
       controls.append(
-        label_('How long, from the first sighting to the end (minutes)'),
+        label_('How long, from the first sign of it to the end (minutes)'),
         el('div', { class: 'row' }, minutes, presets),
         ending,
         endingHelp,
@@ -1157,6 +1205,39 @@ export function adminScreen(host: AdminHost): Screen {
       );
     };
     const label_ = (t: string): HTMLElement => el('div', { class: 'label' }, t);
+    // Tests: it shows itself near you; say something to it (no haunting needed)
+    const talkIn = field({ type: 'text', maxLength: 200, placeholder: 'Say something to it...', class: 'field haunt-talk-text' });
+    const talkOut = el('div', { class: 'admin-stats haunt-talk-out' });
+    const talk = (): void => {
+      const text = talkIn.value.trim();
+      if (!text) return;
+      const c = shown();
+      clear(talkOut);
+      talkOut.append(el('div', { class: 'muted small' }, 'Waiting for an answer...'));
+      void send({ a: 'haunt', op: 'talk', text, ...(c !== 'herobrine' ? { character: c } : {}) }).then((r) => {
+        clear(talkOut);
+        const t = (r.data as { talk?: { line: string; source: 'claude' | 'scripted'; reason?: string; speaker: string } } | undefined)?.talk;
+        if (!t) return void talkOut.append(el('div', { class: 'error-text small' }, r.text || 'No answer.'));
+        const why: Record<string, string> = { off: 'the AI voice is not set up here', busy: 'too many messages, wait a little', limit: "today's AI answers are used up", refused: 'the hub said no', unreachable: 'the hub could not be reached', none: 'no answer came back', unsaid: 'its answer was filtered out' };
+        talkOut.append(
+          el('div', { class: 'row' }, el('span', { class: 'muted' }, 'You'), el('span', {}, text)),
+          el('div', { class: 'row' }, el('span', { class: 'muted' }, t.speaker), el('span', { class: `haunt-talk-line haunt-talk-${t.source}` }, t.line)),
+          el('div', { class: 'row' }, el('span', { class: 'muted' }, 'Answered by'), el('span', { class: t.source === 'claude' ? 'yellow' : '' }, t.source === 'claude' ? 'Claude' : `The scripted lines${t.reason ? ` (${why[t.reason] ?? t.reason})` : ''}`)),
+        );
+      });
+    };
+    talkIn.addEventListener('keydown', (e) => {
+      e.stopPropagation();
+      if ((e as KeyboardEvent).key === 'Enter') talk();
+    });
+    const tests = el(
+      'div',
+      {},
+      el('div', { class: 'admin-chips' }, btn('Show it near me', () => op('appear', shown() !== 'herobrine' ? { character: shown() } : {}), 'btn chip haunt-appear')),
+      label_('Talk to it (a test: nothing else happens, and nothing it says does anything)'),
+      el('div', { class: 'row' }, talkIn, btn('Say it', talk, 'btn chip haunt-talk-send')),
+      talkOut,
+    );
     op('status');
     // The status follows along while the tab is open
     perfTimer = setInterval(() => {
@@ -1166,20 +1247,13 @@ export function adminScreen(host: AdminHost): Screen {
       }
       void host.request({ a: 'haunt', op: 'status' }).then((r) => !destroyed && showState(r.data as HauntStatus));
     }, 1000);
+    renderPicker();
+    renderStages();
     return el(
       'div',
       { class: 'admin-cols' },
-      el(
-        'div',
-        { class: 'admin-col' },
-        el(
-          'div',
-          { class: 'muted small' },
-          'Herobrine haunts this world, the way the old stories tell it: a figure far off in the fog, redstone torches nobody placed, cobblestone crosses in the air, 2x2 tunnels, leafless trees. He comes closer, speaks, and at the end he comes for everyone: a jumpscare, then everyone is thrown out with a fake ban screen. Everyone in the world sees it, and nobody is told it was started.',
-        ),
-        section('The Haunting', controls),
-      ),
-      el('div', { class: 'admin-col' }, section('Status', state), section('What happens', ...HAUNT_STAGES.map((x) => el('div', { class: 'small' }, el('span', { class: 'yellow' }, `${x.name}: `), x.what)))),
+      el('div', { class: 'admin-col' }, section('Who', picker, blurb), section('The Haunting', controls), section('Tests', tests)),
+      el('div', { class: 'admin-col' }, section('Status', state), section('What happens', stages)),
     );
   };
 

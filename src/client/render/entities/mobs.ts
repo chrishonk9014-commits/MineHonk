@@ -172,6 +172,8 @@ interface MobVisualDef {
   extra?: (m: BoxModel, e: ClientEntity, time: number) => void;
   /** Full-bright (can depend on the entity, e.g. a Voidbound Enderman). */
   glow?: boolean | ((e: ClientEntity) => boolean);
+  /** V7 phase 4: never darker than this (the Cave Dweller's pale skin at the edge of the light). */
+  minLight?: number;
   transparent?: boolean;
 }
 
@@ -2177,6 +2179,169 @@ V.herobrine = {
   nameY: 2.3,
 };
 
+// V7 phase 4: the Haunting's other characters. All three are figures the
+// server moves itself (hbAnim says what they are doing).
+
+/** The arms and legs still, the head turned the way it looks (a figure standing and watching). */
+function standStill(m: BoxModel, e: ClientEntity): void {
+  for (const n of ['rightLeg', 'leftLeg', 'rightArm', 'leftArm']) m.part(n)?.rotation.set(0, 0, 0);
+  const head = m.part('head');
+  if (head) {
+    head.rotation.set(0, angle(e.headYaw - e.yaw), 0);
+  }
+  m.root.position.y = 0;
+}
+
+// Null: a figure of pure black, no face at all. It never moves while you
+// look at it; once in a while it is not quite there for a frame.
+V.null_entity = {
+  parts: () =>
+    humanoidParts({
+      head: { all: '#060606' },
+      body: { all: '#060606' },
+      arms: { all: '#070707' },
+      legs: { all: '#050505' },
+      face: (p) => p.speckle('front', 'rgba(40,40,40,0.5)', 0.04),
+      bodyPaint: (p) => p.speckle('front', 'rgba(30,30,30,0.5)', 0.05),
+    }),
+  anim: (m, e, alpha) => {
+    const anim = String(e.meta.hbAnim ?? 'stare');
+    if (anim === 'idle') animateHumanoid(m, e, alpha);
+    else standStill(m, e);
+  },
+  extra: (m, e, time) => {
+    const t = Math.floor(time / 2);
+    // A dropped frame now and then, like a signal breaking up
+    m.root.visible = ((t * 6151 + e.id * 92821) % 113) > 2;
+  },
+  nameY: 2.3,
+};
+
+// Green Steve: Steve, but green all over, from the old story. He waves.
+V.green_steve = {
+  parts: () =>
+    humanoidParts({
+      head: { all: '#5cae48', top: '#2c5a1c', back: '#2c5a1c' },
+      body: { all: '#2f8f3a' },
+      arms: { all: '#5cae48', top: '#2f8f3a' },
+      legs: { all: '#1f5a3a', bottom: '#2a3a2a' },
+      face: (p) => {
+        // Steve's face, gone green: the hair line, the eyes, the nose, the mouth
+        p.px('front', 0, 0, '#2c5a1c', 8, 2);
+        p.px('front', 0, 2, '#2c5a1c', 1, 1);
+        p.px('front', 7, 2, '#2c5a1c', 1, 1);
+        p.px('front', 1, 4, '#e8ffe0', 1, 1);
+        p.px('front', 2, 4, '#1c3a6a', 1, 1);
+        p.px('front', 5, 4, '#1c3a6a', 1, 1);
+        p.px('front', 6, 4, '#e8ffe0', 1, 1);
+        p.px('front', 3, 5, '#3e8a30', 2, 1);
+        p.px('front', 2, 6, '#2a6420', 4, 1);
+        p.px('left', 0, 0, '#2c5a1c', 8, 2);
+        p.px('right', 0, 0, '#2c5a1c', 8, 2);
+      },
+      bodyPaint: (p) => p.speckle('front', 'rgba(0,40,0,0.08)', 0.2),
+    }),
+  anim: (m, e, alpha, time) => {
+    const anim = String(e.meta.hbAnim ?? 'stare');
+    if (anim === 'idle') {
+      animateHumanoid(m, e, alpha);
+      return;
+    }
+    standStill(m, e);
+    if (anim === 'wave') {
+      // One arm up, waving, far too long
+      const ra = m.part('rightArm');
+      if (ra) {
+        ra.rotation.z = 2.5 + Math.sin(time * 0.35) * 0.35;
+        ra.rotation.x = 0;
+      }
+    }
+  },
+  nameY: 2.3,
+};
+
+// The Cave Dweller: very tall and thin and pale, arms down past its knees,
+// two hollow black eyes. It stands, frozen, when watched; it runs and
+// crawls on all fours; it lunges with its arms out.
+const dwellerTwitch = new WeakMap<ClientEntity, number>();
+V.cave_dweller = {
+  parts: () => [
+    { name: 'body', pivot: [0, 22, 0], from: [-3, 0, -1.5], size: [6, 14, 3], colors: { all: '#d6d0c2', bottom: '#bdb6a6' }, paint: (p) => (p.speckle('front', 'rgba(120,110,95,0.35)', 0.12), p.px('front', 1, 3, 'rgba(150,140,125,0.6)', 4, 1), p.px('front', 1, 5, 'rgba(150,140,125,0.6)', 4, 1), p.px('front', 1, 7, 'rgba(150,140,125,0.6)', 4, 1)) },
+    {
+      name: 'head',
+      parent: 'body',
+      pivot: [0, 14, 0],
+      from: [-3, 0, -3],
+      size: [6, 9, 6],
+      colors: { all: '#ddd7c9', top: '#cfc8b8' },
+      paint: (p) => {
+        // Two hollow black eyes, a long dark mouth
+        p.px('front', 1, 2, '#0a0806', 2, 3);
+        p.px('front', 4, 2, '#0a0806', 2, 3);
+        p.px('front', 1, 7, '#2a2420', 4, 1);
+        p.speckle('front', 'rgba(140,130,115,0.3)', 0.08);
+      },
+    },
+    { name: 'rightArm', parent: 'body', pivot: [-4, 13, 0], from: [-1, -23, -1], size: [2, 24, 2], colors: { all: '#d2ccbe', bottom: '#8e8676' } },
+    { name: 'leftArm', parent: 'body', pivot: [4, 13, 0], from: [-1, -23, -1], size: [2, 24, 2], colors: { all: '#d2ccbe', bottom: '#8e8676' } },
+    { name: 'rightLeg', pivot: [-1.5, 22, 0], from: [-1.25, -22, -1.25], size: [2.5, 22, 2.5], colors: { all: '#cfc9bb', bottom: '#8e8676' } },
+    { name: 'leftLeg', pivot: [1.5, 22, 0], from: [-1.25, -22, -1.25], size: [2.5, 22, 2.5], colors: { all: '#cfc9bb', bottom: '#8e8676' } },
+  ],
+  anim: (m, e, alpha, time) => {
+    const anim = String(e.meta.hbAnim ?? 'stare');
+    const P = (n: string): THREE.Object3D | undefined => m.part(n);
+    const body = P('body');
+    const head = P('head');
+    const ra = P('rightArm');
+    const la = P('leftArm');
+    const rl = P('rightLeg');
+    const ll = P('leftLeg');
+    const walk = e.prevWalkDist + (e.walkDist - e.prevWalkDist) * alpha;
+    const swing = Math.sin(walk * 0.9) * 0.9 * Math.min(1, e.limbSpeed * 1.5 + 0.15);
+    m.root.position.y = 0;
+    if (body) body.rotation.set(0, 0, 0);
+    if (anim === 'crawl' || anim === 'drag') {
+      // Down on all fours: the body pitched forward, the long arms its front legs
+      const lean = 1.3;
+      if (body) body.rotation.x = lean;
+      if (head) head.rotation.set(-1.05, 0, 0);
+      if (ra) ra.rotation.set(-lean + swing * (anim === 'drag' ? 0.3 : 0.8) - (anim === 'drag' ? 0.5 : 0), 0, 0);
+      if (la) la.rotation.set(-lean - swing * (anim === 'drag' ? 0.3 : 0.8) - (anim === 'drag' ? 0.5 : 0), 0, 0);
+      if (rl) rl.rotation.set(-swing * 0.8, 0, 0);
+      if (ll) ll.rotation.set(swing * 0.8, 0, 0);
+      return;
+    }
+    if (anim === 'lunge') {
+      if (body) body.rotation.x = 0.55;
+      if (head) head.rotation.set(-0.4, 0, 0);
+      if (ra) ra.rotation.set(-2.0, 0, -0.15);
+      if (la) la.rotation.set(-2.0, 0, 0.15);
+      if (rl) rl.rotation.set(0.5, 0, 0);
+      if (ll) ll.rotation.set(-0.4, 0, 0);
+      return;
+    }
+    if (anim === 'idle') {
+      if (rl) rl.rotation.set(swing, 0, 0);
+      if (ll) ll.rotation.set(-swing, 0, 0);
+      if (ra) ra.rotation.set(-swing * 0.6, 0, 0.05);
+      if (la) la.rotation.set(swing * 0.6, 0, -0.05);
+      if (head) head.rotation.set(0, angle(e.headYaw - e.yaw), 0);
+      return;
+    }
+    // Standing, frozen, watching; the head now and then jerks to one side
+    standStill(m, e);
+    let tw = dwellerTwitch.get(e) ?? 0;
+    if (Math.floor(time) % 47 === e.id % 47) tw = (Math.floor(time / 47) % 2 ? 1 : -1) * 0.35;
+    tw *= 0.93;
+    dwellerTwitch.set(e, tw);
+    if (head) head.rotation.z = 0.12 + tw;
+    if (ra) ra.rotation.z = 0.06;
+    if (la) la.rotation.z = -0.06;
+  },
+  minLight: 0.38,
+  nameY: 3.1,
+};
+
 function glitchJitter(m: BoxModel, e: ClientEntity, time: number): void {
   const t = Math.floor(time / 2);
   const glitch = ((t * 7919 + e.id * 104729) % 97) < 6;
@@ -2923,7 +3088,7 @@ function makeVisual(def: MobVisualDef, e: ClientEntity, ctx: VisualContext): Ent
   const baseSet = visual.setBrightness.bind(visual);
   const glow = typeof def.glow === 'function' ? def.glow(e) : !!def.glow;
   visual.setBrightness = (v) => {
-    const b = glow ? Math.max(v, 0.85) : v;
+    const b = glow ? Math.max(v, 0.85) : Math.max(v, def.minLight ?? 0);
     baseSet(b);
     heldMat?.color.setScalar(b);
     headwear?.setBrightness(b);

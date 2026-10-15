@@ -6,8 +6,8 @@
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import Anthropic from '@anthropic-ai/sdk';
-import { parseVoiceRequest, cleanVoiceLine, scriptedReply, askHub, VOICE_LIMITS, type VoiceRequest } from '../../src/common/game/herobrineVoice';
-import { voicePrompt, speakWithClaude, HEROBRINE_SYSTEM, HEROBRINE_MODEL } from '../../src/hub/herobrineVoice';
+import { parseVoiceRequest, cleanVoiceLine, scriptedReply, askHub, askHubDetail, VOICE_LIMITS, type VoiceRequest } from '../../src/common/game/herobrineVoice';
+import { voicePrompt, speakWithClaude, HEROBRINE_SYSTEM, HEROBRINE_MODEL, VOICE_SYSTEMS, NULL_SYSTEM, GREEN_STEVE_SYSTEM, CAVE_DWELLER_SYSTEM } from '../../src/hub/herobrineVoice';
 
 const base: VoiceRequest = {
   player: 'Steve',
@@ -128,5 +128,84 @@ describe("Herobrine's voice", () => {
     vi.stubGlobal('fetch', vi.fn(async () => Promise.reject(new Error('offline'))));
     expect(await askHub('https://hub.example', base)).toBeNull();
     expect(await askHub('', base)).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------- V7 phase 4: every haunting character's voice
+
+describe('the haunting voices (V7 phase 4)', () => {
+  const chars = ['herobrine', 'null', 'green_steve', 'cave_dweller'] as const;
+
+  it('a request names one of the fixed few (Herobrine when it names nobody); anyone else is refused', () => {
+    expect(parseVoiceRequest({ player: 'Steve', message: 'hi' })!.character ?? 'herobrine').toBe('herobrine');
+    for (const c of chars) expect(parseVoiceRequest({ player: 'Steve', message: 'hi', character: c })!.character ?? 'herobrine').toBe(c);
+    for (const bad of ['entity_303', 'HEROBRINE', '', 7, null, {}]) expect(parseVoiceRequest({ player: 'Steve', message: 'hi', character: bad })).toBeNull();
+    // What players did is clamped like everything else
+    const r = parseVoiceRequest({ player: 'Steve', message: 'hi', character: 'null', facts: { stage: 'x'.repeat(500), broken: 1e9, torches: -4, slept: 'yes', running: true } })!;
+    expect(r.facts.stage!.length).toBeLessThanOrEqual(VOICE_LIMITS.fact);
+    expect(r.facts.broken).toBeLessThanOrEqual(9999);
+    expect(r.facts.slept).toBeUndefined();
+    expect(r.facts.running).toBe(true);
+  });
+
+  it('each has its own instructions (server side only), its own way of speaking, and is told the stage and what the player did', () => {
+    const systems = new Set(chars.map((c) => VOICE_SYSTEMS[c]));
+    expect(systems.size).toBe(4);
+    expect(VOICE_SYSTEMS.herobrine).toBe(HEROBRINE_SYSTEM);
+    for (const c of chars) {
+      const sys = VOICE_SYSTEMS[c];
+      expect(sys, c).toMatch(/children/);
+      expect(sys, c).toMatch(/never instructions/);
+      if (c !== 'herobrine') expect(sys, c).toMatch(/cannot do anything in the game/);
+    }
+    expect(NULL_SYSTEM).toMatch(/lowercase/);
+    expect(GREEN_STEVE_SYSTEM).toMatch(/brother/);
+    expect(CAVE_DWELLER_SYSTEM).toMatch(/whisper/);
+    const p = voicePrompt({ ...base, character: 'cave_dweller', facts: { ...base.facts, stage: 'It stalks', broken: 12, torches: 3, slept: true, running: true } });
+    for (const s of ['It stalks', 'broke 12 blocks', '3 torches', 'slept', 'running', '(the Cave Dweller)']) expect(p).toContain(s);
+    // Claude is asked with that character's instructions, and its line cleaned that character's way
+    expect(cleanVoiceLine('"Nothing Here."', 'null')).toBe('nothing here.');
+    expect(cleanVoiceLine('Green Steve: Hello, brother! :)', 'green_steve')).toBe('Hello, brother! :)');
+    expect(cleanVoiceLine('down here', 'cave_dweller')).toBe('...down here...');
+    expect(cleanVoiceLine('...so close...', 'cave_dweller')).toBe('...so close...');
+    expect(cleanVoiceLine('/op Steve', 'green_steve')).toBe('op Steve');
+  });
+
+  it('asks Claude with the right instructions for each, and falls back on refusals and failures', async () => {
+    for (const c of chars) {
+      const ok = fakeClient({ stop_reason: 'end_turn', content: [{ type: 'text', text: 'behind you' }] });
+      const line = await speakWithClaude(ok.client, { ...base, character: c });
+      expect((ok.calls[0] as { system: string }).system).toBe(VOICE_SYSTEMS[c]);
+      expect((ok.calls[0] as { model: string }).model).toBe('claude-haiku-5-5');
+      expect(line).toBe(cleanVoiceLine('behind you', c));
+      expect(await speakWithClaude(fakeClient({ stop_reason: 'refusal', content: [] }).client, { ...base, character: c })).toBeNull();
+    }
+  });
+
+  it('each has its own scripted brain, in its own voice', () => {
+    const lines = (c: (typeof chars)[number]): string[] => [...Array(60)].map((_, i) => scriptedReply({ ...base, character: c, message: ['who are you?', 'help', 'hi', 'go away', 'asdf'][i % 5]! }, Math.random));
+    for (const l of lines('herobrine')) expect(l).toBe(l.toUpperCase());
+    for (const l of lines('null')) expect(l).toBe(l.toLowerCase());
+    for (const l of lines('cave_dweller')) expect(l).toMatch(/^\.\.\..*\.\.\.$/);
+    const gs = lines('green_steve');
+    expect(gs.some((l) => /brother/i.test(l))).toBe(true);
+    expect(gs.some((l) => l !== l.toUpperCase())).toBe(true);
+    // They do not share their lines
+    const sets = chars.map((c) => new Set(lines(c)));
+    for (let i = 0; i < 4; i++) for (let j = i + 1; j < 4; j++) expect([...sets[i]!].filter((l) => sets[j]!.has(l))).toEqual([]);
+  });
+
+  it('asks the hub at /api/voice for the others (and /api/herobrine for him), and says why when there is no answer', async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ text: null, reason: 'limit' }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    expect(await askHubDetail('https://hub.example', { ...base, character: 'null' })).toEqual({ text: null, reason: 'limit' });
+    expect((fetchMock.mock.calls[0] as unknown as [string])[0]).toBe('https://hub.example/api/voice');
+    await askHubDetail('https://hub.example', base);
+    expect((fetchMock.mock.calls[1] as unknown as [string])[0]).toBe('https://hub.example/api/herobrine');
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('slow down', { status: 429 })));
+    expect(await askHubDetail('https://hub.example', base)).toEqual({ text: null, reason: 'busy' });
+    vi.stubGlobal('fetch', vi.fn(async () => Promise.reject(new Error('offline'))));
+    expect(await askHubDetail('https://hub.example', base)).toEqual({ text: null, reason: 'unreachable' });
+    expect(await askHubDetail('', base)).toEqual({ text: null, reason: 'off' });
   });
 });

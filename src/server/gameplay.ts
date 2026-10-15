@@ -166,6 +166,8 @@ export function installGameplay(server: GameServer): void {
     if (m.type === 'ender_dragon') end.fight.onDeath(m, killer, info);
     else if (m.type === 'the_error') errorBoss.onDeath(m, killer, info);
     else if (m.type === 'herobrine') herobrine.onBossDeath(m, killer, info);
+    // V7 phase 4: the Haunting's other figures are only ever figures: gone, nothing dropped
+    else if (m.def.figure) m.remove();
     // V6 phase 5: the End Guardian (and its pylons and orbs)
     else if (guardian.onDeath(m, killer)) return true;
     // Other bosses (the Glitch Beast) drop their loot like any mob

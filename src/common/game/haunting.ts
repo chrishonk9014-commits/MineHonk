@@ -113,6 +113,8 @@ export interface HauntStatus {
   auto: boolean;
   /** An automatic haunting waiting to begin: seconds of play left until it does (the panel only). */
   autoIn?: number;
+  /** This world's automatic haunting: none (no roll, or it did not come up), waiting, running, or over for good. */
+  autoState: 'none' | 'waiting' | 'running' | 'over';
   /** Seconds in, and of the whole. */
   elapsed: number;
   total: number;

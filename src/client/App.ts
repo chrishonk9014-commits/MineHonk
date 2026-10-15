@@ -30,12 +30,13 @@ import { el, clear } from './ui/dom';
 import * as S from './ui/Screens';
 import { listWorlds, deleteWorld, updateWorld, exportWorld, importWorld } from '../server/storage/IndexedDBStorage';
 import type { NewWorldOptions } from '../server/world/LevelData';
-import { PROTOCOL_VERSION, type FakeBan } from '../common/net/protocol';
+import { PROTOCOL_VERSION, type FakeBan, type HauntEndScreen } from '../common/net/protocol';
 import { registryHash } from '../common/registry/hash';
 import { normalizeGodHearts, type GameMode } from '../common/game/gamemode';
 import { randomSeedString } from '../common/math/rng';
 import { seasonClock } from '../common/halloween/clock';
 import { seasonActive } from '../common/halloween/season';
+import { herobrineBeaten, recordHerobrineBeaten, backfillHerobrineBeaten, HEROBRINE_DEFEAT } from './hauntRecord';
 
 export class App implements GameHost, S.ScreenHost {
   private readonly stack: S.Screen[] = [];
@@ -69,6 +70,8 @@ export class App implements GameHost, S.ScreenHost {
   ) {
     this.loading.root.classList.add('hidden');
     ui.append(this.screenLayer, this.loading.root, this.fpsEl);
+    // A win over Herobrine from before it was kept (the automatic haunting's eligibility)
+    void backfillHerobrineBeaten(profile.uuid);
     window.addEventListener('keydown', this.onKey, true);
     window.addEventListener('resize', () => this.applyGuiScale());
     // Tabs can be closed or frozen at any time: save single player worlds when hidden
@@ -432,6 +435,7 @@ export class App implements GameHost, S.ScreenHost {
       cheats: mode === 'hardcore' ? false : options.cheats,
       owner: this.profile.uuid,
       halloween: options.halloween ?? 'seasonal',
+      hauntEligible: herobrineBeaten(),
     });
   }
 
@@ -633,6 +637,7 @@ export class App implements GameHost, S.ScreenHost {
       owner: this.profile.uuid,
       rules: { godHunger: o.godHunger, godHazards: o.godHazards, keepInventory: o.keepInventory },
       halloween: o.halloween,
+      hauntEligible: herobrineBeaten(),
     };
     await this.startWorld(id, create);
   }
@@ -667,6 +672,8 @@ export class App implements GameHost, S.ScreenHost {
         this.pendingHost = null;
         setTimeout(() => void this.beginHosting(o), 0);
       }
+      // He was beaten for real, in whichever world (kept on this device)
+      if (m.t === 'achievement' && m.id === HEROBRINE_DEFEAT) recordHerobrineBeaten();
       if (m.t === 'progress' && this.progressScreen) {
         if (this.progressScreen.kind === 'ach') (this.progressScreen.update as (u: Set<string>) => void)(new Set(m.achievements));
         else (this.progressScreen.update as (s: Record<string, number>) => void)(m.stats);
@@ -682,7 +689,7 @@ export class App implements GameHost, S.ScreenHost {
    * or (`corrupted`, the lair ending) straight to the title; with `erase` the
    * world is deleted (only ever this browser's own world).
    */
-  async quitToTitle(reason: string | null = null, kick: { ban?: FakeBan; erase?: boolean; corrupted?: boolean } = {}): Promise<void> {
+  async quitToTitle(reason: string | null = null, kick: { ban?: FakeBan; erase?: boolean; corrupted?: boolean; screen?: HauntEndScreen } = {}): Promise<void> {
     if (this.quitting) return;
     this.quitting = true;
     this.clearStack();
@@ -691,7 +698,7 @@ export class App implements GameHost, S.ScreenHost {
     const worldId = this.worldId;
     const hubId = this.hostSession?.details?.id ?? null;
     // Everyone else's ban goes out before the host's world closes under them
-    const haunted = !!kick.ban || !!kick.corrupted;
+    const haunted = !!kick.ban || !!kick.corrupted || !!kick.screen;
     if (haunted && this.hostSession) await new Promise((r) => setTimeout(r, 1500));
     this.setLoading(haunted ? '' : conn instanceof WorkerConnection ? 'Saving world...' : 'Disconnecting...');
     // Everyone else leaves a hosted world with the host
@@ -721,6 +728,8 @@ export class App implements GameHost, S.ScreenHost {
     gl?.clear(gl.COLOR_BUFFER_BIT);
     this.showTitle();
     if (kick.ban) this.push(S.fakeBanScreen(this, kick.ban));
+    // V7 phase 4: the other characters' end screens (Connection Lost: null, Hello brother...)
+    else if (kick.screen) this.push(S.hauntEndScreen(this, kick.screen));
     // The lair ending already said it: SERVER MEMORY CORRUPTED, then the title
     else if (reason && !kick.corrupted) this.push(S.messageScreen(this, 'Disconnected', reason));
     this.quitting = false;
@@ -920,7 +929,7 @@ export class App implements GameHost, S.ScreenHost {
     this.setPaused(false);
   }
 
-  exit(reason: string | null, kick?: { ban?: FakeBan; erase?: boolean; corrupted?: boolean }): void {
+  exit(reason: string | null, kick?: { ban?: FakeBan; erase?: boolean; corrupted?: boolean; screen?: HauntEndScreen }): void {
     void this.quitToTitle(reason, kick);
   }
 

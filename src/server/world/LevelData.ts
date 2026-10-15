@@ -7,6 +7,7 @@ import { seedFromString } from '../../common/math/rng';
 import type { DimensionId } from '../../common/data/biomes';
 import { normalizeHalloweenSetting, type HalloweenSetting } from '../../common/halloween/season';
 import { sanitizeVillageRecords, type VillageRecord } from '../../common/halloween/villages';
+import { rollAutoHaunt } from '../../common/game/haunting';
 
 export const LEVEL_VERSION = 1;
 /** Worlds created from V2 on generate with the Caves Update terrain (see GeneratorOptions.version). */
@@ -305,6 +306,22 @@ export interface NewWorldOptions {
   rules?: Partial<GameRules>;
   /** V7: Halloween content (default Seasonal). */
   halloween?: HalloweenSetting;
+  /**
+   * V7 phase 4: whoever is making it has beaten Herobrine for real: the
+   * automatic haunting's roll is made (once, now, never again).
+   */
+  hauntEligible?: boolean;
+}
+
+/** A real random number (not the seed's): the automatic haunting's roll. */
+export function realRandom(): number {
+  const c = (globalThis as { crypto?: { getRandomValues?(a: Uint32Array): Uint32Array } }).crypto;
+  if (c?.getRandomValues) {
+    const a = new Uint32Array(1);
+    c.getRandomValues(a);
+    return a[0]! / 2 ** 32;
+  }
+  return Math.random();
 }
 
 /** A browser-hosted world's link to the cloud hub (single player ignores it). */
@@ -355,7 +372,8 @@ export function createLevelData(o: NewWorldOptions): LevelData {
     allowlist: [],
     banned: [],
     operators: o.owner ? [o.owner] : [],
-    flags: {},
+    // The automatic haunting's roll, for a world made by someone who beat Herobrine
+    flags: o.hauntEligible ? { autoHaunt: rollAutoHaunt(realRandom, Date.now()) } : {},
     portals: [],
     roles: {},
     defaultRole: 'builder',

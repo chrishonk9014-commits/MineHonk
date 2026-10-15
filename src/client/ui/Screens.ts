@@ -10,7 +10,7 @@ import { GAME_MODE_INFO, GOD_HEART_PRESETS, normalizeGodHearts, type GameMode, t
 import { ACHIEVEMENTS } from '../../common/data/achievements';
 import { itemById } from '../../common/registry/items';
 import type { ItemIcons } from '../render/ItemIcons';
-import { LIMITS, type FakeBan } from '../../common/net/protocol';
+import { LIMITS, type FakeBan, type HauntEndScreen } from '../../common/net/protocol';
 import { updateLogScreen } from './UpdateLogScreen';
 import { undoCount, undoAutoOptimize } from '../game/AutoOptimizer';
 import { HALLOWEEN_SETTING_NAMES, type HalloweenSetting } from '../../common/halloween/season';
@@ -309,6 +309,28 @@ export function fakeBanScreen(host: ScreenHost, ban: FakeBan): Screen {
     note,
   );
   setTimeout(() => note.classList.add('shown'), 8000);
+  return { root, escapable: false };
+}
+
+/**
+ * V7 phase 4: how the Haunting's other characters leave everyone: Null with
+ * the old error (Connection Lost, Disconnected: null), Green Steve and the
+ * Cave Dweller each with a screen of their own. Like the fake ban, a note
+ * comes up after a few seconds: it was only the Haunting.
+ */
+export function hauntEndScreen(host: ScreenHost, end: HauntEndScreen): Screen {
+  const nul = end.style === 'null';
+  const { root, body } = titled(nul ? 'Connection Lost' : '', `screen ${nul ? 'dirt' : ''} center haunt-end haunt-end-${end.style}`);
+  const note = el('div', { class: 'fake-ban-note' }, end.deleted ? 'It was only the Haunting.' : end.note);
+  body.append(
+    nul ? el('div', { class: 'haunt-end-reason' }, end.reason) : el('div', { class: 'haunt-end-title' }, end.title),
+    nul ? el('div', {}) : el('div', { class: 'haunt-end-reason' }, end.reason),
+    end.deleted ? el('div', { class: 'fake-ban-deleted' }, 'This world has been deleted.') : el('div', {}),
+    el('div', { class: 'spacer' }),
+    button('Back to Title Screen', wrapClick(host, () => host.pop())),
+    note,
+  );
+  setTimeout(() => note.classList.add('shown'), 6000);
   return { root, escapable: false };
 }
 

@@ -77,6 +77,8 @@ export class Chat {
         line.append(body, a);
       } else line.append(body);
     } else line.append(body);
+    // V7 phase 4: the other characters' voices (Null flat and grey, Green Steve a player in green, the Cave Dweller a whisper)
+    if (kind === 'null' || kind === 'greensteve' || kind === 'dweller') line.classList.add(`chat-${kind}`);
     if (kind === 'herobrine') {
       line.classList.add('chat-herobrine');
       if (this.glitchFx !== 'off') {

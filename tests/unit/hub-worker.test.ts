@@ -53,6 +53,24 @@ describe('cloud hub (local Wrangler)', () => {
     ).rejects.toThrow(/403/);
   });
 
+  it('V7 phase 4: one voice endpoint for every haunting character, only the fixed few, and off without a key', async () => {
+    const c = new HubClient(hub.base, 'Voicey');
+    const req = { player: 'Steve', message: 'who are you?', history: [], facts: {} };
+    // No API key on this hub: everyone falls back to their scripted lines
+    for (const character of ['herobrine', 'null', 'green_steve', 'cave_dweller']) expect((await c.call('POST', '/voice', { ...req, character })).data).toEqual({ text: null, reason: 'off' });
+    // The old endpoint still answers (as Herobrine), for tabs opened before the update
+    expect((await c.call('POST', '/herobrine', req)).data).toEqual({ text: null, reason: 'off' });
+    expect((await c.call('POST', '/herobrine', { ...req, character: 'null' })).data).toEqual({ text: null, reason: 'off' });
+    // Anyone else is refused, and so is a request that names nobody
+    expect((await c.call('POST', '/voice', { ...req, character: 'entity_303' })).status).toBe(400);
+    expect((await c.call('POST', '/voice', { ...req, character: 7 })).status).toBe(400);
+    expect((await c.call('POST', '/voice', req)).status).toBe(400);
+    expect((await c.call('POST', '/voice', { character: 'null' })).status).toBe(400);
+    // Not from another site
+    const evil = await fetch(`${hub.base}/api/voice`, { method: 'POST', headers: { Origin: 'https://evil.example', 'Content-Type': 'application/json' }, body: JSON.stringify({ ...req, character: 'null' }) });
+    expect(evil.status).toBe(403);
+  });
+
   it('hosts a world, shows it to friends, and signs tickets only for who may join', async () => {
     const host = await new HubClient(hub.base, 'Hosty').signUp();
     const friend = await new HubClient(hub.base, 'Frieda').signUp();

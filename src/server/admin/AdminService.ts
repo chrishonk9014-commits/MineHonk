@@ -729,7 +729,7 @@ export class AdminService {
   spawn(p: ServerPlayer, type: string, count: number): { ok: boolean; text: string } {
     const s = this.server;
     const def = mobDef(type);
-    if (!def || !s.mobs) return { ok: false, text: `Unknown mob ${type}.` };
+    if (!def || !s.mobs || def.figure) return { ok: false, text: `Unknown mob ${type}.` };
     if (type === 'ender_dragon') {
       // In the End the dragon joins the real fight (with its arena rules)
       if (p.dim.id === 'end' && s.theEnd) {
@@ -1083,7 +1083,7 @@ export class AdminService {
     return {
       structures,
       biomes: bl,
-      mobs: MOB_DEFS.map((m) => ({ id: m.id, name: m.name, category: m.category })),
+      mobs: MOB_DEFS.filter((m) => !m.figure).map((m) => ({ id: m.id, name: m.name, category: m.category })),
       players: [...s.players.values()].map((o) => o.name),
       caves,
     };

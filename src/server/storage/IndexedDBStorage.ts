@@ -113,6 +113,26 @@ export async function listWorlds(): Promise<Record<string, unknown>[]> {
   return values.map((v, i) => ({ ...(v as Record<string, unknown>), id: String(keys[i]) }));
 }
 
+/**
+ * V7 phase 4: whether a saved player with this uuid, in any world on this
+ * device, has this advancement (a win from before it was kept elsewhere).
+ */
+export async function anyPlayerHas(uuid: string, achievement: string): Promise<boolean> {
+  const db = await openDb();
+  const s = db.transaction('players', 'readonly').objectStore('players');
+  return new Promise((resolve) => {
+    const r = s.openCursor();
+    r.onsuccess = () => {
+      const c = r.result;
+      if (!c) return resolve(false);
+      const v = c.value as { achievements?: unknown } | null;
+      if (String(c.key).endsWith(`/${uuid}`) && Array.isArray(v?.achievements) && v.achievements.includes(achievement)) return resolve(true);
+      c.continue();
+    };
+    r.onerror = () => resolve(false);
+  });
+}
+
 /** Deletes a world and all of its chunks, players and metadata. */
 export async function deleteWorld(worldId: string): Promise<void> {
   const db = await openDb();

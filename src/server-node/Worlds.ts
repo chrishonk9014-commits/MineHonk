@@ -112,13 +112,13 @@ export class Worlds {
 
   // ------------------------------------------------------------------ management
 
-  async create(owner: AccountInfo, o: NewWorldInput & { seed?: unknown; difficulty?: unknown; godHearts?: unknown }): Promise<WorldDetails> {
+  async create(owner: AccountInfo, o: NewWorldInput & { seed?: unknown; difficulty?: unknown; godHearts?: unknown; hauntEligible?: unknown }): Promise<WorldDetails> {
     const entry = await this.core.newEntry(owner, o, GAME_MODES);
     const mode = entry.mode as GameMode;
     const difficulty = DIFFICULTIES.includes(o.difficulty as Difficulty) ? (o.difficulty as Difficulty) : 'normal';
     const seed = typeof o.seed === 'string' && o.seed.trim() ? o.seed.trim().slice(0, 64) : randomBytes(6).toString('hex');
     const storage = new FileStorage(this.dir(entry.id), this.deps.log);
-    const server = await GameServer.open(storage, { id: entry.id, name: entry.name, seed, mode, difficulty, godHearts: normalizeGodHearts(o.godHearts ?? 10), pvp: entry.pvp, cheats: entry.cheats, owner: owner.uuid, visibility: entry.visibility }, {});
+    const server = await GameServer.open(storage, { id: entry.id, name: entry.name, seed, mode, difficulty, godHearts: normalizeGodHearts(o.godHearts ?? 10), pvp: entry.pvp, cheats: entry.cheats, owner: owner.uuid, visibility: entry.visibility, hauntEligible: o.hauntEligible === true }, {});
     this.applyEntry(server.level, entry);
     await storage.writeLevel(server.level);
     await storage.close();

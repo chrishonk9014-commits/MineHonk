@@ -115,6 +115,8 @@ export interface MobDef {
   vehicle?: 'minecart' | 'skiff';
   /** V6: treats void edges as walls (never walks off an island). */
   edgeGuard?: boolean;
+  /** V7 phase 4: only ever a haunting's figure (no spawn egg, not in the Admin Panel's spawn list, never natural). */
+  figure?: boolean;
 }
 
 const M: MobDef[] = [];
@@ -206,6 +208,10 @@ mob({ id: 'glitch_beast', name: 'Glitch Beast', category: 'boss', width: 2.2, he
 mob({ id: 'the_error', name: 'The Error', category: 'boss', width: 3.4, height: 18, health: 600, speed: 0, damage: 12, armor: 8, knockbackRes: 1, followRange: 96, brain: 'the_error', model: 'the_error', egg: [0x07030c, 0xff2bd6], fireImmune: true, farlands: true });
 // V5.5: he comes out of a computer (driven by the Herobrine system, never spawned naturally)
 mob({ id: 'herobrine', name: 'Herobrine', category: 'boss', width: 0.6, height: 1.95, eye: 1.62, health: 300, speed: 0.12, damage: 6, armor: 6, knockbackRes: 0.85, followRange: 64, brain: 'herobrine', model: 'herobrine', egg: [0x1e8a8a, 0xffffff], fireImmune: true });
+// V7 phase 4: the Haunting's other characters (the Admin Panel's only): untouchable figures it moves itself
+mob({ id: 'null_entity', name: 'Null', category: 'boss', width: 0.6, height: 1.95, eye: 1.62, health: 100, speed: 0, brain: 'herobrine', model: 'null_entity', egg: [0x050505, 0x2a2a2a], fireImmune: true, figure: true });
+mob({ id: 'green_steve', name: 'Green Steve', category: 'boss', width: 0.6, height: 1.95, eye: 1.62, health: 100, speed: 0, brain: 'herobrine', model: 'green_steve', egg: [0x2f8a2f, 0x7ad65c], fireImmune: true, figure: true });
+mob({ id: 'cave_dweller', name: 'Cave Dweller', category: 'boss', width: 0.7, height: 3.1, eye: 2.8, health: 100, speed: 0, brain: 'herobrine', model: 'cave_dweller', egg: [0xd8d2c4, 0x1a1612], fireImmune: true, figure: true });
 // V6 phase 2: the Expanded End (spawned only in its biomes, see src/common/endExpansion/mobs.ts)
 /** Small and shy; hops away when hit and scatters from Void Stalkers. Breeds on chorus fruit. */
 mob({ id: 'endling', name: 'Endling', category: 'creature', width: 0.5, height: 0.6, health: 8, speed: 0.1, brain: 'endling', model: 'endling', egg: [0xd8c8f0, 0x2a2040], breedItems: ['chorus_fruit'], babyChance: 0, idleInterval: 240, edgeGuard: true });

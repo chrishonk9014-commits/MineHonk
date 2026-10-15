@@ -227,6 +227,8 @@ export class Interaction {
     this.server.sculk?.vibrate(dim, first.x + 0.5, first.y + 0.5, first.z + 0.5, p, 'block_place');
     if (isSurvivalLike(p.gamemode)) this.consume(p, hand, 1);
     p.addStat('placed.' + blocks[STATE_BLOCK[first.state]!]!.id);
+    // V7 phase 4: whatever is haunting the world notices
+    this.server.haunting?.onBlock(p, 'place', pdef.id, first.x, first.y, first.z);
     if (pdef.model === 'crop' && !cheat) this.grant(p, 'plant_seed');
     p.send({ t: 'use_result', seq: m.seq, ok: true });
   }

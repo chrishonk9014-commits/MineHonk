@@ -241,7 +241,7 @@ export class HauntingSystem {
       case 'talk': {
         const said = (text ?? '').trim().slice(0, 200);
         if (!said) return reply(false, 'Say something first.');
-        return this.testTalk(p, character, said).then((r) => reply(true, r.line, { talk: r }));
+        return this.testTalk(p, character, said).then((r) => reply(true, `${r.speaker}: ${r.line} (${r.source === 'claude' ? 'Claude answered' : 'the scripted lines answered'})`, { talk: r }));
       }
     }
   }
@@ -268,6 +268,7 @@ export class HauntingSystem {
       character: this.character,
       auto: !!st?.auto,
       ...(roll?.haunted && !roll.begun && !roll.over ? { autoIn: Math.max(0, Math.floor((roll.after - roll.played) / 20)) } : {}),
+      autoState: !roll?.haunted ? 'none' : roll.over ? 'over' : st?.auto ? 'running' : roll.begun ? 'over' : 'waiting',
       elapsed: st ? Math.floor(st.t / 20) : 0,
       total: st ? Math.floor(st.total / 20) : 0,
       erase: !!st?.erase,
@@ -381,6 +382,7 @@ export class HauntingSystem {
       }
     }
     if (s.tickNo % 20 === 0) part.atmosphere(st, f, players);
+    part.everyTick?.(st, f, players);
   }
 
   /** Where everyone has been (the fake lag), who has died since it began, and what they have been doing. */
@@ -567,10 +569,10 @@ export class HauntingSystem {
   }
 
   /** One of the current character's figures, for one player. */
-  spawnFigure(p: ServerPlayer, kind: string, x: number, y: number, z: number, anim = 'stare', data: Record<string, unknown> = {}, extra: Record<string, unknown> = {}, c: HauntCharacter = this.character): Mob | null {
-    const m = this.apparition(p.dim, HAUNT_CAST[c].mob, x, y, z, Math.atan2(-(p.x - x), -(p.z - z)), anim, extra);
+  spawnFigure(p: ServerPlayer, kind: string, x: number, y: number, z: number, anim = 'stare', data: Record<string, unknown> = {}, extra: Record<string, unknown> = {}, c: HauntCharacter = this.character, mob = HAUNT_CAST[c].mob): Mob | null {
+    const m = this.apparition(p.dim, mob, x, y, z, Math.atan2(-(p.x - x), -(p.z - z)), anim, extra);
     if (!m) return null;
-    this.figures.push({ m, p, kind, since: this.server.tickNo, seen: 0, data });
+    this.figures.push({ m, p, kind, since: this.server.tickNo, seen: 0, data, owner: c });
     return m;
   }
 
@@ -581,7 +583,7 @@ export class HauntingSystem {
       const { m, p } = fg;
       const gone = m.removed || !s.players.has(p.conn.id) || p.dim !== m.dim;
       let vanish = gone;
-      const part = this.parts[MOB_CHARACTER[m.type] ?? 'herobrine'];
+      const part = this.parts[fg.owner];
       if (!gone) {
         const age = s.tickNo - fg.since;
         const d = Math.hypot(p.x - m.x, p.z - m.z);
@@ -941,9 +943,6 @@ export class HauntingSystem {
     return null;
   }
 }
-
-/** Whose figure each mob is. */
-const MOB_CHARACTER: Readonly<Record<string, HauntCharacter>> = Object.fromEntries(Object.values(HAUNT_CAST).map((c) => [c.mob, c.id]));
 
 /** Events that change blocks (they stop once it has changed enough). */
 const BLOCKY = new Set(['torch', 'cross', 'tunnel', 'tree', 'pyramid', 'sign', 'dark', 'erase', 'take', 'hole', 'house', 'trap', 'burrow', 'knock', 'door']);

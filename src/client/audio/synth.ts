@@ -780,6 +780,28 @@ const EFFECTS: Record<string, { dur: number; recipe: Recipe }> = {
     },
   },
   'herobrine.whisper': { dur: 1.4, recipe: (s) => (s.noise({ dur: 1.3, gain: 0.35, attack: 0.3, decay: 0.6, bp: [2200, 3] }), s.noise({ start: 0.2, dur: 0.8, gain: 0.2, attack: 0.2, decay: 0.4, bp: [1100, 4] })) },
+  // V7 phase 4: the Haunting's other characters
+  /** Null: static that comes and goes, and the soft nothing of a block that is suddenly not there. */
+  'null.static': { dur: 1.2, recipe: (s) => (s.noise({ dur: 1.1, gain: 0.35, attack: 0.05, decay: 0.5, hp: 1500, grain: 3 }), s.crush(3, 6)) },
+  'null.erase': { dur: 0.5, recipe: (s) => (s.tone({ dur: 0.35, gain: 0.35, f0: 600, f1: 90, wave: 'sine', decay: 0.2 }), s.noise({ dur: 0.3, gain: 0.15, decay: 0.15, hp: 2500 })) },
+  /** Green Steve: a creeper that was never there puffing into smoke; a cheerful hum of a hello. */
+  'greensteve.pop': { dur: 0.5, recipe: (s) => (s.noise({ dur: 0.4, gain: 0.5, attack: 0.005, decay: 0.15, bp: [900, 1.2] }), s.tone({ dur: 0.15, gain: 0.25, f0: 500, f1: 900, decay: 0.08 })) },
+  'greensteve.hello': { dur: 1.2, recipe: (s) => (s.voice({ dur: 0.4, gain: 0.55, f0: 240, f1: 250, formants: [600, 1800], rough: 0.1, vibrato: 0.01 }), s.voice({ start: 0.42, dur: 0.6, gain: 0.55, f0: 280, f1: 200, formants: [500, 900], rough: 0.1, vibrato: 0.02 })) },
+  /** The Cave Dweller: claws skittering in the walls, heavy breathing, a screech, running on all fours. */
+  'dweller.skitter': {
+    dur: 0.9,
+    recipe: (s) => {
+      for (let i = 0; i < 14; i++) s.knock({ start: i * 0.05 + s.rng.next() * 0.02, f: 900 + s.rng.next() * 1300, gain: 0.3, decay: 0.008 });
+    },
+  },
+  'dweller.breath': { dur: 2.5, recipe: (s) => (s.noise({ dur: 1, gain: 0.45, attack: 0.45, decay: 0.5, bp: [500, 1.5] }), s.noise({ start: 1.2, dur: 1.1, gain: 0.35, attack: 0.3, decay: 0.7, bp: [380, 1.5] })) },
+  'dweller.screech': { dur: 1.2, recipe: (s) => (s.voice({ dur: 1, gain: 0.85, f0: 900, f1: 1300, formants: [2200, 3600], rough: 0.7, vibrato: 0.08 }), s.noise({ dur: 0.9, gain: 0.3, decay: 0.4, hp: 3000 })) },
+  'dweller.run': {
+    dur: 0.9,
+    recipe: (s) => {
+      for (let i = 0; i < 8; i++) s.knock({ start: i * 0.09, f: 70 + s.rng.next() * 30, gain: 0.6, decay: 0.04 });
+    },
+  },
   'herobrine.strike': { dur: 0.6, recipe: (s) => (s.tone({ dur: 0.12, gain: 0.5, f0: 2400, f1: 300, wave: 'square', decay: 0.05 }), s.knock({ start: 0.08, f: 110, gain: 0.8, decay: 0.05 }), s.crush(4, 4)) },
   'herobrine.charge': { dur: 1.5, recipe: (s) => (s.tone({ dur: 1.4, gain: 0.45, f0: 90, f1: 700, wave: 'square', lp: 1800, attack: 0.5, decay: 0.3, vibrato: 0.05, vibratoRate: 12 }), s.crush(4, 3)) },
   'herobrine.slam': { dur: 1.2, recipe: (s) => (s.knock({ f: 60, gain: 1, decay: 0.3 }), s.noise({ dur: 1.1, gain: 0.5, attack: 0.01, decay: 0.6, lp: 700 }), s.crush(5, 2)) },

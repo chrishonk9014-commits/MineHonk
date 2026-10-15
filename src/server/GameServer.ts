@@ -125,11 +125,13 @@ export class GameServer {
     trickNow: (s) => this.villages?.trickNow(s) ?? false,
   };
   /**
-   * The Haunting: where Herobrine's answers come from when players talk to him
-   * (the cloud hub, or Claude with a dedicated server's own key). Null: only
-   * his scripted lines. Resolves to null when there is no answer.
+   * The Haunting: where its answers come from when players talk to whoever
+   * is haunting the world (the cloud hub, or Claude with a dedicated server's
+   * own key); the request names the character. Null: only their scripted
+   * lines. Resolves to null (or an answer without text, and why) when there
+   * is no answer.
    */
-  herobrineVoice: ((req: import('../common/game/herobrineVoice').VoiceRequest) => Promise<string | null>) | null = null;
+  herobrineVoice: ((req: import('../common/game/herobrineVoice').VoiceRequest) => Promise<string | import('../common/game/herobrineVoice').VoiceAnswer | null>) | null = null;
   /** Work scheduled for a later tick (see `later`). */
   private readonly scheduled: { at: number; fn: () => void }[] = [];
   /** Hook for the hosting layer to forward player reports (e.g. to platform moderation). */
@@ -781,7 +783,9 @@ export class GameServer {
     this.log(`<${p.name}> ${filtered}`);
     // The Haunting may have glitched a player's name
     const from = this.haunting?.chatName(p) ?? p.name;
-    for (const o of this.players.values()) o.send({ t: 'chat', text: filtered, kind: 'chat', from });
+    // V7 phase 4: or taken words out of it (Null)
+    const shown = this.haunting?.chatText(p, filtered) ?? filtered;
+    for (const o of this.players.values()) o.send({ t: 'chat', text: shown, kind: 'chat', from });
     this.haunting?.onChat(p, filtered);
   }
 

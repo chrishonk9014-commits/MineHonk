@@ -177,6 +177,8 @@ export class Mining {
     this.server.broadcastNear(dim, x, y, z, 64, { t: 'dig_progress', x, y, z, stage: -1, by: p.id }, p);
     p.addStat('mined.' + bt.id);
     p.addStat('blocks_mined');
+    // V7 phase 4: whatever is haunting the world notices
+    this.server.haunting?.onBlock(p, 'break', bt.id, x, y, z);
     if (survival) {
       const drops = computeBlockDrops(state, tool, rng);
       // Batteries keep their charge and tanks their contents

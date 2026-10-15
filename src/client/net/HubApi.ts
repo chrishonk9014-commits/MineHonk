@@ -174,7 +174,8 @@ export class HubApi {
   worlds(): Promise<{ mine: WorldSummary[]; friends: WorldSummary[]; public: WorldSummary[] }> {
     return this.call('GET', '/worlds');
   }
-  createWorld(o: { name: string; seed?: string; mode: string; difficulty: string; visibility: string; godHearts?: unknown }): Promise<WorldDetails> {
+  /** `hauntEligible`: the player making it beat Herobrine for real (the automatic haunting's roll, on the server). */
+  createWorld(o: { name: string; seed?: string; mode: string; difficulty: string; visibility: string; godHearts?: unknown; hauntEligible?: boolean }): Promise<WorldDetails> {
     return this.call('POST', '/worlds', o);
   }
   world(id: string): Promise<WorldDetails> {

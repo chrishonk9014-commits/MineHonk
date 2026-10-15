@@ -316,8 +316,9 @@ async function herobrine(req: Request, env: Env, ip: string, b: Record<string, u
   const row = await env.DB.prepare('INSERT INTO herobrine_usage (day, n) VALUES (?, 1) ON CONFLICT(day) DO UPDATE SET n = n + 1 RETURNING n').bind(day).first<{ n: number }>();
   if (!row || row.n > limit) return { text: null, reason: 'limit' };
   const line = await speakWithClaude(voiceClient(env.ANTHROPIC_API_KEY), r, env.HEROBRINE_MODEL || HEROBRINE_MODEL);
+  if (!line) return { text: null, reason: 'none' };
   // The same filter as world names and chat: anything it would mask is not said at all
-  if (!line || filter.mask(line).changed) return { text: null, reason: 'unsaid' };
+  if (filter.mask(line).changed) return { text: null, reason: 'unsaid' };
   return { text: line };
 }
 

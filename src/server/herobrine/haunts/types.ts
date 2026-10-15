@@ -47,6 +47,8 @@ export interface Figure {
   seen: number;
   /** Whatever the character keeps about this figure. */
   data: Record<string, unknown>;
+  /** Whose figure it is (it may wear another mob's shape: Green Steve's fake creepers). */
+  owner: HauntCharacter;
 }
 
 /** How a haunting ends for everyone. */
@@ -68,6 +70,8 @@ export interface HauntPart {
   finale(st: HauntState, f: number, players: ServerPlayer[]): void;
   /** Every 20 ticks outside the end: the dark, the quiet, the colour (whatever it does to the air). */
   atmosphere(st: HauntState, f: number, players: ServerPlayer[]): void;
+  /** Every tick outside the end, for what must be watched closely (cheap). */
+  everyTick?(st: HauntState, f: number, players: ServerPlayer[]): void;
   /** One of its figures, each tick: false when it should go (the core makes it vanish). */
   stepFigure(fg: Figure, age: number, dist: number): boolean;
   /** How a figure vanishes (the sound, the afterimage; `gone`: its player left or moved away); the core removes it. */

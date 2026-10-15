@@ -13,7 +13,7 @@ import { initItems } from '../common/registry/items';
 import { installGameplay } from '../server/gameplay';
 import { BrowserHost, type HostConfig, type HostOptionsPatch } from './hosting';
 import type { HostSettingsPush } from '../common/net/hubProtocol';
-import { askHub } from '../common/game/herobrineVoice';
+import { askHubDetail } from '../common/game/herobrineVoice';
 import { seasonClock, type ClockSource } from '../common/halloween/clock';
 
 declare const __HUB_URL__: string;
@@ -81,8 +81,8 @@ self.onmessage = async (ev: MessageEvent<In>) => {
           clock: () => seasonClock.now(),
         });
         installGameplay(server);
-        // The Haunting: Herobrine answers through the cloud hub when it can (his scripted lines otherwise)
-        if (HUB_URL) server.herobrineVoice = (req) => askHub(HUB_URL, req);
+        // The Haunting: whoever haunts the world answers through the cloud hub when it can (their scripted lines otherwise)
+        if (HUB_URL) server.herobrineVoice = (req) => askHubDetail(HUB_URL, req);
         server.start();
         post({ type: 'started', level: server.level });
         const p = await server.connect(conn, { ...m.identity, isHost: true }, m.hello);

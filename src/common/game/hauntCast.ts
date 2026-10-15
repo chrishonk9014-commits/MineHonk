@@ -178,6 +178,9 @@ const GREEN_STEVE: HauntCharacterDef = {
 /** "Green Steve joined the world" (and left), at these moments. */
 export const GREEN_JOIN_AT = [0.01, 0.3, 0.62] as const;
 
+/** What he says to be friendly, early on (to one player). */
+export const GREEN_FRIENDLY: readonly string[] = ['hey :)', 'this world is so cool', 'wanna be friends?', 'i like your house', 'follow me!', 'i left you something', 'can we build together?', 'you are my best friend'];
+
 /** What the signs at his houses say. */
 export const GREEN_SIGNS: readonly string[][] = [
   ['', 'FOR MY', 'BROTHER', ''],

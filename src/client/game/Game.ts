@@ -6,7 +6,7 @@
  */
 import { CAVE_BIOMES } from '../../common/gen/caves/caveBiomes';
 import type { ClientConnection } from '../net/ClientConnection';
-import type { C2S, S2C, PlayerStats, WorldInfo, AbilitiesMsg, WindowKind, FakeBan } from '../../common/net/protocol';
+import type { C2S, S2C, PlayerStats, WorldInfo, AbilitiesMsg, WindowKind, FakeBan, HauntEndScreen } from '../../common/net/protocol';
 import { ClientWorld } from '../world/ClientWorld';
 import { LocalPlayer } from './LocalPlayer';
 import { BlockInteraction } from './BlockInteraction';
@@ -60,7 +60,7 @@ export interface GameHost {
   openAdmin(): void;
   openDeath(message: string, hardcore: boolean, score: number): void;
   closeScreens(): void;
-  exit(reason: string | null, kick?: { ban?: FakeBan; erase?: boolean; corrupted?: boolean }): void;
+  exit(reason: string | null, kick?: { ban?: FakeBan; erase?: boolean; corrupted?: boolean; screen?: HauntEndScreen }): void;
   setLoading(text: string | null, detail?: string): void;
   openAchievements(): void;
   openEngineeringBook(entry?: string): void;
@@ -130,6 +130,11 @@ export class Game {
   /** V7 phase 2: the Abandoned Village the player is in or near (its server says so). */
   hauntedArea: { x0: number; z0: number; x1: number; z1: number; y: number } | null = null;
   private hauntTarget = 0;
+  /** V7 phase 4: the colour drained out of the view (Null), a pulse of it, and the filter last set. */
+  private drain = 0;
+  private drainTarget = 0;
+  private drainPulse: { strength: number; until: number; ticks: number } | null = null;
+  private drainFilter = '';
   private readonly jumpscare: Jumpscare;
   /** The lair ending's cutscene: what lies over the view, and the step the camera follows (the drag's path). */
   private readonly hauntScene: HauntScene;
@@ -337,6 +342,23 @@ export class Game {
   }
 
   /** V7: the block worn on the head (a costume head, a carved pumpkin), for the inventory doll. */
+  /** V7 phase 4: how much colour has gone (Null), eased, as a filter over the view. */
+  private tickDrain(): void {
+    if (this.drain !== this.drainTarget) this.drain = Math.abs(this.drainTarget - this.drain) < 0.005 ? this.drainTarget : this.drain + (this.drainTarget - this.drain) * 0.04;
+    let d = this.drain;
+    const pl = this.drainPulse;
+    if (pl) {
+      const left = pl.until - this.tickNo;
+      if (left <= 0) this.drainPulse = null;
+      else d = Math.max(d, pl.strength * Math.min(1, left / (pl.ticks * 0.6)));
+    }
+    const f = d > 0.01 ? `grayscale(${d.toFixed(3)}) contrast(${(1 + d * 0.12).toFixed(3)}) brightness(${(1 - d * 0.12).toFixed(3)})` : '';
+    if (f !== this.drainFilter) {
+      this.drainFilter = f;
+      this.canvas.style.filter = f;
+    }
+  }
+
   private wornHead(): string | undefined {
     const id = items[this.invSlots[HELMET]?.id ?? -1]?.id;
     return id && WEARABLE_BLOCKS.includes(id) ? id : undefined;
@@ -383,8 +405,10 @@ export class Game {
     const prev = this.sceneCam;
     // A drag with nowhere to go (strength 0): still on your feet, facing him, as when he grabbed you
     const still = step === 'drag' && strength === 0;
-    const moves = (step === 'drag' && !still) || step === 'grab' || step === 'look';
-    this.sceneCam = { step: still ? 'grab' : step, start: still ? (prev?.start ?? this.tickNo) : this.tickNo, ticks, from: moves ? from : (prev?.from ?? from), to: moves ? to : (prev?.to ?? to) };
+    const moves = (step === 'drag' && !still) || step === 'grab' || step === 'look' || step === 'watch';
+    // V7 phase 4: 'watch' again only moves what the camera watches (it stays where it is)
+    const more = step === 'watch' && prev?.step === 'watch';
+    this.sceneCam = { step: still ? 'grab' : step, start: still || more ? (prev?.start ?? this.tickNo) : this.tickNo, ticks, from: more ? prev!.from : moves ? from : (prev?.from ?? from), to: moves ? to : (prev?.to ?? to) };
     if (step === 'drag') this.sceneY = NaN;
     if (step === 'shock' && !this.settings.reduceMotion) this.shake = 1;
   }
@@ -399,7 +423,20 @@ export class Game {
     fs.bobAmount = 0;
     const calm = this.settings.reduceMotion;
     const t = this.tickNo + alpha;
-    if (c.step === 'look') {
+    if (c.step === 'watch') {
+      // V7 phase 4: out of yourself, a little way off, watching something (Green Steve walking away as you)
+      const k = Math.min(1, Math.max(0, (t - c.start) / 16));
+      const e = k * k * (3 - 2 * k);
+      fs.x += (c.from[0] - fs.x) * e;
+      fs.y += (c.from[1] - fs.y) * e;
+      fs.z += (c.from[2] - fs.z) * e;
+      const [x1, y1, z1] = c.to;
+      const want = Math.atan2(-(x1 - fs.x), -(z1 - fs.z));
+      let d = want - fs.yaw;
+      d = Math.atan2(Math.sin(d), Math.cos(d));
+      fs.yaw += d * e;
+      fs.pitch += (-Math.atan2(y1 - fs.y, Math.hypot(x1 - fs.x, z1 - fs.z)) - fs.pitch) * e;
+    } else if (c.step === 'look') {
       // V7 phase 3: a step back from the door, eyes on whoever answers it
       const k = Math.min(1, Math.max(0, (t - c.start) / 10));
       const e = k * k * (3 - 2 * k);
@@ -436,7 +473,7 @@ export class Game {
       // On your back, looking up at him as he pulls; bumping over the ground
       fs.yaw = Math.atan2(-(x1 - x0), -(z1 - z0)) + (calm ? 0 : Math.sin(t * 0.37) * 0.05);
       fs.pitch = -0.38 + (calm ? 0 : Math.sin(t * 0.61) * 0.06);
-    } else {
+    } else if (c.step === 'black' || c.step === 'wake' || c.step === 'shock' || c.step === 'die' || c.step === 'corrupt') {
       // Wired into the chair
       fs.y -= 0.55;
     }
@@ -610,7 +647,7 @@ export class Game {
       }
       case 'kick':
         this.running = false;
-        this.host.exit(m.reason, { ban: m.ban, erase: m.erase, corrupted: m.corrupted });
+        this.host.exit(m.reason, { ban: m.ban, erase: m.erase, corrupted: m.corrupted, screen: m.screen });
         break;
       case 'chunk':
         this.world.loadChunk(m.data);
@@ -1247,6 +1284,7 @@ export class Game {
     if (this.hurtTilt > 0) this.hurtTilt = Math.max(0, this.hurtTilt - 0.12);
     if (this.shake > 0) this.shake = Math.max(0, this.shake - 0.05);
     if (this.haunt !== this.hauntTarget) this.haunt = Math.abs(this.hauntTarget - this.haunt) < 0.005 ? this.hauntTarget : this.haunt + (this.hauntTarget - this.haunt) * 0.03;
+    this.tickDrain();
     this.tickPortalFx();
     this.ambience();
     if (this.tickNo % 100 === 0) {
@@ -1531,6 +1569,11 @@ export class Game {
       // The Haunting
       case 'haunt':
         this.hauntTarget = Math.max(0, Math.min(1, m.strength ?? 0));
+        break;
+      case 'drain':
+        // V7 phase 4 (Null): the colour going out of the world; with ticks, a pulse that fades back
+        if (m.ticks) this.drainPulse = { strength: Math.max(0, Math.min(1, m.strength ?? 0)), until: this.tickNo + m.ticks, ticks: m.ticks };
+        else this.drainTarget = Math.max(0, Math.min(1, m.strength ?? 0));
         break;
       case 'scene':
         this.playScene(m.text ?? '', m.ticks ?? 20, [m.x ?? 0, m.y ?? 0, m.z ?? 0], [m.x1 ?? 0, m.y1 ?? 0, m.z1 ?? 0], m.strength ?? 1, m.skip === true);
@@ -2318,6 +2361,8 @@ export class Game {
 
   /** Stops the game loop and releases resources. The host handles saving. */
   destroy(): void {
+    // V7 phase 4: no colour left drained over the title screen
+    this.canvas.style.filter = '';
     this.running = false;
     cancelAnimationFrame(this.rafId);
     document.removeEventListener('pointerlockchange', this.onPointerLock);

@@ -9,6 +9,12 @@
  * V7 phase 3 uses the same steps for a Trick Home's grab and drag, and adds
  * 'look' (a Candy Home answering the door: black bars top and bottom) and a
  * Skip button for the scenes that may be skipped.
+ *
+ * V7 phase 4 adds the other characters' endings: 'erase' (the screen going
+ * black square by square: Null), 'flash' (a white flash that stays: Green
+ * Steve's room), 'rise' (eyes opening, on your feet), 'eyes' (pale eyes
+ * opening in the dark of the Cave Dweller's den) and 'watch' (from outside
+ * yourself, letterboxed: Green Steve walking away as you).
  */
 import { el, clear } from './dom';
 import type { Settings } from '../settings';
@@ -40,6 +46,9 @@ export class HauntScene {
   private readonly dump: HTMLElement;
   private readonly bars: HTMLElement;
   private readonly skipBtn: HTMLElement;
+  private readonly erase: HTMLElement;
+  private readonly white: HTMLElement;
+  private readonly eyes: HTMLElement;
   private timers: ReturnType<typeof setTimeout>[] = [];
   private current = '';
   /** V7 phase 3: the scene playing may be skipped (Game sends scene_skip). */
@@ -60,6 +69,9 @@ export class HauntScene {
     this.corrupt = el('div', { class: 'hs-corrupt' }, el('div', { class: 'hs-corrupt-title', 'data-text': 'SERVER MEMORY CORRUPTED' }, 'SERVER MEMORY CORRUPTED'), this.dump);
     this.bars = el('div', { class: 'hs-bars' }, el('div', { class: 'hs-bar top' }), el('div', { class: 'hs-bar bottom' }));
     this.skipBtn = el('div', { class: 'hs-skip hidden' }, 'Skip ▸');
+    this.erase = el('div', { class: 'hs-erase' });
+    this.white = el('div', { class: 'hs-white' });
+    this.eyes = el('div', { class: 'hs-eyes' });
     const skip = (e: Event): void => {
       e.preventDefault();
       e.stopPropagation();
@@ -67,7 +79,7 @@ export class HauntScene {
     };
     this.skipBtn.addEventListener('mousedown', skip);
     this.skipBtn.addEventListener('touchstart', skip, { passive: false });
-    this.root = el('div', { class: 'haunt-scene hidden' }, this.bars, this.vignette, this.lids, this.flash, this.black, this.die, this.corrupt, this.skipBtn);
+    this.root = el('div', { class: 'haunt-scene hidden' }, this.bars, this.vignette, this.lids, this.flash, this.black, this.die, this.corrupt, this.erase, this.white, this.eyes, this.skipBtn);
     parent.append(this.root);
   }
 
@@ -115,6 +127,43 @@ export class HauntScene {
       case 'die':
         this.restart(this.die, 'go');
         break;
+      case 'erase': {
+        // Square by square, in no order, until there is nothing
+        clear(this.erase);
+        const n = 12 * 8;
+        const order = [...Array(n).keys()].sort(() => Math.random() - 0.5);
+        const cells: HTMLElement[] = [];
+        for (let i = 0; i < n; i++) cells.push(el('i'));
+        order.forEach((c, i) => (cells[c]!.style.animationDelay = `${Math.round((i / n) * ms * 0.8)}ms`));
+        this.erase.append(...cells);
+        this.restart(this.erase, 'go');
+        this.audio.playThrough('glitch.static', 0.3);
+        break;
+      }
+      case 'flash':
+        this.restart(this.white, 'go');
+        break;
+      case 'rise':
+        this.root.classList.remove('is-black');
+        this.vignette.className = 'hs-vignette';
+        this.restart(this.lids, 'open');
+        break;
+      case 'eyes': {
+        this.root.classList.add('is-black');
+        clear(this.eyes);
+        for (let i = 0; i < 9; i++) {
+          const eye = el('i');
+          eye.style.left = `${8 + ((i * 37) % 80)}%`;
+          eye.style.top = `${12 + ((i * 53) % 70)}%`;
+          eye.style.animationDelay = `${Math.round(i * Math.min(400, ms / 12))}ms`;
+          this.eyes.append(eye);
+        }
+        this.restart(this.eyes, 'go');
+        break;
+      }
+      case 'watch':
+        if (!this.bars.classList.contains('in')) this.restart(this.bars, 'in');
+        break;
       case 'corrupt':
         this.root.classList.add('is-black');
         this.restart(this.corrupt, 'go');
@@ -133,7 +182,9 @@ export class HauntScene {
     this.current = '';
     delete this.root.dataset.step;
     this.root.className = 'haunt-scene hidden';
-    for (const e of [this.vignette, this.lids, this.flash, this.die, this.corrupt, this.bars]) e.className = e.className.split(' ')[0]!;
+    for (const e of [this.vignette, this.lids, this.flash, this.die, this.corrupt, this.bars, this.erase, this.white, this.eyes]) e.className = e.className.split(' ')[0]!;
+    clear(this.erase);
+    clear(this.eyes);
     this.skippable = false;
     this.skipBtn.classList.add('hidden');
     clear(this.dump);

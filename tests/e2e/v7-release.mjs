@@ -447,7 +447,7 @@ await (async () => {
       const panel = await page.locator('.admin-body').innerText();
       check(`the Halloween tab shows it off, the date simulated ("${panel.split('\n').slice(0, 6).join(' / ')}")`, /Halloween content\s*OFF/.test(panel) && /simulated/i.test(panel));
       // From the top: the world's state (off, the date simulated) and the tests
-      await page.evaluate(() => document.querySelector('.admin-body')?.scrollTo(0, 0));
+      await page.evaluate(() => document.querySelectorAll('.admin-body, .admin-cols').forEach((e) => e.scrollTo(0, 0)));
       await page.waitForTimeout(300);
       await page.screenshot({ path: `${OUT}/v7r-admin-after.png` });
       await noMenus(page);

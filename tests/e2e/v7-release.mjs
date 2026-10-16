@@ -693,7 +693,7 @@ await (async () => {
       // no flying) brought to its step
       // (the server may still be busy making the village's chunks: asked again a moment later)
       let look = null;
-      for (let t = 0; t < 8 && !look?.ok; t++) {
+      for (let t = 0; t < 3 && !look?.ok; t++) {
         if (t) await alice.waitForTimeout(5000);
         look = await admin(alice, { a: 'halloween', op: 'village_doors' });
       }

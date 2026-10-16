@@ -262,7 +262,7 @@ export class GreenSteveHaunt implements HauntPart {
           for (let y = g; y <= g + 2; y++) {
             const door = dx === 2 * sx && dz === 2 * sz && y <= g + 1;
             const window = !corner && y === g + 1 && (dx === 0 || dz === 0) && !(dx === 2 * sx && dz === 2 * sz);
-            if (!door) put(x + dx, y, z + dz, corner ? stateOf('oak_log', { axis: 'y' }) : window ? S('glass_pane') : S('oak_planks'));
+            if (!door) put(x + dx, y, z + dz, corner ? stateOf('oak_log', { axis: 'y' }) : window ? S('glass') : S('oak_planks'));
           }
         put(x + dx, g + 3, z + dz, stateOf('oak_slab', { type: 'bottom' }));
       });

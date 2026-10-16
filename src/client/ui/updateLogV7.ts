@@ -554,7 +554,7 @@ export const V7_LOG: UpdateEntry = {
         {
           k: 'gallery',
           items: [
-            { img: 'dweller-crawl', caption: 'It runs on all fours.' },
+            { img: 'dweller-crawl', caption: 'Out of the dark, right at you.' },
             { img: 'dweller-drag', caption: 'Taken: dragged down into the dark.' },
           ],
         },

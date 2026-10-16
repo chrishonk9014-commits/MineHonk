@@ -101,7 +101,7 @@ for (const c of ['null', 'green_steve', 'cave_dweller']) add(`appear-${c}`, `cle
 add('auto-sighting', 'clean/haunting4-auto-sighting.png');
 for (const n of ['null-figure', 'null-sign', 'null-erase', 'green-friend', 'green-house', 'green-copy', 'green-room', 'green-replaced', 'dweller-watch', 'dweller-drag', 'dweller-dawn']) add(n, `clean/haunting4-${n}.png`);
 // Whichever of its moves the run caught
-add('dweller-crawl', ['clean/haunting4-dweller-crawl.png', 'clean/haunting4-dweller-lunge.png']);
+add('dweller-crawl', ['clean/haunting4-dweller-lunge.png', 'clean/haunting4-dweller-crawl.png']);
 add('dweller-eyes', 'clean/haunting4-dweller-eyes.png', { filter: '' });
 // The panel, the end screens, and those that keep the HUD (the chat) or the colour drained out
 for (const [name, src] of [['haunt-tab', 'haunting4-tab-null'], ['haunt-talk', 'haunting4-talk-green_steve'], ['null-end', 'haunting4-null-end'], ['auto-status', 'haunting4-auto-status'], ['null-drain', 'haunting4-null-drain'], ['auto-notice', 'haunting4-auto-notice']]) add(name, `${src}.png`, { filter: '' });

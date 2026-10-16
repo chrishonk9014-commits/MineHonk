@@ -196,13 +196,16 @@ async function flyTo(page, x, z, y = null) {
 const doorsNear = (page) => page.evaluate(() => window.minehonk.game.knockDoors ?? []);
 const FACE = { north: [0, -1], south: [0, 1], west: [-1, 0], east: [1, 0] };
 /** Walks (in small steps) to a door's step, faces it and knocks with G. */
-async function knockAt(page, d) {
+async function knockAt(page, d, out = 1) {
   const [x, y, z, facing] = d;
   const [fx, fz] = FACE[facing];
-  // Over its step (above the roofs), then straight down onto it
+  // Over the street in front of it, `out` blocks out where the sky is open (above the roofs), straight
+  // down, then along the ground to its step (under any eaves)
+  const k = Math.max(1.3, out);
   const top = await page.evaluate(() => window.minehonk.game.player.body.y);
-  await flyTo(page, x + 0.5 + fx * 1.3, z + 0.5 + fz * 1.3, Math.max(top, y + 12));
-  await flyTo(page, x + 0.5 + fx * 1.3, z + 0.5 + fz * 1.3, y + 1);
+  await flyTo(page, x + 0.5 + fx * k, z + 0.5 + fz * k, Math.max(top, y + 12));
+  await flyTo(page, x + 0.5 + fx * k, z + 0.5 + fz * k, y + 0.1);
+  await flyTo(page, x + 0.5 + fx * 1.3, z + 0.5 + fz * 1.3, y + 0.1);
   await page.evaluate(() => (window.minehonk.game.player.flying = false));
   await page.waitForTimeout(700);
   await page.evaluate(([x, y, z]) => {
@@ -309,16 +312,31 @@ await (async () => {
       // its step (a test flies down to it; a door under a roof or a tree in an alley is left out)
       const r = await admin(page, { a: 'halloween', op: 'village_doors' });
       const list = (r.data?.doors?.doors ?? []).filter((d) => !d.used && !tried.has(key(d.x, d.y, d.z)) && !(tricks && d.kind === 'trick'));
-      const open = await page.evaluate((list) => list.map((d) => window.minehonk.game.world.heightAt(d.out[0], d.out[2]) <= d.out[1] + 1), list);
+      // How far out along the street there is open sky to come down through (none: left out)
+      const open = await page.evaluate(
+        (list) =>
+          list.map((d) => {
+            const fx = d.out[0] - d.x;
+            const fz = d.out[2] - d.z;
+            for (let k = 1; k <= 6; k++) if (window.minehonk.game.world.heightAt(d.x + fx * k, d.z + fz * k) <= d.y + 1) return k;
+            return 0;
+          }),
+        list,
+      );
       const b = await page.evaluate(() => ({ x: window.minehonk.game.player.body.x, z: window.minehonk.game.player.body.z }));
-      const next = list.filter((_, i) => open[i]).sort((a, c) => Math.hypot(a.x - b.x, a.z - b.z) - Math.hypot(c.x - b.x, c.z - b.z))[0];
-      if (!next) break;
+      const ok = list.map((d, i) => ({ d, k: open[i] })).filter((o) => o.k > 0);
+      const pick = ok.sort((a, c) => Math.hypot(a.d.x - b.x, a.d.z - b.z) - Math.hypot(c.d.x - b.x, c.d.z - b.z))[0];
+      if (!pick) {
+        console.log(`     no door left to fly down to (${list.length} not tried)`);
+        break;
+      }
+      const next = pick.d;
       tried.add(key(next.x, next.y, next.z));
       const dx = next.out[0] - next.x;
       const dz = next.out[2] - next.z;
       const d = [next.x, next.y, next.z, dx > 0 ? 'east' : dx < 0 ? 'west' : dz > 0 ? 'south' : 'north'];
       await page.evaluate(() => (window.__speech = []));
-      await knockAt(page, d);
+      await knockAt(page, d, pick.k);
       await page.waitForTimeout(1200);
       const scene = await page.evaluate(() => document.querySelector('.haunt-scene')?.dataset.step ?? '');
       console.log(`     knocked at ${d.join(' ')}: scene "${scene}", said: ${(await page.evaluate(() => (window.__speech ?? []).join(' | '))) || '(nothing)'}`);

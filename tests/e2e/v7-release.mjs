@@ -97,7 +97,13 @@ async function goto(page, query = `clock=${IN_SEASON}`) {
     window.minehonk.settings.renderDistance = 6;
     window.__chatLog = [];
     new MutationObserver((ms) => {
-      for (const m of ms) for (const n of m.addedNodes) if (n.nodeType === 1 && n.classList.contains('line') && n.parentElement?.classList.contains('chat')) window.__chatLog.push(n.textContent);
+      for (const m of ms)
+        for (const n of m.addedNodes) {
+          if (n.nodeType !== 1) continue;
+          if (n.classList.contains('line') && n.parentElement?.classList.contains('chat')) window.__chatLog.push(n.textContent);
+          // What is said at a door (a voice behind it, the villager, the sack)
+          if (n.classList.contains('speech')) (window.__speech ??= []).push(n.textContent);
+        }
     }).observe(document.body, { childList: true, subtree: true });
   });
 }
@@ -282,6 +288,7 @@ await (async () => {
     const tried = new Set();
     const key = (x, y, z) => `${x},${y},${z}`;
     let tricks = null;
+    let candyShot = false;
     for (let round = 0; round < 24 && !/\[Trick or Treat!\]/.test(await ach()); round++) {
       const doors = (await doorsNear(page)).filter((d) => !tried.has(key(d[0], d[1], d[2])));
       if (!doors.length) {
@@ -298,10 +305,11 @@ await (async () => {
       }
       const d = doors[0];
       tried.add(key(d[0], d[1], d[2]));
-      const before = await chatText(page);
+      await page.evaluate(() => (window.__speech = []));
       await knockAt(page, d);
       await page.waitForTimeout(1200);
       const scene = await page.evaluate(() => document.querySelector('.haunt-scene')?.dataset.step ?? '');
+      console.log(`     knocked at ${d.join(' ')}: scene "${scene}", said: ${(await page.evaluate(() => (window.__speech ?? []).join(' | '))) || '(nothing)'}`);
       if (scene === 'grab' || scene === 'drag' || /trick/i.test(scene)) {
         tricks = d;
         await page.waitForTimeout(5000);
@@ -316,10 +324,12 @@ await (async () => {
       }
       // A Candy Home: watch it a moment, then skip
       await page.waitForTimeout(2500);
-      if (round === 0) await page.screenshot({ path: `${OUT}/v7r-candy-home.png`, keepHud: true });
+      if (!candyShot && scene) {
+        candyShot = true;
+        await page.screenshot({ path: `${OUT}/v7r-candy-home.png`, keepHud: true });
+      }
       await page.keyboard.press('Space');
       await page.waitForTimeout(1500);
-      void before;
     }
     const all = await ach();
     check('candy from a Candy Home for real: "Sweet!"', /Sweet!/.test(all));

@@ -169,14 +169,18 @@ async function flyTo(page, x, z, y = null) {
         const dz = z - b.z;
         const d = Math.hypot(dx, dz);
         const ty = y ?? Math.max(b.y, g.world.heightAt(Math.floor(b.x), Math.floor(b.z)) + 6);
-        if (d < 1) return true;
+        // There: over the spot and (when asked) at its height
+        if (d < 1 && (y == null || Math.abs(ty - b.y) < 0.6)) return true;
         // No faster than flying really is (the server puts a player moving too fast back)
         const now = performance.now();
-        const s = Math.min(d, (9 * Math.min(200, now - (window.__flyAt ?? now - 70))) / 1000);
+        const step = (9 * Math.min(200, now - (window.__flyAt ?? now - 70))) / 1000;
         window.__flyAt = now;
-        b.x += (dx / d) * s;
-        b.z += (dz / d) * s;
-        b.y += Math.max(-Math.max(s, 0.3), Math.min(Math.max(s, 0.3), ty - b.y));
+        const s = Math.min(d, step);
+        if (d > 0.01) {
+          b.x += (dx / d) * s;
+          b.z += (dz / d) * s;
+        }
+        b.y += Math.max(-step, Math.min(step, ty - b.y));
         b.vx = b.vy = b.vz = 0;
         g.player.yaw = Math.atan2(-dx, -dz);
         return false;

@@ -691,15 +691,38 @@ await (async () => {
       await alice.waitForTimeout(6000);
       // A Candy Home of the village (the owner's lookup); Alice a few steps off, Bob (a Survival player:
       // no flying) brought to its step
-      const look = await admin(alice, { a: 'halloween', op: 'village_doors' });
-      const home = (look.data?.doors?.doors ?? []).find((h) => h.kind === 'candy' && !h.used);
-      if (!home) throw new Error(`no Candy Home found (${look.text})`);
+      // (the server may still be busy making the village's chunks: asked again a moment later)
+      let look = null;
+      for (let t = 0; t < 8 && !look?.ok; t++) {
+        if (t) await alice.waitForTimeout(5000);
+        look = await admin(alice, { a: 'halloween', op: 'village_doors' });
+      }
+      // One that opens onto an open street (Alice stands out there in the open, under the sky)
+      const homes = (look.data?.doors?.doors ?? []).filter((h) => h.kind === 'candy' && !h.used);
+      const opens = await alice.evaluate(
+        (list) =>
+          list.map((h) => {
+            const fx = h.out[0] - h.x;
+            const fz = h.out[2] - h.z;
+            for (let k = 1; k <= 6; k++) if (window.minehonk.game.world.heightAt(h.x + fx * k, h.z + fz * k) <= h.y + 1) return k;
+            return 0;
+          }),
+        homes,
+      );
+      const i = opens.findIndex((k) => k > 0);
+      const home = homes[i];
+      if (!home) throw new Error(`no Candy Home on an open street (${look.text})`);
       const fx = home.out[0] - home.x;
       const fz = home.out[2] - home.z;
       const d = [home.x, home.y, home.z, fx > 0 ? 'east' : fx < 0 ? 'west' : fz > 0 ? 'south' : 'north'];
       const [x, y, z] = d;
-      await cmd(alice, `/tp ${(x + 0.5 + fx * 4 + fz * 2).toFixed(1)} ${y + 1} ${(z + 0.5 + fz * 4 + fx * 2).toFixed(1)}`);
-      await cmd(alice, `/tp BobV7 ${(x + 0.5 + fx * 1.3).toFixed(2)} ${y + 1} ${(z + 0.5 + fz * 1.3).toFixed(2)}`);
+      const k = opens[i];
+      // (/tp takes a player to a player: Alice goes to the step first and brings Bob, then stands back)
+      await cmd(alice, `/tp ${(x + 0.5 + fx * 1.3).toFixed(2)} ${y + 0.2} ${(z + 0.5 + fz * 1.3).toFixed(2)}`);
+      await alice.waitForTimeout(1500);
+      await cmd(alice, '/tp BobV7 AliceV7');
+      await alice.waitForTimeout(1500);
+      await cmd(alice, `/tp ${(x + 0.5 + fx * (k + 1.5)).toFixed(1)} ${y + 1} ${(z + 0.5 + fz * (k + 1.5)).toFixed(1)}`);
       await Promise.all([alice, bob].map((p) => p.waitForTimeout(6000)));
       const dd = await Promise.all([alice, bob].map((p) => doorsNear(p)));
       const has = (list) => list.some((e) => e[0] === x && e[1] === y && e[2] === z && e[3] === d[3]);
@@ -733,7 +756,12 @@ await (async () => {
       console.log(log.join('').slice(-2000));
     } finally {
       kill(hub);
-      fs.rmSync(data, { recursive: true, force: true });
+      await new Promise((r) => setTimeout(r, 1000));
+      try {
+        fs.rmSync(data, { recursive: true, force: true });
+      } catch {
+        /* the server was still writing as it stopped */
+      }
     }
   }
 })();

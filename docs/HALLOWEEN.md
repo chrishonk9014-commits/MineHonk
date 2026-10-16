@@ -997,7 +997,21 @@ a frame of 1.7 seconds (JS 137 ms on average over the measurement, against
 The haunting, simulated quickly (two players walking and building, 45
 minutes of ticks), server tick time:
 
-(measured below)
+| Haunting | Version | Average | 99th percentile | Heap growth over it (MB) | Blocks recorded |
+| --- | --- | --- | --- | --- | --- |
+| None | V6.5 | 0.72 | 1.8 | 1.6 | 0 |
+| | V7 | 0.76 | 2.4 | 2.9 | 0 |
+| Herobrine (the Admin Panel's) | V6.5 | 1.12 | 5.7 | 2.5 | 1,080 |
+| | V7 | 1.17 | 7.9 | 2.3 | 1,620 |
+| Herobrine coming back by himself | V7 | 1.03 | 4.5 | 2.2 | 1,267 |
+| Null | V7 | 0.78 | 2.4 | 3.3 | 749 |
+| Green Steve | V7 | 0.74 | 2.4 | 3.3 | 203 |
+| The Cave Dweller | V7 | 0.82 | 2.5 | 2.2 | 24 |
+
+All well inside the 50 ms a tick may take; the heap ends within a few MB of
+where it began (no leak). The longest single tick, up to about 160 ms, is
+the moment an ending begins (the lair or the screen effects being set up),
+once.
 
 - `tests/perf/v7-bench.mjs`: frame time, JS time, draw calls, memory and
   server tick time, for plain terrain by day, the Trick-or-Treat Village at

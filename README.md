@@ -811,6 +811,19 @@ single player, a browser-hosted world and the dedicated server
 are Seasonal; villages appear dressed only in newly explored land of worlds
 made since V7.
 
+#### Performance
+
+Measured against V6.5 on the same machine, seed and view distance (numbers
+in [docs/HALLOWEEN.md](docs/HALLOWEEN.md#performance)): a Trick-or-Treat
+Village at night with its ghosts and lights, and a Trick Home's fight, cost
+about what the same village and house cost in V6.5 (JS time 13 to 17 ms a
+frame in software WebGL, similar draw calls and memory); the server's tick
+over a whole 45-minute haunting is within a few percent of V6.5's for
+Herobrine (1.17 ms against 1.12) and lower for the three new characters,
+with no memory growth. Ghosts are capped (8, and 4 or 2 on lower Particles
+settings, which Auto Optimize lowers); their shader compiles up front, so
+the first ghost of a night no longer stalls a frame.
+
 ### Recipe Book
 
 The book button in the top corner of the inventory and of every workstation

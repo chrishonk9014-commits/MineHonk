@@ -159,7 +159,7 @@ const creative = async (page, slot, id, count = 1) => {
 };
 /** Flies there in steps the server accepts (no teleport: a teleport is a cheat, and the place it lands counts for nothing). */
 async function flyTo(page, x, z, y = null) {
-  for (let i = 0; i < 4000; i++) {
+  for (let i = 0; i < 1500; i++) {
     const done = await page.evaluate(
       ([x, z, y]) => {
         const g = window.minehonk.game;
@@ -199,6 +199,10 @@ const FACE = { north: [0, -1], south: [0, 1], west: [-1, 0], east: [1, 0] };
 async function knockAt(page, d) {
   const [x, y, z, facing] = d;
   const [fx, fz] = FACE[facing];
+  // Over the street in front of it (above the roofs), straight down, then up to the step
+  const top = await page.evaluate(() => window.minehonk.game.player.body.y);
+  await flyTo(page, x + 0.5 + fx * 3.5, z + 0.5 + fz * 3.5, Math.max(top, y + 10));
+  await flyTo(page, x + 0.5 + fx * 3.5, z + 0.5 + fz * 3.5, y + 1);
   await flyTo(page, x + 0.5 + fx * 1.3, z + 0.5 + fz * 1.3, y + 1);
   await page.evaluate(() => (window.minehonk.game.player.flying = false));
   await page.waitForTimeout(700);

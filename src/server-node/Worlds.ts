@@ -13,7 +13,9 @@ import { promises as fs } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import { GameServer } from '../server/GameServer';
 import { installGameplay } from '../server/gameplay';
-import { speakWithClaude, voiceClient, HEROBRINE_MODEL } from '../hub/herobrineVoice';
+import { speakWithClaude, voiceClient, HEROBRINE_MODEL, HEROBRINE_DAILY_LIMIT } from '../hub/herobrineVoice';
+import { parseVoiceRequest } from '../common/game/herobrineVoice';
+import { VoiceBudget } from './voiceBudget';
 import type { Connection } from '../server/net/Connection';
 import type { LevelData } from '../server/world/LevelData';
 import type { C2S } from '../common/net/protocol';
@@ -56,6 +58,8 @@ function liveOf(l: LevelData): Partial<WorldEntry> {
 
 export class Worlds {
   private readonly running = new Map<string, Running>();
+  /** The haunting voices' limits, for every world on this server together (V7 phase 5). */
+  private readonly voiceBudget = new VoiceBudget(Math.max(0, Number(process.env.HEROBRINE_DAILY_LIMIT ?? HEROBRINE_DAILY_LIMIT) || 0));
   private readonly starting = new Map<string, Promise<Running>>();
   /** Account uuid -> world id they are currently playing in. */
   readonly presence = new Map<string, string>();
@@ -223,11 +227,18 @@ export class Worlds {
         });
         this.applyEntry(server.level, e);
         installGameplay(server);
-        // The Haunting: with its own Anthropic key, Herobrine answers players through Claude
+        // The Haunting: with its own Anthropic key, the haunting characters answer players through Claude,
+        // within the same limits as the cloud hub's, and only from a request cleaned the same way
         const voiceKey = process.env.ANTHROPIC_API_KEY;
         if (voiceKey) {
           const client = voiceClient(voiceKey);
-          server.herobrineVoice = (req) => speakWithClaude(client, req, process.env.HEROBRINE_MODEL || HEROBRINE_MODEL);
+          server.herobrineVoice = async (raw) => {
+            const req = parseVoiceRequest(raw);
+            if (!req) return { text: null, reason: 'none' };
+            const ok = this.voiceBudget.take(id);
+            if (ok !== 'ok') return { text: null, reason: ok };
+            return speakWithClaude(client, req, process.env.HEROBRINE_MODEL || HEROBRINE_MODEL);
+          };
         }
         const run: Running = { server, storage, emptySince: Date.now() };
         server.onPlayerLeft = (pl) => {

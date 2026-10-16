@@ -19,8 +19,8 @@ import { END_QUESTS } from '../../common/endExpansion/quests';
 import type { DimensionId } from '../../common/data/biomes';
 import { ENDINGS } from '../../common/data/endings';
 import { DIMENSION_PUMPKINS } from '../../common/halloween/pumpkins';
-import { HALLOWEEN_SETTING_NAMES, type HalloweenSimulation } from '../../common/halloween/season';
-import type { HalloweenStatus, VillageDoorsInfo } from '../../common/game/admin';
+import { HALLOWEEN_SETTING_NAMES, HALLOWEEN_CONTENT_TESTS, HALLOWEEN_DATE_TESTS, HALLOWEEN_CONTENT_TEST_NAMES, HALLOWEEN_DATE_TEST_NAMES } from '../../common/halloween/season';
+import type { HalloweenStatus, VillageDoorsInfo, QuestStatus } from '../../common/game/admin';
 import { CANDY_KINDS, CANDY_NAMES } from '../../common/halloween/candy';
 import { TRICK_KINDS, TRICK_ENCOUNTERS } from '../../common/halloween/trickOrTreat';
 
@@ -919,40 +919,70 @@ export function adminScreen(host: AdminHost): Screen {
   // ------------------------------------------------------------------ V7: Halloween
   const renderHalloween = (): HTMLElement => {
     const state = el('div', { class: 'admin-stats halloween-state' });
-    const simRow = el('div', { class: 'admin-chips halloween-sim' });
+    const contentRow = el('div', { class: 'admin-chips halloween-content' });
+    const dateRow = el('div', { class: 'admin-chips halloween-date' });
+    const questBox = el('div', { class: 'halloween-quest' });
     const when = (ms: number): string => {
       const d = Math.max(0, ms);
       const days = Math.floor(d / 86400000);
       const hours = Math.floor((d % 86400000) / 3600000);
       const mins = Math.floor((d % 3600000) / 60000);
-      return days > 0 ? `${days} day${days === 1 ? '' : 's'}, ${hours} h` : `${hours} h ${mins} min`;
+      const secs = Math.floor((d % 60000) / 1000);
+      return days > 0 ? `${days} day${days === 1 ? '' : 's'}, ${hours} h` : hours > 0 ? `${hours} h ${mins} min` : `${mins}:${String(secs).padStart(2, '0')}`;
     };
-    const SIMS: { id: HalloweenSimulation; label: string }[] = [
-      { id: 'none', label: 'No simulation' },
-      { id: 'expired', label: 'After the cutoff' },
-      { id: 'always', label: 'Always on' },
-    ];
+    const utc = (ms: number): string => new Date(ms).toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
     const showState = (d: HalloweenStatus | undefined): void => {
-      if (!d) return;
+      if (!d?.state) return;
       clear(state);
       const left = d.endsAt - d.now;
-      const rows: [string, string][] = [
-        ['Halloween content', d.state.active ? 'ON' : 'OFF'],
-        ['World setting', HALLOWEEN_SETTING_NAMES[d.state.setting]],
-        ['Season', left > 0 ? `${when(left)} left` : 'Over'],
-        ['Simulation', d.state.sim === 'expired' ? 'After the cutoff' : d.state.sim === 'always' ? 'Always on' : 'None'],
-        ['Pumpkins grown', String(d.placed)],
+      const st = d.state;
+      const tests = [st.content !== 'real' ? HALLOWEEN_CONTENT_TEST_NAMES[st.content] : '', st.date !== 'real' ? `date ${HALLOWEEN_DATE_TEST_NAMES[st.date].toLowerCase()}` : ''].filter(Boolean).join(', ');
+      const rows: [string, string, string][] = [
+        ['Halloween content', st.active ? 'ON' : 'OFF', st.active ? 'halloween-on' : 'halloween-off'],
+        ['World setting', HALLOWEEN_SETTING_NAMES[st.setting], ''],
+        ['Season', st.inSeason ? `${d.season}: ${when(left)} left` : `${d.season}: over`, ''],
+        ['Date', st.date === 'real' ? utc(d.now) : `${utc(d.now)} (simulated)`, st.date === 'real' ? '' : 'halloween-test'],
+        ['Tests', tests ? `${tests} (until the world closes)` : 'None', tests ? 'halloween-test' : ''],
+        ['Pumpkins grown', String(d.placed), ''],
       ];
-      const tips: Record<string, string> = { Season: 'Until the cutoff', 'Pumpkins grown': 'On new chunks since the world opened' };
-      for (const [k, v] of rows) state.append(el('div', { class: 'admin-kv', title: tips[k] ?? '' }, el('span', { class: 'muted' }, k), el('span', { class: k === 'Halloween content' ? (d.state.active ? 'halloween-on' : 'halloween-off') : '' }, v)));
+      const tips: Record<string, string> = { Season: `Until ${d.endsText}`, Date: 'The date this world goes by for Halloween', 'Pumpkins grown': 'On new chunks since the world opened' };
+      for (const [k, v, cls] of rows) state.append(el('div', { class: 'admin-kv', title: tips[k] ?? '' }, el('span', { class: 'muted' }, k), el('span', { class: cls }, v)));
       state.append(el('div', { class: 'muted small halloween-why' }, d.text));
-      for (const c of simRow.children) c.classList.toggle('active', (c as HTMLElement).dataset.sim === d.state.sim);
+      for (const c of contentRow.children) c.classList.toggle('active', (c as HTMLElement).dataset.v === st.content);
+      for (const c of dateRow.children) c.classList.toggle('active', (c as HTMLElement).dataset.v === st.date);
     };
-    const op = (action: Parameters<typeof send>[0]): void => void send(action).then((r) => (r.data as HalloweenStatus | undefined)?.state && showState(r.data as HalloweenStatus));
-    for (const sm of SIMS) {
-      const b = btn(sm.label, () => op({ a: 'halloween', op: 'simulate', sim: sm.id }), 'btn chip');
-      b.dataset.sim = sm.id;
-      simRow.append(b);
+    const showQuest = (q: QuestStatus | null | undefined): void => {
+      if (!q) return;
+      clear(questBox);
+      const list = el('div', { class: 'halloween-quest-steps' });
+      q.steps.forEach((st, i) =>
+        list.append(
+          el(
+            'div',
+            { class: 'halloween-quest-step' + (st.done ? ' done' : st.now ? ' now' : '') },
+            el('span', { class: 'halloween-quest-mark' }, st.done ? '\u2714' : st.now ? '\u25b6' : `${i + 1}`),
+            el('span', {}, st.text, ...(st.why ? [el('div', { class: 'error-text small' }, st.why)] : [])),
+          ),
+        ),
+      );
+      questBox.append(list, el('div', { class: 'muted small' }, `${q.done ? 'Finished. ' : ''}Honest knocks answered: ${q.knocks}; Candy Homes that treated you: ${q.treats}; candy from them: ${q.candy}; Trick Homes beaten: ${q.tricks}.`));
+    };
+    const op = (action: Parameters<typeof send>[0]): void =>
+      void send(action).then((r) => {
+        const d = r.data as (HalloweenStatus & { quest?: QuestStatus | null }) | undefined;
+        if (d?.state) showState(d);
+        if (d?.quest !== undefined) showQuest(d.quest);
+      });
+    for (const v of HALLOWEEN_CONTENT_TESTS) {
+      const b = btn(HALLOWEEN_CONTENT_TEST_NAMES[v], () => op({ a: 'halloween', op: 'test', content: v }), `btn chip halloween-content-${v}`);
+      b.dataset.v = v;
+      contentRow.append(b);
+    }
+    for (const v of HALLOWEEN_DATE_TESTS) {
+      const b = btn(HALLOWEEN_DATE_TEST_NAMES[v], () => op({ a: 'halloween', op: 'test', date: v }), `btn chip halloween-date-${v}`);
+      b.dataset.v = v;
+      b.title = v === 'real' ? 'The real date' : `Starts a minute ${v} the cutoff and runs on from there`;
+      dateRow.append(b);
     }
     const pumpkinBtn = (p: (typeof DIMENSION_PUMPKINS)[number]): HTMLElement => {
       const b = btn('', () => op({ a: 'halloween', op: 'place', pumpkin: p.id }), 'btn chip halloween-place');
@@ -964,7 +994,7 @@ export function adminScreen(host: AdminHost): Screen {
       return b;
     };
     // V7 phase 2: the nearest Trick-or-Treat Village's doors
-    const doorsBox = el('div', { class: 'halloween-doors' }, el('div', { class: 'muted small' }, 'Every house door is a Candy Home or a Trick Home (2 to 4 of them). They look the same from outside.'));
+    const doorsBox = el('div', { class: 'halloween-doors' });
     const showDoors = (r: AdminReply): void => {
       clear(doorsBox);
       const info = (r.data as { doors?: VillageDoorsInfo | null } | undefined)?.doors;
@@ -994,14 +1024,17 @@ export function adminScreen(host: AdminHost): Screen {
       }
       doorsBox.append(list);
     };
-    void host.request({ a: 'halloween', op: 'status' }).then((r) => !destroyed && showState(r.data as HalloweenStatus));
+    const refresh = (): void => void host.request({ a: 'halloween', op: 'status' }).then((r) => !destroyed && showState(r.data as HalloweenStatus));
+    refresh();
+    void host.request({ a: 'halloween', op: 'quest' }).then((r) => !destroyed && showQuest((r.data as { quest?: QuestStatus | null } | undefined)?.quest));
     perfTimer = setInterval(() => {
       if (destroyed || !root.isConnected) {
         if (perfTimer) clearInterval(perfTimer);
         return;
       }
-      void host.request({ a: 'halloween', op: 'status' }).then((r) => !destroyed && showState(r.data as HalloweenStatus));
+      refresh();
     }, 1000);
+    const help = (t: string): HTMLElement => el('div', { class: 'muted small' }, t);
     return el(
       'div',
       { class: 'admin-cols' },
@@ -1009,16 +1042,30 @@ export function adminScreen(host: AdminHost): Screen {
         'div',
         { class: 'admin-col' },
         section('Halloween in this world', state),
-        section('Test the season', el('div', { class: 'muted small' }, 'Simulate the end of the season, or Halloween always on. Never saved: it ends when the world closes.'), simRow),
+        section(
+          'Season tests',
+          help("For testing only. Never saved: they end when the world closes, and the world's own setting stays as it is. Only the world's owner and its operators can use them."),
+          el('div', { class: 'label' }, 'Halloween content'),
+          contentRow,
+          el('div', { class: 'label' }, 'Simulate date'),
+          dateRow,
+          help('A simulated date runs on: "just before" shows the season ending a minute later.'),
+        ),
         section(
           'Villages',
-          el('div', { class: 'muted small' }, 'Builds one around you, in any world (Overworld only). Everything in it is cheat-made.'),
+          help('Builds one around you (Overworld only), in any world and any season. Everything in it is cheat-made.'),
           el('div', { class: 'admin-chips' }, btn('Build a Trick-or-Treat Village', () => op({ a: 'halloween', op: 'spawn_trick_village' }), 'btn chip halloween-spawn-trick'), btn('Build an Abandoned Village', () => op({ a: 'halloween', op: 'spawn_abandoned_village' }), 'btn chip halloween-spawn-abandoned')),
         ),
+        section('Ghosts', help('They drift past now and then on Halloween nights. This shows you one now, day or night (only you see it).'), btn('Show a ghost now', () => op({ a: 'halloween', op: 'ghost' }), 'btn chip halloween-ghost')),
+        section('Dimension pumpkins', help('Placed in front of you, facing you (cheat-made).'), el('div', { class: 'admin-chips' }, ...DIMENSION_PUMPKINS.map(pumpkinBtn)), btn('Place one of each', () => op({ a: 'halloween', op: 'place_all' }), 'btn chip halloween-place-all')),
+      ),
+      el(
+        'div',
+        { class: 'admin-col' },
         // V7 phase 3: trick-or-treating
         section(
-          'Trick-or-treating',
-          el('div', { class: 'muted small' }, 'All cheat-made: nothing here counts for advancements or the quest, and no real door is used up.'),
+          'Sacks and candy',
+          help('All cheat-made: nothing here counts for advancements or the quest.'),
           el(
             'div',
             { class: 'admin-chips halloween-give' },
@@ -1026,22 +1073,29 @@ export function adminScreen(host: AdminHost): Screen {
             btn('Full sack', () => op({ a: 'halloween', op: 'give_full_sack' }), 'btn chip halloween-give-full'),
             ...CANDY_KINDS.map((k) => btn(CANDY_NAMES[k], () => op({ a: 'halloween', op: 'give_candy', candy: k }), `btn chip halloween-give-${k}`)),
           ),
+        ),
+        section(
+          'Knocking and Trick Homes',
+          help('Uses the nearest door of a Trick-or-Treat Village (within 48 blocks). A test knock ignores the costume, the sack and "once each", and never uses a real door up.'),
           el(
             'div',
             { class: 'admin-chips' },
-            btn('Knock on the nearest door', () => void send({ a: 'halloween', op: 'knock' }).then((r) => r.ok && host.close()), 'btn chip halloween-knock'),
+            btn('Test a knock', () => void send({ a: 'halloween', op: 'knock' }).then((r) => r.ok && host.close()), 'btn chip halloween-knock'),
             btn("Reset the nearest village's doors", () => op({ a: 'halloween', op: 'reset_doors' }), 'btn chip halloween-reset-doors'),
           ),
-          el('div', { class: 'muted small' }, 'Knocking ignores the costume, the sack and "once each". Start a Trick Home at the nearest door:'),
+          el('div', { class: 'label' }, 'Start a Trick Home encounter'),
           el('div', { class: 'admin-chips halloween-tricks' }, ...TRICK_KINDS.map((k) => btn(TRICK_ENCOUNTERS[k].name, () => void send({ a: 'halloween', op: 'trick', trick: k }).then((r) => r.ok && host.close()), `btn chip halloween-trick-${k}`))),
+          el('div', { class: 'label' }, 'Doors'),
+          help('Every house door is a Candy Home or a Trick Home (2 to 4 of them). They look the same from outside.'),
+          btn("Show the nearest village's doors", () => void send({ a: 'halloween', op: 'village_doors' }).then((r) => !destroyed && showDoors(r)), 'btn chip halloween-doors-btn'),
+          doorsBox,
         ),
-      ),
-      el(
-        'div',
-        { class: 'admin-col' },
-        section('Trick-or-Treat doors', btn('Show the nearest village\'s doors', () => void send({ a: 'halloween', op: 'village_doors' }).then((r) => !destroyed && showDoors(r)), 'btn chip halloween-doors-btn'), doorsBox),
-        section('Ghosts', el('div', { class: 'muted small' }, 'They drift past now and then on Halloween nights. This shows you one now, day or night.'), btn('Show a ghost now', () => op({ a: 'halloween', op: 'ghost' }), 'btn chip halloween-ghost')),
-        section('Dimension pumpkins', el('div', { class: 'muted small' }, 'Placed in front of you, facing you (cheat-made).'), el('div', { class: 'admin-chips' }, ...DIMENSION_PUMPKINS.map(pumpkinBtn)), btn('Place one of each', () => op({ a: 'halloween', op: 'place_all' }), 'btn chip halloween-place-all')),
+        section(
+          'Your Trick or Treat! quest',
+          help('Only honest play moves it on: nothing from this panel, cheats or cheat-made villages counts.'),
+          questBox,
+          el('div', { class: 'admin-chips' }, btn('Refresh', () => op({ a: 'halloween', op: 'quest' }), 'btn chip halloween-quest-refresh'), btn('Reset my quest', () => op({ a: 'halloween', op: 'quest_reset' }), 'btn chip halloween-quest-reset')),
+        ),
       ),
     );
   };

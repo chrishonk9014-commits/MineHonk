@@ -99,7 +99,8 @@ export function voicePrompt(req: VoiceRequest): string {
 
 export function voiceClient(apiKey: string): Anthropic {
   // A ghost who takes too long to answer has nothing to say: the game falls back to its scripted lines
-  return new Anthropic({ apiKey, timeout: 8000, maxRetries: 1 });
+  // (no retries: the game stops waiting after ten seconds, and an answer after that is paid for and never said)
+  return new Anthropic({ apiKey, timeout: 8000, maxRetries: 0 });
 }
 
 /** One line from Claude, cleaned for chat in the character's way; null when it was refused, empty, or the API failed. */
@@ -108,7 +109,8 @@ export async function speakWithClaude(client: Anthropic, req: VoiceRequest, mode
   try {
     const res = await client.messages.create({
       model,
-      max_tokens: 1024,
+      // One short line (at most 14 words): room to spare, but never a long, costly answer
+      max_tokens: 256,
       output_config: { effort: 'low' },
       system: VOICE_SYSTEMS[character],
       messages: [{ role: 'user', content: voicePrompt(req) }],

@@ -117,7 +117,7 @@ export class HerobrineSystem {
   private readonly arrivedAt = new Map<ServerPlayer, number>();
   private readonly rng = new Random();
   /** V7 phase 3: the Herobrine Head he dropped, and who it goes to if nobody picks it up before the hall falls. */
-  private head: { e: ItemEntity; heir: string } | null = null;
+  private head: { e: ItemEntity; heirs: string[] } | null = null;
 
   constructor(readonly server: GameServer) {
     this.malware = new Malware(this);
@@ -855,7 +855,9 @@ export class HerobrineSystem {
     e.body.vy = 0.25;
     e.pickupDelay = 20;
     f.dim.addEntity(e);
-    this.head = { e, heir: party[0]!.uuid };
+    // Those who won it honestly, nearest to where he fell first
+    const heirs = party.sort((a, b) => a.distanceSq(m.x, m.y, m.z) - b.distanceSq(m.x, m.y, m.z)).map((p) => p.uuid);
+    this.head = { e, heirs };
   }
 
   /** The hall is coming down: a head nobody picked up goes to the one who was nearest when he fell. */
@@ -863,10 +865,11 @@ export class HerobrineSystem {
     const h = this.head;
     this.head = null;
     if (!h || h.e.removed) return;
+    // Only someone who won it (never a bystander, nor anyone under a cheat); with none of them here it stays where it fell
+    const heir = h.heirs.map((u) => this.online(u)).find((p): p is ServerPlayer => !!p && !this.server.admin.inContext(p));
+    if (!heir) return;
     const st = h.e.stack;
     h.e.remove();
-    const heir = this.online(h.heir) ?? [...this.server.players.values()][0];
-    if (!heir) return;
     const rem = heir.inventory.add(st);
     if (rem) this.server.mining.dropItem(heir.dim, heir.x, heir.y + 0.3, heir.z, rem);
     this.server.interaction.syncInventory(heir);

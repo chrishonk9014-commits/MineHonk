@@ -7,6 +7,7 @@ import type { Mob } from '../../entity/Mob';
 import type { HauntCharacter } from '../../../common/game/haunting';
 import type { HauntNotice } from '../../../common/game/hauntCast';
 import type { HauntEndScreen } from '../../../common/net/protocol';
+import type { DimensionId } from '../../../common/data/biomes';
 
 /** What the world keeps of a haunting (level.flags.haunt). */
 export interface HauntState {
@@ -87,6 +88,15 @@ export interface HauntPart {
    * nothing haunts the world, so it must be cheap and quiet when idle.
    */
   reset(why: 'stop' | 'end'): void;
+  /**
+   * V7 phase 5: a player is leaving the world in the middle of something that
+   * moved them (a trap, an end's cutscene): where they are saved is where it
+   * took them from, never a bedrock room or a lair. (A world loaded again in
+   * its end starts the end again.)
+   */
+  release?(p: ServerPlayer): void;
+  /** Where a player it holds was taken from (saves made meanwhile keep them there); null: it holds nobody. */
+  originOf?(p: ServerPlayer): { dim: DimensionId; x: number; y: number; z: number; yaw: number } | null;
   /** It is holding this player (a cutscene of its end). */
   holds?(p: ServerPlayer): boolean;
   /** It is not answering anyone now (`delivering`: an answer already on its way is about to be said). */

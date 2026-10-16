@@ -7,7 +7,13 @@ export interface AchievementDef {
   /** Parent achievement shown as prerequisite in the UI tree. */
   parent?: string;
   secret?: boolean;
-  category: 'story' | 'nether' | 'end' | 'adventure' | 'farlands' | 'husbandry' | 'caves' | 'world' | 'engineering' | 'digital';
+  category: 'story' | 'nether' | 'end' | 'adventure' | 'farlands' | 'husbandry' | 'caves' | 'world' | 'engineering' | 'digital' | 'halloween';
+  /**
+   * V7: needs seasonal content to be earned (Halloween content on in the
+   * world: the season, or a world with it Always on). Never removed: after the
+   * season it stays on the screen, marked, and Always on worlds still give it.
+   */
+  seasonal?: 'halloween';
 }
 
 export const ACHIEVEMENTS: AchievementDef[] = [
@@ -110,14 +116,6 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: 'sleep_bed', title: 'Sweet Dreams', description: 'Sleep in a bed to change your respawn point', icon: 'red_bed', parent: 'root', category: 'adventure' },
   { id: 'trade', title: "What a Deal!", description: 'Successfully trade with a Villager', icon: 'emerald', parent: 'root', category: 'adventure' },
   { id: 'find_village', title: 'Neighbourhood Watch', description: 'Find a village', icon: 'bell', parent: 'root', category: 'adventure' },
-  // V7 phase 2
-  { id: 'find_trick_village', title: 'Trick or Treat!', description: 'Find a Trick-or-Treat Village', icon: 'hallow_pumpkin', parent: 'find_village', category: 'adventure' },
-  { id: 'find_abandoned_village', title: 'Ghost Town', description: 'Find an Abandoned Village', icon: 'skeleton_skull', parent: 'find_village', category: 'adventure' },
-  // V7 phase 3
-  { id: 'first_candy', title: 'Sweet!', description: 'Get candy from a Candy Home', icon: 'candy', parent: 'find_trick_village', category: 'adventure' },
-  { id: 'full_sack', title: 'Sweet Tooth', description: 'Fill a Trick-or-Treat Sack to the top', icon: 'trick_or_treat_sack', parent: 'first_candy', category: 'adventure' },
-  { id: 'beat_trick_home', title: 'Who Goes There?', description: 'Fight your way out of a Trick Home', icon: 'jack_o_lantern', parent: 'find_trick_village', category: 'adventure' },
-  { id: 'herobrine_trick', title: 'He Was Never Here', description: 'Beat Herobrine in a Trick Home', icon: 'redstone_torch', parent: 'beat_trick_home', category: 'adventure', secret: true },
   { id: 'find_temple', title: 'Tomb Raider', description: 'Find a temple', icon: 'chiseled_sandstone', parent: 'root', category: 'adventure' },
   { id: 'find_sky_shrine', title: 'Above the Clouds', description: 'Discover a Sky Shrine', icon: 'sky_ray_membrane', parent: 'root', category: 'adventure', secret: true },
   { id: 'level_30', title: 'Experienced', description: 'Reach experience level 30', icon: 'experience_bottle', parent: 'root', category: 'adventure' },
@@ -188,6 +186,20 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: 'find_herobrine_cave', title: 'The Lights Never Go Out', description: "Find Herobrine's cave", icon: 'server_rack', parent: 'discover_herobrine_seed', category: 'digital', secret: true },
   { id: 'defeat_final_herobrine', title: 'Removed Herobrine', description: 'Defeat Herobrine in his cave', icon: 'netherite_sword', parent: 'find_herobrine_cave', category: 'digital', secret: true },
   { id: 'herobrine_ending', title: 'Secret Ending: Herobrine', description: 'Reach the Herobrine secret ending', icon: 'corrupted_flash_drive', parent: 'defeat_final_herobrine', category: 'digital', secret: true },
+  // V7 - The Halloween Update: its own tab. `seasonal`: needs Halloween content (the season, or Always on)
+  { id: 'find_abandoned_village', title: 'Ghost Town', description: 'Find an Abandoned Village', icon: 'skeleton_skull', parent: 'find_village', category: 'halloween' },
+  { id: 'find_trick_village', title: 'Spooky Streets', description: 'Find a Trick-or-Treat Village', icon: 'hallow_pumpkin', parent: 'find_village', category: 'halloween', seasonal: 'halloween' },
+  { id: 'craft_sack', title: 'Bring a Bag', description: 'Craft a Trick-or-Treat Sack', icon: 'trick_or_treat_sack', parent: 'find_trick_village', category: 'halloween', seasonal: 'halloween' },
+  { id: 'obtain_costume', title: 'Dressed to Scare', description: 'Get a costume: a mob head or a carved pumpkin', icon: 'carved_pumpkin', parent: 'find_village', category: 'halloween' },
+  { id: 'first_candy', title: 'Sweet!', description: 'Get candy from a Candy Home', icon: 'candy', parent: 'find_trick_village', category: 'halloween', seasonal: 'halloween' },
+  { id: 'obtain_big_candy', title: 'Big Treat', description: 'Get Big Candy', icon: 'big_candy', parent: 'first_candy', category: 'halloween', seasonal: 'halloween' },
+  { id: 'obtain_king_candy', title: 'Fit for a King', description: 'Get King-Sized Candy', icon: 'king_sized_candy', parent: 'obtain_big_candy', category: 'halloween', seasonal: 'halloween' },
+  { id: 'full_sack', title: 'Sweet Tooth', description: 'Fill a Trick-or-Treat Sack to the top with candy (128)', icon: 'trick_or_treat_sack', parent: 'first_candy', category: 'halloween', seasonal: 'halloween' },
+  { id: 'trick_or_treat_quest', title: 'Trick or Treat!', description: 'Complete the Trick or Treat! quest', icon: 'hallow_pumpkin', parent: 'first_candy', category: 'halloween', seasonal: 'halloween' },
+  { id: 'find_trick_home', title: 'Not a Treat', description: 'Knock on the door of a Trick Home', icon: 'oak_door', parent: 'find_trick_village', category: 'halloween', seasonal: 'halloween' },
+  { id: 'beat_trick_home', title: 'Who Goes There?', description: 'Fight your way out of a Trick Home', icon: 'jack_o_lantern', parent: 'find_trick_home', category: 'halloween', seasonal: 'halloween' },
+  { id: 'herobrine_trick', title: 'He Was Never Here', description: 'Beat Herobrine in a Trick Home', icon: 'redstone_torch', parent: 'beat_trick_home', category: 'halloween', secret: true, seasonal: 'halloween' },
+  { id: 'experience_haunting', title: 'It Came Back', description: 'Live through a haunting that came by itself, to its very end', icon: 'herobrine_head', parent: 'root', category: 'halloween', secret: true },
 ];
 
 export const ACHIEVEMENT_BY_ID = new Map(ACHIEVEMENTS.map((a) => [a.id, a]));

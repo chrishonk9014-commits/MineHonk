@@ -141,27 +141,36 @@ export interface VillageRecord {
   area?: GuardArea;
 }
 
-/** Reads saved records back, dropping anything malformed. */
+/** At most this many village records and doors a village are read back (far more than any world makes). */
+export const MAX_VILLAGE_RECORDS = 4096;
+export const MAX_VILLAGE_DOORS = 64;
+/** A record's key: the village's start chunk ("cx,cz"), or "admin@x,z" for the Admin Panel's. */
+const RECORD_KEY = /^(admin@)?-?\d{1,9},-?\d{1,9}$/;
+
+/** Reads saved records back, dropping anything malformed (and keys that are not a village's). */
 export function sanitizeVillageRecords(raw: unknown): Record<string, VillageRecord> {
   const out: Record<string, VillageRecord> = {};
-  if (!raw || typeof raw !== 'object') return out;
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return out;
   const num = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+  let n = 0;
   for (const [key, r] of Object.entries(raw as Record<string, unknown>)) {
-    if (!r || typeof r !== 'object') continue;
+    if (n >= MAX_VILLAGE_RECORDS) break;
+    if (!RECORD_KEY.test(key) || !r || typeof r !== 'object') continue;
     const o = r as Record<string, unknown>;
     if ((o.kind !== 'trick' && o.kind !== 'normal' && o.kind !== 'abandoned') || !num(o.x) || !num(o.y) || !num(o.z)) continue;
     const doors: DoorRecord[] = [];
     if (Array.isArray(o.doors))
-      for (const d of o.doors as Record<string, unknown>[]) {
-        if (!d || !num(d.x) || !num(d.y) || !num(d.z) || !num(d.id) || (d.kind !== 'candy' && d.kind !== 'trick')) continue;
-        const outPos = Array.isArray(d.out) && d.out.length === 3 && d.out.every(num) ? (d.out as [number, number, number]) : ([d.x, d.y, d.z] as [number, number, number]);
+      for (const d of (o.doors as Record<string, unknown>[]).slice(0, MAX_VILLAGE_DOORS)) {
+        if (!d || typeof d !== 'object' || !Number.isInteger(d.x) || !Number.isInteger(d.y) || !Number.isInteger(d.z) || !Number.isInteger(d.id) || (d.id as number) < 0 || (d.kind !== 'candy' && d.kind !== 'trick')) continue;
+        const outPos = Array.isArray(d.out) && d.out.length === 3 && d.out.every((v) => Number.isInteger(v)) ? ([...d.out] as [number, number, number]) : ([d.x, d.y, d.z] as [number, number, number]);
         const facing = (['north', 'south', 'west', 'east'] as const).find((f) => f === d.facing) ?? 'north';
         const got = Array.isArray(d.got) ? [...new Set((d.got as unknown[]).filter((u): u is string => typeof u === 'string' && u.length > 0 && u.length <= 64))].slice(0, 1024) : [];
-        doors.push({ id: d.id, x: d.x, y: d.y, z: d.z, facing, out: outPos, design: typeof d.design === 'string' ? d.design : 'house', kind: d.kind, seed: num(d.seed) ? d.seed >>> 0 : 0, used: d.used === true, ...(got.length ? { got } : {}) });
+        doors.push({ id: d.id as number, x: d.x as number, y: d.y as number, z: d.z as number, facing, out: outPos, design: typeof d.design === 'string' && d.design.length <= 32 ? d.design : 'house', kind: d.kind, seed: num(d.seed) ? d.seed >>> 0 : 0, used: d.used === true, ...(got.length ? { got } : {}) });
       }
     const a = o.area as Record<string, unknown> | undefined;
     const area = a && num(a.x0) && num(a.z0) && num(a.x1) && num(a.z1) && num(a.y) ? { x0: a.x0, z0: a.z0, x1: a.x1, z1: a.z1, y: a.y } : undefined;
-    out[key] = { kind: o.kind, decidedAt: num(o.decidedAt) ? o.decidedAt : 0, x: o.x, y: o.y, z: o.z, style: typeof o.style === 'string' ? o.style : 'plains', doors, ...(o.cheat === true ? { cheat: true } : {}), ...(area ? { area } : {}) };
+    out[key] = { kind: o.kind, decidedAt: num(o.decidedAt) ? o.decidedAt : 0, x: o.x, y: o.y, z: o.z, style: typeof o.style === 'string' && o.style.length <= 32 ? o.style : 'plains', doors, ...(o.cheat === true ? { cheat: true } : {}), ...(area ? { area } : {}) };
+    n++;
   }
   return out;
 }

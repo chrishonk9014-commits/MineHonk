@@ -11,7 +11,7 @@ import { describe, it, expect } from 'vitest';
 import { makeServer, join, tick, type FakeConn } from '../helpers/testServer';
 import type { GameServer } from '../../src/server/GameServer';
 import { MemoryStorage } from '../../src/server/storage/Storage';
-import { HALLOWEEN_ENDS_AT, halloweenState, seasonActive, normalizeHalloweenSetting, halloweenReasonText } from '../../src/common/halloween/season';
+import { HALLOWEEN_ENDS_AT, HALLOWEEN_WINDOWS, DATE_TEST_LEAD, halloweenState, halloweenTested, seasonActive, seasonWindowAt, seasonWindowFor, simulatedDateStart, normalizeHalloweenSetting, halloweenReasonText } from '../../src/common/halloween/season';
 import { SeasonClock, hubTimeOf } from '../../src/common/halloween/clock';
 import { DIMENSION_PUMPKINS, PUMPKIN_IDS, PUMPKIN_GROUND, decoratePumpkins, pumpkinFor, pumpkinSpot } from '../../src/common/halloween/pumpkins';
 import { createLevelData, sanitizeLevelData } from '../../src/server/world/LevelData';
@@ -48,22 +48,49 @@ describe('the Halloween season', () => {
   });
 
   it('a world: the date and its setting (Seasonal worlds stop, Always on worlds keep it)', () => {
-    expect(halloweenState(BEFORE, 'seasonal')).toEqual({ active: true, reason: 'season', setting: 'seasonal', sim: 'none' });
-    expect(halloweenState(AFTER, 'seasonal')).toEqual({ active: false, reason: 'expired', setting: 'seasonal', sim: 'none' });
+    expect(halloweenState(BEFORE, 'seasonal')).toEqual({ active: true, reason: 'season', setting: 'seasonal', inSeason: true, content: 'real', date: 'real' });
+    expect(halloweenState(AFTER, 'seasonal')).toEqual({ active: false, reason: 'expired', setting: 'seasonal', inSeason: false, content: 'real', date: 'real' });
     expect(halloweenState(BEFORE, 'always')).toMatchObject({ active: true, reason: 'always' });
     expect(halloweenState(AFTER, 'always')).toMatchObject({ active: true, reason: 'always' });
     // Next year does not bring it back by itself
     expect(halloweenState(Date.parse('2027-10-31T00:00:00Z'), 'seasonal').active).toBe(false);
   });
 
-  it('the Admin Panel simulations: after the cutoff, and always on', () => {
-    expect(halloweenState(BEFORE, 'seasonal', 'expired')).toMatchObject({ active: false, reason: 'expired', sim: 'expired' });
+  it('the Admin Panel tests: the content forced on or off, a date just before or after the cutoff', () => {
+    // A simulated date is just a date: the world's answer for it
+    expect(simulatedDateStart('before', BEFORE - 30 * 86400_000)).toBe(HALLOWEEN_ENDS_AT - DATE_TEST_LEAD);
+    expect(simulatedDateStart('after', BEFORE - 30 * 86400_000)).toBe(HALLOWEEN_ENDS_AT + DATE_TEST_LEAD);
+    expect(simulatedDateStart('real', 12345)).toBe(12345);
+    expect(halloweenState(simulatedDateStart('after', BEFORE), 'seasonal', { content: 'real', date: 'after' })).toMatchObject({ active: false, reason: 'expired', inSeason: false, date: 'after' });
     // An Always on world keeps it after the cutoff, simulated or not
-    expect(halloweenState(BEFORE, 'always', 'expired')).toMatchObject({ active: true, reason: 'always' });
-    expect(halloweenState(AFTER, 'seasonal', 'always')).toMatchObject({ active: true, reason: 'always', sim: 'always' });
+    expect(halloweenState(AFTER, 'always', { content: 'real', date: 'after' })).toMatchObject({ active: true, reason: 'always', inSeason: false });
+    // Forced: whatever the date and setting say
+    expect(halloweenState(AFTER, 'seasonal', { content: 'on', date: 'real' })).toMatchObject({ active: true, reason: 'forced', content: 'on' });
+    expect(halloweenState(BEFORE, 'always', { content: 'off', date: 'real' })).toMatchObject({ active: false, reason: 'forced', content: 'off' });
+    expect(halloweenTested(halloweenState(BEFORE, 'seasonal'))).toBe(false);
+    expect(halloweenTested(halloweenState(BEFORE, 'seasonal', { content: 'real', date: 'before' }))).toBe(true);
     expect(halloweenReasonText(halloweenState(AFTER, 'seasonal'))).toMatch(/^Off/);
     expect(halloweenReasonText(halloweenState(BEFORE, 'seasonal'))).toMatch(/November 7, 2026/);
-    expect(halloweenReasonText(halloweenState(AFTER, 'seasonal', 'always'))).toMatch(/simulating/);
+    expect(halloweenReasonText(halloweenState(AFTER, 'seasonal', { content: 'on', date: 'real' }))).toMatch(/forced on/);
+    expect(halloweenReasonText(halloweenState(AFTER, 'seasonal', { content: 'real', date: 'after' }))).toMatch(/just after the cutoff/);
+  });
+
+  it('is one window, written in one place, and nothing brings it back by itself', () => {
+    expect(HALLOWEEN_WINDOWS).toHaveLength(1);
+    expect(HALLOWEEN_WINDOWS[0]).toMatchObject({ id: 'halloween-2026', from: null, until: Date.parse('2026-11-07T08:00:00Z') });
+    expect(seasonWindowAt(BEFORE)?.id).toBe('halloween-2026');
+    expect(seasonWindowAt(AFTER)).toBeNull();
+    // Every Halloween after this one: off (no future windows)
+    for (const y of [2027, 2028, 2030, 2040]) expect(seasonActive(Date.UTC(y, 9, 31, 12))).toBe(false);
+    // A later Halloween is one more window (docs/SEASONS.md): on in it, off between
+    const year2 = [...HALLOWEEN_WINDOWS, { id: 'halloween-2027', name: 'Halloween 2027', from: Date.UTC(2027, 9, 1, 7), until: Date.UTC(2027, 10, 7, 8), untilText: 'November 7, 2027, 12:00 AM PST', untilDate: 'November 7, 2027' }];
+    expect(seasonWindowAt(Date.UTC(2027, 9, 31), year2)?.id).toBe('halloween-2027');
+    expect(seasonWindowAt(Date.UTC(2027, 5, 1), year2)).toBeNull();
+    expect(seasonWindowFor(Date.UTC(2027, 5, 1), year2).id).toBe('halloween-2027');
+    expect(seasonWindowFor(Date.UTC(2028, 5, 1), year2).id).toBe('halloween-2027');
+    // Nothing else in the code writes the cutoff down
+    const files = ['src/client/ui/Screens.ts', 'src/client/ui/OnlineScreens.ts', 'src/client/ui/AdminPanel.ts', 'src/client/ui/updateLogV7.ts', 'src/server/systems/Halloween.ts', 'src/client/App.ts'];
+    for (const f of files) expect(readFileSync(f, 'utf8'), f).not.toMatch(/November 7|2026-11-07|Date\.UTC\(2026/);
   });
 
   it('the clock: the hub time when known, the device clock otherwise', () => {
@@ -312,8 +339,12 @@ describe("the Admin Panel's Halloween tab", () => {
     expect(validateAdmin({ a: 'halloween', op: 'status' })).toEqual({ a: 'halloween', op: 'status' });
     expect(validateAdmin({ a: 'halloween', op: 'place', pumpkin: 'ember_pumpkin' })).toEqual({ a: 'halloween', op: 'place', pumpkin: 'ember_pumpkin' });
     expect(validateAdmin({ a: 'halloween', op: 'place', pumpkin: 'diamond_block' })).toBeNull();
-    expect(validateAdmin({ a: 'halloween', op: 'simulate', sim: 'expired' })).toEqual({ a: 'halloween', op: 'simulate', sim: 'expired' });
-    expect(validateAdmin({ a: 'halloween', op: 'simulate', sim: 'forever' })).toBeNull();
+    expect(validateAdmin({ a: 'halloween', op: 'test', date: 'after' })).toEqual({ a: 'halloween', op: 'test', date: 'after' });
+    expect(validateAdmin({ a: 'halloween', op: 'test', content: 'off', date: 'before' })).toEqual({ a: 'halloween', op: 'test', content: 'off', date: 'before' });
+    expect(validateAdmin({ a: 'halloween', op: 'test', content: 'forever' })).toBeNull();
+    expect(validateAdmin({ a: 'halloween', op: 'test', date: 'yesterday' })).toBeNull();
+    expect(validateAdmin({ a: 'halloween', op: 'test' })).toBeNull();
+    expect(validateAdmin({ a: 'halloween', op: 'simulate', sim: 'expired' })).toBeNull();
     expect(validateAdmin({ a: 'halloween', op: 'delete_world' })).toBeNull();
     expect(describeAdmin({ a: 'halloween', op: 'status' })).toBeNull();
     expect(describeAdmin({ a: 'halloween', op: 'place_all' })).toMatch(/pumpkin/);
@@ -324,7 +355,7 @@ describe("the Admin Panel's Halloween tab", () => {
     const { conn, player } = await join(server, 'Op', 'uuid-op', 4);
     let r = admin(server, conn, { a: 'halloween', op: 'status' });
     expect(r.ok).toBe(true);
-    expect(r.data).toMatchObject({ state: { active: true, reason: 'season', setting: 'seasonal', sim: 'none' }, endsAt: HALLOWEEN_ENDS_AT, now: BEFORE });
+    expect(r.data).toMatchObject({ state: { active: true, reason: 'season', setting: 'seasonal', inSeason: true, content: 'real', date: 'real' }, endsAt: HALLOWEEN_ENDS_AT, now: BEFORE, realNow: BEFORE, season: 'Halloween 2026' });
     expect(r.data!.text).toMatch(/season/);
 
     r = admin(server, conn, { a: 'halloween', op: 'ghost' });
@@ -349,17 +380,22 @@ describe("the Admin Panel's Halloween tab", () => {
       expect(getProp(player.dim.getState(f.x, f.y, f.z), 'facing')).toBe('south');
     }
 
-    r = admin(server, conn, { a: 'halloween', op: 'simulate', sim: 'expired' });
-    expect(r.data!.state).toMatchObject({ active: false, reason: 'expired', sim: 'expired' });
-    expect(conn.last('world_info')!.world.halloween).toMatchObject({ active: false, sim: 'expired' });
-    r = admin(server, conn, { a: 'halloween', op: 'simulate', sim: 'always' });
-    expect(r.data!.state).toMatchObject({ active: true, reason: 'always', sim: 'always' });
-    r = admin(server, conn, { a: 'halloween', op: 'simulate', sim: 'none' });
-    expect(r.data!.state).toMatchObject({ active: true, reason: 'season', sim: 'none' });
-    // Not saved: a new server for the world starts without it
-    server.halloween!.sim = 'expired';
+    r = admin(server, conn, { a: 'halloween', op: 'test', date: 'after' });
+    expect(r.data!.state).toMatchObject({ active: false, reason: 'expired', date: 'after', inSeason: false });
+    expect(r.data!.now).toBe(HALLOWEEN_ENDS_AT + DATE_TEST_LEAD);
+    expect(r.data!.realNow).toBe(BEFORE);
+    expect(conn.last('world_info')!.world.halloween).toMatchObject({ active: false, date: 'after' });
+    r = admin(server, conn, { a: 'halloween', op: 'test', content: 'on' });
+    expect(r.data!.state).toMatchObject({ active: true, reason: 'forced', content: 'on', date: 'after' });
+    r = admin(server, conn, { a: 'halloween', op: 'test', content: 'off', date: 'before' });
+    expect(r.data!.state).toMatchObject({ active: false, reason: 'forced', content: 'off', date: 'before', inSeason: true });
+    r = admin(server, conn, { a: 'halloween', op: 'test', content: 'real', date: 'real' });
+    expect(r.data!.state).toMatchObject({ active: true, reason: 'season', content: 'real', date: 'real' });
+    // Not saved, and the world's own setting never changes: a new server for the world starts without them
+    admin(server, conn, { a: 'halloween', op: 'test', content: 'off', date: 'after' });
+    expect(server.level.halloween).toBe('seasonal');
     await server.saveAll();
-    expect(JSON.stringify(server.level)).not.toMatch(/expired/);
+    expect(JSON.stringify(server.level)).not.toMatch(/"(content|date)":"(off|after)"/);
   });
 
   it('only the owner and operators of a world with cheats can use it', async () => {

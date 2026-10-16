@@ -25,7 +25,6 @@ import { DecorView } from '../../common/gen/decorate/view';
 import type { OverworldGenerator } from '../../common/gen/generator';
 import type { PlanContext, Start } from '../../common/gen/structures/manager';
 import { planVillageV9 } from '../../common/gen/v9/village';
-import { halloweenState } from '../../common/halloween/season';
 import { inGuardArea, type GuardArea, type VillageMeta, type VillageRecord, type VillageHooks } from '../../common/halloween/villages';
 import { biomeOf } from '../../common/registry/biomes';
 import { STATE_FLUID, STATE_SOLID } from '../../common/registry/blocks';
@@ -69,9 +68,17 @@ export class VillageSystem {
     return this.server.level.villages;
   }
 
-  /** A record changed (phase 3: a door knocked on): it reaches the save soon. */
-  markDirty(): void {
+  /**
+   * A record changed (phase 3: a door knocked on): it reaches the save soon.
+   * `now`: at once (a door that gave candy or loot: so a crash a moment later
+   * cannot forget it while the player's save keeps what they got).
+   */
+  markDirty(now = false): void {
     this.unsaved = true;
+    if (!now) return;
+    this.unsaved = false;
+    this.lastSave = this.tickNo;
+    void this.server.storage.writeLevel(this.server.level).catch(() => {});
   }
 
   /** A village's record (undefined: never built yet). */
@@ -99,8 +106,8 @@ export class VillageSystem {
   private decide(s: VillageLike, m: VillageMeta, cheat = false): VillageRecord {
     const srv = this.server;
     const state = srv.halloweenState();
-    // Only an Admin Panel simulation made it Halloween here: the village is cheat-made
-    const simOnly = state.active && state.sim !== 'none' && !halloweenState(srv.clock(), srv.level.halloween).active;
+    // Only an Admin Panel season test made it Halloween here: the village is cheat-made
+    const simOnly = !!srv.halloween?.onByTest;
     const rec: VillageRecord = {
       kind: state.active ? 'trick' : 'normal',
       decidedAt: srv.clock(),

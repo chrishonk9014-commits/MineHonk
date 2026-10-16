@@ -159,28 +159,38 @@ export const QUEST_STEPS: readonly { id: QuestStep; text: string }[] = [
   { id: 'costume', text: 'Get a costume: a head, or a carved pumpkin' },
   { id: 'wear', text: 'Wear your costume on your head' },
   { id: 'village', text: 'Find a Trick-or-Treat Village' },
-  { id: 'knock', text: 'Knock on a door' },
+  { id: 'knock', text: 'Knock on doors until a Candy Home treats you' },
   { id: 'candy', text: 'Collect candy from Candy Homes' },
 ];
 export const QUEST_TITLE = 'Trick or Treat!';
 /** Candies to collect for the last step. */
 export const QUEST_CANDY = 10;
+/** The tracker's note while something does not count (Phase 5: the quest is honest, like advancements). */
+export const QUEST_CHEAT_NOTE = 'Cheats and the Admin Panel do not count';
 
-/** What a player has done towards trick-or-treating (saved with the player). */
+/**
+ * What a player has done towards trick-or-treating (saved with the player).
+ * Since V7 phase 5 every count is honest play only (no cheats, no Admin Panel,
+ * no cheat-made village): the quest cannot be finished without really doing
+ * it, and finishing it is an advancement.
+ */
 export interface HalloweenProgress {
   /** Quest steps done, in order (they stay done). */
   steps: QuestStep[];
-  /** Doors answered (Candy and Trick Homes), and candies Candy Homes gave: for the quest, so cheats count too. */
+  /** Doors answered (Candy and Trick Homes). */
   knocks: number;
+  /** Successful trick-or-treats: Candy Homes that gave candy (phase 5; older saves start at 0). */
+  treats: number;
+  /** Candies Candy Homes gave. */
   candy: number;
-  /** Trick Homes beaten (honest wins only). */
+  /** Trick Homes beaten. */
   tricks: number;
   /** The quest was finished. */
   done: boolean;
 }
 
 export function newProgress(): HalloweenProgress {
-  return { steps: [], knocks: 0, candy: 0, tricks: 0, done: false };
+  return { steps: [], knocks: 0, treats: 0, candy: 0, tricks: 0, done: false };
 }
 
 export function sanitizeProgress(raw: unknown): HalloweenProgress {
@@ -190,6 +200,7 @@ export function sanitizeProgress(raw: unknown): HalloweenProgress {
   const n = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? Math.max(0, Math.min(1e9, Math.floor(v))) : 0);
   if (Array.isArray(o.steps)) for (const s of o.steps) if (QUEST_STEPS.some((q) => q.id === s) && !out.steps.includes(s as QuestStep)) out.steps.push(s as QuestStep);
   out.knocks = n(o.knocks);
+  out.treats = n(o.treats);
   out.candy = n(o.candy);
   out.tricks = n(o.tricks);
   out.done = o.done === true;

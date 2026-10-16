@@ -10,7 +10,7 @@ import type { HubApi } from '../net/HubApi';
 import type { HostOptions, HostSession } from '../net/HostSession';
 import { normalizeJoinCode, type FriendsResponse, type WorldSummary, type WorldRole, type WorldVisibility } from '../../common/net/multiplayer';
 import { GAME_MODE_INFO, GOD_HEART_PRESETS, type GameMode, type GodHearts } from '../../common/game/gamemode';
-import { HALLOWEEN_SETTING_NAMES, type HalloweenSetting } from '../../common/halloween/season';
+import { HALLOWEEN_SETTING_NAMES, HALLOWEEN_ENDS_DATE, type HalloweenSetting } from '../../common/halloween/season';
 
 export interface OnlineContext {
   api: HubApi;
@@ -123,7 +123,7 @@ export function hostOptionsForm(o: HostOptions, isTouch: boolean, opts: { lockNa
     : el('div', { class: 'label' }, `Game Mode: ${modeName(cur.mode)}`);
   // V7: a new world's Halloween content (Seasonal unless chosen)
   const halloween = cycle((v: HalloweenSetting) => `Halloween: ${HALLOWEEN_SETTING_NAMES[v]}`, ['seasonal', 'always'] as const, cur.halloween ?? 'seasonal', (v) => (cur.halloween = v), 'btn half');
-  halloween.title = 'Seasonal: Halloween content until November 7, 2026. Always on: this world keeps it after the season.';
+  halloween.title = `Seasonal: Halloween content until ${HALLOWEEN_ENDS_DATE}. Always on: this world keeps it after the season.`;
   const root = el(
     'div',
     { class: 'stack' },

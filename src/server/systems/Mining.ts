@@ -167,7 +167,10 @@ export class Mining {
     const be = dim.getBlockEntity(x, y, z);
     // Breaking a cheat-placed block, or with a cheat tool, or under a cheat: the drops are cheat-made
     const placedByCheat = this.server.admin.blockMarked(dim, x, y, z);
-    const cheat = placedByCheat || this.server.interaction.isCheat(p, tool);
+    // (a Herobrine Head goes by its own mark: a real one put down in a cheat-made chunk is still real)
+    const headByCheat = this.server.admin.blockMarkedExactly(dim, x, y, z);
+    const toolCheat = this.server.interaction.isCheat(p, tool);
+    const cheat = placedByCheat || toolCheat;
     dim.setBlock(x, y, z, replacement);
     this.server.admin.setBlockMark(dim, x, y, z, false);
     this.removeCompanion(dim, x, y, z, state);
@@ -184,8 +187,8 @@ export class Mining {
       // Batteries keep their charge and tanks their contents
       this.server.engineering?.decorateDrops(be, drops.items);
       // V7 phase 3: a Herobrine Head is only ever won from Herobrine, never broken out of a cheat-placed one
-      if (placedByCheat) drops.items = drops.items.filter((st) => !ONLY_WON.has(items[st.id]?.id ?? ''));
-      if (cheat) for (const s of drops.items) markAdmin(s);
+      if (headByCheat) drops.items = drops.items.filter((st) => !ONLY_WON.has(items[st.id]?.id ?? ''));
+      for (const s of drops.items) if (ONLY_WON.has(items[s.id]?.id ?? '') ? toolCheat : cheat) markAdmin(s);
       for (const s of drops.items) this.dropItem(dim, x + 0.5, y + 0.3, z + 0.5, s);
       if (drops.xp > 0) this.dropXp(dim, x + 0.5, y + 0.5, z + 0.5, drops.xp, cheat);
       // Container contents spill
@@ -259,7 +262,11 @@ export class Mining {
     const placedByCheat = this.server.admin.blockMarked(dim, x, y, z);
     const marked = cheat || placedByCheat;
     for (const st of drops.items) {
-      if (placedByCheat && ONLY_WON.has(items[st.id]?.id ?? '')) continue;
+      // A Herobrine Head goes by its own mark (a real one in a cheat-made chunk stays real)
+      if (ONLY_WON.has(items[st.id]?.id ?? '')) {
+        if (!this.server.admin.blockMarkedExactly(dim, x, y, z)) this.dropItem(dim, x + 0.5, y + 0.3, z + 0.5, cheat ? markAdmin(st) : st);
+        continue;
+      }
       this.dropItem(dim, x + 0.5, y + 0.3, z + 0.5, marked ? markAdmin(st) : st);
     }
   }

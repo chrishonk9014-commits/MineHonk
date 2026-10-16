@@ -2066,6 +2066,13 @@ body {
 .quest-tracker .quest-left {
   color: #ffb0b0;
 }
+/* V7 phase 5: why something does not count (cheat-made things, the Admin Panel) */
+.quest-tracker .quest-note {
+  color: #b8b8b8;
+  font-size: calc(var(--s) * 5);
+  line-height: calc(var(--s) * 7);
+  margin-top: calc(var(--s) * 1);
+}
 .quest-pips {
   display: flex;
   gap: calc(var(--s) * 2);
@@ -3823,6 +3830,47 @@ body {
 .btn.chip.halloween-ghost,
 .btn.chip.halloween-place-all {
   margin-top: calc(var(--s) * 2);
+  align-self: flex-start;
+}
+/* V7 phase 5: seasonal advancements are marked */
+.adv-season {
+  display: inline-block;
+  margin-left: calc(var(--s) * 3);
+  padding: 0 calc(var(--s) * 2);
+  font-size: calc(var(--s) * 5);
+  line-height: calc(var(--s) * 7);
+  color: #1a0d00;
+  background: #ff9c2a;
+  border: calc(var(--s) * 0.5) solid #4a1a5a;
+  vertical-align: middle;
+  text-shadow: none;
+}
+/* V7 phase 5: the season tests and the player's quest */
+.halloween-test {
+  color: #7a2fb0;
+}
+.halloween-quest-steps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s);
+  margin-bottom: calc(var(--s) * 2);
+}
+.halloween-quest-step {
+  display: grid;
+  grid-template-columns: calc(var(--s) * 8) 1fr;
+  gap: calc(var(--s) * 2);
+  color: #4a4a4a;
+  font-size: calc(var(--s) * 6);
+  line-height: calc(var(--s) * 8);
+}
+.halloween-quest-step.done {
+  color: #1f6f1f;
+}
+.halloween-quest-step.now {
+  color: #1e1e1e;
+}
+.halloween-quest-mark {
+  text-align: center;
 }
 
 /* V7 phase 2: Trick-or-Treat Villages' doors */

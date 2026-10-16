@@ -101,6 +101,8 @@ export class ServerPlayer extends Entity {
   readonly achievements = new Set<string>();
   /** Cheat bookkeeping that keeps admin actions advancement-neutral. */
   cheat: AdminPlayerState = newAdminState();
+  /** V7 phase 5: where this player is saved as leaving from, when a haunting had moved them (null: where they are). */
+  leaveAt: { dim: DimensionId; x: number; y: number; z: number; yaw: number } | null = null;
   readonly statistics: Record<string, number> = {};
   /** Open container window id (0 = own inventory). */
   windowId = 0;

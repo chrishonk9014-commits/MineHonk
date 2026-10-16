@@ -876,6 +876,13 @@ export class Containers {
     w.dragSlots = [];
     if (!cursor || slots.length === 0) return;
     if (w.dragButton === 2 && !creative) return;
+    // V7 phase 5: a creative middle-drag copies like Creative's clone: never a Herobrine Head, a sack
+    // empty (its candy is never copied), and cheat-made under a cheat
+    if (w.dragButton === 2 && ONLY_WON.has(itemIdOf(cursor))) return;
+    const copy = (): ItemStack => {
+      const c = itemIdOf(cursor) === SACK_ID ? stackOf(SACK_ID) : cloneStack(cursor)!;
+      return this.server.admin.inContext(p) ? markAdmin(c) : c;
+    };
     let remaining = cursor.count;
     const per = w.dragButton === 0 ? Math.floor(cursor.count / slots.length) : 1;
     for (const i of slots) {
@@ -885,7 +892,7 @@ export class Containers {
       const have = cur?.count ?? 0;
       let n = w.dragButton === 2 ? max - have : Math.min(per, remaining, max - have);
       if (n <= 0) continue;
-      s.set({ ...cloneStack(cursor), count: have + n });
+      s.set(w.dragButton === 2 && !cur ? { ...copy(), count: n } : { ...cloneStack(cursor), count: have + n });
       if (w.dragButton !== 2) remaining -= n;
     }
     p.cursor = remaining > 0 ? { ...cursor, count: remaining } : null;
@@ -897,7 +904,15 @@ export class Containers {
       this.syncInventory(p);
       return;
     }
+    // map player-window slot to inventory index (-1: dropped)
+    const w = this.playerWindowFor(p);
+    const s = slot === -1 ? null : w.slots[slot];
+    if (slot !== -1 && (!s || s.output || (item && !s.mayPlace(item)))) {
+      this.syncInventory(p);
+      return;
+    }
     // V7 phase 3: a Herobrine Head is never in the creative menu: one can only be put back down (once) after being picked up
+    // (checked after the slot, so a head put where it cannot go is not lost)
     if (item && ONLY_WON.has(itemIdOf(item))) {
       const held = this.creativeHand.get(p);
       if (!held || held.id !== item.id) {
@@ -909,15 +924,10 @@ export class Containers {
     }
     // Items taken from the creative menu under a cheat (e.g. cheat Creative mode) are cheat-made
     else if (item && this.server.admin.inContext(p)) markAdmin(item);
-    if (slot === -1) {
+    if (!s) {
       if (item) this.server.interaction.dropStack(p, item);
       return;
     }
-    // map player-window slot to inventory index
-    const w = this.playerWindowFor(p);
-    const s = w.slots[slot];
-    if (!s || s.output) return;
-    if (item && !s.mayPlace(item)) return;
     const was = s.get();
     if (!item && was) this.creativeHand.set(p, cloneStack(was)!);
     if (item) {

@@ -198,8 +198,10 @@ export class Interaction {
       if (STATE_SOLID[pl.state] && this.entityObstructs(dim, pl.x, pl.y, pl.z, pl.state)) return this.resend(p, x, y, z, face);
     }
     for (const pl of placements) dim.setBlock(pl.x, pl.y, pl.z, pl.state);
-    // Blocks placed from cheat items (or in a cheat context) stay cheat-made
-    const cheat = this.isCheat(p, stack);
+    // Blocks placed from cheat items (or in a cheat context) stay cheat-made; so does a Herobrine Head
+    // put down without using it up (Creative), so it can never be multiplied
+    const onlyWon = ONLY_WON.has(items[stack.id]?.id ?? '');
+    const cheat = this.isCheat(p, stack) || (onlyWon && !isSurvivalLike(p.gamemode));
     for (const pl of placements) this.server.admin.setBlockMark(dim, pl.x, pl.y, pl.z, cheat);
     const first = placements[0]!;
     const pdef = blocks[STATE_BLOCK[first.state]!]!.def;
@@ -700,8 +702,15 @@ export class Interaction {
       // equip from hand (V7: a costume head or a carved pumpkin, used in the air, goes on the head)
       const slot = { head: 39, chest: 38, legs: 37, feet: 36 }[def.armor?.slot ?? 'head'];
       const cur = p.inventory.get(slot);
-      p.inventory.set(slot, cloneStack(stack));
-      p.inventory.set(hand, cur);
+      if (stack.count > 1) {
+        // One of a stack (heads and pumpkins stack to 64; a head slot holds one): the rest stay in hand
+        if (cur && p.inventory.add(cloneStack(cur)!)) return;
+        p.inventory.set(slot, { ...cloneStack(stack)!, count: 1 });
+        p.inventory.set(hand, { ...stack, count: stack.count - 1 });
+      } else {
+        p.inventory.set(slot, cloneStack(stack));
+        p.inventory.set(hand, cur);
+      }
       this.survival.updateArmor(p);
       this.server.playSound(p.dim, 'equip', p.x, p.y, p.z, 1, 1);
       return;
@@ -1205,6 +1214,8 @@ export class Interaction {
     if (id === 'bread') this.grant(p, 'bake_bread');
     if (id === 'recovery_compass') this.grant(p, 'recovery_compass');
     if (id === 'music_disc_hollow') this.grant(p, 'hollow_disc');
+    // V7 phase 5 (the recipe itself is only there while Halloween content is on)
+    if (id === 'trick_or_treat_sack') this.grant(p, 'craft_sack');
     if (id.startsWith('glitched_')) this.grant(p, 'glitched_gear');
     if (id.startsWith('netherite_')) {
       const all = [36, 37, 38, 39].every((i) => items[p.inventory.get(i)?.id ?? 0]?.id.startsWith('netherite_'));

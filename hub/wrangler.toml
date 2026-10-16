@@ -14,6 +14,8 @@ ALLOWED_ORIGINS = "https://chrishonk9014-commits.github.io"
 # uses Claude when the ANTHROPIC_API_KEY secret is set (docs/ONLINE_SETUP.md).
 HEROBRINE_MODEL = "claude-haiku-5-5"
 HEROBRINE_DAILY_LIMIT = "200"
+# V7 phase 5: of those, at most this many for one address (so nobody can use up the day for everyone)
+VOICE_ADDRESS_DAILY_LIMIT = "30"
 
 [[d1_databases]]
 binding = "DB"

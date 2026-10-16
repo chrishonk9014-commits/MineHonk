@@ -8,7 +8,7 @@
  * so the game's HubApi talks to both.
  */
 import type { Env } from './env';
-import { SqlHubStore } from '../../src/hub/sqlStore';
+import { SqlHubStore, type SqlDb } from '../../src/hub/sqlStore';
 import { AccountsCore, AccountError, deviceStretchedHasher } from '../../src/hub/accounts';
 import { FriendsCore, FriendError } from '../../src/hub/friends';
 import { WorldsCore, WorldError, isMember } from '../../src/hub/worlds';
@@ -22,6 +22,7 @@ import { GAME_MODES } from '../../src/common/game/gamemode';
 import type { HostSettingsPush } from '../../src/common/net/hubProtocol';
 import { parseVoiceRequest } from '../../src/common/game/herobrineVoice';
 import { speakWithClaude, voiceClient, HEROBRINE_MODEL, HEROBRINE_DAILY_LIMIT } from '../../src/hub/herobrineVoice';
+import { addressHash, addressKey, takeVoiceAnswer, VOICE_ADDRESS_DAILY_LIMIT } from '../../src/hub/voiceUsage';
 import type { HostedEntry, Presence } from './lobby';
 
 export { LobbyDO } from './lobby';
@@ -310,11 +311,12 @@ async function herobrine(req: Request, env: Env, ip: string, b: Record<string, u
   const r = parseVoiceRequest(route === 'herobrine' ? { ...b, character: 'herobrine' } : b);
   if (!r || (route === 'voice' && typeof b.character !== 'string')) throw new HttpError(400, 'Bad request');
   if (!env.ANTHROPIC_API_KEY) return { text: null, reason: 'off' };
-  if (!voiceLimiter.take(ip) || !voiceHourLimiter.take(ip)) return { text: null, reason: 'busy' };
+  if (!voiceLimiter.take(addressKey(ip)) || !voiceHourLimiter.take(addressKey(ip))) return { text: null, reason: 'busy' };
+  // The day's answers: a share per address (kept only as a hash), then one limit for everyone together
   const limit = Math.max(0, Number(env.HEROBRINE_DAILY_LIMIT ?? HEROBRINE_DAILY_LIMIT) || 0);
+  const perAddress = Math.max(0, Number(env.VOICE_ADDRESS_DAILY_LIMIT ?? VOICE_ADDRESS_DAILY_LIMIT) || 0);
   const day = new Date().toISOString().slice(0, 10);
-  const row = await env.DB.prepare('INSERT INTO herobrine_usage (day, n) VALUES (?, 1) ON CONFLICT(day) DO UPDATE SET n = n + 1 RETURNING n').bind(day).first<{ n: number }>();
-  if (!row || row.n > limit) return { text: null, reason: 'limit' };
+  if ((await takeVoiceAnswer(env.DB as unknown as SqlDb, day, await addressHash(day, ip, env.VOICE_SALT ?? ''), perAddress, limit)) !== 'ok') return { text: null, reason: 'limit' };
   const line = await speakWithClaude(voiceClient(env.ANTHROPIC_API_KEY), r, env.HEROBRINE_MODEL || HEROBRINE_MODEL);
   if (!line) return { text: null, reason: 'none' };
   // The same filter as world names and chat: anything it would mask is not said at all

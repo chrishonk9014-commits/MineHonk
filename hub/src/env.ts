@@ -20,4 +20,7 @@ export interface Env {
   HEROBRINE_MODEL?: string;
   /** How many answers a day, across everyone, before he falls back to his scripted lines (wrangler.toml). */
   HEROBRINE_DAILY_LIMIT?: string;
+  /** V7 phase 5: answers a day for one address (wrangler.toml), and an optional secret mixed into the address hashes. */
+  VOICE_ADDRESS_DAILY_LIMIT?: string;
+  VOICE_SALT?: string;
 }

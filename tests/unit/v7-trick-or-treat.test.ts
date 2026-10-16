@@ -541,10 +541,14 @@ describe('knocking and Candy Homes', () => {
     dress(player, stackOf(SACK_ID), '');
     knock(server, conn, candyDoor);
     expect(NO_COSTUME_LINES).toContain(speech(conn).pop());
+    // (a knock right after another is refused: one knock every half second)
     dress(player, null);
+    expect(server.trickOrTreat!.knock(player, candyDoor.x, candyDoor.y, candyDoor.z)).toEqual({ ok: false, text: 'Not so fast.' });
+    tick(server, 10);
     knock(server, conn, candyDoor);
     expect(NO_SACK_LINES).toContain(speech(conn).pop());
     dress(player, sackWith({ regular: 128 }));
+    tick(server, 10);
     knock(server, conn, candyDoor);
     expect(FULL_SACK_LINES).toContain(speech(conn).pop());
     expect(candyDoor.got ?? []).not.toContain(player.uuid);
@@ -905,11 +909,14 @@ describe('the Trick or Treat! quest', () => {
     expect(QUEST_STEPS.map((s) => s.id)).toEqual(['sack', 'costume', 'wear', 'village', 'knock', 'candy']);
     tick(server, 12);
     expect(conn.last('quest')!.quest).toMatchObject({ title: 'Trick or Treat!', stage: 0, stages: 6 });
-    // (an Admin Panel sack counts too: the quest is a guide, see "the quest in Creative, with cheats")
+    // A cheat-made sack does not count (phase 5: the quest is honest), and the tracker says why
     p.inventory.set(0, markAdmin(stackOf(SACK_ID)));
     tick(server, 12);
-    expect(p.halloween.steps).toEqual(['sack']);
+    expect(p.halloween.steps).toEqual([]);
+    expect(conn.last('quest')!.quest).toMatchObject({ stage: 0, note: 'Cheat-made sacks do not count' });
     p.inventory.set(0, stackOf(SACK_ID));
+    tick(server, 12);
+    expect(p.halloween.steps).toEqual(['sack']);
     p.inventory.set(5, stackOf('zombie_head'));
     tick(server, 12);
     expect(p.halloween.steps).toEqual(['sack', 'costume']);
@@ -936,7 +943,10 @@ describe('the Trick or Treat! quest', () => {
     tick(server, 12);
     expect(p.halloween.steps).toEqual(['sack', 'costume', 'wear', 'village', 'knock', 'candy']);
     expect(p.halloween.done).toBe(true);
+    expect(p.halloween.treats).toBeGreaterThan(0);
     expect(conn.of('title').some((m) => m.text === 'Trick or Treat!')).toBe(true);
+    // Finished for real: the advancement
+    expect(p.achievements.has('trick_or_treat_quest')).toBe(true);
     await server.disconnect(conn);
     await server.stop();
     const again = await makeServer({}, storage, { clock: () => BEFORE });
@@ -947,52 +957,83 @@ describe('the Trick or Treat! quest', () => {
   }, 240000);
 });
 
-describe('the quest in Creative, with cheats', () => {
-  it('works all the way through (it is a guide); the advancements and stats stay honest', async () => {
-    const { server, doors } = await trickWorld();
-    server.level.cheats = true;
+describe('the quest in Creative, and with cheats', () => {
+  it('a Creative world: the creative menu and real knocks count, and finishing it is an advancement', async () => {
+    const { server } = await makeServer({ seed: SEED, mode: 'creative' }, new MemoryStorage(), { clock: () => BEFORE });
+    const g = server.overworld.generator as OverworldGenerator;
+    const v = g.villageAt(VILLAGE.x, VILLAGE.z)!;
+    await loadArea(server, v.bounds.x0, v.bounds.z0, v.bounds.x1, v.bounds.z1);
+    const rec = server.villages!.record(v.village!.key)!;
     const { conn, player: p } = await join(server, 'Cat', 'uuid-catq');
-    // Creative by command (a cheat in a survival world), everything from the creative menu
-    server.handle(conn, { t: 'chat', text: '/gamemode creative' });
     expect(p.gamemode).toBe('creative');
-    expect(server.admin.inContext(p)).toBe(true);
+    expect(server.admin.inContext(p)).toBe(false);
+    // The world's own mode is normal play: what the creative menu gives is not cheat-made
     server.handle(conn, { t: 'creative_set', slot: 36, item: { id: num(SACK_ID), count: 1 } });
-    expect(isAdminStack(p.inventory.get(0))).toBe(true);
-    tick(server, 12);
-    expect(p.halloween.steps).toEqual(['sack']);
+    expect(isAdminStack(p.inventory.get(0))).toBe(false);
     server.handle(conn, { t: 'creative_set', slot: 37, item: { id: num('carved_pumpkin'), count: 1 } });
-    tick(server, 12);
-    expect(p.halloween.steps).toEqual(['sack', 'costume']);
-    // Put on by using it
     server.handle(conn, { t: 'hotbar', slot: 1 });
     server.handle(conn, { t: 'use', hand: 0, action: 'start' } as never);
     tick(server, 12);
     expect(idOf(p.inventory.get(39))).toBe('carved_pumpkin');
     expect(p.halloween.steps).toEqual(['sack', 'costume', 'wear']);
-    // Teleported to the village
-    const d0 = doors.find((d) => d.door.kind === 'candy')!.door;
-    server.handle(conn, { t: 'chat', text: `/tp ${d0.out[0] + 0.5} ${d0.out[1]} ${d0.out[2] + 0.5}` });
-    tick(server, 45);
-    expect(p.halloween.steps).toContain('village');
-    // Knocking at Candy Homes until ten candies
     server.handle(conn, { t: 'hotbar', slot: 0 });
-    const candyDoors = doors.filter((d) => d.door.kind === 'candy').map((d) => d.door);
+    const candyDoors = rec.doors.filter((d) => d.kind === 'candy');
     for (let i = 0; p.halloween.candy < QUEST_CANDY && i < candyDoors.length; i++) {
       atDoor(p, candyDoors[i]!);
+      tick(server, 12);
       knock(server, conn, candyDoors[i]!);
       server.handle(conn, { t: 'scene_skip' });
       tick(server, 12);
     }
-    expect(p.halloween.steps).toContain('knock');
-    expect(p.halloween.candy).toBeGreaterThan(0);
+    expect(p.halloween.steps).toEqual(expect.arrayContaining(['village', 'knock']));
+    expect(p.halloween.treats).toBeGreaterThan(0);
     if (p.halloween.candy < QUEST_CANDY) p.halloween.candy = QUEST_CANDY; // a small village: the count is what is tested here
     tick(server, 12);
-    expect(p.halloween.steps).toEqual(['sack', 'costume', 'wear', 'village', 'knock', 'candy']);
     expect(p.halloween.done).toBe(true);
-    expect(conn.of('title').some((m) => m.text === 'Trick or Treat!')).toBe(true);
-    // ...but nothing it did counts for advancements, and the candy it got is cheat-made
-    for (const a of ['find_trick_village', 'first_candy']) expect(p.achievements.has(a), a).toBe(false);
-    expect(sackContents(p.inventory.get(0)).cheat.regular + sackContents(p.inventory.get(0)).cheat.big + sackContents(p.inventory.get(0)).cheat.king + sackContents(p.inventory.get(0)).cheat.poisoned).toBe(sackTotal(sackContents(p.inventory.get(0))));
+    for (const a of ['find_trick_village', 'first_candy', 'trick_or_treat_quest']) expect(p.achievements.has(a), a).toBe(true);
+    await server.stop();
+  }, 240000);
+
+  it('cheats (creative by command, the creative menu under it, a teleport, an Admin Panel village) move nothing on, and the tracker says why', async () => {
+    const { server, doors } = await trickWorld();
+    server.level.cheats = true;
+    const { conn, player: p } = await join(server, 'Dee', 'uuid-deeq');
+    server.handle(conn, { t: 'chat', text: '/gamemode creative' });
+    expect(p.gamemode).toBe('creative');
+    expect(server.admin.inContext(p)).toBe(true);
+    server.handle(conn, { t: 'creative_set', slot: 36, item: { id: num(SACK_ID), count: 1 } });
+    server.handle(conn, { t: 'creative_set', slot: 37, item: { id: num('carved_pumpkin'), count: 1 } });
+    expect(isAdminStack(p.inventory.get(0))).toBe(true);
+    tick(server, 12);
+    expect(p.halloween.steps).toEqual([]);
+    expect(conn.last('quest')!.quest!.note).toMatch(/do not count/);
+    // Back in survival (still a cheat context until it is the world's own mode), the cheat-made sack still does not count
+    server.handle(conn, { t: 'chat', text: '/gamemode survival' });
+    expect(server.admin.inContext(p)).toBe(false);
+    tick(server, 12);
+    expect(p.halloween.steps).toEqual([]);
+    expect(conn.last('quest')!.quest).toMatchObject({ note: 'Cheat-made sacks do not count' });
+    // Honest things now: a sack and a costume
+    p.inventory.set(0, stackOf(SACK_ID));
+    p.inventory.set(39, stackOf('carved_pumpkin'));
+    p.inventory.set(1, null);
+    tick(server, 12);
+    expect(p.halloween.steps).toEqual(['sack', 'costume', 'wear']);
+    // Teleported into the village: its arrival area is a cheat context, so the village step waits
+    const d0 = doors.find((d) => d.door.kind === 'candy')!.door;
+    server.handle(conn, { t: 'chat', text: `/tp ${d0.out[0] + 0.5} ${d0.out[1]} ${d0.out[2] + 0.5}` });
+    tick(server, 45);
+    expect(server.admin.inContext(p)).toBe(true);
+    expect(p.halloween.steps).not.toContain('village');
+    // Knocking from there: answered, but cheat candy, and nothing counts
+    knock(server, conn, d0);
+    server.handle(conn, { t: 'scene_skip' });
+    tick(server, 12);
+    expect(p.halloween).toMatchObject({ knocks: 0, treats: 0, candy: 0 });
+    expect(p.achievements.has('first_candy')).toBe(false);
+    const c = sackContents(p.inventory.get(0));
+    expect(sackTotal(c)).toBeGreaterThan(0);
+    expect(CANDY_KINDS.reduce((a, k) => a + c.cheat[k], 0)).toBe(sackTotal(c));
     await server.stop();
   }, 240000);
 });
@@ -1028,8 +1069,8 @@ describe('the Admin Panel', () => {
     expect(r.ok, r.text).toBe(true);
     tick(server, CANDY_TIMES.end + 30);
     expect(candyDoor.door.got ?? []).toEqual(gotBefore);
-    // (the quest, a guide, counts the knock; no advancement does)
-    expect(player.halloween.knocks).toBe(1);
+    // Nothing counts: not the quest, not an advancement
+    expect(player.halloween).toMatchObject({ knocks: 0, treats: 0, candy: 0, steps: [] });
     expect(player.achievements.has('first_candy')).toBe(false);
     // Reset the doors
     candyDoor.door.got = ['someone'];

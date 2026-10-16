@@ -306,6 +306,7 @@ export class Hud {
     }
     this.questEl.append(el('div', { class: 'quest-text' }, q.text));
     if (q.remaining !== undefined) this.questEl.append(el('div', { class: 'quest-left' }, `${q.remaining} remaining`));
+    if (q.note) this.questEl.append(el('div', { class: 'quest-note' }, q.note));
   }
 
   /** V7 phase 3: shows (or hides, with null) an action prompt: "[G] Knock". `tap` runs it (touch screens tap the prompt). */

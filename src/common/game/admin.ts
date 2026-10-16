@@ -13,20 +13,23 @@ import { RARE_END_LOOT } from '../endExpansion/guardian';
 import { DRAGON_TESTS } from '../endExpansion/dragon';
 import { HAUNT_OPS, HAUNT_MIN_MINUTES, HAUNT_MAX_MINUTES, HAUNT_CHARACTERS, type HauntOp, type HauntCharacter } from './haunting';
 import { castEnding } from './hauntCast';
-import { HALLOWEEN_SIMULATIONS, type HalloweenSimulation, type HalloweenState } from '../halloween/season';
+import { HALLOWEEN_CONTENT_TESTS, HALLOWEEN_DATE_TESTS, type HalloweenContentTest, type HalloweenDateTest, type HalloweenState } from '../halloween/season';
 import { PUMPKIN_IDS } from '../halloween/pumpkins';
 import { CANDY_KINDS, type CandyKind } from '../halloween/candy';
 import { TRICK_KINDS, type TrickKind } from '../halloween/trickOrTreat';
 
 export const ADMIN_DIMENSIONS: DimensionId[] = ['overworld', 'nether', 'end', 'farlands', 'computer'];
 
-/** V7: the Admin Panel's Halloween tab (all cheats; the simulations are never saved). */
+/** V7: the Admin Panel's Halloween tab (all cheats; the season tests are never saved). */
 export type HalloweenOp =
   | 'status'
   | 'ghost'
   | 'place'
   | 'place_all'
-  | 'simulate'
+  // V7 phase 5: the season tests (`content`, `date`: either or both), and the player's own quest (shown, or reset)
+  | 'test'
+  | 'quest'
+  | 'quest_reset'
   | 'spawn_trick_village'
   | 'spawn_abandoned_village'
   | 'village_doors'
@@ -38,7 +41,7 @@ export type HalloweenOp =
   | 'knock'
   | 'trick'
   | 'reset_doors';
-export const HALLOWEEN_OPS: readonly HalloweenOp[] = ['status', 'ghost', 'place', 'place_all', 'simulate', 'spawn_trick_village', 'spawn_abandoned_village', 'village_doors', 'door_tp', 'give_sack', 'give_full_sack', 'give_candy', 'knock', 'trick', 'reset_doors'];
+export const HALLOWEEN_OPS: readonly HalloweenOp[] = ['status', 'ghost', 'place', 'place_all', 'test', 'quest', 'quest_reset', 'spawn_trick_village', 'spawn_abandoned_village', 'village_doors', 'door_tp', 'give_sack', 'give_full_sack', 'give_candy', 'knock', 'trick', 'reset_doors'];
 
 /** V7 phase 2: the doors of the nearest Trick-or-Treat Village, as the Halloween tab lists them. */
 export interface VillageDoorsInfo {
@@ -58,11 +61,25 @@ export interface HalloweenStatus {
   state: HalloweenState;
   /** Why, in a sentence. */
   text: string;
-  /** The cutoff and the server's time now (ms since 1970). */
+  /** The cutoff that matters now, the date the world goes by (simulated under a date test) and the server's real time (ms since 1970). */
   endsAt: number;
   now: number;
+  realNow: number;
+  /** The season's name ("Halloween 2026") and how its end reads. */
+  season: string;
+  endsText: string;
   /** Pumpkins scattered on new chunks since the world opened. */
   placed: number;
+}
+
+/** V7 phase 5: the asking player's Trick or Treat! quest, as the Halloween tab shows it. */
+export interface QuestStatus {
+  steps: { id: string; text: string; done: boolean; now: boolean; why?: string }[];
+  knocks: number;
+  treats: number;
+  candy: number;
+  tricks: number;
+  done: boolean;
 }
 
 export const STRUCTURE_NAMES: Record<string, string> = {
@@ -260,8 +277,8 @@ export type AdminAction =
   /** The Haunting (every world): Herobrine over `minutes`; `erase` deletes the world at the end (its owner only). */
   /** V7 phase 4: `character` (Herobrine when left out), `text` (op talk), `minutes` also for finale_in. */
   | { a: 'haunt'; op: HauntOp; minutes?: number; erase?: boolean; ending?: string; character?: HauntCharacter; text?: string }
-  /** V7: Halloween (the season's state, a ghost now, the pumpkins, test simulations). */
-  | { a: 'halloween'; op: HalloweenOp; pumpkin?: string; sim?: HalloweenSimulation; door?: number; candy?: CandyKind; trick?: TrickKind };
+  /** V7: Halloween (the season's state, a ghost now, the pumpkins, the season tests, villages, trick-or-treating, the quest). */
+  | { a: 'halloween'; op: HalloweenOp; pumpkin?: string; content?: HalloweenContentTest; date?: HalloweenDateTest; door?: number; candy?: CandyKind; trick?: TrickKind };
 
 export type AdminActionName = AdminAction['a'];
 
@@ -269,6 +286,14 @@ export type AdminActionName = AdminAction['a'];
  * What an admin action did, in a few words for the chat announcement
  * ("[Admin] Name used: give diamond ×64"); null for lookups that change nothing.
  */
+/** How a season test reads in the chat announcement. */
+function describeSeasonTest(content?: HalloweenContentTest, date?: HalloweenDateTest): string {
+  const parts: string[] = [];
+  if (content !== undefined) parts.push(content === 'real' ? 'Halloween content back to real' : `Halloween content forced ${content}`);
+  if (date !== undefined) parts.push(date === 'real' ? 'the real date' : `a simulated date just ${date} the Halloween cutoff`);
+  return `test the season: ${parts.join(', ')}`;
+}
+
 export function describeAdmin(a: AdminAction): string | null {
   const who = (t?: string): string => (t ? ` on ${t}` : '');
   switch (a.a) {
@@ -333,7 +358,9 @@ export function describeAdmin(a: AdminAction): string | null {
       if (a.op === 'knock') return 'knock on the nearest Trick-or-Treat door';
       if (a.op === 'trick') return `start a Trick Home (${(a.trick ?? 'zombie_villagers').replace(/_/g, ' ')})`;
       if (a.op === 'reset_doors') return "reset a Trick-or-Treat Village's doors";
-      return a.sim === 'expired' ? 'simulate the end of the Halloween season' : a.sim === 'always' ? 'simulate Halloween always on' : 'stop simulating the Halloween season';
+      if (a.op === 'quest') return null;
+      if (a.op === 'quest_reset') return 'reset their Trick or Treat! quest';
+      return describeSeasonTest(a.content, a.date);
     case 'reload_chunks':
       return 'reload chunks';
     default: {
@@ -365,7 +392,12 @@ export function validateAdmin(raw: unknown): AdminAction | null {
     case 'halloween': {
       if (!HALLOWEEN_OPS.includes(m.op as HalloweenOp)) return null;
       if (m.op === 'place') return typeof m.pumpkin === 'string' && PUMPKIN_IDS.includes(m.pumpkin) ? { a: 'halloween', op: 'place', pumpkin: m.pumpkin } : null;
-      if (m.op === 'simulate') return HALLOWEEN_SIMULATIONS.includes(m.sim as HalloweenSimulation) ? { a: 'halloween', op: 'simulate', sim: m.sim as HalloweenSimulation } : null;
+      if (m.op === 'test') {
+        if (m.content === undefined && m.date === undefined) return null;
+        if (m.content !== undefined && !HALLOWEEN_CONTENT_TESTS.includes(m.content as HalloweenContentTest)) return null;
+        if (m.date !== undefined && !HALLOWEEN_DATE_TESTS.includes(m.date as HalloweenDateTest)) return null;
+        return { a: 'halloween', op: 'test', ...(m.content !== undefined ? { content: m.content as HalloweenContentTest } : {}), ...(m.date !== undefined ? { date: m.date as HalloweenDateTest } : {}) };
+      }
       if (m.op === 'door_tp') return Number.isInteger(m.door) && (m.door as number) >= 0 && (m.door as number) < 256 ? { a: 'halloween', op: 'door_tp', door: m.door as number } : null;
       if (m.op === 'give_candy') return CANDY_KINDS.includes(m.candy as CandyKind) ? { a: 'halloween', op: 'give_candy', candy: m.candy as CandyKind } : null;
       if (m.op === 'trick') return TRICK_KINDS.includes(m.trick as TrickKind) ? { a: 'halloween', op: 'trick', trick: m.trick as TrickKind } : null;

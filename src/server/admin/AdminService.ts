@@ -175,6 +175,11 @@ export class AdminService {
 
   blockMarked(dim: Dimension, x: number, y: number, z: number): boolean {
     if (this.chunkMarks.get(dim.id)?.has(chunkIndex(x >> 4, z >> 4))) return true;
+    return this.blockMarkedExactly(dim, x, y, z);
+  }
+
+  /** Only this block's own mark (not its chunk's): whether this very block was placed by a cheat. */
+  blockMarkedExactly(dim: Dimension, x: number, y: number, z: number): boolean {
     const set = this.blockMarks.get(dim.id)?.get(chunkIndex(x >> 4, z >> 4));
     return !!set && set.has((y << 8) | ((z & 15) << 4) | (x & 15));
   }
@@ -469,7 +474,7 @@ export class AdminService {
         return herobrineAdmin(this.server.herobrine, { moveTo: (pl, dim, x, y, z) => this.moveTo(pl, dim, x, y, z), give: (pl, id, n) => this.giveMarked(pl, id, n), safeSpot: (dim, x, y, z) => this.safeSpot(dim, x, y, z, false) }, p, a.op);
       case 'halloween':
         if (!this.server.halloween) return { ok: false, text: 'Halloween is not available.' };
-        return this.server.halloween.admin(p, a.op, a.pumpkin, a.sim, a.door, a.candy, a.trick);
+        return this.server.halloween.admin(p, a.op, a.pumpkin, a.content, a.date, a.door, a.candy, a.trick);
       case 'haunt':
         if (!this.server.haunting) return { ok: false, text: 'The haunting is not available.' };
       {

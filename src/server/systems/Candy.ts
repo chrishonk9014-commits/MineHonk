@@ -62,6 +62,8 @@ export class CandySystem {
   /** Randomness (replaceable in tests). */
   rng: { next(): number; int(n: number): number } = new Random();
   private tickNo = 0;
+  /** When each player may next eat one straight from a sack (server tick). */
+  private readonly nextBite = new WeakMap<ServerPlayer, number>();
 
   constructor(private readonly server: GameServer) {}
 
@@ -204,6 +206,11 @@ export class CandySystem {
         else this.server.playSound(p.dim, 'sack.remove', p.x, p.y + 1, p.z, 0.6, 1);
       });
     } else if (op === 'eat' && kind) {
+      // As long as eating one from the hand takes (a modified client cannot eat a sackful at once)
+      if (this.server.tickNo < (this.nextBite.get(p) ?? 0)) {
+        this.server.interaction.syncInventory(p);
+        return;
+      }
       let ate: { cheat: boolean } | null = null;
       this.edit(get, set, (c) => {
         if (c.counts[kind] <= 0) return;
@@ -212,6 +219,7 @@ export class CandySystem {
       });
       if (ate) {
         const f = CANDY_FOOD[kind];
+        this.nextBite.set(p, this.server.tickNo + f.eatTime);
         this.server.interaction.survival.feed(p, f.hunger, f.saturation);
         this.server.playSound(p.dim, 'eat', p.x, p.y + 1.5, p.z, 0.5, 1.1);
         this.server.playSound(p.dim, 'burp', p.x, p.y + 1, p.z, 0.5, 1);

@@ -240,6 +240,8 @@ export interface QuestInfo {
   remaining?: number;
   /** Glitched quests get the corrupted look; V6 End quests the ancient one. */
   style?: 'normal' | 'glitch' | 'end';
+  /** V7 phase 5: a small line under the objective (why something does not count). */
+  note?: string;
 }
 
 export interface AbilitiesMsg {

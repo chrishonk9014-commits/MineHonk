@@ -49,8 +49,11 @@ export class PlayerData {
     p.enderChest.load(raw.enderChest);
     if (Array.isArray(raw.achievements)) for (const a of raw.achievements) if (typeof a === 'string') p.achievements.add(a);
     if (raw.stats && typeof raw.stats === 'object') for (const [k, v] of Object.entries(raw.stats as Record<string, unknown>)) if (typeof v === 'number') p.statistics[k] = v;
+    // V7 phase 5: a haunting lived through before its advancement existed (phase 4 kept only the flag)
+    if ((p.statistics['haunting.experienced'] ?? 0) > 0) p.achievements.add('experience_haunting');
     if (Array.isArray(raw.effects)) {
-      for (const e of raw.effects as { id?: string; amp?: number; ticks?: number }[]) if (e && typeof e.id === 'string') p.effects.set(e.id, { amp: num(e.amp, 0), ticks: num(e.ticks, 0) });
+      // (V7: candy effects ride on these; the numbers are kept within what the game itself gives)
+      for (const e of (raw.effects as { id?: string; amp?: number; ticks?: number }[]).slice(0, 64)) if (e && typeof e.id === 'string' && e.id.length <= 48) p.effects.set(e.id, { amp: Math.max(0, Math.min(255, Math.floor(num(e.amp, 0)))), ticks: Math.max(0, Math.min(1e7, Math.floor(num(e.ticks, 0)))) });
     }
     const sp = raw.spawnPoint as Record<string, unknown> | undefined;
     if (sp && DIMS.includes(sp.dim as DimensionId) && [sp.x, sp.y, sp.z].every((v) => typeof v === 'number')) {
@@ -85,13 +88,15 @@ export class PlayerData {
   }
 
   serialize(p: ServerPlayer): Record<string, unknown> {
+    // V7 phase 5: someone a haunting moved (a trap, an end) is saved where it took them from
+    const at = p.leaveAt ?? this.server.haunting?.originOf(p) ?? null;
     return {
       version: PLAYER_DATA_VERSION,
       uuid: p.uuid,
       name: p.name,
-      dim: p.dim?.id ?? 'overworld',
-      pos: [p.x, p.y, p.z],
-      yaw: p.yaw,
+      dim: at?.dim ?? p.dim?.id ?? 'overworld',
+      pos: at ? [at.x, at.y, at.z] : [p.x, p.y, p.z],
+      yaw: at?.yaw ?? p.yaw,
       pitch: p.pitch,
       gamemode: p.gamemode,
       health: Number.isFinite(p.maxHealth) ? p.health : 'inf',
@@ -125,7 +130,7 @@ export class PlayerData {
       endEntry: p.endEntry ?? undefined,
       freeze: p.freezeTicks || undefined,
       fire: (p as { fireTicks?: number }).fireTicks ?? 0,
-      halloween: p.halloween.steps.length || p.halloween.knocks || p.halloween.candy || p.halloween.tricks ? p.halloween : undefined,
+      halloween: p.halloween.steps.length || p.halloween.knocks || p.halloween.treats || p.halloween.candy || p.halloween.tricks || p.halloween.done ? p.halloween : undefined,
       cheat: p.cheat,
       savedAt: Date.now(),
     };

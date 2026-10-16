@@ -53,9 +53,9 @@ jobs:
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-      TURN_KEY_ID: ${{ secrets.TURN_KEY_ID }}
-      TURN_KEY_API_TOKEN: ${{ secrets.TURN_KEY_API_TOKEN }}
-      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      # Only whether the optional secrets are set: their values are given to the deploy step alone
+      HAS_TURN_KEY: ${{ secrets.TURN_KEY_ID != '' && secrets.TURN_KEY_API_TOKEN != '' }}
+      HAS_VOICE_KEY: ${{ secrets.ANTHROPIC_API_KEY != '' }}
     steps:
       - name: Check the Cloudflare secrets
         run: |
@@ -184,15 +184,20 @@ jobs:
         run: |
           {
             echo 'list<<EOF'
-            if [ -n "$TURN_KEY_ID" ] && [ -n "$TURN_KEY_API_TOKEN" ]; then printf 'TURN_KEY_ID\nTURN_KEY_API_TOKEN\n'; fi
-            if [ -n "$ANTHROPIC_API_KEY" ]; then echo ANTHROPIC_API_KEY; fi
+            if [ "$HAS_TURN_KEY" = "true" ]; then printf 'TURN_KEY_ID\nTURN_KEY_API_TOKEN\n'; fi
+            if [ "$HAS_VOICE_KEY" = "true" ]; then echo ANTHROPIC_API_KEY; fi
             echo EOF
           } >> "$GITHUB_OUTPUT"
-          if [ -n "$ANTHROPIC_API_KEY" ]; then echo "Herobrine's voice: on (Claude)"; else echo "Herobrine's voice: his scripted lines (no ANTHROPIC_API_KEY secret)"; fi
+          if [ "$HAS_VOICE_KEY" = "true" ]; then echo "Herobrine's voice: on (Claude)"; else echo "Herobrine's voice: his scripted lines (no ANTHROPIC_API_KEY secret)"; fi
 
       - name: Deploy the hub
         id: deploy
         uses: cloudflare/wrangler-action@v3
+        # The optional secrets' values, for wrangler to store as the hub's secrets (this step only)
+        env:
+          TURN_KEY_ID: ${{ secrets.TURN_KEY_ID }}
+          TURN_KEY_API_TOKEN: ${{ secrets.TURN_KEY_API_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -231,7 +236,7 @@ jobs:
             echo
             echo "Address: **$url**"
             echo
-            if [ -n "$ANTHROPIC_API_KEY" ]; then echo "Herobrine's voice (the Haunting): **Claude**, up to the daily limit in hub/wrangler.toml"; else echo "Herobrine's voice (the Haunting): his scripted lines. Add the ANTHROPIC_API_KEY secret to have him answer through Claude (docs/ONLINE_SETUP.md)."; fi
+            if [ "$HAS_VOICE_KEY" = "true" ]; then echo "Herobrine's voice (the Haunting): **Claude**, up to the daily limit in hub/wrangler.toml"; else echo "Herobrine's voice (the Haunting): his scripted lines. Add the ANTHROPIC_API_KEY secret to have him answer through Claude (docs/ONLINE_SETUP.md)."; fi
             echo
             echo '```'
             cat health.json
@@ -243,7 +248,7 @@ jobs:
 
       # V7 phase 4: a few real questions to each haunting voice (only when asked for: they cost money)
       - name: Try the haunting voices
-        if: github.event_name == 'workflow_dispatch' && inputs.voice_check && env.ANTHROPIC_API_KEY != ''
+        if: github.event_name == 'workflow_dispatch' && inputs.voice_check && env.HAS_VOICE_KEY == 'true'
         env:
           URL: ${{ steps.check.outputs.url }}
           ORIGIN: https://${{ github.repository_owner }}.github.io

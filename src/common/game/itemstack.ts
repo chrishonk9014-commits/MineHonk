@@ -2,7 +2,7 @@
 import { items, itemById } from '../registry/items';
 import { POTION_BY_ID } from '../data/potions';
 import { ENCHANT_BY_ID } from '../data/enchantments';
-import { stripExpiredTemp } from '../halloween/tempEnchant';
+import { stripInvalidTemp } from '../halloween/tempEnchant';
 
 export interface ItemTag {
   /** Enchantments id -> level. */
@@ -104,8 +104,8 @@ export function fromSaved(s: SavedStack | null | undefined): Slot {
   if (s.damage && Number.isFinite(s.damage)) out.damage = Math.max(0, Math.floor(s.damage));
   if (s.tag && typeof s.tag === 'object') {
     out.tag = s.tag;
-    // V7 phase 3: a temporary enchantment that ran out while it lay here is gone
-    stripExpiredTemp(out);
+    // V7 phase 3: a malformed temporary enchantment is gone (one that ran out counts for nothing, and the server's sweep clears it)
+    stripInvalidTemp(out);
   }
   return out;
 }

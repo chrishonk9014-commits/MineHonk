@@ -124,7 +124,7 @@ export function validateC2S(raw: unknown): C2S | null {
       if (!inRange(m.f, -1, 1) || !inRange(m.s, -1, 1) || !inRange(m.v, -1, 1)) return null;
       return { t: 'pilot', f: m.f, s: m.s, v: m.v };
     case 'elytra':
-      if (m.a !== 'burst' && m.a !== 'blink') return null;
+      if (m.a !== 'burst' && m.a !== 'blink' && m.a !== 'veil') return null;
       return { t: 'elytra', a: m.a };
     case 'knock':
       if (!isInt(m.x) || !inRange(m.y, -512, 1024) || !isInt(m.y) || !isInt(m.z) || !inRange(m.x, -COORD, COORD) || !inRange(m.z, -COORD, COORD)) return null;

@@ -10,14 +10,16 @@
  *   on. The chunk is then saved like any changed chunk, so the pumpkin stays
  *   after the season.
  * - The Admin Panel's Halloween tab: the state and why, a ghost now, placing
- *   each pumpkin, and simulating "after the cutoff" or "always on" (never
- *   saved: it ends when the world closes). Everything it does is a cheat.
+ *   each pumpkin, and the season tests: the Halloween content forced on or
+ *   off, and a simulated date just before or just after the cutoff. They are
+ *   never saved (they end when the world closes) and change nothing about the
+ *   world's own setting. Everything the tab does is a cheat.
  */
 import type { GameServer } from '../GameServer';
 import type { ServerPlayer } from '../player/ServerPlayer';
 import type { Dimension } from '../world/Dimension';
 import type { Chunk } from '../../common/world/chunk';
-import { halloweenReasonText, halloweenState, HALLOWEEN_ENDS_AT, type HalloweenSimulation, type HalloweenState } from '../../common/halloween/season';
+import { halloweenReasonText, halloweenState, seasonWindowFor, simulatedDateStart, NO_TESTS, HALLOWEEN_CONTENT_TEST_NAMES, HALLOWEEN_DATE_TEST_NAMES, type HalloweenContentTest, type HalloweenDateTest, type HalloweenState, type HalloweenTests } from '../../common/halloween/season';
 import { DIMENSION_PUMPKINS, decoratePumpkins } from '../../common/halloween/pumpkins';
 import { STATE_REPLACEABLE, STATE_SOLID, STATE_FLUID, stateOf } from '../../common/registry/blocks';
 import type { HalloweenOp, HalloweenStatus } from '../../common/game/admin';
@@ -28,8 +30,10 @@ import type { TrickKind } from '../../common/halloween/trickOrTreat';
 const CHECK_TICKS = 20;
 
 export class HalloweenSystem {
-  /** Admin Panel test simulation (never saved). */
-  sim: HalloweenSimulation = 'none';
+  /** The Admin Panel's season tests (never saved: a new server for the world starts without them). */
+  readonly tests: HalloweenTests = { ...NO_TESTS };
+  /** Under a date test: the simulated date minus the real one (ms). */
+  private dateOffset = 0;
   private last = '';
   private tickNo = 0;
   /** Pumpkins scattered on new chunks since the world opened (the Admin Panel shows it). */
@@ -42,11 +46,37 @@ export class HalloweenSystem {
 
   private key(): string {
     const s = this.state;
-    return `${s.active}:${s.reason}:${s.sim}`;
+    return `${s.active}:${s.reason}:${s.inSeason}:${s.content}:${s.date}`;
   }
 
   get state(): HalloweenState {
     return this.server.halloweenState();
+  }
+
+  /** The date this world goes by: the server's clock, or the simulated date of a date test (it runs on). */
+  now(): number {
+    return this.server.clock() + (this.tests.date === 'real' ? 0 : this.dateOffset);
+  }
+
+  /** The answer without the Admin Panel's tests. */
+  get realState(): HalloweenState {
+    return halloweenState(this.server.clock(), this.server.level.halloween);
+  }
+
+  /** Only a test makes it Halloween here now: whatever comes of it is cheat-made. */
+  get onByTest(): boolean {
+    return this.state.active && !this.realState.active;
+  }
+
+  /** Sets either test (or both); the other stays as it is. Everyone hears at once if the answer changes. */
+  setTests(content?: HalloweenContentTest, date?: HalloweenDateTest): void {
+    if (content !== undefined) this.tests.content = content;
+    if (date !== undefined) {
+      this.tests.date = date;
+      const real = this.server.clock();
+      this.dateOffset = simulatedDateStart(date, real) - real;
+    }
+    this.syncIfChanged();
   }
 
   get active(): boolean {
@@ -77,17 +107,19 @@ export class HalloweenSystem {
     const spot = decoratePumpkins(c, dim.id, this.server.level.seedNum, (x, y, z) => dim.generator.structureAt?.(x, y, z) ?? null);
     if (!spot) return 0;
     this.placed++;
-    // Only an Admin Panel simulation made it Halloween here: what it grew is cheat-made
-    if (s.sim !== 'none' && !halloweenState(this.server.clock(), this.server.level.halloween).active) this.server.admin.setBlockMark(dim, spot.x, spot.y, spot.z, true);
+    // Only an Admin Panel test made it Halloween here: what it grew is cheat-made
+    if (this.onByTest) this.server.admin.setBlockMark(dim, spot.x, spot.y, spot.z, true);
     return 1;
   }
 
   status(): HalloweenStatus {
     const s = this.state;
-    return { state: s, text: halloweenReasonText(s), endsAt: HALLOWEEN_ENDS_AT, now: this.server.clock(), placed: this.placed };
+    const now = this.now();
+    const w = seasonWindowFor(now);
+    return { state: s, text: halloweenReasonText(s, now), endsAt: w.until, now, realNow: this.server.clock(), season: w.name, endsText: w.untilText, placed: this.placed };
   }
 
-  admin(p: ServerPlayer, op: HalloweenOp, pumpkin?: string, sim?: HalloweenSimulation, door?: number, candy?: CandyKind, trick?: TrickKind): { ok: boolean; text: string; data?: unknown } {
+  admin(p: ServerPlayer, op: HalloweenOp, pumpkin?: string, content?: HalloweenContentTest, date?: HalloweenDateTest, door?: number, candy?: CandyKind, trick?: TrickKind): { ok: boolean; text: string; data?: unknown } {
     const reply = (ok: boolean, text: string): { ok: boolean; text: string; data: HalloweenStatus } => ({ ok, text, data: this.status() });
     switch (op) {
       case 'status':
@@ -145,12 +177,22 @@ export class HalloweenSystem {
         const r = this.server.trickOrTreat?.adminReset(p) ?? { ok: false, text: 'Trick-or-treating is not available.' };
         return reply(r.ok, r.text);
       }
-      case 'simulate': {
-        this.sim = sim ?? 'none';
-        this.syncIfChanged();
+      case 'test': {
+        this.setTests(content, date);
         const s = this.state;
-        const what = this.sim === 'expired' ? 'Simulating after the cutoff' : this.sim === 'always' ? 'Simulating Halloween always on' : 'Simulation off';
-        return reply(true, `${what}: Halloween content is ${s.active ? 'on' : 'off'} here until the world closes.`);
+        const t = this.tests;
+        const what = t.content === 'real' && t.date === 'real' ? 'No tests' : `Content: ${HALLOWEEN_CONTENT_TEST_NAMES[t.content]}. Date: ${HALLOWEEN_DATE_TEST_NAMES[t.date]}`;
+        return reply(true, `${what}. Halloween content is ${s.active ? 'on' : 'off'} here${t.content === 'real' && t.date === 'real' ? '' : ' until the world closes (never saved)'}.`);
+      }
+      case 'quest': {
+        const q = this.server.trickOrTreat?.questStatus(p) ?? null;
+        return { ok: !!q, text: q ? '' : 'Trick-or-treating is not available.', data: { ...this.status(), quest: q } };
+      }
+      case 'quest_reset': {
+        const tt = this.server.trickOrTreat;
+        if (!tt) return reply(false, 'Trick-or-treating is not available.');
+        tt.resetQuest(p);
+        return { ok: true, text: 'Your Trick or Treat! quest starts again from the first step (advancements you have stay).', data: { ...this.status(), quest: tt.questStatus(p) } };
       }
     }
   }

@@ -1,4 +1,5 @@
 /** Persistent world-level settings and state. */
+import { sanitizeHauntFlags } from '../herobrine/hauntSave';
 import type { Disk } from '../../common/digital/data';
 import type { HerobrineStage } from '../../common/digital/story';
 import type { GameMode, Difficulty, GodHearts } from '../../common/game/gamemode';
@@ -423,7 +424,9 @@ export function sanitizeLevelData(raw: unknown, fallbackId: string): LevelData |
   out.allowlist = Array.isArray(r.allowlist) ? r.allowlist.filter((s) => typeof s === 'string') : [];
   out.banned = Array.isArray(r.banned) ? r.banned.filter((s) => typeof s === 'string') : [];
   out.operators = Array.isArray(r.operators) ? r.operators.filter((s) => typeof s === 'string') : [];
-  out.flags = r.flags && typeof r.flags === 'object' ? r.flags : {};
+  out.flags = r.flags && typeof r.flags === 'object' && !Array.isArray(r.flags) ? r.flags : {};
+  // V7 phase 5: the hauntings' saved state, read back safely
+  sanitizeHauntFlags(out.flags);
   out.roles = {};
   if (r.roles && typeof r.roles === 'object') for (const [k, v] of Object.entries(r.roles)) if (v === 'builder' || v === 'visitor') out.roles[k] = v;
   out.defaultRole = r.defaultRole === 'visitor' ? 'visitor' : 'builder';

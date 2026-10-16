@@ -398,11 +398,12 @@ export class GameServer {
 
   /**
    * V7: is Halloween content on in this world? The one answer every seasonal
-   * feature asks (the date, the world's setting and any Admin Panel test
-   * simulation). Players get it in their world info.
+   * feature asks (the date, the world's setting and the Admin Panel's season
+   * tests, if any). Players get it in their world info.
    */
   halloweenState(): HalloweenState {
-    return halloweenState(this.clock(), this.level.halloween, this.halloween?.sim ?? 'none');
+    const h = this.halloween;
+    return halloweenState(h ? h.now() : this.clock(), this.level.halloween, h?.tests);
   }
 
   isOperator(p: ServerPlayer): boolean {
@@ -431,6 +432,8 @@ export class GameServer {
   handle(conn: Connection, raw: unknown): void {
     const p = this.players.get(conn.id);
     if (!p) return;
+    // V7: temporary enchantments go by this world's clock (a dedicated server runs several worlds in one process)
+    setTempClock(this.level.time);
     // Basic flood protection: 300 messages per second budget.
     p.msgBudget++;
     if (p.msgBudget > 600) {
@@ -591,6 +594,7 @@ export class GameServer {
     this.endQuests?.onLeave(p);
     this.elytra?.onLeave(p);
     this.trickOrTreat?.onLeave(p);
+    this.haunting?.onLeave(p);
     this.mounts?.dismount(p, true);
     this.interaction.closeWindow(p, p.windowId, true);
     p.dim.removeEntity(p);

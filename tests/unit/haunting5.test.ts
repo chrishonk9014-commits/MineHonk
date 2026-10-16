@@ -277,19 +277,26 @@ describe('the other characters, from the Admin Panel', () => {
     const a = await adminAsync(server, conn, { a: 'haunt', op: 'talk', text: 'who are you?', character: 'null' });
     expect(a.data!.talk).toMatchObject({ source: 'claude', line: 'nothing here', character: 'null', speaker: 'null' });
     expect(asked[0]!.character).toBe('null');
+    // (one test every five seconds: each can be a call to Claude)
+    expect((await adminAsync(server, conn, { a: 'haunt', op: 'talk', text: 'again?', character: 'null' })).text).toMatch(/Wait a few seconds/);
+    expect(asked).toHaveLength(1);
+    tick(server, 100);
     // ...or it is off, busy, used up, throws, or takes too long: the scripted lines answer, and the panel is told why
     server.herobrineVoice = async () => ({ text: null, reason: 'limit' });
     const b = await adminAsync(server, conn, { a: 'haunt', op: 'talk', text: 'who are you?', character: 'green_steve' });
     expect(b.data!.talk).toMatchObject({ source: 'scripted', reason: 'limit', character: 'green_steve' });
+    tick(server, 100);
     server.herobrineVoice = async () => {
       throw new Error('boom');
     };
     const c = await adminAsync(server, conn, { a: 'haunt', op: 'talk', text: 'hello', character: 'cave_dweller' });
     expect(c.data!.talk).toMatchObject({ source: 'scripted' });
     expect(String((c.data!.talk as { line: string }).line)).toMatch(/^\.\.\..*\.\.\.$/);
+    tick(server, 100);
     server.herobrineVoice = null;
     const d = await adminAsync(server, conn, { a: 'haunt', op: 'talk', text: 'hello' });
     expect(d.data!.talk).toMatchObject({ source: 'scripted', reason: 'off', character: 'herobrine' });
+    tick(server, 100);
     // Something the chat filter would mask is never said
     server.herobrineVoice = async () => 'you are a bastard';
     const e = await adminAsync(server, conn, { a: 'haunt', op: 'talk', text: 'hello', character: 'null' });

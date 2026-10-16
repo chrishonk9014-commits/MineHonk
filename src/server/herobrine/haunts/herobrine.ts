@@ -654,6 +654,20 @@ export class HerobrineHaunt implements HauntPart {
       }
   }
 
+  originOf(p: ServerPlayer): { dim: DimensionId; x: number; y: number; z: number; yaw: number } | null {
+    const e = this.scene?.taken.get(p.uuid);
+    return e ? { dim: e.from[0], x: e.from[1], y: e.from[2], z: e.from[3], yaw: e.from[4] } : null;
+  }
+
+  /** Leaving from his lair (or on the way there): saved where he took them from. */
+  release(p: ServerPlayer): void {
+    const e = this.scene?.taken.get(p.uuid);
+    if (!e) return;
+    if (e.drag && !e.drag.removed) e.drag.remove();
+    p.leaveAt = this.originOf(p);
+    this.scene!.taken.delete(p.uuid);
+  }
+
   /** The lair ending stops: his figures gone; `restore` puts everyone he took back where they were; `tell` clears their screen. */
   private endScene(restore: boolean, tell: boolean): void {
     const sc = this.scene;

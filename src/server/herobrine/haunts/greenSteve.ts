@@ -115,6 +115,24 @@ export class GreenSteveHaunt implements HauntPart {
     this.traps = [];
   }
 
+  originOf(p: ServerPlayer): { dim: DimensionId; x: number; y: number; z: number; yaw: number } | null {
+    const from = this.end?.from.get(p.uuid);
+    if (from) return { dim: from[0], x: from[1], y: from[2], z: from[3], yaw: from[4] };
+    const tr = this.trapped.get(p.uuid);
+    return tr ? { dim: tr.trap.dim, x: tr.trap.out[0], y: tr.trap.out[1], z: tr.trap.out[2], yaw: p.yaw } : null;
+  }
+
+  /** Leaving from a trap's room, or his end: saved where he took them from. */
+  release(p: ServerPlayer): void {
+    const at = this.originOf(p);
+    if (!at) return;
+    p.leaveAt = at;
+    const tr = this.trapped.get(p.uuid);
+    if (tr) for (const m of tr.figs) if (!m.removed) m.remove();
+    this.trapped.delete(p.uuid);
+    this.end?.from.delete(p.uuid);
+  }
+
   event(kind: string, p: ServerPlayer, _st: HauntState, stage: string): void {
     switch (kind) {
       case 'wave':

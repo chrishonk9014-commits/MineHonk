@@ -19,6 +19,11 @@
  *     Leave or die and it ends, monsters gone, to be tried again.
  * - The Trick or Treat! quest (each step read off the real game, saved per
  *   player), shown while Halloween is on and no other tracker needs the space.
+ *   Only honest play moves it on (phase 5): nothing cheat-made, nothing from
+ *   the Admin Panel or a cheat-made village, nothing in a cheat context.
+ *   Finishing it is an advancement.
+ * - The Halloween advancements read off what players carry (a costume, Big
+ *   and King-Sized Candy, in the inventory or a sack): honest items only.
  * - The Admin Panel's trick-or-treat controls. Everything they make or start
  *   is cheat-made and counts for nothing, and never uses up a real door.
  */
@@ -29,9 +34,9 @@ import { Mob } from '../entity/Mob';
 import { Random } from '../../common/math/rng';
 import { stateOf, getProp, withProp, STATE_BLOCK, STATE_SOLID, STATE_FLUID, blocks } from '../../common/registry/blocks';
 import { items } from '../../common/registry/items';
-import { stackOf, markAdmin } from '../../common/game/itemstack';
+import { stackOf, markAdmin, isAdminStack } from '../../common/game/itemstack';
 import { WEARABLE_BLOCKS } from '../../common/halloween/heads';
-import { CANDY_ITEM, CANDY_NAMES, rollCandyHome, type CandyKind } from '../../common/halloween/candy';
+import { CANDY_ITEM, CANDY_NAMES, CANDY_OF_ITEM, rollCandyHome, sackContents, type CandyKind } from '../../common/halloween/candy';
 import {
   KNOCK_REACH,
   KNOCK_LIST_RANGE,
@@ -51,6 +56,8 @@ import {
   QUEST_STEPS,
   QUEST_TITLE,
   QUEST_CANDY,
+  QUEST_CHEAT_NOTE,
+  newProgress,
   candySceneFor,
   handfulText,
   trickKindFor,
@@ -64,13 +71,19 @@ import {
 import type { DoorRecord, VillageRecord } from '../../common/halloween/villages';
 import { floorNear, sendGrab, sendDrag, sendSceneEnd, ease } from '../world/drag';
 import type { QuestInfo, SpeechTone } from '../../common/net/protocol';
+import type { QuestStatus } from '../../common/game/admin';
 
 /** In a Trick-or-Treat Village, for the quest: this near one of its doors (blocks). */
 const QUEST_VILLAGE_NEAR = 24;
 /** How often (ticks) the doors near each player and the quest are looked at. */
 const CHECK_TICKS = 10;
+/** Ticks between one player's knocks. */
+const KNOCK_GAP = 10;
 /** Village records further than this from a player (blocks) are not searched for doors. */
 const RECORD_RANGE = 220;
+/** Phase 5: the advancement for finishing the quest, and those read off what a player carries. */
+const QUEST_ADVANCEMENT = 'trick_or_treat_quest';
+const CARRIED_ADVANCEMENTS = ['obtain_costume', 'obtain_big_candy', 'obtain_king_candy'] as const;
 const FACING: Record<string, [number, number]> = { north: [0, -1], south: [0, 1], west: [-1, 0], east: [1, 0] };
 const PROFESSIONS = ['farmer', 'librarian', 'cleric', 'fisherman', 'shepherd', 'butcher', 'mason', 'toolsmith'];
 /** Boss bar ids for Trick Homes (one per door being fought in). */
@@ -144,6 +157,8 @@ export class TrickOrTreatSystem {
   private readonly sentDoors = new WeakMap<ServerPlayer, string>();
   private readonly shownQuest = new Map<ServerPlayer, string>();
   private readonly doneShown = new Map<ServerPlayer, number>();
+  /** When each player may knock again (tick). */
+  private readonly nextKnock = new WeakMap<ServerPlayer, number>();
   private tickNo = 0;
 
   constructor(private readonly server: GameServer) {}
@@ -210,6 +225,12 @@ export class TrickOrTreatSystem {
     return !!hat && WEARABLE_BLOCKS.includes(items[hat.id]?.id ?? '');
   }
 
+  /** Whether that costume is an honest one (not cheat-made): the quest's "wear it" step. */
+  honestlyCostumed(p: ServerPlayer): boolean {
+    const hat = p.inventory.get(39);
+    return this.costumed(p) && !isAdminStack(hat);
+  }
+
   // ------------------------------------------------------------------ knocking
 
   /**
@@ -231,6 +252,9 @@ export class TrickOrTreatSystem {
     const dist = Math.hypot(eye[0] - (d.x + 0.5), eye[1] - (d.y + 1), eye[2] - (d.z + 0.5));
     const outside = (p.x - (d.x + 0.5)) * fx + (p.z - (d.z + 0.5)) * fz > 0.2;
     if (!force && (dist > KNOCK_REACH + 0.75 || !outside)) return { ok: false, text: 'Too far from the door.' };
+    // One knock at a time (half a second apart): a modified client cannot flood everyone with knocks
+    if (!force && this.tickNo < (this.nextKnock.get(p) ?? 0)) return { ok: false, text: 'Not so fast.' };
+    this.nextKnock.set(p, this.tickNo + KNOCK_GAP);
     // Everyone near hears the knock
     s.playSound(dim, 'door.knock', d.x + 0.5, d.y + 1, d.z + 0.5, 1, 1);
     const id = this.idOf(ref);
@@ -251,9 +275,13 @@ export class TrickOrTreatSystem {
       if (candy.room(p) <= 0) return voice(FULL_SACK_LINES);
       if (!trick && d.got?.includes(p.uuid)) return voice(ALREADY_LINES);
     }
-    const cheat = force || !!ref.rec.cheat || s.admin.inContext(p);
-    // (the quest counts every answered door, cheats too: it is a guide, and rewards nothing)
-    p.halloween.knocks++;
+    // Cheat-made: the panel's test knock, a village it built, a cheat context, or Halloween on only because of a season test
+    const cheat = force || !!ref.rec.cheat || s.admin.inContext(p) || !!s.halloween?.onByTest;
+    // Only honest knocks count (the quest, the stats, the advancements)
+    if (!cheat) {
+      p.halloween.knocks++;
+      if (trick) s.interaction.grant(p, 'find_trick_home');
+    }
     if (trick) {
       this.startTrick(p, ref, trickKindFor(d.seed), force, cheat);
       return { ok: true, text: `Knocked on a Trick Home: ${TRICK_ENCOUNTERS[trickKindFor(d.seed)].name}.` };
@@ -292,14 +320,16 @@ export class TrickOrTreatSystem {
     if (!force) {
       d.got = [...(d.got ?? []), p.uuid];
       d.used = true;
-      s.villages?.markDirty();
+      s.villages?.markDirty(true);
     }
-    p.halloween.candy += kinds.length;
     if (!cheat) {
+      p.halloween.treats++;
+      p.halloween.candy += kinds.length;
       s.interaction.grant(p, 'first_candy');
       if (s.candy!.fullSack(p)) s.interaction.grant(p, 'full_sack');
+      p.addStat('trick_or_treat.candy', kinds.length);
+      this.checkCarried(p);
     }
-    p.addStat('trick_or_treat.candy', kinds.length);
     const run: CandyRun = { ref, id: this.idOf(ref), p, t: 0, scene: candySceneFor(d.seed, p.uuid), kinds, villager: null, told: false, box: this.house(p.dim, d) };
     this.candyRuns.set(run.id, run);
     if (run.box) this.clearResidents(p.dim, d, run.box, 'in');
@@ -549,7 +579,7 @@ export class TrickOrTreatSystem {
     const box = run.box;
     const guard = { x0: box.x0, z0: box.z0, x1: box.x1, z1: box.z1, y: box.y0 + 1, leash: 0 };
     const herobrine = type === 'herobrine';
-    const m = s.mobs?.spawn(run.p.dim, type, x, y, z, { reason: 'event', data: { trickHome: run.id, noDrops: true, guard, ...(herobrine ? { hbAnim: 'idle' } : {}) } });
+    const m = s.mobs?.spawn(s.overworld, type, x, y, z, { reason: 'event', data: { trickHome: run.id, noDrops: true, guard, ...(herobrine ? { hbAnim: 'idle' } : {}) } });
     if (!m) return null;
     m.persistent = false;
     m.persistenceRequired = true;
@@ -569,7 +599,7 @@ export class TrickOrTreatSystem {
 
   private tickTrick(run: TrickRun): void {
     const s = this.server;
-    const dim = run.p.dim;
+    const dim = this.server.overworld;
     const d = run.ref.door;
     const T = TRICK_TIMES;
     run.t++;
@@ -748,7 +778,7 @@ export class TrickOrTreatSystem {
     const title = `${run.enc.title}: ${alive} left`;
     const progress = alive / Math.max(1, run.mobs.length);
     for (const p of s.players.values()) {
-      const near = p.dim === run.p.dim && p.distanceSq(d.x, d.y, d.z) < 24 * 24;
+      const near = p.dim === this.server.overworld && p.distanceSq(d.x, d.y, d.z) < 24 * 24;
       if (near && !run.bar.has(p)) {
         run.bar.add(p);
         p.send({ t: 'boss', id: run.barId, action: 'add', title, progress, color: run.kind === 'herobrine' ? 'herobrine' : 'halloween' });
@@ -784,7 +814,7 @@ export class TrickOrTreatSystem {
   private win(run: TrickRun): void {
     const s = this.server;
     const d = run.ref.door;
-    const dim = run.p.dim;
+    const dim = this.server.overworld;
     run.phase = 'won';
     run.t = 0;
     this.clearBars(run);
@@ -794,7 +824,7 @@ export class TrickOrTreatSystem {
     for (const p of run.party) {
       if (!s.players.has(p.conn.id)) continue;
       this.say(p, herobrine ? 'He was never here. Something was left behind...' : 'The house falls quiet. A chest creaks open...', 'info', undefined, 80);
-      if (run.cheat || run.admin) continue;
+      if (run.cheat || run.admin || s.admin.inContext(p)) continue;
       p.halloween.tricks++;
       s.interaction.grant(p, 'beat_trick_home');
       if (herobrine) s.interaction.grant(p, 'herobrine_trick');
@@ -803,7 +833,7 @@ export class TrickOrTreatSystem {
     // Once per home, for everyone (a run the panel started never uses a real door up)
     if (!run.admin) {
       d.used = true;
-      s.villages?.markDirty();
+      s.villages?.markDirty(true);
     }
   }
 
@@ -811,7 +841,7 @@ export class TrickOrTreatSystem {
   private placeChest(run: TrickRun): [number, number, number] | null {
     const s = this.server;
     const d = run.ref.door;
-    const dim = run.p.dim;
+    const dim = this.server.overworld;
     const isChest = (x: number, y: number, z: number): boolean => blocks[STATE_BLOCK[dim.getState(x, y, z)]!]?.id === 'chest';
     const cells = [...run.box.cells].sort((a, b) => Math.hypot(b[0] - d.x, b[2] - d.z) - Math.hypot(a[0] - d.x, a[2] - d.z));
     for (const [x, y, z] of cells) {
@@ -836,7 +866,7 @@ export class TrickOrTreatSystem {
     for (const m of run.mobs) if (!m.removed) m.remove();
     this.clearBars(run);
     if (run.phase === 'opening' && this.server.players.has(run.p.conn.id)) sendSceneEnd(run.p);
-    this.setDoor(run.p.dim, run.ref.door, false, null);
+    this.setDoor(this.server.overworld, run.ref.door, false, null);
   }
 
   /** A player left the world: their cutscene ends (a Trick Home they were alone in ends a moment later). */
@@ -857,6 +887,7 @@ export class TrickOrTreatSystem {
     for (const p of this.server.players.values()) {
       this.sendDoors(p);
       this.quest(p);
+      this.checkCarried(p);
     }
   }
 
@@ -872,14 +903,43 @@ export class TrickOrTreatSystem {
 
   // ------------------------------------------------------------------ the quest
 
+  /** Honest (not cheat-made) items in a player's inventory, armour and offhand that pass a test. */
+  private honestItem(p: ServerPlayer, pred: (id: string) => boolean): boolean {
+    for (let i = 0; i <= 40; i++) {
+      const st = p.inventory.get(i);
+      if (st && !isAdminStack(st) && pred(items[st.id]!.id)) return true;
+    }
+    return false;
+  }
+
   /**
-   * Whether a quest step is done right now, read off the game. The quest is a
-   * guide (it rewards nothing), so it works in Creative and with cheats like
-   * the other trackers: a sack or a costume from the creative menu or the
-   * Admin Panel counts, and so does an Admin Panel village. The advancements
-   * along the way stay honest (Interaction.grant).
+   * Whether a quest step is done right now, read off the game: honest play
+   * only (phase 5). A sack or costume must not be cheat-made, the village not
+   * one the Admin Panel built, and knocks and candy count only from Candy
+   * Homes that answered an honest knock. It works in a Creative world (its
+   * own mode is normal play) but not under cheats.
    */
   stepDone(p: ServerPlayer, step: QuestStep): boolean {
+    const candy = this.server.candy!;
+    switch (step) {
+      case 'sack':
+        return this.honestItem(p, (id) => id === items[candy.sackNum]!.id);
+      case 'costume':
+        return this.honestItem(p, (id) => WEARABLE_BLOCKS.includes(id));
+      case 'wear':
+        return this.honestlyCostumed(p);
+      case 'village':
+        return p.achievements.has('find_trick_village') || (p.dim.id === 'overworld' && this.doorsAround(p.x, p.z, QUEST_VILLAGE_NEAR).some((r) => !r.rec.cheat));
+      case 'knock':
+        return p.halloween.treats > 0;
+      case 'candy':
+        return p.halloween.candy >= QUEST_CANDY;
+    }
+  }
+
+  /** Why the step a player is on is not done although it looks it (something cheat-made, a cheat context); null: nothing to say. */
+  private notCounting(p: ServerPlayer, step: QuestStep): string | null {
+    if (this.server.admin.inContext(p)) return QUEST_CHEAT_NOTE;
     const candy = this.server.candy!;
     const has = (pred: (id: string) => boolean): boolean => {
       for (let i = 0; i <= 40; i++) {
@@ -888,20 +948,11 @@ export class TrickOrTreatSystem {
       }
       return false;
     };
-    switch (step) {
-      case 'sack':
-        return has((id) => id === items[candy.sackNum]!.id);
-      case 'costume':
-        return has((id) => WEARABLE_BLOCKS.includes(id));
-      case 'wear':
-        return this.costumed(p);
-      case 'village':
-        return p.achievements.has('find_trick_village') || (p.dim.id === 'overworld' && this.doorsAround(p.x, p.z, QUEST_VILLAGE_NEAR).length > 0);
-      case 'knock':
-        return p.halloween.knocks > 0;
-      case 'candy':
-        return p.halloween.candy >= QUEST_CANDY;
-    }
+    if (step === 'sack' && has((id) => id === items[candy.sackNum]!.id)) return 'Cheat-made sacks do not count';
+    if (step === 'costume' && has((id) => WEARABLE_BLOCKS.includes(id))) return 'Cheat-made costumes do not count';
+    if (step === 'wear' && this.costumed(p)) return 'Cheat-made costumes do not count';
+    if (step === 'village' && p.dim.id === 'overworld' && this.doorsAround(p.x, p.z, QUEST_VILLAGE_NEAR).length) return 'Villages built by the Admin Panel do not count';
+    return null;
   }
 
   /** The tracker for a player (null: hidden). */
@@ -912,22 +963,26 @@ export class TrickOrTreatSystem {
     const i = QUEST_STEPS.findIndex((q) => q.id === step);
     const def = QUEST_STEPS[i]!;
     const text = step === 'candy' ? `${def.text} (${Math.min(pr.candy, QUEST_CANDY)}/${QUEST_CANDY})` : def.text;
-    return { title: QUEST_TITLE, text, stage: i, stages: QUEST_STEPS.length, ...(step === 'candy' ? { remaining: Math.max(0, QUEST_CANDY - pr.candy) } : {}) };
+    const note = this.notCounting(p, step);
+    return { title: QUEST_TITLE, text, stage: i, stages: QUEST_STEPS.length, ...(step === 'candy' ? { remaining: Math.max(0, QUEST_CANDY - pr.candy) } : {}), ...(note ? { note } : {}) };
   }
 
   /** Moves a player's quest on (steps in order, each staying done) and shows it while Halloween is on. */
   private quest(p: ServerPlayer): void {
     const s = this.server;
     const pr = p.halloween;
-    if (this.active && !p.dead && p.gamemode !== 'spectator') {
+    if (this.active && !p.dead && p.gamemode !== 'spectator' && !s.admin.inContext(p)) {
       for (let step = currentStep(pr); step && this.stepDone(p, step); step = currentStep(pr)) pr.steps.push(step);
       if (!currentStep(pr) && !pr.done) {
         pr.done = true;
         this.doneShown.set(p, this.tickNo);
         p.send({ t: 'title', text: 'Trick or Treat!', sub: 'Quest complete. Happy Halloween!', ticks: 80 });
         p.send({ t: 'sound', name: 'music.discovery', x: p.x, y: p.y + 1, z: p.z, volume: 1, pitch: 1.2 });
+        s.interaction.grant(p, QUEST_ADVANCEMENT);
       }
     }
+    // Finished before phase 5 (when cheats still counted): an honest Candy Home's candy shows it was played for real
+    if (pr.done && !p.achievements.has(QUEST_ADVANCEMENT) && p.achievements.has('first_candy')) s.interaction.grant(p, QUEST_ADVANCEMENT);
     let q: QuestInfo | null = this.active ? this.questInfo(p) : null;
     const doneAt = this.doneShown.get(p);
     if (this.active && !q && doneAt !== undefined) {
@@ -944,6 +999,64 @@ export class TrickOrTreatSystem {
     if (k) this.shownQuest.set(p, k);
     else this.shownQuest.delete(p);
     p.send({ t: 'quest', quest: q });
+  }
+
+  /**
+   * The advancements read off what a player carries: a costume, Big Candy and
+   * King-Sized Candy (in the inventory, or honest candy in a sack). Honest
+   * items only, never in a cheat context; seasonal content or not (a costume
+   * or candy kept after the season still counts).
+   */
+  checkCarried(p: ServerPlayer): void {
+    if (CARRIED_ADVANCEMENTS.every((a) => p.achievements.has(a)) || this.server.admin.inContext(p) || p.dead) return;
+    const candy = this.server.candy!;
+    const got = { costume: false, big: false, king: false };
+    for (let i = 0; i <= 40; i++) {
+      const st = p.inventory.get(i);
+      if (!st || isAdminStack(st)) continue;
+      const id = items[st.id]!.id;
+      if (WEARABLE_BLOCKS.includes(id)) got.costume = true;
+      const kind = CANDY_OF_ITEM[id];
+      if (kind === 'big') got.big = true;
+      if (kind === 'king') got.king = true;
+      if (st.id === candy.sackNum) {
+        // Honest candy in the sack (its cheat share is counted apart)
+        const c = sackContents(st);
+        if (c.counts.big - c.cheat.big > 0) got.big = true;
+        if (c.counts.king - c.cheat.king > 0) got.king = true;
+      }
+    }
+    const g = this.server.interaction;
+    if (got.costume) g.grant(p, 'obtain_costume');
+    if (got.big) g.grant(p, 'obtain_big_candy');
+    if (got.king) g.grant(p, 'obtain_king_candy');
+  }
+
+  /** The Admin Panel's view of a player's quest: each step, done or not, and why not. */
+  questStatus(p: ServerPlayer): QuestStatus {
+    const pr = p.halloween;
+    const cur = currentStep(pr);
+    return {
+      steps: QUEST_STEPS.map((q) => {
+        const done = pr.steps.includes(q.id);
+        const now = q.id === cur;
+        const why = now ? (this.notCounting(p, q.id) ?? undefined) : undefined;
+        return { id: q.id, text: q.text, done, now, ...(why ? { why } : {}) };
+      }),
+      knocks: pr.knocks,
+      treats: pr.treats,
+      candy: pr.candy,
+      tricks: pr.tricks,
+      done: pr.done,
+    };
+  }
+
+  /** The Admin Panel: a player's quest from the start again (their advancements stay). */
+  resetQuest(p: ServerPlayer): void {
+    p.halloween = newProgress();
+    this.doneShown.delete(p);
+    this.shownQuest.delete(p);
+    this.quest(p);
   }
 
   // ------------------------------------------------------------------ Admin Panel

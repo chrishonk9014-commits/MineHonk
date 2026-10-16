@@ -54,6 +54,20 @@ export function tempLeft(s: ItemStack | null | undefined, now = clock): number {
   return t ? t.until - now : 0;
 }
 
+/**
+ * Removes a malformed temporary enchantment (loading saved items: whether one
+ * has run out is left to the server's sweep, which runs in its tick with its
+ * own world's clock; until then an expired one simply counts for nothing).
+ */
+export function stripInvalidTemp(s: ItemStack | null | undefined): boolean {
+  if (!s?.tag || s.tag.temp === undefined || valid(s.tag.temp)) return false;
+  const tag = { ...s.tag };
+  delete tag.temp;
+  s.tag = Object.keys(tag).length ? tag : undefined;
+  if (!s.tag) delete s.tag;
+  return true;
+}
+
 /** Removes a temporary enchantment that has run out (or is malformed); true if it changed the stack. */
 export function stripExpiredTemp(s: ItemStack | null | undefined, now = clock): boolean {
   if (!s?.tag || s.tag.temp === undefined) return false;

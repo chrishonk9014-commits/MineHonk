@@ -13,7 +13,7 @@ import type { ItemIcons } from '../render/ItemIcons';
 import { LIMITS, type FakeBan, type HauntEndScreen } from '../../common/net/protocol';
 import { updateLogScreen } from './UpdateLogScreen';
 import { undoCount, undoAutoOptimize } from '../game/AutoOptimizer';
-import { HALLOWEEN_SETTING_NAMES, type HalloweenSetting } from '../../common/halloween/season';
+import { HALLOWEEN_SETTING_NAMES, HALLOWEEN_ENDS_DATE, type HalloweenSetting } from '../../common/halloween/season';
 
 export interface Screen {
   root: HTMLElement;
@@ -105,7 +105,7 @@ const HALLOWEEN_SPLASHES = [
   'Boo!',
   'Look behind you.',
   'Who carved that one?',
-  'Until November 7!',
+  `Until ${HALLOWEEN_ENDS_DATE.replace(/, \d{4}$/, '')}!`,
   'Glows in the dark!',
   'He is watching the pumpkin patch.',
   'Do not follow the lights.',
@@ -355,7 +355,7 @@ export interface CreateWorldOptions {
 
 /** V7: what the world option means, under its button. */
 export function halloweenOptionHelp(v: HalloweenSetting): string {
-  return v === 'always' ? 'Always on: this world keeps Halloween content after the season ends.' : 'Seasonal: Halloween content until November 7, 2026. Nothing is removed after that.';
+  return v === 'always' ? 'Always on: this world keeps Halloween content after the season ends.' : `Seasonal: Halloween content until ${HALLOWEEN_ENDS_DATE}. Nothing is removed after that.`;
 }
 
 export function createWorldScreen(host: ScreenHost, create: (o: CreateWorldOptions) => void): Screen {
@@ -689,8 +689,8 @@ export function deathScreen(host: ScreenHost, message: string, hardcore: boolean
 
 export function achievementsScreen(host: ScreenHost, unlocked: Set<string> | null): Screen & { update: (u: Set<string>) => void } {
   const { root, body } = titled('Advancements', 'screen dim');
-  const cats = ['story', 'world', 'engineering', 'digital', 'caves', 'nether', 'end', 'adventure', 'husbandry', 'farlands'] as const;
-  const names: Record<(typeof cats)[number], string> = { story: 'MineHonk', world: 'World', engineering: 'Engineering', digital: 'Digital', caves: 'Caves', nether: 'Nether', end: 'The End', adventure: 'Adventure', husbandry: 'Husbandry', farlands: 'Farlands' };
+  const cats = ['story', 'halloween', 'world', 'engineering', 'digital', 'caves', 'nether', 'end', 'adventure', 'husbandry', 'farlands'] as const;
+  const names: Record<(typeof cats)[number], string> = { story: 'MineHonk', halloween: 'Halloween', world: 'World', engineering: 'Engineering', digital: 'Digital', caves: 'Caves', nether: 'Nether', end: 'The End', adventure: 'Adventure', husbandry: 'Husbandry', farlands: 'Farlands' };
   let cat: (typeof cats)[number] = 'story';
   const tabs = el('div', { class: 'row' });
   const list = el('div', { class: 'list adv-list' });
@@ -719,7 +719,9 @@ export function achievementsScreen(host: ScreenHost, unlocked: Set<string> | nul
       const num = itemById.get(a.icon)?.num ?? 0;
       const icon = el('div', { class: 'icon adv-icon' + (done ? ' done' : '') });
       if (num && !hidden) icon.style.backgroundImage = `url(${host.icons.icon(num)})`;
-      list.append(el('div', { class: 'list-item' + (done ? ' adv-done' : ' adv-locked') }, icon, el('div', {}, el('div', { class: done ? 'yellow' : '' }, hidden ? '???' : a.title), el('div', { class: 'meta' }, hidden ? 'A secret yet to be discovered' : a.description))));
+      // V7: seasonal ones are marked (they stay after the season; worlds with Halloween content Always on still give them)
+      const badge = a.seasonal === 'halloween' && !hidden ? el('span', { class: 'adv-season', title: 'Halloween: earned while Halloween content is on (during the season, or in worlds with it Always on)' }, 'Halloween') : null;
+      list.append(el('div', { class: 'list-item' + (done ? ' adv-done' : ' adv-locked') }, icon, el('div', {}, el('div', { class: done ? 'yellow' : '' }, hidden ? '???' : a.title, ...(badge ? [badge] : [])), el('div', { class: 'meta' }, hidden ? 'A secret yet to be discovered' : a.description))));
     }
     const total = ACHIEVEMENTS.length;
     const got = ACHIEVEMENTS.filter((a) => unlocked!.has(a.id)).length;

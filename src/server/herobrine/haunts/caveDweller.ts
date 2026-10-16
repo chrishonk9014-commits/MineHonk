@@ -22,6 +22,7 @@ import type { Mob } from '../../entity/Mob';
 import { dragWay } from '../../world/drag';
 import { DWELLER_DAWN_CHANCE, DWELLER_HUNT_TICKS, DWELLER_END } from '../../../common/game/hauntCast';
 import type { HauntPart, HauntState, Figure } from './types';
+import type { DimensionId } from '../../../common/data/biomes';
 import { NATURAL, seenByAnyone, soundAround, openDoor, safeToTake, steady } from './shared';
 
 const BUDGET: Record<string, Record<string, number>> = {
@@ -80,6 +81,21 @@ export class CaveDwellerHaunt implements HauntPart {
       if (c.drag && !c.drag.removed) c.drag.remove();
       if (why === 'stop' && this.h.server.players.has(c.p.conn.id)) c.p.send({ t: 'fx', kind: 'scene', text: 'end', ticks: 1 });
     }
+  }
+
+  originOf(p: ServerPlayer): { dim: DimensionId; x: number; y: number; z: number; yaw: number } | null {
+    const c = this.hunt?.caught.get(p.uuid);
+    return c ? { dim: p.dim.id, x: c.from[0], y: c.from[1], z: c.from[2], yaw: p.yaw } : null;
+  }
+
+  /** Leaving while it drags them down: saved where it caught them. */
+  release(p: ServerPlayer): void {
+    const at = this.originOf(p);
+    if (!at) return;
+    const c = this.hunt!.caught.get(p.uuid)!;
+    if (c.drag && !c.drag.removed) c.drag.remove();
+    p.leaveAt = at;
+    this.hunt!.caught.delete(p.uuid);
   }
 
   /** How loud it is where a player is: underground loudest, then at night. */

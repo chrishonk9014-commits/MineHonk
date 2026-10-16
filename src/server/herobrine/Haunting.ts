@@ -36,6 +36,7 @@
 import type { GameServer } from '../GameServer';
 import type { ServerPlayer } from '../player/ServerPlayer';
 import type { Dimension } from '../world/Dimension';
+import type { DimensionId } from '../../common/data/biomes';
 import { Mob } from '../entity/Mob';
 import { stateOf, blocks, STATE_BLOCK, STATE_SOLID } from '../../common/registry/blocks';
 import { items } from '../../common/registry/items';
@@ -44,7 +45,7 @@ import { Random } from '../../common/math/rng';
 import { ChatFilter } from '../moderation/ChatFilter';
 import { floorNear as floorAt, openAt, solidGround as solidAt } from '../world/drag';
 import { cleanVoiceLine, scriptedReply, VOICE_SPEAKER, type VoiceRequest, type VoiceAnswer } from '../../common/game/herobrineVoice';
-import { HAUNT_MAX_ANSWERS, HAUNT_MAX_MINUTES, HAUNT_BAN, HAUNT_CHASE_AT, AUTO_HAUNT_MINUTES, AUTO_HAUNT_ENDING, type HauntStatus, type HauntOp, type HauntCharacter, type AutoHauntRoll } from '../../common/game/haunting';
+import { HAUNT_CHARACTERS, HAUNT_MAX_ANSWERS, HAUNT_MAX_MINUTES, HAUNT_BAN, HAUNT_CHASE_AT, AUTO_HAUNT_MINUTES, AUTO_HAUNT_ENDING, type HauntStatus, type HauntOp, type HauntCharacter, type AutoHauntRoll } from '../../common/game/haunting';
 import { HAUNT_CAST, castStage, castEnding, defaultEnding, type HauntNotice } from '../../common/game/hauntCast';
 import type { HauntState, Figure, HauntPart, HauntFinish } from './haunts/types';
 import { HerobrineHaunt } from './haunts/herobrine';
@@ -117,7 +118,7 @@ export class HauntingSystem {
   /** Who is haunting (Herobrine when nobody is, or for a haunting from before V7 phase 4). */
   get character(): HauntCharacter {
     const c = this.state?.char;
-    return c && c in HAUNT_CAST ? c : 'herobrine';
+    return c && HAUNT_CHARACTERS.includes(c) ? c : 'herobrine';
   }
 
   /** The part of whoever is haunting. */
@@ -127,6 +128,20 @@ export class HauntingSystem {
 
   get herobrine(): HerobrineHaunt {
     return this.parts.herobrine as HerobrineHaunt;
+  }
+
+  /** A player is leaving: anything that moved them lets go, so they are saved where they were taken from. */
+  onLeave(p: ServerPlayer): void {
+    for (const part of Object.values(this.parts)) part.release?.(p);
+  }
+
+  /** Where a player it holds right now was taken from (their save keeps them there), or null. */
+  originOf(p: ServerPlayer): { dim: DimensionId; x: number; y: number; z: number; yaw: number } | null {
+    for (const part of Object.values(this.parts)) {
+      const at = part.originOf?.(p);
+      if (at) return at;
+    }
+    return null;
   }
 
   /** A cutscene of its end has this player (the Herobrine story leaves them alone). */
@@ -241,6 +256,10 @@ export class HauntingSystem {
       case 'talk': {
         const said = (text ?? '').trim().slice(0, 200);
         if (!said) return reply(false, 'Say something first.');
+        // As often as a player may be answered in a haunting (each answer can be a call to Claude)
+        const key = 'test:' + p.uuid;
+        if (this.server.tickNo - (this.lastAnswer.get(key) ?? -1e9) < 100) return reply(false, 'Wait a few seconds before asking again.');
+        this.lastAnswer.set(key, this.server.tickNo);
         return this.testTalk(p, character, said).then((r) => reply(true, `${r.speaker}: ${r.line} (${r.source === 'claude' ? 'Claude answered' : 'the scripted lines answered'})`, { talk: r }));
       }
     }
@@ -298,26 +317,69 @@ export class HauntingSystem {
     return n;
   }
 
-  /** Every block it changed put back, if nobody changed it since (blocks in chunks not loaded are forgotten). */
+  /**
+   * Every block it changed put back, if nobody changed it since. Those in
+   * chunks not loaded now are put back when their chunk is next loaded (the
+   * list is saved with the world: level.flags.hauntRestore).
+   */
   putBack(): number {
     const s = this.server;
     let n = 0;
     const list = this.changes;
+    const later = this.pendingRestore;
     for (let i = list.length - 1; i >= 0; i--) {
-      const [d, x, y, z, prev, now] = list[i]!;
-      const dim = s.dims.get(d as never);
-      if (!dim || !dim.isLoaded(x, z)) continue;
-      // Only what is still as it was left (a player may have changed it since)
-      if (dim.getState(x, y, z) === now) {
-        dim.setBlock(x, y, z, prev);
-        s.admin.setBlockMark(dim, x, y, z, false);
-        n++;
+      const c = list[i]!;
+      const dim = s.dims.get(c[0] as never);
+      if (dim && !dim.isLoaded(c[1], c[3])) {
+        if (later.length < MAX_CHANGES) later.push(c);
+        continue;
       }
-      list.splice(i, 1);
+      if (dim && this.restoreOne(dim, c)) n++;
     }
-    // Blocks in chunks that are not loaded are forgotten: the record stays small
     s.level.flags.hauntBlocks = [];
     return n;
+  }
+
+  /** One recorded change undone, if the block is still as it was left (a player may have changed it since). */
+  private restoreOne(dim: Dimension, [, x, y, z, prev, now]: Change): boolean {
+    if (dim.getState(x, y, z) !== now) return false;
+    dim.setBlock(x, y, z, prev);
+    this.server.admin.setBlockMark(dim, x, y, z, false);
+    return true;
+  }
+
+  /** Changes still to be put back once their chunks load (after Stop or an end, with their chunks unloaded). */
+  get pendingRestore(): Change[] {
+    const f = this.server.level.flags;
+    if (!Array.isArray(f.hauntRestore)) f.hauntRestore = [];
+    return f.hauntRestore as Change[];
+  }
+
+  /** Puts back what waited for its chunk (every second, only while anything waits). */
+  private restorePending(): void {
+    const f = this.server.level.flags;
+    const later = f.hauntRestore as Change[] | undefined;
+    if (!Array.isArray(later) || !later.length || this.server.tickNo % 20 !== 0) return;
+    const keep: Change[] = [];
+    for (const c of later) {
+      const dim = this.server.dims.get(c[0] as never);
+      if (!dim) continue;
+      if (!dim.isLoaded(c[1], c[3])) keep.push(c);
+      else this.restoreOne(dim, c);
+    }
+    if (keep.length) f.hauntRestore = keep;
+    else delete f.hauntRestore;
+  }
+
+  /** A player changed this block: whatever the haunting recorded there is theirs now, never undone over them. */
+  private forget(dim: string, x: number, y: number, z: number): void {
+    const f = this.server.level.flags;
+    for (const key of ['hauntBlocks', 'hauntRestore'] as const) {
+      const list = f[key] as Change[] | undefined;
+      if (!Array.isArray(list) || !list.length) continue;
+      const i = list.findIndex((c) => c[1] === x && c[2] === y && c[3] === z && c[0] === dim);
+      if (i >= 0) list.splice(i, 1);
+    }
   }
 
   /** The dark gone, for one player (a part takes back anything else it did to the screen). */
@@ -340,6 +402,7 @@ export class HauntingSystem {
   tick(): void {
     const s = this.server;
     const players = [...s.players.values()];
+    this.restorePending();
     if (!this.resumed) {
       this.resumed = true;
       // A world loaded in the middle of the end: back to its start (the ending already decided is kept)
@@ -434,6 +497,7 @@ export class HauntingSystem {
 
   /** A player broke or placed a block (Mining, Interaction): remembered while the world is haunted. */
   onBlock(p: ServerPlayer, what: 'break' | 'place', blockId: string, x: number, y: number, z: number): void {
+    this.forget(p.dim.id, x, y, z);
     const st = this.state;
     if (!st) return;
     const d = this.doingsOf(p);
@@ -800,7 +864,13 @@ export class HauntingSystem {
     for (const part of Object.values(this.parts)) part.reset('end');
     if (st.auto) {
       this.autoOver();
-      if (!st.touched) for (const p of s.players.values()) if (!s.admin.inContext(p)) p.addStat('haunting.experienced');
+      // The advancement (hidden until earned) comes with the flag, before everyone is shown out
+      if (!st.touched)
+        for (const p of s.players.values())
+          if (!s.admin.inContext(p)) {
+            p.addStat('haunting.experienced');
+            s.interaction.grant(p, 'experience_haunting');
+          }
     }
     s.level.flags.haunt = undefined;
     // What Null took is given back; the others' marks are left in the world

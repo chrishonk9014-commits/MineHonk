@@ -677,6 +677,7 @@ await (async () => {
       await screen(bob).locator('input[placeholder="ABC7-92KD"]').fill(code.toLowerCase().replace('-', ''));
       await screen(bob).getByRole('button', { name: 'Join', exact: true }).click();
       await inGame(bob);
+      for (const [n, p] of [['alice', alice], ['bob', bob]]) console.log(`     ${n}: ${JSON.stringify(await p.evaluate(() => ({ yaw: window.minehonk.game.player.yaw, pitch: window.minehonk.game.player.pitch, sens: window.minehonk.settings.sensitivity, locked: document.pointerLockElement != null })))}`);
       const hw = await Promise.all([alice, bob].map((p) => p.evaluate(() => window.minehonk.game.worldInfo.halloween)));
       check('two players on a dedicated server: the server tells both the same (Halloween on)', hw.every((h) => h?.active === true && h.setting === 'seasonal'));
       // The owner turns cheats on, gives Bob a sack and a costume and brings both to the village

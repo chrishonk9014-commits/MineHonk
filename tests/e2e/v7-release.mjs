@@ -698,6 +698,9 @@ await (async () => {
       for (const it of ['trick_or_treat_sack', 'carved_pumpkin']) await admin(alice, { a: 'give', item: it, count: 1, target: 'BobV7' });
       await cmd(alice, '/time set 14000');
       await cmd(alice, '/gamerule doDaylightCycle false');
+      // No skeletons for Bob at night, and the owner a Creative player (no fall from the teleport's height)
+      await cmd(alice, '/gamerule doMobSpawning false');
+      await cmd(alice, '/gamemode creative');
       await cmd(alice, `/tp ${VILLAGE.x} 120 ${VILLAGE.z}`);
       await alice.waitForTimeout(6000);
       // A Candy Home of the village (the owner's lookup); Alice a few steps off, Bob (a Survival player:

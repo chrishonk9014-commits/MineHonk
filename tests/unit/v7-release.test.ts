@@ -653,6 +653,16 @@ describe('a modified client', () => {
     }
   }, 120000);
 
+  it('a dead player asking the Admin Panel is told to respawn first (not left waiting)', async () => {
+    const { server } = await makeServer({ seed: 'dead-admin', cheats: true }, new MemoryStorage(), { clock: () => BEFORE });
+    const { conn, player } = await join(server, 'Ann', 'uuid-ann');
+    player.dead = true;
+    const r = admin(server, conn, { a: 'halloween', op: 'status' });
+    expect(r).toMatchObject({ ok: false });
+    expect(r.text).toMatch(/respawn/i);
+    await server.stop();
+  }, 60000);
+
   it('cannot give the loot of a Trick Home twice: one chest, rolled once, whoever opens it first', async () => {
     const { server, doors } = await trickWorld();
     const a = await join(server, 'Ann', 'uuid-ann');

@@ -453,7 +453,11 @@ export class GameServer {
   }
 
   private dispatch(p: ServerPlayer, m: C2S): void {
-    if (p.dead && m.t !== 'respawn' && m.t !== 'chat' && m.t !== 'ping' && m.t !== 'settings') return;
+    if (p.dead && m.t !== 'respawn' && m.t !== 'chat' && m.t !== 'ping' && m.t !== 'settings') {
+      // The Admin Panel is told why (it would otherwise wait for an answer that never comes)
+      if (m.t === 'admin') p.send({ t: 'admin_result', req: m.req, ok: false, text: 'You are dead: respawn first.' });
+      return;
+    }
     switch (m.t) {
       case 'move':
         this.handleMove(p, m);

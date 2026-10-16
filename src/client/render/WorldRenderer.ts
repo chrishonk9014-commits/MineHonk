@@ -286,6 +286,8 @@ export class WorldRenderer {
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0, 0, 0, 0, 0, 0, 0], 3));
     for (const m of this.chunks.materials) g.add(new THREE.Mesh(geo, m));
+    // V7: the ghosts' sheet too (none may be out yet: the first one of a night would stall its frame)
+    g.add(new THREE.Mesh(geo, this.ghosts.material));
     this.scene.add(g);
     try {
       this.renderer.compile(this.skyScene, cam);

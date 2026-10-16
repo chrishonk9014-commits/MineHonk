@@ -138,7 +138,8 @@ export interface GhostView {
 export class Ghosts {
   readonly mesh: THREE.Mesh;
   private readonly geometry: THREE.InstancedBufferGeometry;
-  private readonly material: THREE.ShaderMaterial;
+  /** Compiled up front with the chunk materials (the first ghost of a night must not stall a frame). */
+  readonly material: THREE.ShaderMaterial;
   private readonly centers = new Float32Array(MAX_GHOSTS * 3);
   private readonly looks = new Float32Array(MAX_GHOSTS * 4);
   private readonly list: Ghost[] = [];

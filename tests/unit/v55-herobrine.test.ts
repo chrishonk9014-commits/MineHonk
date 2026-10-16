@@ -541,6 +541,8 @@ describe('multiplayer', () => {
     }
     const f = hb.fights.fight!;
     expect(f.boss!.maxHealth).toBe(450);
+    // Its attacks are picked at random: the same ones every run (some draws gave only two in the 30 seconds)
+    f.rng = new Random(20261016);
     const before = b.conn.received.length;
     for (let i = 0; i < 600; i++) {
       for (const p of [a.player, b.player]) p.health = 20;

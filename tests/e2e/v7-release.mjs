@@ -40,6 +40,8 @@ const check = (name, ok) => {
 };
 const SEED = 'v7-villages';
 const VILLAGE = { x: 552, z: 1000 };
+/** The season playthrough's village (same seed): most of its Candy Homes open onto the street, enough for the quest's 10 candy. */
+const QUEST_VILLAGE = { x: 1368, z: -2072 };
 const IN_SEASON = '2026-10-20T20:00:00Z';
 const AFTER = '2026-11-10T20:00:00Z';
 
@@ -288,9 +290,9 @@ await (async () => {
     await cmd(page, '/gamerule doMobSpawning false');
     await cmd(page, '/gamerule doDaylightCycle false');
     // A teleport well away from the village (its landing place is a cheat's), then flying in for real
-    await cmd(page, `/tp ${VILLAGE.x + 260} 140 ${VILLAGE.z}`);
+    await cmd(page, `/tp ${QUEST_VILLAGE.x + 260} 150 ${QUEST_VILLAGE.z}`);
     await page.waitForTimeout(2500);
-    const arrived = await flyTo(page, VILLAGE.x, VILLAGE.z, 110);
+    const arrived = await flyTo(page, QUEST_VILLAGE.x, QUEST_VILLAGE.z);
     await page.waitForTimeout(3000);
     check('flew into the Trick-or-Treat Village', arrived);
     const ach = () => page.evaluate(() => [...(window.__chatLog ?? [])].join('\n'));

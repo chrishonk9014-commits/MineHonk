@@ -1615,6 +1615,8 @@ body {
 .admin-status {
   min-height: calc(var(--s) * 9);
   font-size: calc(var(--s) * 7);
+  /* A long message takes the lines it needs (the tab above scrolls instead) */
+  flex-shrink: 0;
 }
 .admin-status.ok {
   color: #1f6f1f;
@@ -3588,6 +3590,11 @@ body {
 .btn.haunt-finale,
 .btn.haunt-ending {
   margin-top: calc(var(--s) * 3);
+  /* Wraps in a narrow window rather than spilling out of its column */
+  max-width: 100%;
+  white-space: normal;
+  height: auto;
+  min-height: calc(var(--s) * 20);
 }
 
 /* The Haunting's lair ending */

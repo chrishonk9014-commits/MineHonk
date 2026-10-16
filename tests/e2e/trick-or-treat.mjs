@@ -697,39 +697,9 @@ if (part('creative')) {
     g.send({ t: 'creative_set', slot: 36, item: { id: sack, count: 1 } });
     g.send({ t: 'creative_set', slot: 37, item: { id: pumpkin, count: 1 } });
   }, [await num(page, 'trick_or_treat_sack'), await num(page, 'carved_pumpkin')]);
-  await waitStep(/Wear your costume/);
-  check(`in ${gm}, a sack and a pumpkin from the creative menu move the quest on ("${await tracker()}")`, gm === 'creative' && /Wear your costume/.test(await tracker()));
-  // Put on by using it
-  await page.evaluate(() => {
-    const g = window.minehonk.game;
-    g.send({ t: 'hotbar', slot: 1 });
-    g.selected = 1;
-  });
-  await page.waitForTimeout(400);
-  await page.evaluate(() => window.minehonk.game.send({ t: 'use', hand: 0, action: 'start' }));
-  await waitStep(/Find a Trick-or-Treat Village/);
-  check(`wearing it: "${await tracker()}"`, /Find a Trick-or-Treat Village/.test(await tracker()));
-  // Teleported to the village (another cheat)
-  await cmd(`/tp ${TRICK.x} 120 ${TRICK.z}`, 2500);
-  await waitChunks(9000);
-  const doors = (await admin('village_doors')).data?.doors?.doors ?? [];
-  const d = doors.find((x) => x.kind === 'candy');
-  if (d) await cmd(`/tp ${d.out[0] + 0.5} ${d.out[1]} ${d.out[2] + 0.5}`, 1500);
-  await waitStep(/Knock on a door/);
-  check(`teleported into the village: "${await tracker()}"`, !!d && /Knock on a door/.test(await tracker()));
-  // Knocking (from the hotbar's sack)
-  if (d) {
-    await page.evaluate(([d]) => {
-      const g = window.minehonk.game;
-      g.send({ t: 'hotbar', slot: 0 });
-      g.selected = 0;
-      g.send({ t: 'knock', x: d.x, y: d.y, z: d.z });
-    }, [d]);
-  }
-  await waitStep(/Collect candy/);
-  await page.waitForFunction(() => !window.minehonk.game.hauntScene.active, null, { timeout: 15000 }).catch(() => {});
-  await page.waitForTimeout(800);
-  check(`a Candy Home answered: "${await tracker()}"`, /Collect candy from Candy Homes \([1-3]\/10\)/.test(await tracker()));
+  // (V7 phase 5: the quest is honest, so under a cheat nothing moves it on, and the tracker says why)
+  await page.waitForTimeout(1500);
+  check(`in ${gm} by command, a sack and a pumpkin from the creative menu do not count, and the tracker says so ("${await tracker()}")`, gm === 'creative' && /Get a Trick-or-Treat Sack/.test(await tracker()) && /do not count/.test(await tracker()));
   await page.screenshot({ path: `${OUT}/trick-quest-creative.png`, noClean: true });
   await page.close();
 }
@@ -750,7 +720,7 @@ if (part('after')) {
   const d = r.data?.doors?.doors?.[0];
   await cmd('/give trick_or_treat_sack 1', 500);
   await cmd('/give candy 5', 500);
-  await page.evaluate(() => window.minehonk.game.adminRequest({ a: 'halloween', op: 'simulate', sim: 'expired' }));
+  await page.evaluate(() => window.minehonk.game.adminRequest({ a: 'halloween', op: 'test', date: 'after' }));
   await page.waitForTimeout(1500);
   await view({ x: d.out[0] + 0.5, y: d.out[1], z: d.out[2] + 0.5 }, { x: d.x + 0.5, y: d.y + 1.1, z: d.z + 0.5 }, 2500);
   const prompt = await page.evaluate(() => window.minehonk.game.hud.prompt);

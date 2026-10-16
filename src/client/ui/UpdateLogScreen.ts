@@ -220,7 +220,11 @@ export function updateLogScreen(host: ScreenHost, inGame: boolean): Screen {
         const i1 = ACHIEVEMENTS.findIndex((a) => a.id === b.to);
         const list = i0 >= 0 && i1 >= i0 ? ACHIEVEMENTS.slice(i0, i1 + 1) : [];
         const grid = el('div', { class: 'ul-advancements' });
-        for (const a of list) grid.append(el('div', { class: 'ul-adv' }, itemSlot(advancementIcon(a.icon)), el('div', {}, el('div', { class: 'ul-adv-title' }, a.title), el('div', { class: 'ul-adv-text' }, a.description))));
+        for (const a of list) {
+          const hidden = b.hideSecret && a.secret;
+          const badge = a.seasonal === 'halloween' && !hidden ? el('span', { class: 'adv-season' }, 'Halloween') : null;
+          grid.append(el('div', { class: 'ul-adv' }, itemSlot(hidden ? '' : advancementIcon(a.icon)), el('div', {}, el('div', { class: 'ul-adv-title' }, hidden ? '???' : a.title, ...(badge ? [badge] : [])), el('div', { class: 'ul-adv-text' }, hidden ? 'A secret yet to be discovered' : a.description))));
+        }
         return el('div', {}, el('div', { class: 'ul-sub' }, `${list.length} new advancements`), grid);
       }
     }

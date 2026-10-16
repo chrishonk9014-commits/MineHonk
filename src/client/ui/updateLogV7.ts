@@ -1,12 +1,12 @@
 /**
- * The Update Log's V7 entry: The Halloween Update. It comes in five phases;
- * this is what is in so far, one section each, and phase 5 adds its own
- * (advancements). Pictures are screenshots of the game itself
+ * The Update Log's V7 entry: The Halloween Update, complete (7.0.0: all five
+ * phases), one section each. It stays after the season: the Update Log is
+ * never seasonal. Pictures are screenshots of the game itself
  * (public/updatelog/v7, made by tools/update-log/ from tests/e2e/halloween.mjs,
- * villages.mjs, trick-or-treat.mjs and haunting4.mjs).
+ * villages.mjs, trick-or-treat.mjs, haunting4.mjs and v7-release.mjs).
  */
 import { DIMENSION_PUMPKINS } from '../../common/halloween/pumpkins';
-import { HALLOWEEN_ENDS_TEXT } from '../../common/halloween/season';
+import { HALLOWEEN_ENDS_TEXT, HALLOWEEN_CONTENT_TEST_NAMES, HALLOWEEN_DATE_TEST_NAMES } from '../../common/halloween/season';
 import { COSTUME_HEADS } from '../../common/halloween/heads';
 import { ABANDONED_ONE_IN, TRICK_HOMES_MIN, TRICK_HOMES_MAX } from '../../common/halloween/villages';
 import { CANDY_HOME_ODDS, CANDY_NAMES, CANDY_KINDS, SACK_CAPACITY, KING_OUTCOMES } from '../../common/halloween/candy';
@@ -28,7 +28,7 @@ const pumpkinCards: Card[] = DIMENSION_PUMPKINS.map((p) => ({
 export const V7_LOG: UpdateEntry = {
   version: 'V7',
   name: 'The Halloween Update',
-  tagline: 'New hauntings: Herobrine comes back by himself, and Null, Green Steve and the Cave Dweller. Trick-or-treating, Trick-or-Treat and Abandoned Villages, costume heads, pumpkins in every dimension and ghosts at night. Phases 1 to 4 of 5.',
+  tagline: 'Trick-or-treating in costume, Trick-or-Treat and Abandoned Villages, candy, pumpkins in every dimension and ghosts at night; new hauntings (Herobrine coming back by himself, Null, Green Steve and the Cave Dweller); Halloween advancements. Complete: all five phases.',
   hero: 'title-trick-or-treat',
   sections: [
     // ------------------------------------------------------------------ overview
@@ -39,24 +39,12 @@ export const V7_LOG: UpdateEntry = {
       blocks: [
         {
           k: 'p',
-          text: `Halloween has come to MineHonk. **V7 arrives in five phases**, and four are here. Phase 1 brought the Halloween season itself, a pumpkin for every dimension, ghosts drifting by on dark nights, and a title screen of haunted nights. Phase 2 brought the villages: Trick-or-Treat Villages dressed for the season, eerie Abandoned Villages, and costume heads to wear. Phase 3 brought trick-or-treating. **Phase 4 brings new hauntings:** Herobrine can come back by himself, and three more characters from the old stories join the Admin Panel's Haunting. The season lasts until **${HALLOWEEN_ENDS_TEXT}**; hauntings are never seasonal.`,
+          text: `Halloween has come to MineHonk, and **V7 is complete**: all five phases are here. Put on a costume, take a Trick-or-Treat Sack and knock on the doors of Trick-or-Treat Villages, where Candy Homes hand out candy and Trick Homes drag you inside. Every dimension grows a pumpkin of its own, ghosts drift by on dark nights, and somewhere out there, extremely rare, Abandoned Villages wait. Herobrine can come back by himself, and three more characters from the old stories can haunt a world. The season lasts until **${HALLOWEEN_ENDS_TEXT}**; worlds can keep it for good, and hauntings, Abandoned Villages and this log never go away.`,
         },
         { k: 'img', img: 'dweller-watch', caption: 'Something is watching from the edge of the light.' },
         {
           k: 'cards',
-          title: 'Phase 4 at a glance',
-          items: [
-            { img: 'auto-sighting', title: 'Herobrine comes back', text: 'Beat him, and he may come back by himself to a new world.', link: 'auto-haunting' },
-            { img: 'appear-null', title: 'Null', text: 'It takes things away while nobody is looking.', link: 'null' },
-            { img: 'appear-green_steve', title: 'Green Steve', text: 'Hello, brother. He built you a house.', link: 'green-steve' },
-            { img: 'appear-cave_dweller', title: 'The Cave Dweller', text: 'It lives in the dark under the world, and it follows you.', link: 'cave-dweller' },
-            { icon: 'book', title: 'They talk back', text: 'Each one answers in its own voice.', link: 'voices' },
-            { icon: 'redstone_torch', title: 'Admin Panel: the Haunting', text: 'Pick who haunts the world, test them, watch it go.', link: 'haunt-admin' },
-          ],
-        },
-        {
-          k: 'cards',
-          title: 'Phase 3',
+          title: 'Trick-or-treating',
           items: [
             { icon: 'trick_or_treat_sack', title: 'The Trick-or-Treat Sack', text: `Holds ${SACK_CAPACITY} candy. Use it to look inside.`, link: 'sack' },
             { icon: 'king_sized_candy', title: 'Four candies', text: 'Mild, big, King-Sized... and poisoned.', link: 'candy' },
@@ -68,29 +56,35 @@ export const V7_LOG: UpdateEntry = {
         },
         {
           k: 'cards',
-          title: 'Phase 2',
+          title: 'Villages, pumpkins and ghosts',
           items: [
             { icon: 'hallow_pumpkin', title: 'Trick-or-Treat Villages', text: 'Pumpkins, orange and purple lights, skulls by the doors.', link: 'villages' },
             { icon: 'cobweb', title: 'Abandoned Villages', text: 'Extremely rare ruins, haunted day and night.', link: 'abandoned' },
             { icon: 'skeleton_skull', title: 'Costume heads', text: 'Skulls and heads to place and wear.', link: 'heads' },
-            { icon: 'redstone_torch', title: 'Admin Panel: villages', text: 'Build either village, see every door.', link: 'admin' },
+            { icon: 'hallow_pumpkin', title: 'A pumpkin in every dimension', text: 'Five new glowing pumpkins, from the Overworld to inside the computer.', link: 'pumpkins' },
+            { icon: 'white_wool', title: 'Ghosts at night', text: 'Now and then one drifts past, and fades away.', link: 'ghosts' },
+            { icon: 'jack_o_lantern', title: 'A haunted title screen', text: 'Eight Halloween nights, in turn.', link: 'menu' },
           ],
         },
         {
           k: 'cards',
-          title: 'Phase 1',
+          title: 'Hauntings (all year)',
           items: [
-            { icon: 'clock', title: 'The Halloween season', text: `Until ${HALLOWEEN_ENDS_TEXT}, or for good in worlds that want it.`, link: 'season' },
-            { icon: 'hallow_pumpkin', title: 'A pumpkin in every dimension', text: 'Five new glowing pumpkins, from the Overworld to inside the computer.', link: 'pumpkins' },
-            { icon: 'white_wool', title: 'Ghosts at night', text: 'Now and then one drifts past, and fades away.', link: 'ghosts' },
-            { icon: 'jack_o_lantern', title: 'A haunted title screen', text: 'A foggy forest, a pumpkin patch and a misty marsh, in turn.', link: 'menu' },
-            { icon: 'redstone_torch', title: 'Admin Panel: Halloween', text: 'See why it is on or off, place every pumpkin, test the season.', link: 'admin' },
+            { img: 'auto-sighting', title: 'Herobrine comes back', text: 'Beat him, and he may come back by himself to a new world.', link: 'auto-haunting' },
+            { img: 'appear-null', title: 'Null', text: 'It takes things away while nobody is looking.', link: 'null' },
+            { img: 'appear-green_steve', title: 'Green Steve', text: 'Hello, brother. He built you a house.', link: 'green-steve' },
+            { img: 'appear-cave_dweller', title: 'The Cave Dweller', text: 'It lives in the dark under the world, and it follows you.', link: 'cave-dweller' },
+            { icon: 'book', title: 'They talk back', text: 'Each one answers in its own voice.', link: 'voices' },
           ],
         },
         {
-          k: 'list',
+          k: 'cards',
+          title: 'And',
           items: [
-            '**Next (phase 5):** Halloween advancements, and more.',
+            { icon: 'clock', title: 'The Halloween season', text: `Until ${HALLOWEEN_ENDS_TEXT}, or for good in worlds that want it.`, link: 'season' },
+            { icon: 'golden_apple', title: 'Halloween advancements', text: 'Thirteen of them, in their own tab.', link: 'advancements' },
+            { icon: 'oak_door', title: 'Playing together', text: 'Every bit of it works with friends, the same for everyone.', link: 'together' },
+            { icon: 'redstone_torch', title: 'Admin Panel', text: 'Test the season, the villages, trick-or-treating and every haunting.', link: 'admin' },
           ],
         },
         { k: 'tip', text: 'Halloween only adds. When the season ends, nothing is taken away: pumpkins already out there stay, and so does everything you have: your sack, your candy, your costume.' },
@@ -188,7 +182,7 @@ export const V7_LOG: UpdateEntry = {
       title: 'A Haunted Title Screen',
       icon: 'jack_o_lantern',
       blocks: [
-        { k: 'p', text: 'All season long, the title screen shows Halloween nights, built from real terrain like every title scene, a new one every 40 seconds: a haunted forest, a pumpkin patch, a misty marsh, a Trick-or-Treat Village, an Abandoned Village and, since phase 3, a trick-or-treater at a door. After the season, it goes back to the End Expansion.' },
+        { k: 'p', text: 'All season long, the title screen shows Halloween nights, built from real terrain like every title scene, a new one every 40 seconds: a haunted forest with someone at the end of its path, a Trick-or-Treat Village, a glowing pumpkin patch, a trick-or-treater at a door, ghosts drifting between the trees of a birch wood, an Abandoned Village, a camp at the edge of the woods with something watching it, and a misty marsh. After the season, it goes back to the End Expansion.' },
         {
           k: 'gallery',
           items: [
@@ -196,6 +190,8 @@ export const V7_LOG: UpdateEntry = {
             { img: 'title-haunted-forest', caption: 'A path into a foggy forest, lit by pumpkins. Someone is standing at the end of it.' },
             { img: 'title-pumpkin-patch', caption: 'A pumpkin patch glowing in the dark, scarecrows and all.' },
             { img: 'title-ghost-marsh', caption: 'Ghosts drifting over a misty marsh.' },
+            { img: 'title-ghost-forest', caption: 'Ghosts between the pale trunks of a birch wood.' },
+            { img: 'title-haunted-camp', caption: "Someone's first night out. Someone else is watching." },
             { img: 'title-menu', caption: 'The title screen.' },
           ],
         },
@@ -255,19 +251,7 @@ export const V7_LOG: UpdateEntry = {
             { img: 'abandoned-guardians', caption: 'A zombie villager and the guardians.' },
           ],
         },
-        {
-          k: 'table',
-          title: 'Advancements',
-          head: ['Advancement', 'How'],
-          rows: [
-            ['**Trick or Treat!**', 'Find a Trick-or-Treat Village'],
-            ['**Ghost Town**', 'Find an Abandoned Village'],
-            ['**Sweet!**', 'Get candy from a Candy Home (phase 3)'],
-            ['**Sweet Tooth**', 'Fill a Trick-or-Treat Sack to the top (phase 3)'],
-            ['**Who Goes There?**', 'Fight your way out of a Trick Home (phase 3)'],
-            ['**???**', 'A secret one, in a Trick Home (phase 3)'],
-          ],
-        },
+        { k: 'p', text: "Finding each kind of village for real is an advancement (see **Advancements**): **Spooky Streets** for a Trick-or-Treat Village, **Ghost Town** for an Abandoned one." },
         { k: 'tip', text: 'Walking into either for the first time shows its name, like the End\'s great structures do.' },
         { k: 'img', img: 'title-abandoned-village', caption: 'An Abandoned Village on the title screen.' },
       ],
@@ -442,8 +426,9 @@ export const V7_LOG: UpdateEntry = {
       icon: 'candy',
       blocks: [
         { k: 'img', img: 'quest', caption: 'The quest tracker, on its first step.' },
-        { k: 'p', text: 'While Halloween is on, the quest tracker walks you through trick-or-treating. Each step is checked against what you really have and do, and your progress is saved. It works in Creative too (the advancements along the way still only come from playing it for real).' },
+        { k: 'p', text: 'While Halloween is on, the quest tracker walks you through trick-or-treating. Each step is checked against what you really have and do, and your progress is saved with you. **Finishing it is an advancement**, so only playing it for real counts: things made by cheats or the Admin Panel, villages the panel built, and anything done under a cheat (a cheat game mode, a teleport) do not move it on, and the tracker says so when that is why. A Creative world is fine: its own mode is normal play.' },
         { k: 'list', items: QUEST_STEPS.map((q, i) => `**${i + 1}.** ${q.text}${q.id === 'candy' ? ` (${QUEST_CANDY} of them)` : ''}`) },
+        { k: 'img', img: 'quest-done', caption: 'Quest complete. Happy Halloween!' },
       ],
     },
 
@@ -615,6 +600,47 @@ export const V7_LOG: UpdateEntry = {
       ],
     },
 
+    // ------------------------------------------------------------------ phase 5: advancements
+    {
+      id: 'advancements',
+      title: 'Advancements',
+      icon: 'golden_apple',
+      blocks: [
+        { k: 'img', img: 'advancements', caption: "The advancements' new Halloween tab." },
+        { k: 'p', text: "V7's advancements have a tab of their own, **Halloween**. They come only from playing for real (never from cheats or the Admin Panel), each player their own, saved with them, in single player and with friends alike." },
+        { k: 'advancements', from: 'find_abandoned_village', to: 'experience_haunting', hideSecret: true },
+        {
+          k: 'list',
+          items: [
+            'Those marked **Halloween** need Halloween content: during the season, or in a world with Halloween content Always on, where they can still be earned after it.',
+            'Nothing is taken away when the season ends: they stay on the screen, marked, earned or not.',
+            'Two are secrets until you earn them. One of them has something to do with a haunting nobody asked for.',
+          ],
+        },
+      ],
+    },
+
+    // ------------------------------------------------------------------ phase 5: playing together
+    {
+      id: 'together',
+      title: 'Playing Together',
+      icon: 'oak_door',
+      blocks: [
+        { k: 'img', img: 'mp-together', caption: 'Watching a friend trick-or-treat.' },
+        { k: 'p', text: "Everything in V7 works with friends, in a world you host from the browser and on a dedicated server. The world's server decides everything that matters (whether it is Halloween there, which villages are dressed, what a door gives, how a haunting goes) and tells everyone the same." },
+        {
+          k: 'list',
+          items: [
+            'Each Candy Home gives each player candy once; a Trick Home is beaten once, for everyone, and its chest is filled once.',
+            'Everyone nearby sees a door open and who answers it; only whoever knocked gets the candy.',
+            'Each player has their own sack, quest and advancements.',
+            'A game that is changed or broken cannot knock without a costume and a sack, get candy twice, copy a sack or a Herobrine Head, or start a haunting: the server checks everything.',
+            'Worlds from every earlier version, V6.5 and before, open as they were, and so do worlds from every V7 phase.',
+          ],
+        },
+      ],
+    },
+
     // ------------------------------------------------------------------ admin panel
     {
       id: 'admin',
@@ -628,16 +654,18 @@ export const V7_LOG: UpdateEntry = {
             "See whether Halloween content is on in the world and why: the season, the world's setting, or the season being over.",
             '**Show a ghost now**, day or night.',
             'Place any pumpkin, or one of each, in front of you.',
-            'Simulate **after the cutoff** or **always on**, to test the season. A simulation is never saved: it ends when the world closes.',
+            `**Season tests**: Halloween content (${Object.values(HALLOWEEN_CONTENT_TEST_NAMES).join(' / ')}) and **Simulate date** (${Object.values(HALLOWEEN_DATE_TEST_NAMES).join(' / ')}). A simulated date runs on, so "just before" shows the season ending a minute later. Never saved: they end when the world closes, and the world's own setting stays as it is. Only the world's owner and operators can use them.`,
             '**Build a Trick-or-Treat Village or an Abandoned Village** around you, in any world, in or out of the season.',
             '**Show the doors** of the nearest Trick-or-Treat Village: which are Trick Homes, and a button to go to each.',
             'Find or teleport to the nearest of either village from the **Teleport** tab.',
-            '**Phase 3:** give a sack (empty or full) and each candy; **knock on the nearest door** ignoring every requirement; **start a Trick Home** of any kind (Herobrine too) at the nearest door; and **reset the nearest village\'s doors**. None of it uses up a real door.',
+            'Give a sack (empty or full) and each candy; **test a knock** at the nearest door, ignoring every requirement; **start a Trick Home** of any kind (Herobrine too) at the nearest door; and **reset the nearest village\'s doors**. None of it uses up a real door.',
+            '**Your quest**: every step, done or not and why not, and a button to start it again.',
           ],
         },
         { k: 'img', img: 'admin-trick', caption: 'Trick-or-treating, in the Halloween tab.' },
         { k: 'img', img: 'admin-villages', caption: "The nearest Trick-or-Treat Village's doors." },
-        { k: 'img', img: 'admin-simulated', caption: 'Simulating the end of the season.' },
+        { k: 'img', img: 'admin-after', caption: 'Simulating a date just after the cutoff.' },
+        { k: 'img', img: 'always-on', caption: 'A world with Halloween content Always on, after the season: still Halloween.' },
         { k: 'tip', text: 'Like every cheat, nothing done here earns advancements, and the pumpkins and villages it places count as cheat-made.' },
       ],
     },

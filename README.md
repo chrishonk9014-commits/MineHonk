@@ -6,12 +6,13 @@ deterministic. The server is authoritative. There are four dimensions: the
 Overworld, the Nether, the End and the Farlands (and, since Version 5.5,
 somewhere you can only get to through a computer).
 
-**Now: V7 - The Halloween Update** (phase 3 of 5). Until November 7, 2026,
+**Now: V7 - The Halloween Update** (version 7.0.0). Until November 7, 2026,
 12:00 AM PST, put on a costume, take a Trick-or-Treat Sack and knock on the
 doors of Trick-or-Treat Villages: Candy Homes hand out candy, Trick Homes drag
 you inside. Every dimension grows pumpkins, ghosts drift by on dark nights and
 the title screen is haunted; all year round, extremely rare Abandoned Villages
-wait in the wild. See [below](#version-7---the-halloween-update).
+wait in the wild, and Herobrine may come back by himself. Thirteen new
+advancements. See [below](#version-7---the-halloween-update).
 
 ## Quick start
 
@@ -584,30 +585,46 @@ Update Log itself.
 
 ### Version 7 - The Halloween Update
 
-V7 comes in five phases. **Phase 1** (version 7.0.0-phase1) is the
-foundation: the season, the pumpkins, ghosts, the title screen and the Admin
-Panel's Halloween tab. **Phase 2** (version 7.0.0-phase2) brings the villages
-and the costume heads. **Phase 3** (version 7.0.0-phase3) brings
-trick-or-treating. **Phase 4** (version 7.0.0-phase4) brings new hauntings
-(not seasonal): Herobrine coming back by himself, and three more characters
-from the old stories in the Admin Panel. Advancements follow in phase 5.
-Design notes: [docs/HALLOWEEN.md](docs/HALLOWEEN.md).
+Version **7.0.0**, the complete Halloween Update (built in five phases:
+the season, pumpkins, ghosts and title screen; the villages and costume
+heads; trick-or-treating; new hauntings; and advancements, the Admin
+Panel's tests and polish). Design notes:
+[docs/HALLOWEEN.md](docs/HALLOWEEN.md); how seasons work and how to bring
+Halloween back another year: [docs/SEASONS.md](docs/SEASONS.md).
+
+#### The season
 
 - **The Halloween season** runs until **November 7, 2026, 12:00 AM PST**
   (`2026-11-07T08:00:00Z`): one moment for everyone, never the player's own
   time zone. It does not come back by itself next year. Online it goes by the
-  hub's clock, offline by the device's.
-- **Halloween content: Seasonal / Always on**, a new world option under
+  hub's clock, offline by the device's. The date is written in one place
+  (`HALLOWEEN_WINDOWS` in `src/common/halloween/season.ts`) and every
+  seasonal feature asks the same check.
+- **Halloween content: Seasonal / Always on**, a world option under
   **More World Options...** (Seasonal unless chosen; worlds from before V7 are
   Seasonal). After the cutoff a Seasonal world gets no new seasonal content;
-  an Always on world keeps it for good. Nothing is ever removed: pumpkins
-  already out there, items and saves all stay. In a world the server decides
-  (in multiplayer, the host) and tells every player, so everyone sees the
-  same.
+  an Always on world keeps it for good. **Nothing is ever removed**: pumpkins
+  already out there, dressed villages, sacks, candy, costumes, advancements
+  and saves all stay, and sacks and candy keep working. In a world the server
+  decides (in multiplayer, the host or the dedicated server) and tells every
+  player, so everyone sees the same.
+- **Never seasonal**: hauntings, Abandoned Villages, the Update Log and
+  everything players already have.
+- **The title screen**, all season: eight Halloween nights built from real
+  terrain, a new one every 40 seconds: a foggy forest path lit by pumpkins with
+  Herobrine at its end, a Trick-or-Treat Village, a glowing pumpkin patch with
+  scarecrows, a trick-or-treater with a sack at an open door, ghosts drifting
+  between the trees of a forest, an Abandoned Village, a camp in the woods
+  with one of the haunting's characters watching from the edge of the light,
+  and ghosts over a misty marsh. After the season it goes back to the End
+  Expansion's.
+
+#### Pumpkins, ghosts and villages
+
 - **Dimension pumpkins**, one block each, scattered rarely on newly generated
   land while Halloween is on (about one chunk in twenty, on natural ground,
-  never in a structure). They glow, drop themselves and face the player who
-  places them:
+  never in or on a structure). They glow, drop themselves and face the player
+  who places them:
   - **Hallow Pumpkin** (the Overworld): the classic orange jack o'lantern;
   - **Ember Pumpkin** (the Nether): charred, cracked with lava light, a fiery face;
   - **Ender Pumpkin** (the End and the Expanded End): pale, violet, many-eyed;
@@ -616,65 +633,62 @@ Design notes: [docs/HALLOWEEN.md](docs/HALLOWEEN.md).
 
   Where they go is a pure function of the world's seed and the chunk, added
   after generation and only ever into air, so world generation (and every
-  generation hash test) is unchanged. In creative they are in the new
+  generation hash test) is unchanged. In creative they are in the
   **Halloween** tab.
 - **Ghosts at night**: now and then on a Halloween night a translucent ghost
   drifts across your view in the Overworld or the Farlands and fades away.
   Harmless and rare: drawn only on your screen, they touch nothing and nothing
-  reacts to them. Reduce Motion keeps them slow and still.
-- **The title screen**, all season: Halloween nights built from real terrain,
-  a new one every 40 seconds: a foggy forest path lit by pumpkins with
-  Herobrine at its end, a glowing pumpkin patch with scarecrows, and ghosts
-  over a misty marsh; since phase 2, a Trick-or-Treat Village and an
-  Abandoned Village; and since phase 3, a pumpkin-headed trick-or-treater with
-  a sack at an open door, a villager in a skull answering. After the season it
-  goes back to the End Expansion.
-- **Trick-or-Treat Villages** (phase 2; worlds made in V7 or later, world
-  generator 9): while Halloween is on, two villages in three are dressed for
-  the night: Hallow Pumpkins and skulls on fence posts by the doors, orange
-  and purple factory lights along the houses, jack o'lanterns on the lamp
-  posts, scarecrows in the fields, a few cobwebs. Villagers live there as
-  usual. Every house door is a Candy Home or a Trick Home (2 to 4 Trick Homes a
-  village, identical from outside; see trick-or-treating below). A village
-  is dressed if Halloween is on when it is first explored, recorded with the
-  world, and then stays as it is for good, every chunk of it.
-- **Abandoned Villages** (phase 2, not seasonal): about one village in 40,
-  so extremely rare. Ruins with collapsed walls and roofs, broken windows,
-  doors and fences, rubble, cobwebs, vines and no lights; ghosts drift over
-  them day and night; zombie villagers (a new mob) walk the streets and
-  undead guardians (zombies and skeletons, husks or strays by the climate)
-  keep watch: they never burn in daylight, never despawn and never leave the
+  reacts to them. Fewer on lower graphics (the Particles setting, which Auto
+  Optimize lowers); Reduce Motion keeps them slow.
+- **Trick-or-Treat Villages** (worlds made in V7 or later, world generator 9):
+  while Halloween is on, two villages in three are dressed for the night:
+  Hallow Pumpkins and skulls on fence posts by the doors, orange and purple
+  factory lights along the houses, jack o'lanterns on the lamp posts,
+  scarecrows in the fields, a few cobwebs. Villagers live there as usual.
+  Every house door is a Candy Home or a Trick Home (2 to 4 Trick Homes a
+  village, identical from outside). A village is dressed if Halloween is on
+  when it is first explored, recorded with the world, and then stays as it is
+  for good, every chunk of it.
+- **Abandoned Villages** (not seasonal): about one village in 40, so
+  extremely rare. Ruins with collapsed walls and roofs, broken windows, doors
+  and fences, rubble, cobwebs, vines and no lights; ghosts drift over them day
+  and night; zombie villagers (a new mob) walk the streets and undead
+  guardians (zombies and skeletons, husks or strays by the climate) keep
+  watch: they never burn in daylight, never despawn and never leave the
   village. Excellent loot, the finest house holding the village's last
   treasure.
-- **Costume heads** (phase 2): Skeleton Skull, Zombie Head, Creeper Head and
-  Herobrine Head. Placeable (they drop themselves) and wearable in the
-  helmet slot, as is a carved pumpkin; everyone sees what you wear, and since
-  phase 3 you see the edge of the mask from inside. None can be crafted: the
-  first three are found on fence posts in Trick-or-Treat Villages (and in
-  Abandoned Villages' chests). **The Herobrine Head is only ever won**: one
-  drops where Herobrine falls in a real final fight (no cheats); it is not in
-  the creative menu, /give or the Admin Panel, never in a Trick Home, and a
-  cheat-placed one breaks into nothing. A head halves how far its own kind of
-  mob notices you.
-- **The Trick-or-Treat Sack** (phase 3): one to a stack, crafted from string
-  over wool while Halloween is on (shown in the recipe book then). It holds
-  **128 candy**, every kind together, in its own item data, so they go
-  wherever the sack goes (chests, the ground, another player, a death, a
-  save). Use it to see what is in it ("n / 128", the room left), take candy
-  out or eat one straight from it; click candy onto it to put it in. When it
-  is full: "Your sack is full!", and the rest goes to the inventory or the
-  ground. Every change is made and checked by the server.
-- **Candy** (phase 3), eaten at any hunger: **Candy** (Speed, Jump Boost or
-  Haste for 20 s), **Big Candy** (two of them for 45 s), **King-Sized Candy**
-  (strong buffs, a three-minute temporary enchantment on something you hold
-  or wear, or a little gold or a diamond) and **Poisoned Candy** (warped and
-  sickly yellow-brown everywhere; poison, wither, blindness or a little health
-  lost, never a kill from full health). Effects refresh rather than stack.
-  Candy Homes give Candy 62%, Big 25%, King-Sized 5%, Poisoned 8%.
-- **Trick-or-treating** (phase 3, only while Halloween is on): look at a door
-  of a Trick-or-Treat Village from outside and a **Knock** prompt appears
-  (G, or tap it); right-clicking still opens the door. You need a costume on
-  your head and a sack with room, or a voice behind the door turns you away.
+
+#### Trick-or-treating
+
+- **Costume heads**: Skeleton Skull, Zombie Head, Creeper Head and Herobrine
+  Head. Placeable (they drop themselves) and wearable in the helmet slot, as
+  is a carved pumpkin; everyone sees what you wear, and you see the edge of
+  the mask from inside. None can be crafted: the first three are found on
+  fence posts in Trick-or-Treat Villages (and in Abandoned Villages' chests).
+  **The Herobrine Head is only ever won**: one drops where Herobrine falls in
+  a real final fight (no cheats), to the nearest player who fought honestly;
+  it is not in the creative menu, /give or the Admin Panel, never in a Trick
+  Home, and a cheat-placed one breaks into nothing. A head halves how far its
+  own kind of mob notices you.
+- **The Trick-or-Treat Sack**: one to a stack, crafted from string over wool
+  while Halloween is on (shown in the recipe book then). It holds **128
+  candy**, every kind together, in its own item data, so they go wherever the
+  sack goes (chests, the ground, another player, a death, a save). Use it to
+  see what is in it ("n / 128", the room left), take candy out or eat one
+  straight from it; click candy onto it to put it in. When it is full: "Your
+  sack is full!", and the rest goes to the inventory or the ground. Every
+  change is made and checked by the server.
+- **Candy**, eaten at any hunger: **Candy** (Speed, Jump Boost or Haste for
+  20 s), **Big Candy** (two of them for 45 s), **King-Sized Candy** (strong
+  buffs, a three-minute temporary enchantment on something you hold or wear,
+  or a little gold or a diamond) and **Poisoned Candy** (warped and sickly
+  yellow-brown everywhere; poison, wither, blindness or a little health lost,
+  never a kill from full health). Effects refresh rather than stack. Candy
+  Homes give Candy 62%, Big 25%, King-Sized 5%, Poisoned 8%.
+- **Knocking** (only while Halloween is on): look at a door of a
+  Trick-or-Treat Village from outside and a **Knock** prompt appears (G, or
+  tap it); right-clicking still opens the door. You need a costume on your
+  head and a sack with room, or a voice behind the door turns you away.
   A **Candy Home** opens: a costumed villager greets you, gives you 1 to 3
   candies (straight into your sack, once per player per home, skipped or not)
   and shuts the door, in a short skippable cutscene. A **Trick Home** creaks
@@ -683,27 +697,34 @@ Design notes: [docs/HALLOWEEN.md](docs/HALLOWEEN.md).
   Its monsters stay in the house and drop nothing; beat them and a chest
   appears, once per home for everyone. Open or break the door to escape;
   leave or die and it ends, to be tried again. Friends can follow you in.
-- **The Trick or Treat! quest** (phase 3): get a sack, get a costume, wear it,
-  find a Trick-or-Treat Village, knock on a door, collect 10 candy; each step
-  read off the real game (cheat items do not count), saved per player.
-- **Herobrine comes back by himself** (phase 4, not seasonal, the automatic
-  haunting). Beat him for real (the final fight in his cave, no cheats) and
-  this device remembers it; each new world you make after that has one chance
-  in ten, rolled once when the world is made and kept in it, that he haunts it
-  some day. Nothing says so. After 20 to 40 minutes of play (only time with
-  someone in the world counts) the signs begin quietly, and over about 45
-  minutes he comes closer, the same haunting as the panel's. He notices what
-  you do: breaking a lot of blocks, placing torches (he turns them red),
-  running, staying underground, sleeping, with lines of his own from *Closer*
-  on. It ends the usual way (the ban screen, or his lair one time in four),
-  **the world is always kept**, and it never comes back to that world. In a
-  hosted world it is the host's world that rolls; on a dedicated server the
-  player creating the world tells the server. The Admin Panel shows it and
-  can end it for good or reset it.
-- **Three more hauntings** (phase 4, Admin Panel only, never by themselves),
-  each from a well-known Minecraft creepypasta and each playing differently;
-  all of them talk back, can be talked to through Claude, and end on their
-  own screen. Kid-friendly horror: nothing gory, nobody hurt.
+- **The Trick or Treat! quest**, in the quest tracker: get a sack, get a
+  costume, wear it, find a Trick-or-Treat Village, knock until a Candy Home
+  treats you, collect 10 candy. Each step is read off honest play only, the
+  same rule as advancements: a sack, costume or candy from the creative menu
+  in a Creative world counts (that is the world's own game mode), but nothing
+  from the Admin Panel, cheats (/give, a game mode the world is not in,
+  flight, a teleport's landing place) or a village a test dressed; the
+  tracker says so when something does not count. Saved per player.
+
+#### Hauntings (all year, not seasonal)
+
+- **Herobrine comes back by himself** (the automatic haunting). Beat him for
+  real (the final fight in his cave, no cheats) and this device remembers it;
+  each new world you make after that has one chance in ten, rolled once when
+  the world is made and kept in it, that he haunts it some day. Nothing says
+  so. After 20 to 40 minutes of play (only time with someone in the world
+  counts) the signs begin quietly, and over about 45 minutes he comes closer,
+  the same haunting as the panel's. He notices what you do: breaking a lot of
+  blocks, placing torches (he turns them red), running, staying underground,
+  sleeping. It ends the usual way (the ban screen, or his lair one time in
+  four), **the world is always kept** (an automatic haunting never deletes a
+  world or a server), and it never comes back to that world. Everything he
+  built or changed is put back afterwards, even in chunks that were not
+  loaded when it ended.
+- **Three more hauntings** (Admin Panel only, never by themselves), each from
+  a well-known Minecraft creepypasta and each playing differently; all of
+  them talk back, can be talked to through Claude, and end on their own
+  screen. Kid-friendly horror: nothing gory, nobody hurt.
   - **Null** takes things away while nobody is looking: the torches and
     blocks you placed, clean square holes in the ground, then the sound and
     the colour; *null* on signs and in chat; a black figure that never moves
@@ -722,16 +743,73 @@ Design notes: [docs/HALLOWEEN.md](docs/HALLOWEEN.md).
     follows closer whenever you look away and lunges (a shove, never a
     wound). At the end every light goes out and it hunts everyone (**Ending**:
     Random, Taken: dragged into its den, Dawn: the sun comes up first).
-- **Admin Panel**: a Halloween tab shows whether Halloween content is on in
-  the world and why, shows a ghost now, places any pumpkin (or one of each)
-  and simulates "after the cutoff" or "always on" for testing (never saved);
-  builds a Trick-or-Treat or Abandoned Village around you in any world, and
-  lists the nearest Trick-or-Treat Village's doors (which are Trick Homes,
-  with a button to go to each). Phase 3 adds a sack (empty or full) and each
-  candy, knocking on the nearest door ignoring the requirements, starting a
-  Trick Home of any kind (Herobrine too) and resetting a village's doors. The
-  Teleport tab finds both villages. As always, nothing done there counts
-  towards advancements, and no real door is used up.
+- **Their voices**: Claude Haiku 5.5 through the hub (the API key lives only
+  in the hub's `ANTHROPIC_API_KEY` secret, never in a browser), with one
+  shared daily cap for every character and every world, plus limits per
+  address (6 a minute, 40 an hour, 30 a day). Only in-game
+  facts are sent (the in-game name, the stage, what is going on nearby), never
+  emails, IP addresses, account data or friends. When the cap is reached or
+  the hub is unreachable, the characters fall back to their scripted lines.
+
+#### Advancements
+
+Thirteen, in the advancements screen's new **Halloween** tab. Seasonal ones
+carry a **Halloween** badge; none is ever removed, and the seasonal ones can
+still be earned after the cutoff in an Always on world. Like every
+advancement they are granted by the server, saved per player and earned only
+by honest play (nothing from the Admin Panel or cheats).
+
+| Advancement | How |
+| --- | --- |
+| Ghost Town | Find an Abandoned Village |
+| Spooky Streets (Halloween) | Find a Trick-or-Treat Village |
+| Bring a Bag (Halloween) | Craft a Trick-or-Treat Sack |
+| Dressed to Scare | Get a costume (a head or a carved pumpkin) |
+| Sweet! (Halloween) | Get candy from a Candy Home |
+| Big Treat (Halloween) | Get a Big Candy |
+| Fit for a King (Halloween) | Get a King-Sized Candy |
+| Sweet Tooth (Halloween) | Fill a sack: 128 candy |
+| Trick or Treat! (Halloween) | Finish the Trick or Treat! quest |
+| Not a Treat (Halloween) | Find a Trick Home |
+| Who Goes There? (Halloween) | Beat a Trick Home |
+| (hidden, Halloween) | Something only one Trick Home in a hundred holds |
+| (hidden) | Live through a haunting that came by itself, to its end |
+
+#### Together
+
+Everything works in multiplayer, in a browser-hosted world and on the
+dedicated server alike, and the server checks all of it: the costume and the
+sack before a knock (and a knock only every half second), candy once per
+player per home and a Trick Home's chest once for everyone, the quest and
+advancements from the server's own records, eating from a sack at the candy's
+own pace, and only the world's owner and operators reaching the Admin Panel
+(a modified client cannot start a haunting, claim candy or loot twice, or
+pass a costume or sack check).
+
+#### The Admin Panel
+
+The **Halloween** tab: whether Halloween content is on in this world and why
+(the world's setting, the season, the date); **Season tests**: **Halloween
+content** (Real / Force on / Force off) and **Simulate date** (Real / Just
+before the cutoff / Just after the cutoff), never saved, gone when the world
+closes, and only for the world's owner and operators; a ghost now; every
+pumpkin; a Trick-or-Treat or Abandoned Village built around you; a sack
+(empty or full) and each candy; knocking on the nearest door ignoring the
+requirements, the doors of the nearest village (which are Trick Homes, with a
+button to go to each), resetting them and starting a Trick Home of any kind
+(Herobrine too); and your quest, step by step, with why a step does not
+count. The **Haunting** tab: start Herobrine or any character, the duration,
+the time until the end begins, progress, end or reset, and the automatic
+haunting's state. As always, nothing done there counts towards advancements
+or the quest, and no real door is used up.
+
+#### Old worlds
+
+Every world and save from V0 to V6.5 and every V7 phase opens in V7.0.0, in
+single player, a browser-hosted world and the dedicated server
+(`tests/unit/v7-saves.test.ts` loads saved fixtures from each). Old worlds
+are Seasonal; villages appear dressed only in newly explored land of worlds
+made since V7.
 
 ### Recipe Book
 
@@ -774,11 +852,13 @@ show a **Cheats ON** badge in the Friends and Public lists and when joining.
 - **Performance**: client FPS, frame time, chunks and meshes, server TPS,
   tick time, entities and memory.
 - **Halloween** (V7): whether Halloween content is on in this world and why,
-  a ghost now, every dimension pumpkin, simulating the end of the season (or
-  Halloween always on) for testing, building a Trick-or-Treat or Abandoned
-  Village around you, the nearest Trick-or-Treat Village's doors, and (phase
-  3) sacks, candy, knocking, Trick Homes of any kind and resetting doors.
-- **Haunting**: pick who haunts the world (Herobrine, or since V7 phase 4
+  the season tests (**Halloween content**: Real / Force on / Force off;
+  **Simulate date**: Real / Just before / Just after the cutoff; never
+  saved), a ghost now, every dimension pumpkin, building a Trick-or-Treat or
+  Abandoned Village around you, sacks and candy, knocking, the nearest
+  village's doors, Trick Homes of any kind, resetting doors, and your Trick or
+  Treat! quest step by step.
+- **Haunting**: pick who haunts the world (Herobrine, or since V7
   Null, Green Steve or the Cave Dweller; see
   [Version 7](#version-7---the-halloween-update)), how long it lasts from the
   first sign to the end (30 minutes for Herobrine and 20 for the others unless
@@ -888,6 +968,7 @@ npm run test:e2e:halloween # V7: the Halloween title scenes and their rotation, 
 npm run test:e2e:villages  # V7 phase 2: Trick-or-Treat and Abandoned Villages, the heads worn, zombie villagers and guardians, the Admin Panel's villages and doors, the village title scenes (screenshots)
 npm run test:e2e:trick     # V7 phase 3: the sack's window, the candies (in the sack, in hand, on the ground), costumes, knocking, Candy and Trick Homes, the quest, the Admin Panel, after the season (screenshots)
 npm run test:e2e:haunting4 # V7 phase 4: the Haunting tab's picker and tests, Null, Green Steve and the Cave Dweller from start to end screen, an automatic haunting (screenshots)
+npm run test:e2e:v7        # V7.0.0: every title scene, a season playthrough (village, sack, costume, quest, advancements, save and load), the same world after the cutoff, an Always on world, the Admin Panel at 800x600 and 1920x1080, the Update Log, a V6.5 save, two players on the dedicated server (screenshots; ONLY=menu,season,... for some parts)
 ```
 
 ### Performance tools
@@ -899,6 +980,8 @@ node tools/perf/compare.mjs a.json b.json   # before/after table
 npx tsx tools/perf/server-bench.ts          # server tick cost with many mobs
 node tools/perf/shader-cost.mjs             # frame time by render layer and option
 node tools/perf/churn.mjs                   # server updates and re-meshing in a still scene
+LABEL=v7 npm run bench:v7 -- dist-bench     # V7: a Trick-or-Treat Village at night with ghosts, a Trick Home fight (frame time, memory)
+node --expose-gc --import tsx tools/perf/haunt-bench.ts . v7 herobrine   # a whole haunting, simulated fast: server tick time, entities, memory
 ```
 
 The benchmark uses headless Chromium with software WebGL, so absolute FPS is
@@ -964,3 +1047,8 @@ when they disagree.
 - Cheat and debug commands require operator status and a world with cheats
   enabled. The developer handle (`window.minehonk`) only exists in
   development builds and automated test browsers.
+- The hauntings' voices go through the hub: the Anthropic API key exists only
+  as the hub's `ANTHROPIC_API_KEY` secret (never logged or sent to a browser).
+  Requests are checked and capped (one shared daily cap, plus limits per
+  address kept as salted daily hashes, never the address itself), and carry
+  in-game facts only.

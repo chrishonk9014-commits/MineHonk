@@ -12,7 +12,8 @@ import type { GameMode, Difficulty, GodHearts } from '../game/gamemode';
 import type { DimensionId } from '../data/biomes';
 import type { HalloweenState } from '../halloween/season';
 
-export const PROTOCOL_VERSION = 9;
+/** 10: V7 phase 5 (the season tests in WorldInfo.halloween, the quest note, the new Admin Panel ops). */
+export const PROTOCOL_VERSION = 10;
 
 // ---------------------------------------------------------------------------
 // Client -> Server

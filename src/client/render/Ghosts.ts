@@ -9,6 +9,8 @@
  * the night sky of the Overworld and the Farlands, and they are rare: one at
  * a time, a minute or two apart. Come close and one fades out at once.
  * Reduce Motion keeps them slow and still (no bobbing, no rippling hem).
+ * Fewer and rarer on lower graphics (the Particles setting, which Auto
+ * Optimize lowers when the game lags): see ghostBudget.
  *
  * Each ghost is a blocky sheet ghost (two dark eyes, a little round mouth, a
  * rippling hem) drawn in the fragment shader on a 16x16 pixel grid, so it
@@ -29,6 +31,17 @@ const FIRST_MAX = 50;
 const NIGHT = 0.3;
 /** A ghost fades out at once when the camera comes this close (blocks). */
 const SHY = 7;
+
+/**
+ * V7 phase 5: how many ghosts at once (and over an Abandoned Village), and how
+ * much rarer they come, for the graphics settings: Particles All, Decreased or
+ * Minimal (Auto Optimize lowers it when the game lags).
+ */
+export function ghostBudget(s: Pick<Settings, 'particles'>): { max: number; village: number; gap: number; ambient: number } {
+  if (s.particles === 'minimal') return { max: 2, village: 1, gap: 2.5, ambient: 2 };
+  if (s.particles === 'decreased') return { max: 4, village: 2, gap: 1.5, ambient: 4 };
+  return { max: MAX_GHOSTS, village: 3, gap: 1, ambient: MAX_GHOSTS };
+}
 
 const VERT = /* glsl */ `
 attribute vec3 aCenter;
@@ -187,7 +200,7 @@ export class Ghosts {
 
   /** Starts a ghost somewhere in view: `dist` blocks ahead, drifting across. */
   private spawn(v: GhostView, dist: number, spread: number, high: boolean): void {
-    if (this.list.length >= MAX_GHOSTS) return;
+    if (this.list.length >= ghostBudget(this.settings).max) return;
     const calm = this.settings.reduceMotion;
     const a = v.yaw + (Math.random() - 0.5) * spread;
     const x = v.x - Math.sin(a) * dist;
@@ -205,7 +218,7 @@ export class Ghosts {
 
   /** A title scene's ghost, low over its area (at a fixed height: trees and water don't lift it). */
   private spawnAmbient(v: GhostView): void {
-    if (this.list.length >= MAX_GHOSTS) return;
+    if (this.list.length >= ghostBudget(this.settings).max) return;
     const area = this.ambientArea;
     if (!area) {
       this.spawn(v, 14 + Math.random() * 20, 1.1, Math.random() < 0.35);
@@ -237,7 +250,7 @@ export class Ghosts {
   /** A ghost of an Abandoned Village: somewhere ahead inside it, low over the ruins. */
   private spawnVillage(v: GhostView): void {
     const a = this.village;
-    if (!a || this.list.length >= MAX_GHOSTS) return;
+    if (!a || this.list.length >= ghostBudget(this.settings).max) return;
     const calm = this.settings.reduceMotion;
     const ang = v.yaw + (Math.random() - 0.5) * 2.4;
     const dist = 8 + Math.random() * 24;
@@ -252,12 +265,13 @@ export class Ghosts {
   update(v: GhostView, dt: number): void {
     dt = Math.min(0.1, Math.max(0, dt));
     const calm = this.settings.reduceMotion;
-    // An Abandoned Village's ghosts: day or night, up to three at once, every few seconds
+    const budget = ghostBudget(this.settings);
+    // An Abandoned Village's ghosts: day or night, up to three at once (fewer on lower graphics), every few seconds
     if (this.village && (v.x >= this.village.x0 - 16 && v.x <= this.village.x1 + 16 && v.z >= this.village.z0 - 16 && v.z <= this.village.z1 + 16)) {
       this.villageWait -= dt;
       if (this.villageWait <= 0) {
-        if (this.list.filter((g) => g.village).length < 3) this.spawnVillage(v);
-        this.villageWait = 5 + Math.random() * 9;
+        if (this.list.filter((g) => g.village).length < budget.village) this.spawnVillage(v);
+        this.villageWait = (5 + Math.random() * 9) * budget.gap;
       }
     } else this.villageWait = Math.min(this.villageWait, 2);
     // Ghosts by themselves: a Halloween night, now and then
@@ -266,7 +280,7 @@ export class Ghosts {
     else if (Number.isNaN(this.wait)) this.wait = FIRST_MIN + Math.random() * (FIRST_MAX - FIRST_MIN);
     else if ((this.wait -= dt) <= 0) {
       if (this.list.length === 0) this.spawn(v, 18 + Math.random() * 18, 0.7, Math.random() < 0.4);
-      this.wait = GAP_MIN + Math.random() * (GAP_MAX - GAP_MIN);
+      this.wait = (GAP_MIN + Math.random() * (GAP_MAX - GAP_MIN)) * budget.gap;
     }
     while (this.pendingNow > 0) {
       this.pendingNow--;
@@ -278,10 +292,11 @@ export class Ghosts {
     this.lastAt = now;
     if (this.ambient > 0) {
       this.ambientWait -= real;
-      while (this.list.length < this.ambient && this.ambientWait <= 0) {
+      const want = Math.min(this.ambient, budget.ambient);
+      while (this.list.length < want && this.ambientWait <= 0) {
         this.spawnAmbient(v);
         // The first ones come together (some already part-faded in), then one every few seconds
-        this.ambientWait = this.list.length < this.ambient ? 0 : 2 + Math.random() * 3;
+        this.ambientWait = this.list.length < want ? 0 : 2 + Math.random() * 3;
       }
     }
     let n = 0;

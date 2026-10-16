@@ -1,6 +1,6 @@
 # Version 7 - The Halloween Update
 
-Design notes. V7 comes in five phases:
+Design notes. V7 (7.0.0) is complete; it came in five phases:
 
 1. **Foundation** (7.0.0-phase1): the season's rules, the "Halloween content"
    world option, the Update Log's V7 and V6.5 tabs, a pumpkin for every
@@ -16,11 +16,18 @@ Design notes. V7 comes in five phases:
    (Herobrine comes back by himself, about 45 minutes), and three more
    creepypasta characters in the Admin Panel (Null, Green Steve, the Cave
    Dweller), each with their own AI conversations.
-5. **Admin Panel controls, advancements, full tests and polish.**
+5. **The release** (7.0.0): the Admin Panel's season tests and quest view,
+   the Halloween advancements, an honest quest, a multiplayer and save
+   audit (fixtures from V6.5 and every phase), performance against V6.5,
+   two more title scenes, the final Update Log. See "Phase 5" below.
+
+How seasons work, and how to add another window (a later Halloween), is in
+[docs/SEASONS.md](SEASONS.md).
 
 ## The season (`src/common/halloween/season.ts`)
 
-Halloween content is on before **`HALLOWEEN_ENDS_AT` = 2026-11-07T08:00:00Z**
+The dates live in one list, `HALLOWEEN_WINDOWS` (see [SEASONS.md](SEASONS.md));
+today it has one window. Halloween content is on before **`HALLOWEEN_ENDS_AT` = 2026-11-07T08:00:00Z**
 (November 7, 2026, 12:00 AM PST). It is one instant for everyone: the check
 compares milliseconds since 1970, never a local date. It does not come back
 by itself next year (next year gets its own update).
@@ -70,12 +77,22 @@ Abandoned Villages and the Update Log.
   `?clock=2026-11-07T08:01:00Z`; the page hands it to the worker, and the hub
   is then never asked.
 
-### Simulations (Admin Panel)
+### Season tests (Admin Panel)
 
-`HalloweenSystem.sim` is `'none'`, `'expired'` (as if after the cutoff) or
-`'always'` (as if the world were Always on). It is **never saved**: it ends
-when the world closes. Pumpkins that grow only because of an `'always'`
-simulation are cheat-marked.
+`HalloweenSystem.tests` (phase 5; it replaced phase 1's simulations):
+
+- `content`: `'real'`, `'on'` (forced on) or `'off'` (forced off);
+- `date`: `'real'`, `'before'` or `'after'`: a simulated date starting a
+  minute before or after the cutoff (`DATE_TEST_LEAD`) and running on from
+  there (`HalloweenSystem.now()`), so "just before" shows the season ending.
+
+They are **never saved** (a new server for the world starts without them),
+never change `LevelData.halloween`, and only the owner and operators of a
+world with cheats can set them. `WorldInfo.halloween` carries `inSeason`,
+`content` and `date`, and the state's `reason` is `'forced'` under a content
+test. Anything made only because a test turned Halloween on
+(`HalloweenSystem.onByTest`) is cheat-made: pumpkins grown, villages dressed,
+and trick-or-treating (the knock is a cheat, its candy cheat-made).
 
 ## Adding a seasonal feature (phases 2-5)
 
@@ -802,9 +819,183 @@ advancements, and an automatic haunting touched from here does not count.
   (like Herobrine's); Green Steve's copies wear a player's name but not
   their skin; the Cave Dweller's crawl holes need natural walls nearby.
 
+## Phase 5: the release
+
+### The Admin Panel
+
+- **Halloween tab**, in clear sections with a line of help each: *Halloween
+  in this world* (content on or off, the world's setting, the season and its
+  time left, the date the world goes by, any tests, pumpkins grown, why);
+  *Season tests* (above); *Villages*; *Ghosts*; *Dimension pumpkins*; *Sacks
+  and candy*; *Knocking and Trick Homes* (a test knock, every encounter, the
+  doors list, resetting a village's doors); *Your Trick or Treat! quest*
+  (each step, done or not and why not; `op: 'quest'`, and `quest_reset`).
+- Two columns that wrap to one on narrow windows; the browser test checks
+  both tabs at 800 x 600 and 1920 x 1080 for anything spilling out.
+- **Every V7 action is cheat-made and counts for nothing.**
+  `tests/unit/v7-release.test.ts` runs every Halloween and Haunting op (and
+  checks that it ran them all, against `HALLOWEEN_OPS` and `HAUNT_OPS`), with
+  two players standing in a real village, and shows that no advancement,
+  quest step, stat, ending or honest flag (`haunting.experienced`, Herobrine's
+  defeat) came of it.
+- The Haunting tab's **talk** test waits five seconds between asks (each can
+  be a call to Claude).
+
+### Advancements (`src/common/data/achievements.ts`, category `halloween`)
+
+A tab of their own. `seasonal: 'halloween'` marks those that need Halloween
+content (shown with a Halloween badge; never removed, still earned in Always
+on worlds after the season):
+
+| Id | Title | How | Seasonal |
+| --- | --- | --- | --- |
+| `find_abandoned_village` | Ghost Town | find an Abandoned Village | no |
+| `find_trick_village` | Spooky Streets (was "Trick or Treat!") | find a Trick-or-Treat Village | yes |
+| `craft_sack` | Bring a Bag | craft a sack (`Interaction.onCrafted`) | yes |
+| `obtain_costume` | Dressed to Scare | carry a head or a carved pumpkin | no |
+| `first_candy` | Sweet! | candy from a Candy Home | yes |
+| `obtain_big_candy` | Big Treat | carry Big Candy (inventory, or honest candy in a sack) | yes |
+| `obtain_king_candy` | Fit for a King | carry King-Sized Candy | yes |
+| `full_sack` | Sweet Tooth | fill a sack to 128 | yes |
+| `trick_or_treat_quest` | Trick or Treat! | finish the quest | yes |
+| `find_trick_home` | Not a Treat | knock on a Trick Home (honestly) | yes |
+| `beat_trick_home` | Who Goes There? | win a Trick Home | yes |
+| `herobrine_trick` | He Was Never Here (secret) | beat a Trick Home's Herobrine | yes |
+| `experience_haunting` | It Came Back (secret) | see an automatic haunting through, untouched | no |
+
+- All are granted by the server through `Interaction.grant` (never in a
+  cheat context), per player, saved with the player.
+- The carried ones are read off the inventory every 10 ticks
+  (`TrickOrTreatSystem.checkCarried`), honest items only.
+- `experience_haunting` comes with phase 4's flag (`haunting.experienced`).
+  A player whose save has the flag gets it on loading.
+- `trick_or_treat_quest` is also given to a player who finished the quest
+  in phase 3 or 4 (when cheats still counted) and has `first_candy`, which
+  only honest candy gives.
+
+### The quest is honest
+
+Phase 3's fix made the quest count cheats ("a guide"). Phase 5 asks that it
+"can't be completed without really doing" it and that no admin action grants
+a step, so:
+
+- it moves on only outside cheat contexts;
+- a sack or costume must not be cheat-made;
+- the village must not be one the panel built;
+- knocks and candy count only from honest knocks (`HalloweenProgress.knocks`,
+  `treats`: Candy Homes that gave candy, new; and `candy`);
+- the knock step is now "Knock on doors until a Candy Home treats you".
+
+A Creative *world* still works (its own mode is normal play). When something
+does not count, the tracker says why (`QuestInfo.note`): "Cheat-made sacks
+do not count", "Villages built by the Admin Panel do not count", "Cheats and
+the Admin Panel do not count".
+
+### Multiplayer and modified clients
+
+Audited for browser-hosted worlds and the dedicated server (the same
+`GameServer`). Fixed:
+
+- **Creative cloning:** a creative middle-drag cloned Herobrine Heads and
+  full sacks. It now copies like Creative's clone: never a head, an empty
+  sack, cheat-made under a cheat.
+- **Herobrine Head:**
+  - one placed without using it up (Creative) is cheat-made;
+  - a real one in a cheat-marked chunk no longer breaks into nothing (only
+    the block's own mark counts);
+  - a creative player can no longer lose one into a slot it cannot go in;
+  - an unclaimed one goes only to an honest winner.
+- **Knocks:** one every half second (`KNOCK_GAP`).
+- **Eating from a sack:** waits as long as eating from the hand.
+- **A season test** makes trick-or-treating cheat-made.
+- **Trick Home runs** always use the Overworld.
+- **Wearing from a stack:** puts one head on, not the whole stack.
+- **Door records** are written at once after candy or a win (a crash right
+  after cannot forget them).
+- **Temporary enchantments** read each world's own clock (a dedicated server
+  runs several worlds in one process; loading strips only malformed ones,
+  the in-tick sweep the expired ones).
+- **Saves:** a player a haunting moved (a trap, an end's cutscene) is saved
+  where they were taken from (`HauntPart.originOf` / `release`).
+- **Haunting restores:** blocks a haunting changed in chunks that are not
+  loaded are put back when those chunks load (`level.flags.hauntRestore`),
+  and a player's own block is never undone.
+- **AI voices:**
+  - the dedicated server's voices have the hub's limits (`VoiceBudget`: 6 a
+    minute and 40 an hour per world, one daily cap) and parse their
+    requests;
+  - the cloud hub adds a per-address daily share (`voice_address_usage`,
+    hashed, `VOICE_ADDRESS_DAILY_LIMIT` 30);
+  - a call is 256 tokens at most, with no retries;
+  - the deploy workflow gives the API key to its deploy step only.
+
+`tests/unit/v7-release.test.ts` ("a modified client") checks:
+
+- knocks without a costume or sack, from afar, from inside, on a non-door,
+  twice, in bursts, two players at once;
+- sack messages for more than there is, a slot that is not a sack, a
+  sackful eaten at once;
+- creative drags and the creative menu;
+- guests sending admin actions;
+- a Trick Home's chest opened by two players.
+
+### Saves (`tests/fixtures/worlds/`, `tests/unit/v7-saves.test.ts`)
+
+Fixtures made by the real older versions with
+`tools/fixtures/make-save.ts`: V6.5 (78eaa4e) and every V7 phase (1: the
+setting and pumpkins; 2: generator 9, villages, heads; 3: sacks, candy, temp
+enchantments, door records, quest progress; 4: the automatic roll, a haunting
+by a character). Each loads (memory storage, as the browser keeps it, and the
+dedicated server's file storage) with everything kept, runs, saves and loads
+again; after the cutoff Seasonal ones turn off and nothing is removed. The
+browser test also plays the V6.5 one from IndexedDB.
+
+New sanitizers, on load:
+
+- `hauntSave.ts`: the haunting state, recorded blocks and the automatic roll.
+  A bogus character (even a prototype name), wrong types, out-of-range block
+  states and huge lists are dropped or cut back. Before, some of these
+  stopped the server's tick.
+- `sanitizeVillageRecords`: capped (4096 records, 64 doors), keys checked,
+  integer door ids.
+- Player effects are clamped.
+
+### Performance
+
+Measured against V6.5 on the same machine, seed (`v7-villages`) and view
+distance (6). The numbers are in the release report and README.
+
+- `tests/perf/v7-bench.mjs`: frame time, JS time, draw calls, memory and
+  server tick time, for plain terrain by day, the Trick-or-Treat Village at
+  night with ghosts, and a Trick Home's fight.
+- `tools/perf/haunt-bench.ts`: the server's tick time and memory over a
+  whole 45-minute haunting, for each character, the automatic one and none.
+
+Caps:
+
+- ghosts: 8, and fewer on lower graphics (`ghostBudget`: Particles
+  Decreased 4, Minimal 2; Abandoned Villages 3, 2 and 1; rarer too). Auto
+  Optimize lowers Particles, so it lowers them as well;
+- village decorations: fixed by the plan;
+- village mobs: guardians 10, zombie villagers 8;
+- AI requests: the per-minute, per-hour, per-address and daily limits;
+- cutscenes: one per player;
+- candy effects: refresh, never stack;
+- haunting updates: events every 10 ticks, atmosphere every 20, recorded
+  blocks 4000;
+- the long-haunting leak test.
+
 ## Protocol
 
-`PROTOCOL_VERSION` 9 (phase 4; 8 was phase 3, 7 phase 2, 6 phase 1).
+`PROTOCOL_VERSION` 10 (phase 5; 9 was phase 4, 8 phase 3, 7 phase 2, 6 phase 1).
+
+- **Phase 5:**
+  - `HalloweenState` now has `inSeason`, `content` and `date` (it had `sim`);
+  - `QuestInfo.note`;
+  - the Admin Panel's `halloween` ops `test`, `quest` and `quest_reset`
+    (`simulate` is gone);
+  - `{ t: 'elytra', a: 'veil' }` is accepted (V6's Eclipse Veil, which the
+    validator had been turning away).
 
 - **Phase 1 and 2:** `WorldInfo.halloween` (`HalloweenState`), the `ghost`
   and `haunted_area` messages, the Admin Panel's `halloween` action, and the

@@ -45,8 +45,8 @@ export type Block =
       /** Shows "a + b > result" (smithing and the like). */
       equation?: { parts: string[]; result: string; where: string };
     }
-  /** The advancements from one id to another, in the order of the game's list. */
-  | { k: 'advancements'; from: string; to: string };
+  /** The advancements from one id to another, in the order of the game's list (V7: secret ones as ???, seasonal ones marked). */
+  | { k: 'advancements'; from: string; to: string; hideSecret?: boolean };
 
 export interface Section {
   id: string;

@@ -76,7 +76,7 @@ const RADIUS = 4;
 type EngScene = 'factory' | 'power_plant' | 'mine' | 'farm' | 'control_room' | 'computer_lab';
 type DigitalScene = 'digital_world' | 'herobrine_cave';
 type EndScene = 'expanded_end' | 'crystal_fields' | 'void_citadel' | 'end_eclipse';
-type HalloweenScene = 'haunted_forest' | 'pumpkin_patch' | 'ghost_marsh' | VillageScene;
+type HalloweenScene = 'haunted_forest' | 'pumpkin_patch' | 'ghost_marsh' | 'ghost_forest' | 'haunted_camp' | VillageScene;
 /** V7 phase 2: the two villages, at night; phase 3: trick-or-treating at a door in one. */
 type VillageScene = 'trick_village' | 'abandoned_village' | 'trick_or_treat';
 type Scene = 'farlands' | 'end' | 'arena' | 'error_biome' | 'village' | 'dragon_malware' | EngScene | DigitalScene | EndScene | HalloweenScene;
@@ -86,7 +86,13 @@ const ENG_SCENES: EngScene[] = ['factory', 'power_plant', 'mine', 'farm', 'contr
 const END_SCENES: EndScene[] = ['expanded_end', 'crystal_fields', 'void_citadel', 'end_eclipse'];
 const RANDOM_SCENES: Scene[] = [...END_SCENES];
 /** V7: Halloween nights, in turn, while the season lasts. */
-const HALLOWEEN_SCENES: HalloweenScene[] = ['haunted_forest', 'trick_village', 'pumpkin_patch', 'trick_or_treat', 'abandoned_village', 'ghost_marsh'];
+const HALLOWEEN_SCENES: HalloweenScene[] = ['haunted_forest', 'trick_village', 'pumpkin_patch', 'trick_or_treat', 'ghost_forest', 'abandoned_village', 'haunted_camp', 'ghost_marsh'];
+/** V7 phase 5: who haunts the camp scene (one of the Haunting's characters, a different one each time). */
+const CAMP_FIGURES: { type: string; anim: string }[] = [
+  // (Null, pure black, would not be seen at all at night)
+  { type: 'cave_dweller', anim: 'stare' },
+  { type: 'green_steve', anim: 'wave' },
+];
 /** Seconds each Halloween scene shows before the next. */
 const ROTATE_SECONDS = 40;
 const ALL_SCENES: Scene[] = [...HALLOWEEN_SCENES, ...END_SCENES, ...ENG_SCENES, 'digital_world', 'herobrine_cave', 'dragon_malware', 'error_biome', 'village', 'farlands', 'end', 'arena'];
@@ -100,6 +106,9 @@ const HALLOWEEN_BIOMES: Record<Exclude<HalloweenScene, VillageScene>, string[]> 
   haunted_forest: ['dark_forest', 'forest', 'birch_forest', 'old_growth_birch_forest'],
   pumpkin_patch: ['plains', 'sunflower_plains', 'meadow'],
   ghost_marsh: ['swamp', 'mangrove_swamp'],
+  // V7 phase 5: pale birch trunks in the fog, ghosts drifting between them; and a little camp at the edge of the woods
+  ghost_forest: ['birch_forest', 'old_growth_birch_forest', 'forest', 'dark_forest'],
+  haunted_camp: ['forest', 'birch_forest', 'flower_forest', 'plains', 'meadow'],
 };
 
 /** V7: each Halloween scene's night air (fog colour and thickness, as a cave's is given). */
@@ -107,6 +116,8 @@ const HALLOWEEN_FOG: Record<HalloweenScene, { color: number; density: number; am
   haunted_forest: { color: 0x1e2636, density: 0, amount: 0.88 },
   pumpkin_patch: { color: 0x0e1222, density: 0.7, amount: 0.3 },
   ghost_marsh: { color: 0x1a2628, density: 0.2, amount: 0.65 },
+  ghost_forest: { color: 0x1c2430, density: 0.1, amount: 0.78 },
+  haunted_camp: { color: 0x14141e, density: 0.35, amount: 0.5 },
   trick_village: { color: 0x120e22, density: 0.5, amount: 0.22 },
   abandoned_village: { color: 0x1c2422, density: 0.25, amount: 0.7 },
   trick_or_treat: { color: 0x140e24, density: 0.5, amount: 0.18 },
@@ -138,6 +149,9 @@ const LOOK: Record<Scene, { particle: string; pitch: number; nightVision: number
   haunted_forest: { particle: 'none', pitch: 0.03, nightVision: 0.12, aside: 0.62 },
   pumpkin_patch: { particle: 'none', pitch: 0.36, nightVision: 0.04, aside: 0.45 },
   ghost_marsh: { particle: 'none', pitch: 0.2, nightVision: 0.12, aside: 0.42 },
+  ghost_forest: { particle: 'none', pitch: 0.06, nightVision: 0.14, aside: 0.5 },
+  // The camp and whoever watches it, right of the menu
+  haunted_camp: { particle: 'none', pitch: 0.12, nightVision: 0.1, aside: 0.5 },
   trick_village: { particle: 'none', pitch: 0.32, nightVision: 0.06, aside: 0.45 },
   abandoned_village: { particle: 'none', pitch: 0.3, nightVision: 0.24, aside: 0.45 },
   // Beside the door, the trick-or-treater and whoever answers right of the menu
@@ -363,6 +377,11 @@ export class TitlePanorama {
     // Rings outwards from a random point, 48 blocks apart
     // The pumpkin patch is an open field, not somebody's village
     const clear = (x: number, z: number): boolean => {
+      // The ghost forest looks north along level ground (not into a hillside)
+      if (scene === 'ghost_forest') {
+        const h0 = height(x, z);
+        return [-4, 6, 12, 18, 24].every((d) => Math.abs(height(x, z - d) - h0) <= 2);
+      }
       if (scene !== 'pumpkin_patch') return true;
       const v = gen.locate?.('village', x, z);
       return !v || Math.hypot(v.x - x, v.z - z) > 96;
@@ -483,6 +502,88 @@ export class TitlePanorama {
           set(x, gy + 1, z, S('hay_block'));
           set(x, gy + 2, z, stateOf('hallow_pumpkin', { facing: facingTo(-dx, -dz) }));
         }
+        break;
+      }
+      case 'ghost_forest': {
+        // Where to stand and which way to look: the spot near the focus with the most level ground ahead
+        // of it (between the trunks, not into a hillside or over water)
+        let best = { x: fx, z: fz, y: g0, a: 0, score: Infinity };
+        for (let ox = -16; ox <= 16; ox += 4)
+          for (let oz = -16; oz <= 16; oz += 4) {
+            const cy = ground(fx + ox, fz + oz);
+            if (cy < 2) continue;
+            for (let k = 0; k < 8; k++) {
+              const ang = (k / 8) * Math.PI * 2;
+              let score = Math.hypot(ox, oz) * 0.02;
+              for (let d = -3; d <= 24 && score < best.score; d += 1) {
+                const gy = ground(Math.round(fx + ox - Math.sin(ang) * d), Math.round(fz + oz - Math.cos(ang) * d));
+                score += gy < 2 ? 50 : Math.max(0, Math.abs(gy - cy) - (d > 12 ? 1 : 0)) ** 2;
+              }
+              if (score < best.score) best = { x: fx + ox, z: fz + oz, y: cy, a: ang, score };
+            }
+          }
+        const sx = -Math.sin(best.a);
+        const sz = -Math.cos(best.a);
+        const at = (d: number, side = 0): [number, number] => [Math.round(best.x + sx * d - sz * side), Math.round(best.z + sz * d + sx * side)];
+        // A little clearing to stand in and a way on ahead: undergrowth, low leaves and any trunk right in
+        // the line of sight gone (no floating logs), the canopy left overhead; the ground itself untouched
+        for (let d = -4; d <= 26; d++) {
+          const half = d < 3 ? 4 : d < 14 ? 3 : 2;
+          for (let side = -half; side <= half; side++) {
+            const [x, z] = at(d, side + (d > 3 ? Math.round(Math.sin(d * 0.25)) : 0));
+            const gy = ground(x, z);
+            if (gy < 2) continue;
+            for (let y = gy; y <= gy + 4; y++) if (soft(get(x, y, z))) set(x, y, z, 0);
+            if (Math.abs(side) <= (d < 3 ? 3 : 1)) for (let y = gy; y <= gy + 30; y++) if (blockHasTag(get(x, y, z), 'logs') || (y <= gy + 7 && blockHasTag(get(x, y, z), 'leaves'))) set(x, y, z, 0);
+          }
+        }
+        this.look = { cam: { x: best.x, y: best.y, z: best.z }, at: (() => { const [x, z] = at(11); return { x, y: ground(x, z), z }; })() };
+        // One forgotten jack o'lantern at the clearing's edge, the only light
+        const [px, pz] = at(5, -3);
+        const py = ground(px, pz);
+        if (py > 1 && soft(get(px, py, pz))) set(px, py, pz, stateOf('hallow_pumpkin', { facing: facingTo(best.x - px, best.z - pz) }));
+        break;
+      }
+      case 'haunted_camp': {
+        // Someone's first night: a little cabin, a campfire, torches gone red; and something at the edge of the light
+        const gy = g0;
+        const S2 = (id: string): number => S(id);
+        // A clearing at the edge of the woods: round the cabin, out to where the camera stands, trees and plants gone,
+        // the ground levelled (the camera must see the cabin, the fire and whatever stands by the trees)
+        for (let dz = -8; dz <= 15; dz++)
+          for (let dx = -9; dx <= 11; dx++) {
+            const x = fx + dx;
+            const z = fz + dz;
+            for (let y = gy; y <= gy + 40; y++) if (get(x, y, z) !== 0) set(x, y, z, 0);
+            set(x, gy - 1, z, S2('grass_block'));
+            for (let y = gy - 4; y < gy - 1; y++) if (!STATE_SOLID[get(x, y, z)] || !blockHasTag(get(x, y, z), 'dirt')) set(x, y, z, S2('dirt'));
+          }
+        // The cabin: 5 x 5, oak, a doorway facing the camera (south), glass on the sides, a torch inside
+        for (let dz = -2; dz <= 2; dz++)
+          for (let dx = -2; dx <= 2; dx++) {
+            const x = fx + dx;
+            const z = fz + dz;
+            set(x, gy - 1, z, S2('oak_planks'));
+            const edge = Math.abs(dx) === 2 || Math.abs(dz) === 2;
+            const corner = Math.abs(dx) === 2 && Math.abs(dz) === 2;
+            for (let y = 0; y < 3; y++) {
+              if (!edge) continue;
+              if (dz === 2 && dx === 0 && y < 2) continue;
+              const window = y === 1 && !corner && (Math.abs(dx) === 2 ? dz === 0 : dx !== 0 && dz === -2);
+              set(x, gy + y, z, corner ? S2('oak_log') : window ? S2('glass') : S2('oak_planks'));
+            }
+            set(x, gy + 3, z, S2('oak_planks'));
+          }
+        set(fx - 1, gy, fz - 1, S2('torch'));
+        // The campfire before it, and torches round the clearing, turned red (somebody is here)
+        set(fx + 1, gy, fz + 5, S2('campfire'));
+        for (const [dx, dz] of [[-4, 3], [4, 3], [-4, -3], [5, -2], [-1, 7]] as const) {
+          const x = fx + dx;
+          const z = fz + dz;
+          if (get(x, gy, z) === 0 && STATE_SOLID[get(x, gy - 1, z)]) set(x, gy, z, S2('redstone_torch'));
+        }
+        // It stands at the edge of the light, off to the right of the cabin
+        this.figure = { x: fx + 6, y: gy, z: fz - 3 };
         break;
       }
       case 'ghost_marsh': {
@@ -683,6 +784,37 @@ export class TitlePanorama {
         this.orbit = 19;
         this.renderer!.ghosts.ambient = 3;
         this.renderer!.ghosts.ambientArea = { x: fx, y: focus.y + 1, z: fz, r: 12 };
+        break;
+      }
+      case 'ghost_forest': {
+        // Standing in the clearing, looking into the woods; ghosts drift between the trunks
+        const L = this.look;
+        const cam = L?.cam ?? { x: fx, y: focus.y, z: fz };
+        const at = L?.at ?? { x: fx, y: focus.y, z: fz - 11 };
+        this.center = { x: cam.x + 0.5, y: cam.y + 1.8, z: cam.z + 0.5 };
+        this.orbit = 0;
+        this.fixedYaw = Math.atan2(-(at.x - cam.x), -(at.z - cam.z));
+        this.sway = 0.18;
+        this.bob = 0.25;
+        this.renderer!.ghosts.ambient = 5;
+        this.renderer!.ghosts.ambientArea = { x: at.x, y: Math.min(at.y, cam.y) - 0.5, z: at.z, r: 6 };
+        break;
+      }
+      case 'haunted_camp': {
+        // A few steps back from the campfire, the cabin ahead and it watching from the right
+        this.center = { x: fx - 1.5, y: focus.y + 2.0, z: fz + 10.5 };
+        this.orbit = 0;
+        const f = this.figure;
+        const tx = f ? (fx + f.x) / 2 : fx;
+        const tz = f ? (fz + f.z) / 2 : fz;
+        this.fixedYaw = Math.atan2(-(tx - (fx - 1.5)), -(tz - (fz + 10.5)));
+        this.sway = 0.05;
+        this.bob = 0.15;
+        if (f) {
+          const who = CAMP_FIGURES[Math.floor(Math.random() * CAMP_FIGURES.length)]!;
+          this.boss = new ClientEntity(-1, who.type, f.x + 0.5, f.y, f.z + 0.5, 0, 0, { hbAnim: who.anim, apparition: true });
+          this.renderer!.entities.add(this.boss);
+        }
         break;
       }
       case 'ghost_marsh': {

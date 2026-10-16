@@ -18,9 +18,12 @@ describe('the Update Log', () => {
     expect(new Set(UPDATE_LOG.map((e) => e.version.toLowerCase())).size).toBe(UPDATE_LOG.length);
   });
 
-  it("V7 covers phases 1 to 4: the season, the pumpkins, ghosts, the title screen, the villages, the heads, trick-or-treating, the hauntings and the Admin Panel's tabs", () => {
+  it("V7 is the whole update: the season, the pumpkins, ghosts, the title screen, the villages, the heads, trick-or-treating, the hauntings, the advancements, playing together and the Admin Panel's tabs", () => {
     const ids = UPDATE_LOG[0]!.sections.map((s) => s.id);
-    for (const id of ['overview', 'season', 'pumpkins', 'ghosts', 'menu', 'villages', 'abandoned', 'heads', 'sack', 'candy', 'knocking', 'trick-homes', 'quest', 'auto-haunting', 'null', 'green-steve', 'cave-dweller', 'voices', 'haunt-admin', 'admin']) expect(ids).toContain(id);
+    for (const id of ['overview', 'season', 'pumpkins', 'ghosts', 'menu', 'villages', 'abandoned', 'heads', 'sack', 'candy', 'knocking', 'trick-homes', 'quest', 'auto-haunting', 'null', 'green-steve', 'cave-dweller', 'voices', 'haunt-admin', 'advancements', 'together', 'admin']) expect(ids).toContain(id);
+    // Every V7 advancement is shown (the hidden ones as ???)
+    const adv = UPDATE_LOG[0]!.sections.find((s) => s.id === 'advancements')!.blocks.find((b) => b.k === 'advancements');
+    expect(adv && adv.k === 'advancements' && [adv.from, adv.to, adv.hideSecret]).toEqual(['find_abandoned_village', 'experience_haunting', true]);
     expect(new Set(ids).size).toBe(ids.length);
   });
 
@@ -61,8 +64,9 @@ describe('the Update Log', () => {
             const i1 = ACHIEVEMENTS.findIndex((a) => a.id === b.to);
             expect(i0, b.from).toBeGreaterThanOrEqual(0);
             expect(i1, b.to).toBeGreaterThan(i0);
+            // One update's own advancements (V6: the End's, V7: Halloween's)
             for (const a of ACHIEVEMENTS.slice(i0, i1 + 1)) {
-              expect(a.category).toBe('end');
+              expect(a.category).toBe(entry.version === 'V7' ? 'halloween' : 'end');
               expect(itemById.has(advancementIcon(a.icon)), a.icon).toBe(true);
             }
           }

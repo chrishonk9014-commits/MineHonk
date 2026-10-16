@@ -383,17 +383,17 @@ if (part('world')) {
   await page.waitForTimeout(1000);
   const status = await page.evaluate(() => document.querySelector('.admin-status')?.textContent ?? '');
   check(`"Place one of each" (${status})`, /Placed 5 pumpkins/.test(status));
-  // Simulate after the cutoff
-  await page.locator('.halloween-sim .btn', { hasText: 'After the cutoff' }).click();
+  // Simulate a date just after the cutoff (V7 phase 5's season tests)
+  await page.locator('.halloween-date-after').click();
   await page.waitForTimeout(1600);
   info = await page.evaluate(() => window.minehonk.game.worldInfo.halloween);
   const tabOff = await page.evaluate(() => document.querySelector('.halloween-state')?.textContent ?? '');
-  check('simulating after the cutoff turns it off for the world (and every player)', info?.active === false && info.sim === 'expired' && /Halloween contentOFF/.test(tabOff));
+  check('simulating a date after the cutoff turns it off for the world (and every player)', info?.active === false && info.date === 'after' && /Halloween contentOFF/.test(tabOff));
   await page.screenshot({ path: `${OUT}/halloween-admin-simulated.png`, keepMenu: true });
-  await page.locator('.halloween-sim .btn', { hasText: 'No simulation' }).click();
+  await page.locator('.halloween-date-real').click();
   await page.waitForTimeout(1200);
   info = await page.evaluate(() => window.minehonk.game.worldInfo.halloween);
-  check('and back on without the simulation', info?.active === true && info.sim === 'none');
+  check('and back on with the real date', info?.active === true && info.date === 'real');
   await page.keyboard.press('Escape');
   await page.waitForTimeout(500);
   // The five pumpkins, by day and by night

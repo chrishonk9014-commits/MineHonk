@@ -10,6 +10,7 @@
  *   UPDATE_LOG_SHOTS=1 node tests/e2e/villages.mjs      V7 phase 2: the villages and the heads
  *   UPDATE_LOG_SHOTS=1 node tests/e2e/trick-or-treat.mjs V7 phase 3: trick-or-treating
  *   UPDATE_LOG_SHOTS=1 node tests/e2e/haunting4.mjs     V7 phase 4: the hauntings
+ *   UPDATE_LOG_SHOTS=1 node tests/e2e/v7-release.mjs    V7 phase 5: the release
  *   node tools/update-log/build-images.mjs [v6 v6.5 v7] resize, brighten and encode (all, or just those)
  *
  * Encoding runs in the Chromium that Playwright already uses, so nothing else
@@ -73,7 +74,7 @@ for (const d of ['overworld', 'nether', 'end', 'expanded_end', 'farlands', 'comp
 add('pumpkins-day', 'clean/halloween-pumpkins-day.png', { filter: '' });
 add('pumpkins-night', 'clean/halloween-pumpkins-night.png');
 add('ghost', 'clean/halloween-ghost.png');
-for (const n of ['admin', 'admin-simulated', 'world-option', 'creative-tab']) add(n, `clean/halloween-${n}.png`, { filter: '' });
+for (const n of ['world-option', 'creative-tab']) add(n, `clean/halloween-${n}.png`, { filter: '' });
 // Phase 2: the villages and the heads (tests/e2e/villages.mjs)
 for (const t of ['trick_village', 'abandoned_village']) add(`title-${t.replace('_', '-')}`, `clean/halloween-scene-${t}.png`);
 add('trick-village', 'clean/villages-trick-village.png');
@@ -105,6 +106,16 @@ add('dweller-crawl', ['clean/haunting4-dweller-lunge.png', 'clean/haunting4-dwel
 add('dweller-eyes', 'clean/haunting4-dweller-eyes.png', { filter: '' });
 // The panel, the end screens, and those that keep the HUD (the chat) or the colour drained out
 for (const [name, src] of [['haunt-tab', 'haunting4-tab-null'], ['haunt-talk', 'haunting4-talk-green_steve'], ['null-end', 'haunting4-null-end'], ['auto-status', 'haunting4-auto-status'], ['null-drain', 'haunting4-null-drain'], ['auto-notice', 'haunting4-auto-notice']]) add(name, `${src}.png`, { filter: '' });
+
+// Phase 5: the release (tests/e2e/v7-release.mjs)
+for (const t of ['ghost_forest', 'haunted_camp']) add(`title-${t.replace('_', '-')}`, `clean/v7r-scene-${t}.png`);
+add('advancements', 'v7r-advancements.png', { filter: '' });
+add('admin', 'v7r-admin-halloween-1920.png', { filter: '', width: 1000 });
+add('admin-after', 'v7r-admin-after.png', { filter: '' });
+add('always-on', 'clean/v7r-always-on.png');
+add('mp-together', 'clean/v7r-mp-alice.png');
+// These keep the HUD: the quest tracker's last word
+add('quest-done', 'v7r-quest-done.png');
 
 if (only.length) shots.splice(0, shots.length, ...shots.filter((s) => only.includes(s.version)));
 // A list of sources: the first one there is used

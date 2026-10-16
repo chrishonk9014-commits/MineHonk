@@ -974,7 +974,30 @@ New sanitizers, on load:
 ### Performance
 
 Measured against V6.5 on the same machine, seed (`v7-villages`) and view
-distance (6). The numbers are in the release report and README.
+distance (6). Headless Chromium draws with SwiftShader (software WebGL), so
+frame times are far above a real GPU's and noisy; JS time, draw calls and
+memory carry over.
+
+| Scene | | Frame (ms) | JS (ms) | Draw calls | Heap (MB) | Server tick (ms) |
+| --- | --- | --- | --- | --- | --- | --- |
+| Plain terrain by day | V6.5 | 386 | 24.3 | 415 | 303 | 17.4 |
+| | V7 | 376-403 | 23.8-29.7 | 538-592 | 319-324 | 17.4-18.8 |
+| Trick-or-Treat Village at night, ghosts out | V6.5 | 537 | 14.2 | 160 | 383 | 8.4 |
+| | V7 | 600 | 12.9 | 173 | 386 | 10.2 |
+| A Trick Home's fight | V6.5 | 537 | 13.8 | 125 | 416 | 7.7 |
+| | V7 | 424-457 | 16.8-17.3 | 82-188 | 412-417 | 7.5-7.7 |
+
+(V6.5 has no Trick-or-Treat Villages or Trick Homes: the same village by
+night, and the same house with the same monsters, are measured instead.)
+
+Found and fixed: the first ghost of a night compiled its shader on the spot,
+a frame of 1.7 seconds (JS 137 ms on average over the measurement, against
+13 once fixed): its material now compiles up front with the chunks'.
+
+The haunting, simulated quickly (two players walking and building, 45
+minutes of ticks), server tick time:
+
+(measured below)
 
 - `tests/perf/v7-bench.mjs`: frame time, JS time, draw calls, memory and
   server tick time, for plain terrain by day, the Trick-or-Treat Village at
@@ -993,7 +1016,7 @@ Caps:
 - cutscenes: one per player;
 - candy effects: refresh, never stack;
 - haunting updates: events every 10 ticks, atmosphere every 20, recorded
-  blocks 4000;
+  blocks 4,000 from its events and 12,000 at most;
 - the long-haunting leak test.
 
 ## Protocol

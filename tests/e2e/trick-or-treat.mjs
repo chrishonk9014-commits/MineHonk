@@ -668,7 +668,7 @@ if (part('knock') || part('quest')) {
     await page.locator('.admin-tab[data-tab="halloween"]').dispatchEvent('mousedown');
     await page.waitForTimeout(1200);
     const btns = await page.evaluate(() => [...document.querySelectorAll('.btn')].map((b) => b.textContent));
-    const want = ['Empty sack', 'Full sack', 'King-Sized Candy', 'Knock on the nearest door', "Reset the nearest village's doors", 'Herobrine?!'];
+    const want = ['Empty sack', 'Full sack', 'King-Sized Candy', 'Test a knock', "Reset the nearest village's doors", 'Herobrine?!'];
     check(`the Halloween tab: sacks, candy, knocking, Trick Homes, resetting doors${want.filter((t) => !btns.includes(t)).length ? ` (missing: ${want.filter((t) => !btns.includes(t)).join(', ')})` : ''}`, want.every((t) => btns.includes(t)));
     await page.evaluate(() => document.querySelector('.halloween-tricks')?.scrollIntoView({ block: 'end' }));
     await page.waitForTimeout(400);

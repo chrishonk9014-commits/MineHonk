@@ -215,6 +215,12 @@ async function knockAt(page, d, out = 1) {
   // straight down; then hovering a step or two out (flying, as a Creative player may) until it is in
   // sight to knock on (steps, eaves and lanterns differ from house to house)
   const k0 = Math.max(1.3, out);
+  // First back out from under the last door's eaves, the way the test came down to it (open sky)
+  if (page.__lastOpen) {
+    const b = await page.evaluate(() => window.minehonk.game.player.body.y);
+    await flyTo(page, page.__lastOpen[0], page.__lastOpen[1], b + 0.3, 0.3);
+  }
+  page.__lastOpen = [x + 0.5 + fx * k0, z + 0.5 + fz * k0];
   const top = await page.evaluate(() => window.minehonk.game.player.body.y);
   await flyTo(page, x + 0.5 + fx * k0, z + 0.5 + fz * k0, Math.max(top, y + 12));
   await flyTo(page, x + 0.5 + fx * k0, z + 0.5 + fz * k0, y + 0.6, 0.3);

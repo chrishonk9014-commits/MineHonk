@@ -158,10 +158,10 @@ const creative = async (page, slot, id, count = 1) => {
   await page.waitForTimeout(300);
 };
 /** Flies there in steps the server accepts (no teleport: a teleport is a cheat, and the place it lands counts for nothing). */
-async function flyTo(page, x, z, y = null) {
+async function flyTo(page, x, z, y = null, near = 1) {
   for (let i = 0; i < 1500; i++) {
     const done = await page.evaluate(
-      ([x, z, y]) => {
+      ([x, z, y, near]) => {
         const g = window.minehonk.game;
         const b = g.player.body;
         g.player.flying = true;
@@ -170,7 +170,7 @@ async function flyTo(page, x, z, y = null) {
         const d = Math.hypot(dx, dz);
         const ty = y ?? Math.max(b.y, g.world.heightAt(Math.floor(b.x), Math.floor(b.z)) + 6);
         // There: over the spot and (when asked) at its height
-        if (d < 1 && (y == null || Math.abs(ty - b.y) < 0.6)) return true;
+        if (d < near && (y == null || Math.abs(ty - b.y) < Math.min(0.6, near + 0.1))) return true;
         // No faster than flying really is (the server puts a player moving too fast back)
         const now = performance.now();
         const step = (9 * Math.min(200, now - (window.__flyAt ?? now - 70))) / 1000;
@@ -185,7 +185,7 @@ async function flyTo(page, x, z, y = null) {
         g.player.yaw = Math.atan2(-dx, -dz);
         return false;
       },
-      [x, z, y],
+      [x, z, y, near],
     );
     if (done) return true;
     await page.waitForTimeout(70);
@@ -199,31 +199,41 @@ const FACE = { north: [0, -1], south: [0, 1], west: [-1, 0], east: [1, 0] };
 async function knockAt(page, d, out = 1) {
   const [x, y, z, facing] = d;
   const [fx, fz] = FACE[facing];
-  // Over the street in front of it, `out` blocks out where the sky is open (above the roofs), straight
-  // down, then along the ground to its step (under any eaves)
-  const k = Math.max(1.3, out);
+  // Over the street in front of it, `out` blocks out where the sky is open (above the roofs), then
+  // straight down; then hovering a step or two out (flying, as a Creative player may) until it is in
+  // sight to knock on (steps, eaves and lanterns differ from house to house)
+  const k0 = Math.max(1.3, out);
   const top = await page.evaluate(() => window.minehonk.game.player.body.y);
-  await flyTo(page, x + 0.5 + fx * k, z + 0.5 + fz * k, Math.max(top, y + 12));
-  await flyTo(page, x + 0.5 + fx * k, z + 0.5 + fz * k, y + 0.1);
-  await flyTo(page, x + 0.5 + fx * 1.3, z + 0.5 + fz * 1.3, y + 0.1);
-  await page.evaluate(() => (window.minehonk.game.player.flying = false));
-  await page.waitForTimeout(700);
-  await page.evaluate(([x, y, z]) => {
-    const g = window.minehonk.game;
-    const b = g.player.body;
-    const dx = x + 0.5 - b.x;
-    const dz = z + 0.5 - b.z;
-    g.player.yaw = Math.atan2(-dx, -dz);
-    g.player.pitch = -Math.atan2(y + 1 - (b.y + 1.62), Math.hypot(dx, dz));
-  }, [x, y, z]);
-  await page.waitForTimeout(400);
-  const seen = await page.evaluate(() => {
-    const g = window.minehonk.game;
-    const b = g.player.body;
-    const t = g.interaction.target;
-    return { at: [b.x, b.y, b.z].map((v) => v.toFixed(1)).join(' '), target: t ? `${t.x} ${t.y} ${t.z}` : 'none', knock: g.knockTarget()?.join(' ') ?? 'none' };
-  });
-  console.log(`     at the door: ${JSON.stringify(seen)}`);
+  await flyTo(page, x + 0.5 + fx * k0, z + 0.5 + fz * k0, Math.max(top, y + 12));
+  await flyTo(page, x + 0.5 + fx * k0, z + 0.5 + fz * k0, y + 0.6, 0.3);
+  let seen = null;
+  for (const [k, h] of [
+    [1.3, 0.3],
+    [1.6, 0.8],
+    [2.0, 0.3],
+    [2.4, 1.0],
+    [1.0, 0.5],
+  ]) {
+    await flyTo(page, x + 0.5 + fx * k, z + 0.5 + fz * k, y + h, 0.15);
+    await page.waitForTimeout(300);
+    await page.evaluate(([x, y, z]) => {
+      const g = window.minehonk.game;
+      const b = g.player.body;
+      const dx = x + 0.5 - b.x;
+      const dz = z + 0.5 - b.z;
+      g.player.yaw = Math.atan2(-dx, -dz);
+      g.player.pitch = -Math.atan2(y + 1 - (b.y + 1.62), Math.hypot(dx, dz));
+    }, [x, y, z]);
+    await page.waitForTimeout(350);
+    seen = await page.evaluate(() => {
+      const g = window.minehonk.game;
+      const b = g.player.body;
+      const t = g.interaction.target;
+      return { at: [b.x, b.y, b.z].map((v) => v.toFixed(1)).join(' '), target: t ? `${t.x} ${t.y} ${t.z}` : 'none', knock: g.knockTarget()?.join(' ') ?? null };
+    });
+    if (seen.knock) break;
+  }
+  if (!seen.knock) console.log(`     no knock prompt at ${x} ${y} ${z}: ${JSON.stringify(seen)}`);
   await page.keyboard.press('g');
   await page.waitForTimeout(800);
 }

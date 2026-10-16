@@ -161,7 +161,17 @@ const creative = async (page, slot, id, count = 1) => {
 };
 /** Flies there in steps the server accepts (no teleport: a teleport is a cheat, and the place it lands counts for nothing). */
 async function flyTo(page, x, z, y = null, near = 1) {
+  let last = null;
+  let stuck = 0;
   for (let i = 0; i < 1500; i++) {
+    // Stuck (under a roof, against a wall): given up on, the caller tries another way
+    const at = await page.evaluate(() => {
+      const b = window.minehonk.game.player.body;
+      return [b.x, b.y, b.z];
+    });
+    stuck = last && Math.hypot(at[0] - last[0], at[1] - last[1], at[2] - last[2]) < 0.02 ? stuck + 1 : 0;
+    last = at;
+    if (stuck > 40) return false;
     const done = await page.evaluate(
       ([x, z, y, near]) => {
         const g = window.minehonk.game;
@@ -475,11 +485,20 @@ await (async () => {
     await page.waitForTimeout(3000);
     const doors = await doorsNear(page);
     check(`its doors can be knocked on (${doors.length})`, doors.length > 0);
-    await page.evaluate(() => {
-      const p = window.minehonk.game.player;
-      p.pitch = 0.5;
-    });
-    await page.waitForTimeout(1500);
+    // A few steps back across the street, looking at the dressed house
+    const door = info2?.doors?.[0];
+    if (door) {
+      const fx = door.out[0] - door.x;
+      const fz = door.out[2] - door.z;
+      await flyTo(page, door.x + 0.5 + fx * 6 + fz * 2, door.z + 0.5 + fz * 6 + fx * 2, door.y + 1.5, 0.3);
+      await page.evaluate(([x, y, z]) => {
+        const g = window.minehonk.game;
+        const b = g.player.body;
+        g.player.yaw = Math.atan2(-(x + 0.5 - b.x), -(z + 0.5 - b.z));
+        g.player.pitch = -Math.atan2(y + 2 - (b.y + 1.62), Math.hypot(x + 0.5 - b.x, z + 0.5 - b.z));
+      }, [door.x, door.y, door.z]);
+    }
+    await page.waitForTimeout(2500);
     await page.screenshot({ path: `${OUT}/v7r-always-on.png` });
     await quit(page);
     await page.context().close();
@@ -669,10 +688,22 @@ await (async () => {
       await cmd(alice, '/time set 14000');
       await cmd(alice, '/gamerule doDaylightCycle false');
       await cmd(alice, `/tp ${VILLAGE.x} 120 ${VILLAGE.z}`);
-      await cmd(alice, `/tp BobV7 ${VILLAGE.x + 2} 120 ${VILLAGE.z}`);
-      await Promise.all([alice, bob].map((p) => p.waitForTimeout(8000)));
+      await alice.waitForTimeout(6000);
+      // A Candy Home of the village (the owner's lookup); Alice a few steps off, Bob (a Survival player:
+      // no flying) brought to its step
+      const look = await admin(alice, { a: 'halloween', op: 'village_doors' });
+      const home = (look.data?.doors?.doors ?? []).find((h) => h.kind === 'candy' && !h.used);
+      if (!home) throw new Error(`no Candy Home found (${look.text})`);
+      const fx = home.out[0] - home.x;
+      const fz = home.out[2] - home.z;
+      const d = [home.x, home.y, home.z, fx > 0 ? 'east' : fx < 0 ? 'west' : fz > 0 ? 'south' : 'north'];
+      const [x, y, z] = d;
+      await cmd(alice, `/tp ${(x + 0.5 + fx * 4 + fz * 2).toFixed(1)} ${y + 1} ${(z + 0.5 + fz * 4 + fx * 2).toFixed(1)}`);
+      await cmd(alice, `/tp BobV7 ${(x + 0.5 + fx * 1.3).toFixed(2)} ${y + 1} ${(z + 0.5 + fz * 1.3).toFixed(2)}`);
+      await Promise.all([alice, bob].map((p) => p.waitForTimeout(6000)));
       const dd = await Promise.all([alice, bob].map((p) => doorsNear(p)));
-      check(`both see the same Trick-or-Treat doors (${dd[0].length} / ${dd[1].length})`, dd[0].length > 0 && JSON.stringify([...dd[0]].sort()) === JSON.stringify([...dd[1]].sort()));
+      const has = (list) => list.some((e) => e[0] === x && e[1] === y && e[2] === z && e[3] === d[3]);
+      check(`both are told of the same Trick-or-Treat door (${dd[0].length} / ${dd[1].length} near them)`, has(dd[0]) && has(dd[1]));
       // Bob puts the costume on and knocks; Alice stands by and watches the door
       await bob.evaluate(() => {
         const g = window.minehonk.game;
@@ -682,13 +713,6 @@ await (async () => {
       await bob.waitForTimeout(800);
       const sackSlot = await bob.evaluate(() => window.minehonk.game.invSlots.findIndex((s) => s && window.minehonkRegistry.itemOf(s.id).id === 'trick_or_treat_sack'));
       if (sackSlot >= 0 && sackSlot < 9) await bob.evaluate((i) => (window.minehonk.game.player.selectedSlot = i), sackSlot);
-      const d = dd[1][0];
-      const [x, y, z, facing] = d;
-      const [fx, fz] = FACE[facing];
-      await cmd(alice, `/tp ${(x + 0.5 + fx * 4 + fz * 2).toFixed(1)} ${y + 1} ${(z + 0.5 + fz * 4 + fx * 2).toFixed(1)}`);
-      // Bob is a Survival player (no flying): the owner brings him to the step
-      await cmd(alice, `/tp BobV7 ${(x + 0.5 + fx * 1.3).toFixed(2)} ${y} ${(z + 0.5 + fz * 1.3).toFixed(2)}`);
-      await bob.waitForTimeout(1500);
       await aimAndKnock(bob, d);
       await bob.waitForTimeout(2500);
       await alice.evaluate(([x, y, z]) => {

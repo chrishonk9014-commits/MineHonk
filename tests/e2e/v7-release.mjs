@@ -211,6 +211,13 @@ async function knockAt(page, d) {
     g.player.pitch = -Math.atan2(y + 1 - (b.y + 1.62), Math.hypot(dx, dz));
   }, [x, y, z]);
   await page.waitForTimeout(400);
+  const seen = await page.evaluate(() => {
+    const g = window.minehonk.game;
+    const b = g.player.body;
+    const t = g.interaction.target;
+    return { at: [b.x, b.y, b.z].map((v) => v.toFixed(1)).join(' '), target: t ? `${t.x} ${t.y} ${t.z}` : 'none', knock: g.knockTarget()?.join(' ') ?? 'none' };
+  });
+  console.log(`     at the door: ${JSON.stringify(seen)}`);
   await page.keyboard.press('g');
   await page.waitForTimeout(800);
 }

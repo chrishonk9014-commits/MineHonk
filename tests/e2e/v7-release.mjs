@@ -310,7 +310,10 @@ await (async () => {
     // A teleport well away from the village (its landing place is a cheat's), then flying in for real
     await cmd(page, `/tp ${QUEST_VILLAGE.x + 260} 150 ${QUEST_VILLAGE.z}`);
     await page.waitForTimeout(2500);
+    // In over the roofs, then down among them (a village is found from within it, not from high above)
     const arrived = await flyTo(page, QUEST_VILLAGE.x, QUEST_VILLAGE.z);
+    const roofs = await page.evaluate(([x, z]) => window.minehonk.game.world.heightAt(x, z), [QUEST_VILLAGE.x, QUEST_VILLAGE.z]);
+    await flyTo(page, QUEST_VILLAGE.x, QUEST_VILLAGE.z, roofs + 8, 0.5);
     await page.waitForTimeout(3000);
     check('flew into the Trick-or-Treat Village', arrived);
     const ach = () => page.evaluate(() => [...(window.__chatLog ?? [])].join('\n'));

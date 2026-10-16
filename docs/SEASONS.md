@@ -76,7 +76,11 @@ and its operators, in a world with cheats, can use them:
   before" shows the season ending live a minute later.
 
 Anything made only because a test turned Halloween on (a village dressed, a
-pumpkin grown, candy given) is cheat-made, and counts for no advancement.
+pumpkin grown, a sack crafted, candy given) is cheat-made, and counts for no
+advancement. A test that turns Halloween off stops knocking, candy, the
+recipe and ghosts, but what world generation decides for good (a village's
+dressing, a chunk's pumpkin) still follows the real season: a test is never
+saved, so it must not leave the world without what the real season gives it.
 Test browsers can also pin the clock with `?clock=2026-11-07T08:01:00Z`.
 
 ## Adding a new window (for example, Halloween year 2)

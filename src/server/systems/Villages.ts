@@ -100,22 +100,24 @@ export class VillageSystem {
     const m = s.village;
     if (!m || m.variant !== 'trick') return false;
     const r = this.records[m.key];
-    return r ? r.kind === 'trick' : this.server.halloweenState().active;
+    return r ? r.kind === 'trick' : this.server.halloweenState().active || !!this.server.halloween?.offByTest;
   }
 
   private decide(s: VillageLike, m: VillageMeta, cheat = false): VillageRecord {
     const srv = this.server;
     const state = srv.halloweenState();
-    // Only an Admin Panel season test made it Halloween here: the village is cheat-made
+    // Only an Admin Panel season test made it Halloween here: the village is cheat-made. One that only
+    // a test made not Halloween is decided by the real season (the decision is for good; tests are not)
     const simOnly = !!srv.halloween?.onByTest;
+    const dressed = state.active || !!srv.halloween?.offByTest;
     const rec: VillageRecord = {
-      kind: state.active ? 'trick' : 'normal',
+      kind: dressed ? 'trick' : 'normal',
       decidedAt: srv.clock(),
       x: s.x,
       y: s.y,
       z: s.z,
       style: m.style,
-      doors: state.active ? m.doors.map((d) => ({ ...d, out: [...d.out] as [number, number, number], used: false })) : [],
+      doors: dressed ? m.doors.map((d) => ({ ...d, out: [...d.out] as [number, number, number], used: false })) : [],
       ...(cheat || simOnly ? { cheat: true } : {}),
     };
     this.records[m.key] = rec;

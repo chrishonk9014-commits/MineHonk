@@ -23,10 +23,10 @@ import { blocks, STATE_BLOCK, S } from '../../src/common/registry/blocks';
 import { stackOf, markAdmin, isAdminStack } from '../../src/common/game/itemstack';
 import { validateC2S } from '../../src/common/net/validate';
 import { sanitizeLevelData, createLevelData } from '../../src/server/world/LevelData';
-import { sanitizeHauntState, sanitizeHauntBlocks, sanitizeAutoHaunt } from '../../src/server/herobrine/hauntSave';
+import { sanitizeHauntState, sanitizeHauntBlocks, sanitizeAutoHaunt, HAUNT_MAX_CHANGES } from '../../src/server/herobrine/hauntSave';
 import { sanitizeVillageRecords, MAX_VILLAGE_DOORS } from '../../src/common/halloween/villages';
 import { VoiceBudget } from '../../src/server-node/voiceBudget';
-import { addressKey, addressHash, takeVoiceAnswer } from '../../src/hub/voiceUsage';
+import { addressKey, addressHash, derivedSalt, takeVoiceAnswer } from '../../src/hub/voiceUsage';
 import { sqliteD1 } from '../helpers/sqliteD1';
 import type { OverworldGenerator } from '../../src/common/gen/generator';
 
@@ -283,6 +283,88 @@ describe('the season tests', () => {
     expect(CANDY_KINDS.every((k) => c.cheat[k] === c.counts[k])).toBe(true);
     expect(player.achievements.has('first_candy')).toBe(false);
     expect(player.halloween).toMatchObject({ knocks: 0, treats: 0, candy: 0 });
+    await server.stop();
+  }, 240000);
+
+  it('a sack crafted while only a test makes it Halloween is cheat-made (no advancement, no quest step)', async () => {
+    const clock = { now: BEFORE };
+    const { server } = await trickWorld(clock, { cheats: true });
+    clock.now = AFTER;
+    const { conn, player } = await join(server, 'Ann', 'uuid-ann');
+    tick(server, 25);
+    admin(server, conn, { a: 'halloween', op: 'test', content: 'on' });
+    const c = server.interaction.containers;
+    c.openCrafting(player, player.dim, Math.floor(player.x), Math.floor(player.y), Math.floor(player.z));
+    const w = c.windowOf(player);
+    [null, 'string', null, 'white_wool', null, 'white_wool', 'white_wool', 'white_wool', 'white_wool'].forEach((id, i) => w.slots[1 + i]!.set(id ? stackOf(id) : null));
+    w.refresh!();
+    expect(idOf(w.slots[0]!.get())).toBe(SACK_ID);
+    expect(isAdminStack(w.slots[0]!.get())).toBe(true);
+    server.handle(conn, { t: 'click', window: w.id, slot: 0, button: 0, mode: 'pickup', seq: 1 });
+    expect(player.achievements.has('craft_sack')).toBe(false);
+    await server.stop();
+  }, 240000);
+
+  it('an "off" test leaves no mark: a village first explored under it is still dressed by the real season', async () => {
+    const { server } = await makeServer({ seed: SEED, cheats: true }, new MemoryStorage(), { clock: () => BEFORE });
+    const { conn } = await join(server, 'Ann', 'uuid-ann');
+    for (const t of [{ content: 'off' }, { content: 'real', date: 'after' }] as const) {
+      admin(server, conn, { a: 'halloween', op: 'test', ...t });
+      expect(server.halloweenState().active).toBe(false);
+      expect(server.halloween!.offByTest).toBe(true);
+    }
+    const g = server.overworld.generator as OverworldGenerator;
+    const s = g.villageAt(VILLAGE.x, VILLAGE.z)!;
+    await loadArea(server, s.bounds.x0, s.bounds.z0, s.bounds.x1, s.bounds.z1);
+    const rec = server.villages!.record(s.village!.key)!;
+    expect(rec.kind).toBe('trick');
+    expect(rec.cheat).toBeUndefined();
+    expect(rec.doors.length).toBeGreaterThan(0);
+    // Back to real: its doors can be knocked on, for real
+    admin(server, conn, { a: 'halloween', op: 'test', content: 'real', date: 'real' });
+    expect(server.halloweenState().active).toBe(true);
+    await server.stop();
+  }, 240000);
+
+  it("the panel's sack or costume, or a door it reset: knocking counts for nothing", async () => {
+    const { server, doors } = await trickWorld({ now: BEFORE }, { cheats: true });
+    const { conn, player } = await join(server, 'Ann', 'uuid-ann');
+    const candy = doors.filter((x) => x.door.kind === 'candy').map((x) => x.door);
+    expect(candy.length).toBeGreaterThanOrEqual(3);
+    const at = (d: (typeof candy)[number]): void => {
+      atDoor(player, d);
+      tick(server, 12);
+      knock(server, conn, d);
+      server.handle(conn, { t: 'scene_skip' });
+      tick(server, CANDY_TIMES.end + 15);
+    };
+    // Honest: counts
+    dress(player);
+    at(candy[0]!);
+    expect(player.halloween.treats).toBe(1);
+    expect(player.achievements.has('first_candy')).toBe(true);
+    const honest = player.halloween.candy;
+    // The panel resets the village's doors: that home's candy again is cheat-made
+    atDoor(player, candy[0]!);
+    admin(server, conn, { a: 'halloween', op: 'reset_doors' });
+    expect(candy[0]!.used).toBe(false);
+    expect(candy[0]!.before?.got).toContain('uuid-ann');
+    at(candy[0]!);
+    expect(candy[0]!.got).toContain('uuid-ann');
+    expect(player.halloween).toMatchObject({ treats: 1, candy: honest });
+    // A sack from the panel (an honest costume): cheat-made
+    player.inventory.set(0, server.candy!.makeSack({}, true));
+    at(candy[1]!);
+    expect(candy[1]!.got).toContain('uuid-ann');
+    expect(player.halloween).toMatchObject({ treats: 1, candy: honest });
+    // A costume from the panel (an honest sack): cheat-made
+    dress(player, stackOf(SACK_ID), '');
+    player.inventory.set(39, markAdmin(stackOf('carved_pumpkin')));
+    at(candy[2]!);
+    expect(candy[2]!.got).toContain('uuid-ann');
+    expect(player.halloween).toMatchObject({ treats: 1, candy: honest });
+    const c = sackContents(player.inventory.get(0));
+    expect(CANDY_KINDS.every((k) => c.cheat[k] === c.counts[k])).toBe(true);
     await server.stop();
   }, 240000);
 });
@@ -625,7 +707,7 @@ describe('saved hauntings and villages, read back safely', () => {
     // Recorded blocks: only real changes, at most 4000
     const ok = ['overworld', 1, 64, 1, S('stone'), 0];
     expect(sanitizeHauntBlocks([ok, null, 5, ['moon', 1, 64, 1, 1, 0], ['overworld', 1.5, 64, 1, 1, 0], ['overworld', 1, 64, 1, -1, 0], ['overworld', 1, 64, 1, 1e9, 0]])).toEqual([ok]);
-    expect(sanitizeHauntBlocks(new Array(10000).fill(ok))).toHaveLength(4000);
+    expect(sanitizeHauntBlocks(new Array(HAUNT_MAX_CHANGES + 500).fill(ok))).toHaveLength(HAUNT_MAX_CHANGES);
     // The roll: a delay within its range, booleans that are booleans
     expect(sanitizeAutoHaunt({ haunted: 'yes', after: -5, played: 'lots', at: 1 })).toEqual({ haunted: false, after: 24000, played: 0, at: 1 });
     expect(sanitizeAutoHaunt({ haunted: true })).toBeNull();
@@ -685,6 +767,11 @@ describe("the voices' limits", () => {
     expect(await addressHash(day, '2001:db8:1:2:ffff::9')).toBe(bob);
     expect(addressKey('2001:0db8:0001:0002::1')).toBe('2001:db8:1:2::/64');
     expect(addressKey('203.0.113.5')).toBe('203.0.113.5');
+    expect(addressKey('::ffff:203.0.113.5')).toBe('203.0.113.5');
+    // Salted (by the hub's own secret when it has no VOICE_SALT): not reversible by trying every address
+    expect(await derivedSalt('secret-a')).not.toBe(await derivedSalt('secret-b'));
+    expect(await derivedSalt('secret-a')).not.toContain('secret-a');
+    expect(await addressHash(day, '203.0.113.5', await derivedSalt('secret-a'))).not.toBe(ann);
     // ...and the hash changes with the day, and holds no address
     expect(await addressHash('2026-10-21', '203.0.113.5')).not.toBe(ann);
     expect(ann).not.toMatch(/203|113/);

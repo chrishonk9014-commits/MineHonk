@@ -275,8 +275,10 @@ export class TrickOrTreatSystem {
       if (candy.room(p) <= 0) return voice(FULL_SACK_LINES);
       if (!trick && d.got?.includes(p.uuid)) return voice(ALREADY_LINES);
     }
-    // Cheat-made: the panel's test knock, a village it built, a cheat context, or Halloween on only because of a season test
-    const cheat = force || !!ref.rec.cheat || s.admin.inContext(p) || !!s.halloween?.onByTest;
+    // Cheat-made: the panel's test knock, a village it built, a cheat context, Halloween on only because of a
+    // season test, a cheat-made costume or sack, or having again what a door gave before the panel reset it
+    const again = !!d.before && (trick ? d.before.used : d.before.got.includes(p.uuid));
+    const cheat = force || !!ref.rec.cheat || s.admin.inContext(p) || !!s.halloween?.onByTest || !this.honestlyCostumed(p) || !s.candy!.hasHonestSack(p) || again;
     // Only honest knocks count (the quest, the stats, the advancements)
     if (!cheat) {
       p.halloween.knocks++;
@@ -1114,6 +1116,8 @@ export class TrickOrTreatSystem {
     let n = 0;
     for (const d of ref.rec.doors) {
       if (d.used || d.got?.length) n++;
+      // What it had given out stays known: having it again is cheat-made
+      if (d.used || d.got?.length || d.before) d.before = { used: d.used || !!d.before?.used, got: [...new Set([...(d.before?.got ?? []), ...(d.got ?? [])])] };
       d.used = false;
       delete d.got;
     }

@@ -308,6 +308,11 @@ export class CandySystem {
     return this.sackSlots(p).length > 0;
   }
 
+  /** Whether one of the player's sacks is honest (not from the Admin Panel or a cheat). */
+  hasHonestSack(p: ServerPlayer): boolean {
+    return this.sackSlots(p).some((i) => !isAdminStack(p.inventory.get(i)));
+  }
+
   /**
    * Candy given to a player (Candy Homes, Trick Home chests aside, the Admin
    * Panel): straight into their sacks; the overflow into the inventory, then

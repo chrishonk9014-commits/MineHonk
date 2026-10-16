@@ -22,7 +22,7 @@ import { GAME_MODES } from '../../src/common/game/gamemode';
 import type { HostSettingsPush } from '../../src/common/net/hubProtocol';
 import { parseVoiceRequest } from '../../src/common/game/herobrineVoice';
 import { speakWithClaude, voiceClient, HEROBRINE_MODEL, HEROBRINE_DAILY_LIMIT } from '../../src/hub/herobrineVoice';
-import { addressHash, addressKey, takeVoiceAnswer, VOICE_ADDRESS_DAILY_LIMIT } from '../../src/hub/voiceUsage';
+import { addressHash, addressKey, derivedSalt, takeVoiceAnswer, VOICE_ADDRESS_DAILY_LIMIT } from '../../src/hub/voiceUsage';
 import type { HostedEntry, Presence } from './lobby';
 
 export { LobbyDO } from './lobby';
@@ -316,7 +316,8 @@ async function herobrine(req: Request, env: Env, ip: string, b: Record<string, u
   const limit = Math.max(0, Number(env.HEROBRINE_DAILY_LIMIT ?? HEROBRINE_DAILY_LIMIT) || 0);
   const perAddress = Math.max(0, Number(env.VOICE_ADDRESS_DAILY_LIMIT ?? VOICE_ADDRESS_DAILY_LIMIT) || 0);
   const day = new Date().toISOString().slice(0, 10);
-  if ((await takeVoiceAnswer(env.DB as unknown as SqlDb, day, await addressHash(day, ip, env.VOICE_SALT ?? ''), perAddress, limit)) !== 'ok') return { text: null, reason: 'limit' };
+  const salt = env.VOICE_SALT || (await derivedSalt(env.ANTHROPIC_API_KEY));
+  if ((await takeVoiceAnswer(env.DB as unknown as SqlDb, day, await addressHash(day, ip, salt), perAddress, limit)) !== 'ok') return { text: null, reason: 'limit' };
   const line = await speakWithClaude(voiceClient(env.ANTHROPIC_API_KEY), r, env.HEROBRINE_MODEL || HEROBRINE_MODEL);
   if (!line) return { text: null, reason: 'none' };
   // The same filter as world names and chat: anything it would mask is not said at all

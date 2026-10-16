@@ -840,6 +840,17 @@ advancements, and an automatic haunting touched from here does not count.
   defeat) came of it.
 - The Haunting tab's **talk** test waits five seconds between asks (each can
   be a call to Claude).
+- **Reset doors** keeps what each door had given out (`DoorRecord.before`):
+  having it again (a Candy Home's candy for the same player, a beaten Trick
+  Home's fight and chest) is cheat-made. A knock with the panel's sack or
+  costume is cheat-made too, and so is a sack crafted while only a test turns
+  Halloween on.
+- A test that turns Halloween **off** never decides a village or a chunk's
+  pumpkin for good: those follow the real season (`HalloweenSystem.offByTest`).
+- A haunting makes no block change it could not record: random events stop at
+  4,000 changes, an ending at 12,000 (`HAUNT_MAX_CHANGES`), and the saved
+  lists keep as many; a player's own edit forgets every change recorded at
+  that block.
 
 ### Advancements (`src/common/data/achievements.ts`, category `halloween`)
 

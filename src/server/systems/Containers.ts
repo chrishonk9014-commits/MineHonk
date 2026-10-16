@@ -152,8 +152,10 @@ export class Containers {
       if (r && lock && !p.recipes.has(items[r.result]!.id) && p.gamemode !== 'creative') r = null;
       // V7 phase 3: a seasonal recipe (the Trick-or-Treat Sack) only while Halloween is on here
       if (r && SEASONAL_RECIPES[items[r.result]!.id] && !this.server.halloweenState().active) r = null;
-      // Anything crafted from cheat items (or in a cheat context) is cheat-made
-      const cheat = !!r && (grid.slots.some((s) => isAdminStack(s)) || this.server.admin.inContext(p));
+      // Anything crafted from cheat items (or in a cheat context) is cheat-made; so is a seasonal one
+      // only there because a season test turned Halloween on
+      const seasonalByTest = !!r && !!SEASONAL_RECIPES[items[r.result]!.id] && !!this.server.halloween?.onByTest;
+      const cheat = !!r && (grid.slots.some((s) => isAdminStack(s)) || this.server.admin.inContext(p) || seasonalByTest);
       result.stack = r ? { id: r.result, count: r.count, ...(cheat ? { tag: { admin: true } } : {}) } : null;
     };
     w.refresh = refresh;

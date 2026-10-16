@@ -86,6 +86,12 @@ export interface DoorRecord extends DoorSpot {
   used: boolean;
   /** Phase 3, Candy Homes: who has had their candy here (player uuids; once each). */
   got?: string[];
+  /**
+   * Phase 5: what the door had given out before the Admin Panel reset it.
+   * Knocking again where it already had (a Candy Home's candy for the same
+   * player, a beaten Trick Home) is cheat-made.
+   */
+  before?: { used: boolean; got: string[] };
 }
 
 /** What the plan knows of a village (Start.village). */
@@ -164,8 +170,11 @@ export function sanitizeVillageRecords(raw: unknown): Record<string, VillageReco
         if (!d || typeof d !== 'object' || !Number.isInteger(d.x) || !Number.isInteger(d.y) || !Number.isInteger(d.z) || !Number.isInteger(d.id) || (d.id as number) < 0 || (d.kind !== 'candy' && d.kind !== 'trick')) continue;
         const outPos = Array.isArray(d.out) && d.out.length === 3 && d.out.every((v) => Number.isInteger(v)) ? ([...d.out] as [number, number, number]) : ([d.x, d.y, d.z] as [number, number, number]);
         const facing = (['north', 'south', 'west', 'east'] as const).find((f) => f === d.facing) ?? 'north';
-        const got = Array.isArray(d.got) ? [...new Set((d.got as unknown[]).filter((u): u is string => typeof u === 'string' && u.length > 0 && u.length <= 64))].slice(0, 1024) : [];
-        doors.push({ id: d.id as number, x: d.x as number, y: d.y as number, z: d.z as number, facing, out: outPos, design: typeof d.design === 'string' && d.design.length <= 32 ? d.design : 'house', kind: d.kind, seed: num(d.seed) ? d.seed >>> 0 : 0, used: d.used === true, ...(got.length ? { got } : {}) });
+        const uuids = (a: unknown): string[] => (Array.isArray(a) ? [...new Set((a as unknown[]).filter((u): u is string => typeof u === 'string' && u.length > 0 && u.length <= 64))].slice(0, 1024) : []);
+        const got = uuids(d.got);
+        const b = d.before && typeof d.before === 'object' ? (d.before as { used?: unknown; got?: unknown }) : null;
+        const before = b ? { used: b.used === true, got: uuids(b.got) } : null;
+        doors.push({ id: d.id as number, x: d.x as number, y: d.y as number, z: d.z as number, facing, out: outPos, design: typeof d.design === 'string' && d.design.length <= 32 ? d.design : 'house', kind: d.kind, seed: num(d.seed) ? d.seed >>> 0 : 0, used: d.used === true, ...(got.length ? { got } : {}), ...(before ? { before } : {}) });
       }
     const a = o.area as Record<string, unknown> | undefined;
     const area = a && num(a.x0) && num(a.z0) && num(a.x1) && num(a.z1) && num(a.y) ? { x0: a.x0, z0: a.z0, x1: a.x1, z1: a.z1, y: a.y } : undefined;

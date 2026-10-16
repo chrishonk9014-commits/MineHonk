@@ -199,10 +199,9 @@ const FACE = { north: [0, -1], south: [0, 1], west: [-1, 0], east: [1, 0] };
 async function knockAt(page, d) {
   const [x, y, z, facing] = d;
   const [fx, fz] = FACE[facing];
-  // Over the street in front of it (above the roofs), straight down, then up to the step
+  // Over its step (above the roofs), then straight down onto it
   const top = await page.evaluate(() => window.minehonk.game.player.body.y);
-  await flyTo(page, x + 0.5 + fx * 3.5, z + 0.5 + fz * 3.5, Math.max(top, y + 10));
-  await flyTo(page, x + 0.5 + fx * 3.5, z + 0.5 + fz * 3.5, y + 1);
+  await flyTo(page, x + 0.5 + fx * 1.3, z + 0.5 + fz * 1.3, Math.max(top, y + 12));
   await flyTo(page, x + 0.5 + fx * 1.3, z + 0.5 + fz * 1.3, y + 1);
   await page.evaluate(() => (window.minehonk.game.player.flying = false));
   await page.waitForTimeout(700);
@@ -305,21 +304,19 @@ await (async () => {
     let tricks = null;
     let candyShot = false;
     for (let round = 0; round < 24 && !/\[Trick or Treat!\]/.test(await ach()); round++) {
-      const doors = (await doorsNear(page)).filter((d) => !tried.has(key(d[0], d[1], d[2])));
-      if (!doors.length) {
-        // On to the next door (where the doors are: the Admin Panel's lookup, which changes nothing; the
-        // knocking itself is done by walking up and pressing G)
-        const r = await admin(page, { a: 'halloween', op: 'village_doors' });
-        const b = await page.evaluate(() => ({ x: window.minehonk.game.player.body.x, z: window.minehonk.game.player.body.z }));
-        const next = (r.data?.doors?.doors ?? []).filter((d) => !d.used && !tried.has(key(d.x, d.y, d.z))).sort((a, c) => Math.hypot(a.x - b.x, a.z - b.z) - Math.hypot(c.x - b.x, c.z - b.z))[0];
-        if (!next) break;
-        await flyTo(page, next.out[0] + 0.5, next.out[2] + 0.5, next.out[1] + 3);
-        await page.waitForTimeout(1500);
-        if (!(await doorsNear(page)).some((d) => key(d[0], d[1], d[2]) === key(next.x, next.y, next.z))) tried.add(key(next.x, next.y, next.z));
-        continue;
-      }
-      const d = doors[0];
-      tried.add(key(d[0], d[1], d[2]));
+      // The next door (where the doors are: the Admin Panel's lookup, which changes nothing; the knocking
+      // itself is done by flying up to it and pressing G): the nearest not yet tried with open sky over
+      // its step (a test flies down to it; a door under a roof or a tree in an alley is left out)
+      const r = await admin(page, { a: 'halloween', op: 'village_doors' });
+      const list = (r.data?.doors?.doors ?? []).filter((d) => !d.used && !tried.has(key(d.x, d.y, d.z)) && !(tricks && d.kind === 'trick'));
+      const open = await page.evaluate((list) => list.map((d) => window.minehonk.game.world.heightAt(d.out[0], d.out[2]) <= d.out[1] + 1), list);
+      const b = await page.evaluate(() => ({ x: window.minehonk.game.player.body.x, z: window.minehonk.game.player.body.z }));
+      const next = list.filter((_, i) => open[i]).sort((a, c) => Math.hypot(a.x - b.x, a.z - b.z) - Math.hypot(c.x - b.x, c.z - b.z))[0];
+      if (!next) break;
+      tried.add(key(next.x, next.y, next.z));
+      const dx = next.out[0] - next.x;
+      const dz = next.out[2] - next.z;
+      const d = [next.x, next.y, next.z, dx > 0 ? 'east' : dx < 0 ? 'west' : dz > 0 ? 'south' : 'north'];
       await page.evaluate(() => (window.__speech = []));
       await knockAt(page, d);
       await page.waitForTimeout(1200);

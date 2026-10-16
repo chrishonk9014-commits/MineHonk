@@ -9,8 +9,12 @@ import { castEnding } from '../../common/game/hauntCast';
 import { STATE_BLOCK } from '../../common/registry/blocks';
 import type { HauntState } from './haunts/types';
 
-/** At most this many recorded block changes (the haunting itself stops recording there). */
-export const HAUNT_MAX_CHANGES = 4000;
+/**
+ * At most this many recorded block changes: the haunting makes no change it
+ * could not record (its random events already stop at 4,000; an ending may
+ * take it further, Null's most of all, never past this).
+ */
+export const HAUNT_MAX_CHANGES = 12000;
 const DIMS = ['overworld', 'nether', 'end', 'farlands', 'computer'];
 /** The longest a haunting can be once the panel moved its end (ticks). */
 const MAX_TOTAL = 4 * HAUNT_MAX_MINUTES * 60 * 20;

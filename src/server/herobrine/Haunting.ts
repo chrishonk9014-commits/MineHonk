@@ -52,11 +52,13 @@ import { HerobrineHaunt } from './haunts/herobrine';
 import { NullHaunt } from './haunts/null';
 import { GreenSteveHaunt } from './haunts/greenSteve';
 import { CaveDwellerHaunt } from './haunts/caveDweller';
+import { HAUNT_MAX_CHANGES } from './hauntSave';
 
 export type { HauntState } from './haunts/types';
 
 /** A block it changed: dimension, position, what was there, what it put. */
 type Change = [string, number, number, number, number, number];
+/** Its random block-changing events stop here (an ending can go on to HAUNT_MAX_CHANGES). */
 const MAX_CHANGES = 4000;
 
 const filter = new ChatFilter([]);
@@ -331,7 +333,7 @@ export class HauntingSystem {
       const c = list[i]!;
       const dim = s.dims.get(c[0] as never);
       if (dim && !dim.isLoaded(c[1], c[3])) {
-        if (later.length < MAX_CHANGES) later.push(c);
+        if (later.length < HAUNT_MAX_CHANGES) later.push(c);
         continue;
       }
       if (dim && this.restoreOne(dim, c)) n++;
@@ -377,8 +379,11 @@ export class HauntingSystem {
     for (const key of ['hauntBlocks', 'hauntRestore'] as const) {
       const list = f[key] as Change[] | undefined;
       if (!Array.isArray(list) || !list.length) continue;
-      const i = list.findIndex((c) => c[1] === x && c[2] === y && c[3] === z && c[0] === dim);
-      if (i >= 0) list.splice(i, 1);
+      // Every change recorded there (it may have changed the same block more than once)
+      for (let i = list.length - 1; i >= 0; i--) {
+        const c = list[i]!;
+        if (c[1] === x && c[2] === y && c[3] === z && c[0] === dim) list.splice(i, 1);
+      }
     }
   }
 
@@ -892,10 +897,10 @@ export class HauntingSystem {
 
   // ------------------------------------------------------------------ the world
 
-  /** Changes a block (if its chunk is loaded and it holds no block entity) and records it. */
+  /** Changes a block (if its chunk is loaded and it holds no block entity) and records it (never one it could not record). */
   set(dim: Dimension, x: number, y: number, z: number, state: number): boolean {
     const prev = dim.getState(x, y, z);
-    if (prev === state || !dim.isLoaded(x, z) || dim.getBlockEntity(x, y, z)) return false;
+    if (prev === state || !dim.isLoaded(x, z) || dim.getBlockEntity(x, y, z) || this.changes.length >= HAUNT_MAX_CHANGES) return false;
     const old = dim.setBlock(x, y, z, state);
     if (old < 0) return false;
     this.changes.push([dim.id, x, y, z, old, state]);

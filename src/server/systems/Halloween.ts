@@ -68,6 +68,16 @@ export class HalloweenSystem {
     return this.state.active && !this.realState.active;
   }
 
+  /**
+   * Only a test makes it not Halloween here now. What world generation decides
+   * for good (a village's dressing, a chunk's pumpkin) still follows the real
+   * season then: a test is never saved, so it must not leave the world without
+   * what the real season gives it.
+   */
+  get offByTest(): boolean {
+    return !this.state.active && this.realState.active;
+  }
+
   /** Sets either test (or both); the other stays as it is. Everyone hears at once if the answer changes. */
   setTests(content?: HalloweenContentTest, date?: HalloweenDateTest): void {
     if (content !== undefined) this.tests.content = content;
@@ -103,7 +113,7 @@ export class HalloweenSystem {
    */
   decorate(dim: Dimension, c: Chunk): number {
     const s = this.state;
-    if (!s.active) return 0;
+    if (!s.active && !this.offByTest) return 0;
     const spot = decoratePumpkins(c, dim.id, this.server.level.seedNum, (x, y, z) => dim.generator.structureAt?.(x, y, z) ?? null);
     if (!spot) return 0;
     this.placed++;

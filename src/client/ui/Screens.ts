@@ -692,7 +692,7 @@ export function achievementsScreen(host: ScreenHost, unlocked: Set<string> | nul
   const cats = ['story', 'halloween', 'world', 'engineering', 'digital', 'caves', 'nether', 'end', 'adventure', 'husbandry', 'farlands'] as const;
   const names: Record<(typeof cats)[number], string> = { story: 'MineHonk', halloween: 'Halloween', world: 'World', engineering: 'Engineering', digital: 'Digital', caves: 'Caves', nether: 'Nether', end: 'The End', adventure: 'Adventure', husbandry: 'Husbandry', farlands: 'Farlands' };
   let cat: (typeof cats)[number] = 'story';
-  const tabs = el('div', { class: 'row' });
+  const tabs = el('div', { class: 'row adv-tabs' });
   const list = el('div', { class: 'list adv-list' });
   const count = el('div', { class: 'muted' });
   const render = (): void => {

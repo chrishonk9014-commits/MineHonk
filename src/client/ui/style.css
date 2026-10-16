@@ -190,6 +190,12 @@ body {
 .spacer {
   height: calc(var(--s) * 8);
 }
+/* The advancements' category tabs: as many rows as they need (none cut off at the sides) */
+.row.adv-tabs {
+  flex-wrap: wrap;
+  max-width: 100%;
+  gap: calc(var(--s) * 2);
+}
 .muted {
   color: #a0a0a0;
 }

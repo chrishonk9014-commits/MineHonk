@@ -240,6 +240,24 @@ async function knockAt(page, d, out = 1) {
   await page.waitForTimeout(800);
 }
 
+/** Looks at a door from where the player stands and knocks with G. */
+async function aimAndKnock(page, d) {
+  const [x, y, z] = d;
+  await page.evaluate(([x, y, z]) => {
+    const g = window.minehonk.game;
+    const b = g.player.body;
+    const dx = x + 0.5 - b.x;
+    const dz = z + 0.5 - b.z;
+    g.player.yaw = Math.atan2(-dx, -dz);
+    g.player.pitch = -Math.atan2(y + 1 - (b.y + 1.62), Math.hypot(dx, dz));
+  }, [x, y, z]);
+  await page.waitForTimeout(500);
+  const knock = await page.evaluate(() => window.minehonk.game.knockTarget()?.join(' ') ?? null);
+  if (!knock) console.log(`     no knock prompt at ${x} ${y} ${z}`);
+  await page.keyboard.press('g');
+  await page.waitForTimeout(800);
+}
+
 await (async () => {
   // ====================================================================== menu
   if (part('menu')) {
@@ -459,7 +477,7 @@ await (async () => {
       p.pitch = 0.5;
     });
     await page.waitForTimeout(1500);
-    await page.screenshot({ path: `${OUT}/v7r-always-on.png`, keepHud: true });
+    await page.screenshot({ path: `${OUT}/v7r-always-on.png` });
     await quit(page);
     await page.context().close();
   }
@@ -665,7 +683,10 @@ await (async () => {
       const [x, y, z, facing] = d;
       const [fx, fz] = FACE[facing];
       await cmd(alice, `/tp ${(x + 0.5 + fx * 4 + fz * 2).toFixed(1)} ${y + 1} ${(z + 0.5 + fz * 4 + fx * 2).toFixed(1)}`);
-      await knockAt(bob, d);
+      // Bob is a Survival player (no flying): the owner brings him to the step
+      await cmd(alice, `/tp BobV7 ${(x + 0.5 + fx * 1.3).toFixed(2)} ${y} ${(z + 0.5 + fz * 1.3).toFixed(2)}`);
+      await bob.waitForTimeout(1500);
+      await aimAndKnock(bob, d);
       await bob.waitForTimeout(2500);
       await alice.evaluate(([x, y, z]) => {
         const g = window.minehonk.game;
@@ -674,7 +695,7 @@ await (async () => {
         g.player.pitch = -Math.atan2(y + 1.2 - (b.y + 1.62), Math.hypot(x + 0.5 - b.x, z + 0.5 - b.z));
       }, [x, y, z]);
       await alice.waitForTimeout(800);
-      await alice.screenshot({ path: `${OUT}/v7r-mp-alice.png`, keepHud: true });
+      await alice.screenshot({ path: `${OUT}/v7r-mp-alice.png` });
       await bob.screenshot({ path: `${OUT}/v7r-mp-bob.png`, keepHud: true });
       const bobCandy = await bob.evaluate(() => window.minehonk.game.invSlots.some((s) => s && window.minehonkRegistry.itemOf(s.id).id === 'trick_or_treat_sack' && Object.values(s.tag?.data?.candy ?? {}).some((n) => n > 0)));
       const aliceCandy = await alice.evaluate(() => window.minehonk.game.invSlots.some((s) => s && window.minehonkRegistry.itemOf(s.id).id === 'trick_or_treat_sack'));

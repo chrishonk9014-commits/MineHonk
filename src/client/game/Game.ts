@@ -1129,6 +1129,7 @@ export class Game {
     }
     if (n === 5) this.acc = 0;
     this.touch.setVisible(this.input.touchMode && this.joined && !this.uiBlocking && !this.player.dead);
+    this.touch.setScene(this.hauntScene.active);
     this.touchClose.classList.toggle('hidden', !(this.input.touchMode && (!!this.screen || this.chat.open)));
     this.look(dt);
     this.render(this.acc / 50, dt);
@@ -1291,8 +1292,9 @@ export class Game {
       this.pingTime = performance.now();
       this.send({ t: 'ping', time: this.pingTime });
     }
-    // V7 phase 3: "Knock" when looking at a Trick-or-Treat door from outside
-    if (this.tickNo % 2 === 0) this.hud.setPrompt(this.knockTarget() ? 'Knock' : null, keyName(this.settings.keys.knock), () => this.knock());
+    // V7 phase 3: "Knock" when looking at a Trick-or-Treat door from outside (a button to tap on touch
+    // screens, which have no key to press)
+    if (this.tickNo % 2 === 0) this.hud.setPrompt(this.knockTarget() ? 'Knock' : null, this.input.touchMode ? '' : keyName(this.settings.keys.knock), () => this.knock());
     this.hud.update(
       {
         stats: this.stats,

@@ -14,6 +14,8 @@
  *  - always:  an Always on world after the cutoff: still Halloween;
  *  - admin:   the Admin Panel's Halloween and Haunting tabs, at a small and a
  *             large window (nothing overflows);
+ *  - touch:   a phone: the on-screen controls, and knocking by tapping the
+ *             Knock prompt;
  *  - log:     the final V7 Update Log entry (and the V6.5 and V6 tabs);
  *  - oldsave: a V6.5 save (tests/fixtures/worlds/v6.5.json) put into the
  *             browser's storage and played;
@@ -57,8 +59,8 @@ const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromi
 const errors = [];
 
 /** A page (its own browser profile), with clean Update Log copies of screenshots when asked. */
-async function newPage(viewport = { width: 1280, height: 720 }) {
-  const ctx = await browser.newContext({ viewport });
+async function newPage(viewport = { width: 1280, height: 720 }, device = {}) {
+  const ctx = await browser.newContext({ viewport, ...device });
   const page = await ctx.newPage();
   page.on('pageerror', (e) => errors.push(String(e)));
   if (process.env.UPDATE_LOG_SHOTS) {
@@ -551,6 +553,72 @@ await (async () => {
       await quit(page);
       await page.context().close();
     }
+  }
+
+  // ====================================================================== touch
+  if (part('touch')) {
+    // A phone: the on-screen controls, and knocking by tapping the prompt (there is no G key)
+    const page = await newPage({ width: 844, height: 390 }, { hasTouch: true, isMobile: true, deviceScaleFactor: 2 });
+    await goto(page);
+    await newWorld(page, 'Phone Halloween');
+    check('on a phone: the touch controls are shown', await page.evaluate(() => !document.querySelector('.touch-layer')?.classList.contains('hidden')));
+    await cmd(page, '/time set 14000');
+    await cmd(page, '/gamerule doMobSpawning false');
+    await cmd(page, `/tp ${VILLAGE.x} 120 ${VILLAGE.z}`);
+    await page.waitForTimeout(6000);
+    let look = null;
+    for (let t = 0; t < 3 && !look?.ok; t++) {
+      if (t) await page.waitForTimeout(4000);
+      look = await admin(page, { a: 'halloween', op: 'village_doors' });
+    }
+    const home = (look?.data?.doors?.doors ?? []).find((h) => h.kind === 'candy' && !h.used);
+    check(`a Candy Home to go to (${look?.text})`, !!home);
+    if (home) {
+      await creative(page, 5, 'carved_pumpkin');
+      await creative(page, 36, 'trick_or_treat_sack');
+      await page.evaluate(() => (window.minehonk.game.player.selectedSlot = 0));
+      // On its step, looking at it
+      await admin(page, { a: 'halloween', op: 'door_tp', door: home.id });
+      await page.waitForTimeout(3000);
+      // Looking at it (as a player would, with the look area)
+      await page.evaluate((h) => {
+        const g = window.minehonk.game;
+        const b = g.player.body;
+        g.player.yaw = Math.atan2(-(h.x + 0.5 - b.x), -(h.z + 0.5 - b.z));
+        g.player.pitch = 0;
+      }, home);
+      await page.waitForTimeout(1000);
+      const box = await page.locator('.act-prompt:not(.hidden)').boundingBox().catch(() => null);
+      if (!box)
+        console.log(`     no prompt: ${JSON.stringify(await page.evaluate((home) => {
+          const g = window.minehonk.game;
+          const b = g.player.body;
+          const t = g.interaction.target;
+          return { home: [home.x, home.y, home.z, home.out], at: [b.x, b.y, b.z].map((v) => +v.toFixed(2)), yaw: +g.player.yaw.toFixed(2), pitch: g.player.pitch, target: t ? [t.x, t.y, t.z] : null, doors: g.knockDoors, touch: g.input.touchMode };
+        }, home))}`);
+      await page.screenshot({ path: `${OUT}/v7r-touch-door.png`, keepHud: true });
+      check('the Knock prompt shows', !!box);
+      check('...as a button to tap (no key to press on a phone)', (await page.locator('.act-prompt .key').count()) === 0);
+      if (box) {
+        const cx = box.x + box.width / 2;
+        const cy = box.y + box.height / 2;
+        check('a finger on it touches the prompt, not the controls under it', await page.evaluate(([x, y]) => document.elementFromPoint(x, y)?.closest('.act-prompt') != null, [cx, cy]));
+        await page.screenshot({ path: `${OUT}/v7r-touch-prompt.png`, keepHud: true });
+        await page.evaluate(() => (window.__speech = []));
+        await page.touchscreen.tap(cx, cy);
+        await page.waitForTimeout(2500);
+        const got = await page.evaluate(() => ({ scene: document.querySelector('.haunt-scene')?.dataset.step ?? '', said: (window.__speech ?? []).join(' | ') }));
+        check(`tapping it knocks: the Candy Home answers ("${got.scene}", ${got.said || 'nothing said'})`, got.scene === 'look' || got.said.length > 0);
+        await page.screenshot({ path: `${OUT}/v7r-touch-knocked.png`, keepHud: true });
+        check('during its cutscene the stick and buttons step aside', await page.evaluate(() => document.querySelector('.touch-layer')?.classList.contains('in-scene') && getComputedStyle(document.querySelector('.tb-jump')).visibility === 'hidden'));
+        // A tap anywhere skips it, as a click does
+        await page.touchscreen.tap(422, 150);
+        await page.waitForTimeout(2000);
+        check('a tap skips it, and the controls come back', await page.evaluate(() => !document.querySelector('.haunt-scene')?.dataset.step && !document.querySelector('.touch-layer')?.classList.contains('in-scene')));
+      }
+    }
+    await quit(page);
+    await page.context().close();
   }
 
   // ====================================================================== log

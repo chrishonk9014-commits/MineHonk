@@ -145,6 +145,16 @@ export class TouchControls {
     if (!on) this.releaseAll();
   }
 
+  /**
+   * A cutscene is playing: the stick and buttons go (they do nothing then);
+   * a tap anywhere still skips it, as a click does.
+   */
+  setScene(on: boolean): void {
+    if (this.root.classList.contains('in-scene') === on) return;
+    this.root.classList.toggle('in-scene', on);
+    if (on) this.releaseAll();
+  }
+
   private releaseAll(): void {
     this.stick = null;
     this.endLook();

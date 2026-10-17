@@ -1939,6 +1939,11 @@ body {
   /* The UI root lets clicks through to the world; this layer takes touches */
   pointer-events: auto;
 }
+/* V7: during a cutscene only a tap is left (it skips); the stick and buttons would do nothing */
+.touch-layer.in-scene .touch-btn,
+.touch-layer.in-scene .touch-stick-base {
+  visibility: hidden;
+}
 .touch-stick-base {
   position: absolute;
   left: max(18%, calc(env(safe-area-inset-left) + 90px));
@@ -3961,6 +3966,8 @@ body {
   left: 50%;
   top: calc(50% + var(--s) * 14);
   transform: translateX(-50%);
+  /* Above the touch controls' layer (5), or a tap on it would look around or open the door instead */
+  z-index: 6;
   display: flex;
   align-items: center;
   gap: calc(var(--s) * 3);
@@ -3972,6 +3979,13 @@ body {
   pointer-events: auto;
   cursor: pointer;
   white-space: nowrap;
+}
+/* A finger-sized button on touch screens */
+@media (pointer: coarse) {
+  .act-prompt {
+    padding: calc(var(--s) * 4) calc(var(--s) * 9);
+    font-size: calc(var(--s) * 9);
+  }
 }
 .act-prompt .key {
   padding: 0 calc(var(--s) * 2);

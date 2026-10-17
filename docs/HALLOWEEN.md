@@ -1033,6 +1033,18 @@ Caps:
   blocks 4,000 from its events and 12,000 at most;
 - the long-haunting leak test.
 
+## 7.0.1: trick-or-treating on phones and tablets
+
+- The **Knock** prompt was under the touch controls' layer, so on a touch
+  screen a tap on it looked around or opened the door instead: it now sits
+  above them (`.act-prompt`, z-index 6), is finger-sized on coarse pointers
+  and shows no key (there is no G to press).
+- While a cutscene plays, the stick and buttons step aside (they did
+  nothing then); a tap anywhere still skips a skippable scene.
+- The Admin Panel's **Go** by a door's name now faces the door.
+- `tests/e2e/v7-release.mjs` part `touch`: a phone (touch, mobile viewport)
+  knocks by tapping the prompt.
+
 ## Protocol
 
 `PROTOCOL_VERSION` 10 (phase 5; 9 was phase 4, 8 phase 3, 7 phase 2, 6 phase 1).

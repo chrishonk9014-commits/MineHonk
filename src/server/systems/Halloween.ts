@@ -163,7 +163,8 @@ export class HalloweenSystem {
         const info = this.server.villages?.doorsNear(p);
         const d = info?.doors.find((x) => x.id === door);
         if (!info || !d) return reply(false, 'That door is not there any more.');
-        this.server.admin.moveTo(p, 'overworld', d.out[0] + 0.5, d.out[1], d.out[2] + 0.5);
+        // On its step, facing it (back along the way it looks out)
+        this.server.admin.moveTo(p, 'overworld', d.out[0] + 0.5, d.out[1], d.out[2] + 0.5, Math.atan2(d.out[0] - d.x, d.out[2] - d.z));
         return reply(true, `At door ${d.id + 1} (${d.design}): a ${d.kind === 'trick' ? 'Trick' : 'Candy'} Home.`);
       }
       // V7 phase 3: trick-or-treating (cheat-made, and never using up a real door)

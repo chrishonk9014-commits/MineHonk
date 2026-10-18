@@ -743,6 +743,13 @@ Halloween back another year: [docs/SEASONS.md](docs/SEASONS.md).
     follows closer whenever you look away and lunges (a shove, never a
     wound). At the end every light goes out and it hunts everyone (**Ending**:
     Random, Taken: dragged into its den, Dawn: the sun comes up first).
+- **Several at once** (since V7.1): one of each character can haunt a world
+  at the same time, all four if you like (**Start all four** in the Admin
+  Panel). Each goes at its own pace with its own stages, lines and figures;
+  in chat the one you name answers. Their ends take turns: while one plays
+  its end the others wait, and when everyone is back the next one carries
+  on. The automatic haunting is still only ever Herobrine, and still never
+  deletes anything.
 - **Their voices**: Claude Haiku 5.5 through the hub (the API key lives only
   in the hub's `ANTHROPIC_API_KEY` secret, never in a browser), with one
   shared daily cap for every character and every world, plus limits per
@@ -876,7 +883,11 @@ show a **Cheats ON** badge in the Friends and Public lists and when joining.
   [Version 7](#version-7---the-halloween-update)), how long it lasts from the
   first sign to the end (30 minutes for Herobrine and 20 for the others unless
   changed, 1 to 180) and how it ends, then press Start. Nobody is told in
-  chat. Below that, two tests that need no haunting: **Show it near me** (the
+  chat. Since V7.1 several can haunt at once, one of each: pick another
+  character while one is haunting and start it too, or press **Start all
+  four** (each with its usual ending and its own length, or the minutes
+  given; the world is kept). **Haunting now** lists every one running, the
+  picker shows them in red, and **Stop all** ends them all. Below that, two tests that need no haunting: **Show it near me** (the
   chosen character appears a little way off for a few seconds) and **Talk to
   it** (say something; the answer shows with who gave it: *Claude*, or *the
   scripted lines* and why). Herobrine's haunting, as before:
@@ -943,7 +954,9 @@ show a **Cheats ON** badge in the Friends and Public lists and when joining.
   comes, the ending and when it talks back, and can **Skip to the next
   stage**, go **Straight to the end**, set **The end begins in** a number of
   minutes, or **Stop** (for an automatic haunting **End it**, for good, or
-  **Reset** it to the beginning). Stop removes him and his monsters,
+  **Reset** it to the beginning). With several running, these are about the
+  one picked: Stop puts back only what that one changed, and the others
+  carry on; an end asked for while another plays waits its turn. Stop removes him and his monsters,
   puts back every block he placed or took and the time and weather, and
   brings anyone in his lair back. Nobody loses their things to a death while
   the world is haunted, and his monsters drop nothing. The haunting is saved
@@ -981,6 +994,7 @@ npm run test:e2e:halloween # V7: the Halloween title scenes and their rotation, 
 npm run test:e2e:villages  # V7 phase 2: Trick-or-Treat and Abandoned Villages, the heads worn, zombie villagers and guardians, the Admin Panel's villages and doors, the village title scenes (screenshots)
 npm run test:e2e:trick     # V7 phase 3: the sack's window, the candies (in the sack, in hand, on the ground), costumes, knocking, Candy and Trick Homes, the quest, the Admin Panel, after the season (screenshots)
 npm run test:e2e:haunting4 # V7 phase 4: the Haunting tab's picker and tests, Null, Green Steve and the Cave Dweller from start to end screen, an automatic haunting (screenshots)
+npm run test:e2e:haunting71 # V7.1: Start all four, each running and speaking, Stop for one, Stop all, the tab at 800x600 (screenshots)
 npm run test:e2e:v7        # V7.0.0: every title scene, a season playthrough (village, sack, costume, quest, advancements, save and load), the same world after the cutoff, an Always on world, the Admin Panel at 800x600 and 1920x1080, the Update Log, a V6.5 save, two players on the dedicated server (screenshots; ONLY=menu,season,... for some parts)
 ```
 

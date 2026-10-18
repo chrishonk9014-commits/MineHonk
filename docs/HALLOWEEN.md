@@ -665,7 +665,8 @@ changing Herobrine's: his part (`haunts/herobrine.ts`) is the old code moved
 over, and his tests (`haunting.test.ts`, `haunting2.test.ts`) pass unchanged.
 
 - **The core** (`HauntingSystem`) runs what every haunting shares: the saved
-  timeline (`level.flags.haunt`, only moving while someone is there), the
+  timeline (`level.flags.haunt`; since 7.1 `level.flags.haunts`, one per
+  character running, see below; only moving while someone is there), the
   stages (`HAUNT_CAST[c].stages`, fractions of the whole), each stage's
   budget of random events per player rolled every 10 ticks, the character's
   lines and fake joins (each once), figures (untouchable, AI-less, never
@@ -1044,6 +1045,71 @@ Caps:
 - The Admin Panel's **Go** by a door's name now faces the door.
 - `tests/e2e/v7-release.mjs` part `touch`: a phone (touch, mobile viewport)
   knocks by tapping the prompt.
+
+## 7.1.0: several hauntings at once
+
+One of each character can haunt a world at the same time: all four, from
+the Admin Panel's **Start all four**, or one by one. The automatic haunting
+is unchanged (Herobrine only, never deleting anything); the other three
+still only come from the panel.
+
+- **Saved state**: `level.flags.haunts`, a list of `HauntState` (at most one
+  per character; `char` is always set now). A world saved with the old
+  `level.flags.haunt` carries on with it as the first of the list: the
+  `states` getter moves it over when it is first read, and
+  `sanitizeHauntFlags` does the same when a world loads (de-duplicating by
+  character, at most 8 kept, malformed ones dropped).
+- **Block records**: each change in `level.flags.hauntBlocks` has a 7th
+  element, the character that made it (older 6-element records are the
+  legacy haunting's). Stop for one puts back only its own; an end forgets
+  only its own (Null's are put back, as before).
+- **One core, several timelines**: `tick()` runs each haunting's
+  `tickOne()` in turn, each inside `as(st, ...)`, which sets the current
+  haunting so that the parts' calls (`say`, `set`, `spawnFigure`,
+  `markMob`, `finish`) belong to the right character (`this.character` is
+  the current one's). The players are watched once a tick
+  (`watchPlayers()` returns what is worth noticing: deaths, running,
+  underground, asleep) and each haunting counts and remarks on it itself.
+  Darkness wanted by several is combined (the darkest per player, sent once
+  a tick); the sky (time and weather) is remembered once, by the first that
+  touches it, and only put back when the last of them that holds it stops.
+- **Ends take turns**: only one haunting is ever in its end. While one is,
+  only it ticks; another reaching the edge of its end waits there
+  (`t = ceil(finaleAt * total) - 1`), and so does one sent there by
+  **Skip** or **Straight to the end**. When an end begins, the others let go
+  of everyone (`reset('stop')` on their parts: traps, cutscenes, the hunt)
+  and lose their figures and monsters. The end throws everyone out as
+  usual; the next carries on when they are back. A world reloaded with one
+  in its end starts that end again, any other waiting on its edge. The
+  owner-only *Delete the world* still belongs to the one haunting started
+  with it (**Start all four** always keeps the world).
+- **Chat**: of those past their talking-back moment (and, but for
+  Herobrine, not in their end), the one named in the message answers
+  (`herobrine`/`hb`, `null`, `green`/`steve`, `dweller`/`cave`), otherwise a
+  random one; still one answer at a time, the same per-player pace and the
+  same per-haunting answer limit, and the same single daily AI cap shared
+  by every character.
+- **Admin Panel** (`a: 'haunt'`): `start` is refused for a character
+  already haunting (not for another one); `stop`, `skip`, `finale` and
+  `finale_in` take `character` (Herobrine by leaving it out; from an older
+  panel naming nobody, the only one running); new ops `start_all`
+  (optional `minutes`, otherwise each its own default; every character not
+  haunting, each with its default ending, the world kept) and `stop_all`.
+  `HauntStatus.hauntings` lists every one running (`HauntRun`: character,
+  stage, auto, elapsed, total, erase, ending, its own block changes, and
+  `waiting` when it waits for another's end); the old top-level fields
+  describe the first, so an older panel still works. The tab: the picker is
+  never locked (those haunting are in red), **Haunting now** lists them, the
+  controls are the picked character's, and **All four at once** has **Start
+  all four** (or *the other N*) and **Stop all**.
+- **Protocol**: additive only (an optional status field, two ops, an
+  optional field on four), so `PROTOCOL_VERSION` stays 10: a panel from 7.1
+  on an older dedicated server shows its one haunting, and **Start all
+  four** is refused there.
+- **Tests**: `tests/unit/haunting71.test.ts` (all four at once, ends
+  taking turns to the last, waiting for an end, Stop for one, chat, old
+  saves, a reload with several, the validation) and
+  `tests/e2e/haunting71.mjs` (the tab, screenshots `haunting71-*.png`).
 
 ## Protocol
 

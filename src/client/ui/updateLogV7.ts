@@ -28,7 +28,7 @@ const pumpkinCards: Card[] = DIMENSION_PUMPKINS.map((p) => ({
 export const V7_LOG: UpdateEntry = {
   version: 'V7',
   name: 'The Halloween Update',
-  tagline: 'Trick-or-treating in costume, Trick-or-Treat and Abandoned Villages, candy, pumpkins in every dimension and ghosts at night; new hauntings (Herobrine coming back by himself, Null, Green Steve and the Cave Dweller); Halloween advancements. Complete: all five phases.',
+  tagline: 'Trick-or-treating in costume, Trick-or-Treat and Abandoned Villages, candy, pumpkins in every dimension and ghosts at night; new hauntings (Herobrine coming back by himself, Null, Green Steve and the Cave Dweller, all four at once if you like); Halloween advancements. Complete: all five phases.',
   hero: 'title-trick-or-treat',
   sections: [
     // ------------------------------------------------------------------ overview
@@ -75,6 +75,7 @@ export const V7_LOG: UpdateEntry = {
             { img: 'appear-green_steve', title: 'Green Steve', text: 'Hello, brother. He built you a house.', link: 'green-steve' },
             { img: 'appear-cave_dweller', title: 'The Cave Dweller', text: 'It lives in the dark under the world, and it follows you.', link: 'cave-dweller' },
             { icon: 'book', title: 'They talk back', text: 'Each one answers in its own voice.', link: 'voices' },
+            { img: 'haunt-all-four', title: 'All four at once', text: 'V7.1: start every haunting together, from the Admin Panel.', link: 'haunt-admin' },
           ],
         },
         {
@@ -594,6 +595,17 @@ export const V7_LOG: UpdateEntry = {
             '**Show it near me** and **Talk to it**, to test them without any haunting. The answer says who gave it: Claude, or the scripted lines (and why).',
             'While it runs: who, whether it began by itself, the stage, the time gone and left, when the end comes, when it talks back; **Skip**, **Straight to the end**, **The end begins in...**, and **Stop**, which puts everything back.',
             'The automatic haunting shows here too: waiting, running, or over. **End it** (for good) or **Reset** it.',
+          ],
+        },
+        { k: 'h', text: 'Since V7.1: several at once' },
+        { k: 'img', img: 'haunt-all-four', caption: 'Herobrine, Null, Green Steve and the Cave Dweller, all haunting the same world.' },
+        {
+          k: 'list',
+          items: [
+            '**Start all four** and Herobrine, Null, Green Steve and the Cave Dweller haunt the world together, each with its usual ending, and the world is kept. Or start them one by one: pick another character while one is haunting and start it too (one of each at a time).',
+            'Each goes at its own pace, with its own stages, lines, signs and figures, all at once. Talk in chat and the one you name answers (or one of them).',
+            "**Their ends take turns.** While one plays its end, the others wait at the edge of theirs; it throws everyone out as usual, and when you come back the next one carries on.",
+            '**Haunting now** lists every one running, its stage and its time. Pick one to **Skip**, go **Straight to the end** or **Stop** just that one (it puts back only what it changed), or **Stop all**.',
           ],
         },
         { k: 'tip', text: 'Like every cheat, nothing done here earns advancements. An automatic haunting moved along from the panel no longer counts as having been through one.' },

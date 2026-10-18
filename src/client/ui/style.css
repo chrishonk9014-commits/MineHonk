@@ -3598,6 +3598,19 @@ body {
   height: auto;
   min-height: calc(var(--s) * 20);
 }
+/* V7.1: who is haunting now, in the picker and the list */
+.btn.chip.haunt-on:not(.active) {
+  color: #ff7777;
+}
+.haunt-legend {
+  flex-basis: 100%;
+}
+.haunt-run {
+  margin: var(--s) 0;
+}
+.haunt-run-name {
+  color: #ff7777;
+}
 .btn.haunt-finale,
 .btn.haunt-ending {
   margin-top: calc(var(--s) * 3);

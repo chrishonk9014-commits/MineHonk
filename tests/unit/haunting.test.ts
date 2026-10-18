@@ -13,6 +13,7 @@ import { MemoryStorage } from '../../src/server/storage/Storage';
 import { validateAdmin } from '../../src/common/game/admin';
 import { HAUNT_BAN, type HauntStatus } from '../../src/common/game/haunting';
 import { Mob } from '../../src/server/entity/Mob';
+import { Random } from '../../src/common/math/rng';
 import { blocks, STATE_BLOCK } from '../../src/common/registry/blocks';
 
 let req = 1;
@@ -122,6 +123,8 @@ describe('the Haunting', () => {
   it('Stop puts back every block he changed, and the light', async () => {
     const { server } = await makeServer({ seed: 'haunting-stop', cheats: true });
     const { conn, player } = await join(server, 'Steve', 'uuid-steve', 4);
+    // (his choices the same each run)
+    server.haunting!.rng = new Random(9);
     // Four minutes, from "closer" on: the signs come thick and fast
     expect(admin(server, conn, { a: 'haunt', op: 'start', minutes: 4, erase: false }).ok).toBe(true);
     expect(admin(server, conn, { a: 'haunt', op: 'skip' }).text).toMatch(/Signs/);
@@ -139,13 +142,18 @@ describe('the Haunting', () => {
     const dim = server.dim('overworld');
     const c0 = changes.find((c) => c[5] !== 0)!;
     expect(server.admin.blockMarked(dim, c0[1], c0[2], c0[3])).toBe(true);
+    // What the world changed since by itself (a vine growing into a tree he stripped) is left as it is
+    const lastNow = new Map<string, number>();
+    for (const [, x, y, z, , now] of changes) lastNow.set(`${x},${y},${z}`, now);
+    const moved = new Map([...lastNow].filter(([k, now]) => dim.getState(...(k.split(',').map(Number) as [number, number, number])) !== now).map(([k]) => [k, dim.getState(...(k.split(',').map(Number) as [number, number, number]))]));
     const r = admin(server, conn, { a: 'haunt', op: 'stop' });
     expect(r.ok).toBe(true);
     expect(r.text).toMatch(/Put back \d+ block/);
     // The first record of each position holds what was there before him
     const firstPrev = new Map<string, [number, number, number, number]>();
     for (const [, x, y, z, prev] of changes) if (!firstPrev.has(`${x},${y},${z}`)) firstPrev.set(`${x},${y},${z}`, [x, y, z, prev]);
-    for (const [x, y, z, prev] of firstPrev.values()) expect(dim.getState(x, y, z), `${x},${y},${z}`).toBe(prev);
+    expect(moved.size).toBeLessThan(firstPrev.size / 4);
+    for (const [k, [x, y, z, prev]] of firstPrev) expect(dim.getState(x, y, z), k).toBe(moved.get(k) ?? prev);
     expect(hauntOf(server)).toBeUndefined();
     expect(figures(server)).toEqual([]);
     expect(conn.last('fx')).toMatchObject({ kind: 'haunt', strength: 0 });

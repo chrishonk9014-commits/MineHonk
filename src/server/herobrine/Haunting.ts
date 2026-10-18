@@ -388,9 +388,11 @@ export class HauntingSystem {
 
   /** Moves a haunting along to share `to`; what was skipped is not played all at once. */
   private moveTo(st: HauntState, to: number): void {
-    st.t = Math.ceil(to * st.total);
     const ch = charOf(st);
     const c = HAUNT_CAST[ch];
+    st.t = Math.ceil(to * st.total);
+    // Another one's end is playing: this one waits on the edge of its own
+    if (this.inEnd(st) && this.states.some((o) => o !== st && this.inEnd(o))) st.t = Math.ceil(c.finaleAt * st.total) - 1;
     for (const l of c.lines) if (l.at < to - 1e-9 && !st.done.includes(`line:${l.at}`)) st.done.push(`line:${l.at}`);
     for (const j of this.joinsOf(ch)) if (j < to - 1e-9 && !st.done.includes(`join:${j}`)) st.done.push(`join:${j}`, `left:${j}`);
   }
@@ -582,10 +584,14 @@ export class HauntingSystem {
     this.restorePending();
     if (!this.resumed) {
       this.resumed = true;
-      // A world loaded in the middle of an end: back to its start (the ending already decided is kept)
+      // A world loaded in the middle of an end: back to its start (the ending already decided is kept;
+      // only ever one end at a time, any other waiting on the edge of its own)
+      let one = false;
       for (const st of this.states) {
         const at = HAUNT_CAST[charOf(st)].finaleAt;
-        if (st.t / st.total > at + 1e-9) st.t = Math.ceil(at * st.total);
+        if (!this.inEnd(st)) continue;
+        st.t = Math.ceil(at * st.total) - (one ? 1 : 0);
+        one = true;
       }
     }
     this.stepFigures();
@@ -622,8 +628,18 @@ export class HauntingSystem {
     const part = this.parts[c];
     const cast = HAUNT_CAST[c];
     // Its end waits while another one's is playing
-    if (!this.inEnd(st) && (st.t + 1) / st.total >= cast.finaleAt && this.states.some((o) => o !== st && this.inEnd(o))) return;
+    const before = this.inEnd(st);
+    if (!before && (st.t + 1) / st.total >= cast.finaleAt && this.states.some((o) => o !== st && this.inEnd(o))) return;
     st.t++;
+    // Its end begins: the others let go of everyone (their traps, cutscenes, figures and monsters) while they wait
+    if (!before && this.inEnd(st))
+      for (const o of this.states) {
+        const oc = charOf(o);
+        if (oc === c) continue;
+        this.parts[oc].reset('stop');
+        this.clearFigures(oc);
+        this.clearMobs(oc);
+      }
     const f = Math.min(1, st.t / st.total);
     const stage = castStage(c, f).id;
     for (const [p, what] of seen) {
@@ -862,15 +878,18 @@ export class HauntingSystem {
       const gone = m.removed || !s.players.has(p.conn.id) || p.dim !== m.dim;
       let vanish = gone;
       const part = this.parts[fg.owner];
+      // (as its own haunting: whatever it does is that one's)
+      const st = this.stateOf(fg.owner);
+      const own = <T>(fn: () => T): T => (st ? this.as(st, fn) : fn());
       if (!gone) {
         const age = s.tickNo - fg.since;
         const d = Math.hypot(p.x - m.x, p.z - m.z);
         m.body.vx = m.body.vz = 0;
-        vanish = !part.stepFigure(fg, age, d);
+        vanish = !own(() => part.stepFigure(fg, age, d));
       }
       if (!vanish) continue;
       if (!m.removed) {
-        part.vanish?.(fg, gone);
+        own(() => part.vanish?.(fg, gone));
         if (!m.removed) m.remove();
       }
       if (this.figures[i] === fg) this.figures.splice(i, 1);

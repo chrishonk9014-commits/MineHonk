@@ -11,7 +11,9 @@
  *   UPDATE_LOG_SHOTS=1 node tests/e2e/trick-or-treat.mjs V7 phase 3: trick-or-treating
  *   UPDATE_LOG_SHOTS=1 node tests/e2e/haunting4.mjs     V7 phase 4: the hauntings
  *   UPDATE_LOG_SHOTS=1 node tests/e2e/v7-release.mjs    V7 phase 5: the release
+ *   node tests/e2e/haunting71.mjs                       V7.1: several hauntings at once
  *   node tools/update-log/build-images.mjs [v6 v6.5 v7] resize, brighten and encode (all, or just those)
+ *   NAMES=a,b node tools/update-log/build-images.mjs    only the pictures with those names
  *
  * Encoding runs in the Chromium that Playwright already uses, so nothing else
  * needs installing.
@@ -116,8 +118,12 @@ add('always-on', 'clean/v7r-always-on.png');
 add('mp-together', 'clean/v7r-mp-alice.png');
 // These keep the HUD: the quest tracker's last word
 add('quest-done', 'v7r-quest-done.png');
+// V7.1: all four at once (tests/e2e/haunting71.mjs)
+add('haunt-all-four', 'haunting71-all-four.png', { filter: '' });
 
 if (only.length) shots.splice(0, shots.length, ...shots.filter((s) => only.includes(s.version)));
+const names = process.env.NAMES?.split(',').filter(Boolean) ?? [];
+if (names.length) shots.splice(0, shots.length, ...shots.filter((s) => names.includes(s.name)));
 // A list of sources: the first one there is used
 for (const s of shots) if (Array.isArray(s.src)) s.src = s.src.find((f) => fs.existsSync(path.join(SHOTS, f))) ?? s.src[0];
 // A picture already made whose screenshot is not here is kept as it is (only what was captured is rebuilt)

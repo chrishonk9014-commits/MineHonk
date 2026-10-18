@@ -11,7 +11,7 @@ import type { ItemStack } from '../../common/game/itemstack';
 import { POTIONS } from '../../common/data/potions';
 import { ENCHANTMENTS } from '../../common/data/enchantments';
 import { MOB_DEFS } from '../../common/data/mobs';
-import { HAUNT_MIN_MINUTES, HAUNT_MAX_MINUTES, HAUNT_CHARACTERS, type HauntStatus, type HauntOp, type HauntCharacter } from '../../common/game/haunting';
+import { HAUNT_MIN_MINUTES, HAUNT_MAX_MINUTES, HAUNT_CHARACTERS, type HauntStatus, type HauntRun, type HauntOp, type HauntCharacter } from '../../common/game/haunting';
 import { HAUNT_CAST } from '../../common/game/hauntCast';
 import { structureName, inExpandedEnd, EXPANDED_END_SUFFIX, TIME_PRESETS, ADMIN_DIMENSIONS, type AdminAction, type AdminCatalog, type LocateResult, type V4Op, type V5Op, type V55Op, type V6Op } from '../../common/game/admin';
 import { EXPANSION_BIOMES } from '../../common/endExpansion/biomes';
@@ -1103,90 +1103,128 @@ export function adminScreen(host: AdminHost): Screen {
   // ------------------------------------------------------------------ the Haunting (every world)
   const renderHaunt = (): HTMLElement => {
     const state = el('div', { class: 'admin-stats' });
+    const running = el('div', { class: 'admin-stats haunt-running' });
     const controls = el('div', {});
+    const together = el('div', {});
     const stages = el('div', {});
     const blurb = el('div', { class: 'muted small haunt-blurb' });
     const picker = el('div', { class: 'admin-chips haunt-picker' });
     const mmss = (sec: number): string => `${Math.floor(Math.max(0, sec) / 60)}:${String(Math.max(0, sec) % 60).padStart(2, '0')}`;
     let last: HauntStatus | null = null;
     let armed = false;
-    /** Who the panel is showing: whoever is haunting, or the one picked. */
-    const shown = (): HauntCharacter => (last?.active ? last.character : memory.hauntChar);
+    /** V7.1: every one haunting the world now (an older server's status names only one). */
+    const runs = (d: HauntStatus | null): HauntRun[] =>
+      !d ? [] : (d.hauntings ?? (d.active ? [{ character: d.character, stage: d.stage ?? '', auto: d.auto, elapsed: d.elapsed, total: d.total, erase: d.erase, ending: d.ending, changes: d.changes }] : []));
+    const runOf = (c: HauntCharacter): HauntRun | null => runs(last).find((r) => r.character === c) ?? null;
+    /** Who the panel is showing: the one picked, haunting or not. */
+    const shown = (): HauntCharacter => memory.hauntChar;
     const castName = (c: HauntCharacter): string => HAUNT_CAST[c].name;
+    /** The name in the middle of a sentence ("the Cave Dweller"). */
+    const midName = (c: HauntCharacter): string => castName(c).replace(/^The /, 'the ');
     const endingName = (c: HauntCharacter, id: string): string => HAUNT_CAST[c].endings.find((e) => e.id === id)?.name ?? id;
     const renderPicker = (): void => {
       clear(picker);
-      const locked = !!last?.active;
       for (const c of HAUNT_CHARACTERS) {
-        const b = btn(castName(c), () => {
-          if (locked) return;
-          memory.hauntChar = c;
-          renderPicker();
-          renderControls();
-          renderStages();
-        }, `btn chip haunt-char haunt-char-${c}${shown() === c ? ' active' : ''}`);
-        b.disabled = locked && shown() !== c;
-        picker.append(b);
+        const on = !!runOf(c);
+        picker.append(
+          btn(castName(c), () => {
+            memory.hauntChar = c;
+            armed = false;
+            renderPicker();
+            renderControls();
+            renderStages();
+            if (last) showState(last);
+          }, `btn chip haunt-char haunt-char-${c}${shown() === c ? ' active' : ''}${on ? ' haunt-on' : ''}`),
+        );
       }
+      if (runs(last).length) picker.append(el('div', { class: 'muted small haunt-legend' }, 'In red: haunting the world now. Pick one to see it and move it along, or another to start it too.'));
       blurb.textContent = HAUNT_CAST[shown()].blurb + (shown() === 'herobrine' ? '' : ' (The Admin Panel only: never by itself.)');
     };
     const renderStages = (): void => {
       clear(stages);
       for (const x of HAUNT_CAST[shown()].stages) stages.append(el('div', { class: 'small' }, el('span', { class: 'yellow' }, `${x.name}: `), x.what));
     };
+    /** What changed enough to draw the buttons again (not the time going by). */
+    const shape = (d: HauntStatus | null): string => (d ? JSON.stringify([shown(), d.canErase, d.autoState, runs(d).map((r) => [r.character, r.auto])]) : '');
     const showState = (d: HauntStatus | undefined): void => {
       if (!d) return;
-      const changed = !last || last.active !== d.active || last.canErase !== d.canErase || last.character !== d.character || last.auto !== d.auto || last.autoState !== d.autoState;
+      // The first time: whoever is haunting, if the one picked is not
+      if (!last) {
+        const rs = runs(d);
+        if (rs.length && !rs.some((r) => r.character === memory.hauntChar)) memory.hauntChar = rs[0]!.character;
+      }
+      const changed = shape(last) !== shape(d);
       last = d;
+      const all = runs(d);
+      // Everyone haunting now
+      clear(running);
+      if (!all.length) running.append(el('div', { class: 'row' }, el('span', { class: 'muted' }, 'Haunting'), el('span', {}, 'Nobody')));
+      for (const r of all) {
+        const st = HAUNT_CAST[r.character].stages.find((x) => x.id === r.stage);
+        running.append(
+          el(
+            'div',
+            { class: `small haunt-run haunt-run-${r.character}` },
+            el('span', { class: shown() === r.character ? 'yellow' : 'haunt-run-name' }, `${castName(r.character)}: `),
+            `${st ? st.name : '-'}, ${mmss(r.elapsed)} / ${mmss(r.total)}${r.waiting ? ' (its end comes next)' : ''}`,
+          ),
+        );
+      }
+      if (d.autoState !== 'none')
+        running.append(el('div', { class: 'row' }, el('span', { class: 'muted' }, 'Automatic haunting'), el('span', {}, d.autoState === 'waiting' ? `Waiting: Herobrine comes after ${mmss(d.autoIn ?? 0)} more play` : d.autoState === 'running' ? 'Running now' : 'Over, for good')));
+      if (all.length > 1) running.append(el('div', { class: 'muted small' }, 'Each goes at its own pace. Their ends take turns: while one plays, the others wait, and carry on when everyone is back.'));
+      // The one picked
       clear(state);
-      const c = d.character;
+      const c = shown();
       const cast = HAUNT_CAST[c];
-      const st = cast.stages.find((x) => x.id === d.stage);
+      const r = runOf(c);
+      const st = r ? cast.stages.find((x) => x.id === r.stage) : undefined;
       const talkStage = cast.stages.find((x) => x.at === cast.talkAt) ?? cast.stages[0]!;
-      const finaleAt = Math.floor(d.total * cast.finaleAt);
-      const rows: [string, string][] = d.active
+      const rows: [string, string][] = r
         ? [
             ['Haunting', castName(c)],
-            ['Started', d.auto ? 'By itself' : 'From the Admin Panel'],
+            ['Started', r.auto ? 'By itself' : 'From the Admin Panel'],
             ['Stage', st ? st.name : '-'],
-            ['Time', `${mmss(d.elapsed)} / ${mmss(d.total)}`],
-            ['Time left', mmss(d.total - d.elapsed)],
-            ['The end', d.elapsed >= finaleAt ? 'Now' : `In ${mmss(finaleAt - d.elapsed)}`],
-            ['Ending', endingName(c, d.ending)],
+            ['Time', `${mmss(r.elapsed)} / ${mmss(r.total)}`],
+            ['Time left', mmss(r.total - r.elapsed)],
+            ['The end', r.waiting ? 'Next, once the end playing now is over' : r.elapsed >= Math.floor(r.total * cast.finaleAt) ? 'Now' : `In ${mmss(Math.floor(r.total * cast.finaleAt) - r.elapsed)}`],
+            ['Ending', endingName(c, r.ending)],
             // It only answers in chat from its "talks back" stage on
-            ['Talks back', d.elapsed >= Math.floor(d.total * cast.talkAt) ? `Yes: talk to ${c === 'herobrine' ? 'him' : 'it'} in chat` : `From "${talkStage.name}", in ${mmss(Math.floor(d.total * cast.talkAt) - d.elapsed)}`],
-            ['At the end', d.erase ? 'The world is deleted' : 'The world is kept'],
-            ['Blocks changed', String(d.changes)],
+            ['Talks back', r.elapsed >= Math.floor(r.total * cast.talkAt) ? `Yes: talk to ${c === 'herobrine' ? 'him' : 'it'} in chat` : `From "${talkStage.name}", in ${mmss(Math.floor(r.total * cast.talkAt) - r.elapsed)}`],
+            ['At the end', r.erase ? 'The world is deleted' : 'The world is kept'],
+            ['Blocks changed', String(r.changes)],
           ]
-        : [['Haunting', 'Nobody'], ...(d.changes ? ([['Blocks changed', String(d.changes)]] as [string, string][]) : [])];
-      if (d.autoState !== 'none')
-        rows.push(['Automatic haunting', d.autoState === 'waiting' ? `Waiting: Herobrine comes after ${mmss(d.autoIn ?? 0)} more play` : d.autoState === 'running' ? 'Running now' : 'Over, for good']);
+        : [[castName(c), 'Not haunting'], ...(!all.length && d.changes ? ([['Blocks changed', String(d.changes)]] as [string, string][]) : [])];
       for (const [k, v] of rows) state.append(el('div', { class: 'row' }, el('span', { class: 'muted' }, k), el('span', {}, v)));
-      if (st && d.active) state.append(el('div', { class: 'muted small' }, st.what));
+      if (st) state.append(el('div', { class: 'muted small' }, st.what));
       if (changed) {
         renderPicker();
         renderControls();
+        renderTogether();
         renderStages();
       }
     };
     const op = (o: HauntOp, extra: Partial<AdminAction & { a: 'haunt' }> = {}): void => void send({ a: 'haunt', op: o, ...extra } as AdminAction).then((r) => showState(r.data as HauntStatus));
+    /** The picked character, as the server names it (Herobrine by leaving it out). */
+    const who = (c: HauntCharacter): { character?: HauntCharacter } => (c !== 'herobrine' ? { character: c } : {});
     const renderControls = (): void => {
       clear(controls);
       const d = last;
       if (!d) return;
       const c = shown();
       const cast = HAUNT_CAST[c];
-      if (d.active) {
+      const r = runOf(c);
+      if (r) {
         const left = field({ type: 'number', min: 0, max: HAUNT_MAX_MINUTES, value: '1', class: 'field admin-num haunt-finale-in' });
         controls.append(
-          el('div', { class: 'admin-chips' }, btn('Skip to the next stage', () => op('skip'), 'btn chip haunt-skip'), btn('Straight to the end', () => op('finale'), 'btn chip haunt-to-end')),
-          el('div', { class: 'row' }, label_('The end begins in (minutes)'), left, btn('Set', () => op('finale_in', { minutes: Math.max(0, Math.min(HAUNT_MAX_MINUTES, Math.round(Number(left.value) || 0))) }), 'btn chip haunt-finale-in-set')),
-          el('div', { class: 'admin-chips' }, btn(d.auto ? 'End it (for good: puts everything back)' : 'Stop (puts everything back)', () => op('stop'), 'btn chip haunt-stop'), ...(d.auto ? [btn('Reset (from the beginning)', () => op('restart'), 'btn chip haunt-restart')] : [])),
-          el('div', { class: 'muted small' }, d.auto ? 'This is the automatic haunting. End stops it for good and puts back every block it changed; Reset starts it again from the beginning. Moving it along from here means it does not count as having been through it.' : 'Stop ends it at once and puts back every block it placed or took, its monsters, the time and the weather.'),
+          el('div', { class: 'admin-chips' }, btn('Skip to the next stage', () => op('skip', who(c)), 'btn chip haunt-skip'), btn('Straight to the end', () => op('finale', who(c)), 'btn chip haunt-to-end')),
+          el('div', { class: 'row' }, label_('The end begins in (minutes)'), left, btn('Set', () => op('finale_in', { minutes: Math.max(0, Math.min(HAUNT_MAX_MINUTES, Math.round(Number(left.value) || 0))), ...who(c) }), 'btn chip haunt-finale-in-set')),
+          el('div', { class: 'admin-chips' }, btn(r.auto ? 'End it (for good: puts everything back)' : `Stop ${midName(c)}`, () => op('stop', who(c)), 'btn chip haunt-stop'), ...(r.auto ? [btn('Reset (from the beginning)', () => op('restart'), 'btn chip haunt-restart')] : [])),
+          el('div', { class: 'muted small' }, r.auto ? 'This is the automatic haunting. End stops it for good and puts back every block it changed; Reset starts it again from the beginning. Moving it along from here means it does not count as having been through it.' : `Stop ends ${midName(c)}'s haunting at once and puts back every block it placed or took, and its monsters. Any others haunting carry on.`),
         );
         return;
       }
-      if (d.autoState === 'waiting') controls.append(el('div', { class: 'admin-chips' }, btn('Start the automatic haunting now', () => op('restart'), 'btn chip haunt-restart')));
+      if (c === 'herobrine' && d.autoState === 'waiting') controls.append(el('div', { class: 'admin-chips' }, btn('Start the automatic haunting now', () => op('restart'), 'btn chip haunt-restart')));
       if (!d.canErase) memory.hauntErase = false;
       // Each character's own length until one is chosen
       if (!memory.hauntMinutesSet) memory.hauntMinutes = cast.defaultMinutes;
@@ -1215,7 +1253,7 @@ export function adminScreen(host: AdminHost): Screen {
           return;
         }
         armed = false;
-        void send({ a: 'haunt', op: 'start', minutes: memory.hauntMinutes, erase: memory.hauntErase, ending: memory.hauntEnding[c], ...(c !== 'herobrine' ? { character: c } : {}) }).then((r) => showState(r.data as HauntStatus));
+        void send({ a: 'haunt', op: 'start', minutes: memory.hauntMinutes, erase: memory.hauntErase, ending: memory.hauntEnding[c], ...who(c) }).then((r) => showState(r.data as HauntStatus));
       }, 'btn haunt-start');
       const updateWarn = (): void => {
         armed = false;
@@ -1259,7 +1297,29 @@ export function adminScreen(host: AdminHost): Screen {
         finale,
         ...(d.canErase ? [] : [el('div', { class: 'muted small' }, "Only the world's owner can choose to have the world deleted.")]),
         warn,
+        ...(runs(d).length ? [el('div', { class: 'muted small' }, `${runs(d).map((x) => castName(x.character)).join(', ')} ${runs(d).length === 1 ? 'is' : 'are'} haunting already: this one joins in.`)] : []),
         start,
+      );
+    };
+    /** V7.1: all four at once, and all of them stopped at once. */
+    const renderTogether = (): void => {
+      clear(together);
+      const d = last;
+      if (!d) return;
+      const all = runs(d);
+      const idle = HAUNT_CHARACTERS.filter((c) => !all.some((r) => r.character === c));
+      const mins = field({ type: 'number', min: HAUNT_MIN_MINUTES, max: HAUNT_MAX_MINUTES, value: '', class: 'field admin-num haunt-all-minutes' });
+      const startAll = btn(idle.length === HAUNT_CHARACTERS.length ? 'Start all four' : !idle.length ? 'All four are haunting' : `Start the other ${idle.length === 1 ? 'one' : idle.length}`, () => {
+        const m = Math.round(Number(mins.value));
+        op('start_all', mins.value.trim() && m >= HAUNT_MIN_MINUTES && m <= HAUNT_MAX_MINUTES ? { minutes: m } : {});
+      }, 'btn chip haunt-start-all');
+      startAll.disabled = !idle.length;
+      const stopAll = btn('Stop all (puts everything back)', () => op('stop_all'), 'btn chip haunt-stop-all');
+      stopAll.disabled = !all.length && !d.changes;
+      together.append(
+        el('div', { class: 'row' }, label_('How long, each (minutes; leave it empty for their own)'), mins),
+        el('div', { class: 'admin-chips' }, startAll, stopAll),
+        el('div', { class: 'muted small' }, 'Herobrine, Null, Green Steve and the Cave Dweller haunt the world side by side, each on its own timeline with its usual ending, and the world is kept. Their ends take turns: each throws everyone out, and the next carries on when you are back.'),
       );
     };
     const label_ = (t: string): HTMLElement => el('div', { class: 'label' }, t);
@@ -1310,8 +1370,8 @@ export function adminScreen(host: AdminHost): Screen {
     return el(
       'div',
       { class: 'admin-cols' },
-      el('div', { class: 'admin-col' }, section('Who', picker), section('The Haunting', controls), section('Tests', tests)),
-      el('div', { class: 'admin-col' }, section('Status', state), section('About', blurb), section('What happens', stages)),
+      el('div', { class: 'admin-col' }, section('Who', picker), section('The Haunting', controls), section('All four at once', together), section('Tests', tests)),
+      el('div', { class: 'admin-col' }, section('Haunting now', running), section('Status', state), section('About', blurb), section('What happens', stages)),
     );
   };
 

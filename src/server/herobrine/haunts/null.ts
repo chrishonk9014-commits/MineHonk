@@ -117,7 +117,7 @@ export class NullHaunt implements HauntPart {
 
   /** From "It goes quiet" on, words in chat come out as null. */
   chatText(_p: ServerPlayer, text: string): string | null {
-    const st = this.h.state;
+    const st = this.h.stateOf('null');
     if (!st || st.t / st.total < 0.5 || this.end) return null;
     let n = 0;
     const out = text.replace(/[A-Za-z]{3,}/g, (w) => (n < 3 && this.rng.next() < 0.25 ? (n++, 'null') : w));

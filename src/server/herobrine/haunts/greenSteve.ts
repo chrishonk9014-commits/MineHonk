@@ -311,7 +311,8 @@ export class GreenSteveHaunt implements HauntPart {
     s.playSound(dim, 'fizz', t.x + 0.5, t.y - 1, t.z + 0.5, 0.8, 0.6);
     this.trapped.set(p.uuid, { trap: t, until: s.tickNo + TRAP_TICKS, figs });
     s.later(30, () => {
-      if (this.trapped.has(p.uuid) && s.players.has(p.conn.id)) this.h.say(p, 'welcome home, brother :)', true);
+      // (later, outside his tick: named, since others may be haunting too)
+      if (this.trapped.has(p.uuid) && s.players.has(p.conn.id)) this.h.say(p, 'welcome home, brother :)', true, true, 'green_steve');
     });
   }
 

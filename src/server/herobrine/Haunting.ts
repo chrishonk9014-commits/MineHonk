@@ -252,9 +252,11 @@ export class HauntingSystem {
     minutes?: number,
     erase?: boolean,
     ending?: string,
-    character: HauntCharacter = 'herobrine',
+    named?: HauntCharacter,
     text?: string,
   ): { ok: boolean; text: string; data?: unknown } | Promise<{ ok: boolean; text: string; data?: unknown }> {
+    // (V7.1: the panel always names who it means; an older one names nobody but Herobrine's others)
+    const character: HauntCharacter = named ?? 'herobrine';
     const reply = (ok: boolean, msg: string, extra?: Record<string, unknown>): { ok: boolean; text: string; data: unknown } => ({ ok, text: msg, data: { ...this.status(p), ...extra } });
     const cast = HAUNT_CAST[character];
     switch (op) {
@@ -286,7 +288,7 @@ export class HauntingSystem {
       case 'stop': {
         // The chosen one; from an older panel that names nobody, the only one running
         const sts = this.states;
-        const st = this.stateOf(character) ?? (sts.length === 1 ? sts[0]! : null);
+        const st = this.target(named);
         if (!st) {
           if (sts.length) return reply(false, `${cast.name} is not haunting this world.`);
           if (!this.changes.length && !this.anyHeld()) return reply(false, 'No haunting is running.');
@@ -307,8 +309,8 @@ export class HauntingSystem {
         return reply(true, `${sts.length > 1 ? `All ${sts.length} hauntings are` : 'The haunting is'} over.${n ? ` Put back ${n} block${n === 1 ? '' : 's'} they changed.` : ''}`);
       }
       case 'skip': {
-        const st = this.target(character);
-        if (!st) return reply(false, 'No haunting is running.');
+        const st = this.target(named);
+        if (!st) return reply(false, this.states.length ? `${cast.name} is not haunting this world.` : 'No haunting is running.');
         st.touched = true;
         const c = HAUNT_CAST[charOf(st)];
         const f = st.t / st.total;
@@ -318,8 +320,8 @@ export class HauntingSystem {
         return reply(true, next ? `Skipped to: ${next.name}.` : 'Skipped to the end.');
       }
       case 'finale': {
-        const st = this.target(character);
-        if (!st) return reply(false, 'No haunting is running.');
+        const st = this.target(named);
+        if (!st) return reply(false, this.states.length ? `${cast.name} is not haunting this world.` : 'No haunting is running.');
         st.touched = true;
         const c = HAUNT_CAST[charOf(st)];
         if (st.t / st.total < c.finaleAt) this.moveTo(st, Math.max(c.finaleAt, this.skipToEnd(charOf(st))));
@@ -327,8 +329,8 @@ export class HauntingSystem {
         return reply(true, `Straight to the end: ${c.stages.find((s) => s.id === 'finale')!.name}.${waits ? ' (Another end is playing: this one comes next.)' : ''}`);
       }
       case 'finale_in': {
-        const st = this.target(character);
-        if (!st) return reply(false, 'No haunting is running.');
+        const st = this.target(named);
+        if (!st) return reply(false, this.states.length ? `${cast.name} is not haunting this world.` : 'No haunting is running.');
         const c = HAUNT_CAST[charOf(st)];
         const m = Math.max(0, Math.min(HAUNT_MAX_MINUTES, minutes ?? 0));
         if (st.t / st.total >= c.finaleAt) return reply(false, 'The end has already begun.');
@@ -363,10 +365,15 @@ export class HauntingSystem {
     }
   }
 
-  /** The haunting the panel means: the chosen character's, or (from an older panel naming nobody) the only one. */
-  private target(c: HauntCharacter): HauntState | null {
+  /**
+   * The haunting the panel means: the one it names (only that one: a second
+   * click on Stop never stops another), or, from an older panel naming
+   * nobody, Herobrine's or the only one.
+   */
+  private target(named: HauntCharacter | undefined): HauntState | null {
+    if (named) return this.stateOf(named);
     const sts = this.states;
-    return this.stateOf(c) ?? (sts.length === 1 ? sts[0]! : null);
+    return this.stateOf('herobrine') ?? (sts.length === 1 ? sts[0]! : null);
   }
 
   /** A new haunting's saved state. */
@@ -425,7 +432,7 @@ export class HauntingSystem {
         };
       }),
       ...(roll?.haunted && !roll.begun && !roll.over ? { autoIn: Math.max(0, Math.floor((roll.after - roll.played) / 20)) } : {}),
-      autoState: !roll?.haunted ? 'none' : roll.over ? 'over' : st?.auto ? 'running' : roll.begun ? 'over' : 'waiting',
+      autoState: !roll?.haunted ? 'none' : roll.over ? 'over' : sts.some((x) => x.auto) ? 'running' : roll.begun ? 'over' : 'waiting',
       elapsed: st ? Math.floor(st.t / 20) : 0,
       total: st ? Math.floor(st.total / 20) : 0,
       erase: !!st?.erase,
@@ -473,9 +480,11 @@ export class HauntingSystem {
     this.clearMobs(c);
     if (c === 'herobrine') this.glitchedNames.clear();
     const n = this.putBack(c);
-    // The dark lifted; any others still darkening send theirs again within a second
-    for (const p of s.players.values()) this.calm(p);
-    this.dark.clear();
+    // The dark lifted; any others still darkening send theirs again within a second (an end playing keeps its own)
+    if (!this.states.some((x) => this.inEnd(x))) {
+      for (const p of s.players.values()) this.calm(p);
+      this.dark.clear();
+    }
     return n;
   }
 
@@ -628,11 +637,12 @@ export class HauntingSystem {
     const part = this.parts[c];
     const cast = HAUNT_CAST[c];
     // Its end waits while another one's is playing
+    // (and nothing of the others moves while one plays, from the tick it begins)
     const before = this.inEnd(st);
-    if (!before && (st.t + 1) / st.total >= cast.finaleAt && this.states.some((o) => o !== st && this.inEnd(o))) return;
+    if (!before && this.states.some((o) => o !== st && this.inEnd(o))) return;
     st.t++;
-    // Its end begins: the others let go of everyone (their traps, cutscenes, figures and monsters) while they wait
-    if (!before && this.inEnd(st))
+    // Its end begins: the others let go of everyone (their traps, cutscenes, figures, monsters and dark) while they wait
+    if (!before && this.inEnd(st) && this.states.length > 1) {
       for (const o of this.states) {
         const oc = charOf(o);
         if (oc === c) continue;
@@ -640,6 +650,10 @@ export class HauntingSystem {
         this.clearFigures(oc);
         this.clearMobs(oc);
       }
+      for (const p of players) this.calm(p);
+      this.dark.clear();
+      this.darkWant?.clear();
+    }
     const f = Math.min(1, st.t / st.total);
     const stage = castStage(c, f).id;
     for (const [p, what] of seen) {
@@ -994,8 +1008,11 @@ export class HauntingSystem {
     if (!sts.length) return;
     this.remember(p.name, text);
     if (this.talking || s.tickNo - (this.lastAnswer.get(p.uuid) ?? -1e9) < 100) return;
-    // Who may answer: those past their "talks back" moment (and, but for Herobrine, not in their end)
+    // Who may answer: those past their "talks back" moment (and, but for Herobrine, not in their end;
+    // while one plays its end, only that one)
+    const ending = sts.find((st) => this.inEnd(st));
     const can = sts.filter((st) => {
+      if (ending && st !== ending) return false;
       const c = charOf(st);
       const cast = HAUNT_CAST[c];
       const f = st.t / st.total;

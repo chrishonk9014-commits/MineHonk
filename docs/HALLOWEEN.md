@@ -1074,31 +1074,38 @@ still only come from the panel.
   a tick); the sky (time and weather) is remembered once, by the first that
   touches it, and only put back when the last of them that holds it stops.
 - **Ends take turns**: only one haunting is ever in its end. While one is,
-  only it ticks; another reaching the edge of its end waits there
+  only it ticks (from the very tick it begins: those after it in the list
+  do not move that tick either); another reaching the edge of its end waits there
   (`t = ceil(finaleAt * total) - 1`), and so does one sent there by
   **Skip** or **Straight to the end**. When an end begins, the others let go
   of everyone (`reset('stop')` on their parts: traps, cutscenes, the hunt)
-  and lose their figures and monsters. The end throws everyone out as
+  and lose their figures, monsters and dark. Stopping one of the others
+  while an end plays leaves the end's dark as it is. The end throws everyone out as
   usual; the next carries on when they are back. A world reloaded with one
   in its end starts that end again, any other waiting on its edge. The
   owner-only *Delete the world* still belongs to the one haunting started
   with it (**Start all four** always keeps the world).
 - **Chat**: of those past their talking-back moment (and, but for
-  Herobrine, not in their end), the one named in the message answers
+  Herobrine, not in their end; while one plays its end, only that one), the
+  one named in the message answers
   (`herobrine`/`hb`, `null`, `green`/`steve`, `dweller`/`cave`), otherwise a
   random one; still one answer at a time, the same per-player pace and the
   same per-haunting answer limit, and the same single daily AI cap shared
   by every character.
 - **Admin Panel** (`a: 'haunt'`): `start` is refused for a character
   already haunting (not for another one); `stop`, `skip`, `finale` and
-  `finale_in` take `character` (Herobrine by leaving it out; from an older
-  panel naming nobody, the only one running); new ops `start_all`
+  `finale_in` take `character`, and mean only that one: the panel always
+  names it, Herobrine too, so a second click on Stop (or a panel a second
+  behind) is refused rather than stopping another. Only a request naming
+  nobody (an older panel) means Herobrine's or the only one running. New
+  ops `start_all`
   (optional `minutes`, otherwise each its own default; every character not
   haunting, each with its default ending, the world kept) and `stop_all`.
   `HauntStatus.hauntings` lists every one running (`HauntRun`: character,
   stage, auto, elapsed, total, erase, ending, its own block changes, and
   `waiting` when it waits for another's end); the old top-level fields
-  describe the first, so an older panel still works. The tab: the picker is
+  describe the first (`autoState` looks at them all), so an older panel
+  still works. The tab: the picker is
   never locked (those haunting are in red), **Haunting now** lists them, the
   controls are the picked character's, and **All four at once** has **Start
   all four** (or *the other N*) and **Stop all**.
@@ -1108,7 +1115,8 @@ still only come from the panel.
   four** is refused there.
 - **Tests**: `tests/unit/haunting71.test.ts` (all four at once, ends
   taking turns to the last, waiting for an end, Stop for one, chat, old
-  saves, a reload with several, the validation) and
+  saves, a reload with several, a second Stop, the tick an end begins and
+  what it keeps, the validation) and
   `tests/e2e/haunting71.mjs` (the tab, screenshots `haunting71-*.png`).
 
 ## Protocol

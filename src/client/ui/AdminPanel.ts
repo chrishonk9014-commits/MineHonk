@@ -1205,8 +1205,8 @@ export function adminScreen(host: AdminHost): Screen {
       }
     };
     const op = (o: HauntOp, extra: Partial<AdminAction & { a: 'haunt' }> = {}): void => void send({ a: 'haunt', op: o, ...extra } as AdminAction).then((r) => showState(r.data as HauntStatus));
-    /** The picked character, as the server names it (Herobrine by leaving it out). */
-    const who = (c: HauntCharacter): { character?: HauntCharacter } => (c !== 'herobrine' ? { character: c } : {});
+    /** The picked character, always named (with several haunting, never "whichever is running"). */
+    const who = (c: HauntCharacter): { character: HauntCharacter } => ({ character: c });
     const renderControls = (): void => {
       clear(controls);
       const d = last;

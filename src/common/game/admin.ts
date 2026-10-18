@@ -408,7 +408,8 @@ export function validateAdmin(raw: unknown): AdminAction | null {
       // Who: one of the fixed few, or Herobrine when left out
       if (m.character !== undefined && !HAUNT_CHARACTERS.includes(m.character as HauntCharacter)) return null;
       const c = (m.character ?? 'herobrine') as HauntCharacter;
-      const who = c !== 'herobrine' ? { character: c } : {};
+      // (kept as named, Herobrine too: with several haunting, the server must know who is meant)
+      const who = m.character !== undefined ? { character: c } : {};
       switch (m.op) {
         case 'start':
           if (!isInt(m.minutes) || m.minutes < HAUNT_MIN_MINUTES || m.minutes > HAUNT_MAX_MINUTES || typeof m.erase !== 'boolean') return null;

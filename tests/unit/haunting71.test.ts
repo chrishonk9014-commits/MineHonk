@@ -262,7 +262,69 @@ describe('several hauntings at once', () => {
     await again.stop();
   }, 60000);
 
+  it('Stop names who it means: a second click never stops another (nor the automatic haunting), and the panel shows that one running', async () => {
+    const { server } = await makeServer({ seed: 'twice', cheats: true });
+    const { conn } = await join(server, 'Steve', 'uuid-steve', 4);
+    admin(server, conn, { a: 'haunt', op: 'start', minutes: 10, erase: false, character: 'null' });
+    // Herobrine comes by himself after Null began (he is second in the list)
+    server.level.flags.autoHaunt = { haunted: true, after: 5, played: 0, at: Date.now() };
+    tick(server, 10);
+    expect(chars(server)).toEqual(['null', 'herobrine']);
+    expect(hauntOf<HauntState>(server, 'herobrine')!.auto).toBe(true);
+    expect(admin(server, conn, { a: 'haunt', op: 'status' }).data!.autoState).toBe('running');
+    expect(admin(server, conn, { a: 'haunt', op: 'stop', character: 'null' }).ok).toBe(true);
+    const again = admin(server, conn, { a: 'haunt', op: 'stop', character: 'null' });
+    expect(again.ok).toBe(false);
+    expect(again.text).toMatch(/Null is not haunting/);
+    for (const op of ['skip', 'finale']) expect(admin(server, conn, { a: 'haunt', op, character: 'null' }).ok, op).toBe(false);
+    // He goes on, untouched (still counting for the advancement), and his roll is not over
+    const hb = hauntOf<HauntState>(server, 'herobrine')!;
+    expect(hb.touched).toBeFalsy();
+    expect((server.level.flags.autoHaunt as { over?: boolean }).over).toBeFalsy();
+    // Named, he stops (for good, as an automatic one does)
+    expect(admin(server, conn, { a: 'haunt', op: 'stop', character: 'herobrine' }).ok).toBe(true);
+    expect(server.haunting!.active).toBe(false);
+  }, 60000);
+
+  it('the tick an end begins, the others stand still; while it plays only it answers, and stopping another leaves its dark', async () => {
+    const { server } = await makeServer({ seed: 'still', cheats: true });
+    const { conn } = await join(server, 'Steve', 'uuid-steve', 4);
+    admin(server, conn, { a: 'haunt', op: 'start', minutes: 10, erase: false, character: 'cave_dweller' });
+    admin(server, conn, { a: 'haunt', op: 'start', minutes: 10, erase: false, character: 'green_steve' });
+    admin(server, conn, { a: 'haunt', op: 'start', minutes: 10, erase: false });
+    const cd = hauntOf<HauntState>(server, 'cave_dweller')!;
+    const gs = hauntOf<HauntState>(server, 'green_steve')!;
+    const hb = hauntOf<HauntState>(server, 'herobrine')!;
+    cd.t = Math.ceil(HAUNT_CAST.cave_dweller.finaleAt * cd.total) - 1;
+    gs.t = 100;
+    hb.t = Math.floor(hb.total * 0.85);
+    tick(server, 1);
+    // The Dweller's end began; Green Steve (after it in the list) did not move that tick
+    expect(cd.t / cd.total).toBeGreaterThanOrEqual(HAUNT_CAST.cave_dweller.finaleAt);
+    expect(gs.t).toBe(100);
+    tick(server, 40);
+    expect(gs.t).toBe(100);
+    // Herobrine, waiting, is well past talking back: he does not answer during another's end
+    const asked: string[] = [];
+    server.herobrineVoice = async (q) => {
+      asked.push(q.character ?? 'herobrine');
+      return 'hello';
+    };
+    server.haunting!.rng = { next: () => 0, int: () => 0 };
+    server.handle(conn, { t: 'chat', text: 'herobrine are you there?' });
+    await flush();
+    tick(server, 70);
+    expect(asked).toEqual([]);
+    // Stopping Green Steve does not lift the dark of the hunt
+    const from = conn.received.length;
+    expect(admin(server, conn, { a: 'haunt', op: 'stop', character: 'green_steve' }).ok).toBe(true);
+    expect(conn.received.slice(from).filter((m) => m.t === 'fx' && (m as { kind: string }).kind === 'haunt' && (m as { strength: number }).strength === 0)).toEqual([]);
+    expect(chars(server)).toEqual(['cave_dweller', 'herobrine']);
+  }, 60000);
+
   it('the panel: character kept on stop, skip and finale; Start all four takes minutes in range', () => {
+    expect(validateAdmin({ a: 'haunt', op: 'stop', character: 'herobrine' })).toEqual({ a: 'haunt', op: 'stop', character: 'herobrine' });
+    expect(validateAdmin({ a: 'haunt', op: 'stop' })).toEqual({ a: 'haunt', op: 'stop' });
     expect(validateAdmin({ a: 'haunt', op: 'stop', character: 'null' })).toEqual({ a: 'haunt', op: 'stop', character: 'null' });
     expect(validateAdmin({ a: 'haunt', op: 'skip', character: 'cave_dweller' })).toEqual({ a: 'haunt', op: 'skip', character: 'cave_dweller' });
     expect(validateAdmin({ a: 'haunt', op: 'finale', character: 'green_steve' })).toEqual({ a: 'haunt', op: 'finale', character: 'green_steve' });

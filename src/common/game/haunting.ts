@@ -126,6 +126,23 @@ export interface HauntStatus {
   canErase: boolean;
   /** How it will end (as chosen; a random one is not given away): one of the character's endings. */
   ending: string;
+  /** V7.1: every haunting running (one of each character at most; the fields above describe the first). */
+  hauntings?: HauntRun[];
+}
+
+/** V7.1: one of the hauntings running, as the panel shows it. */
+export interface HauntRun {
+  character: HauntCharacter;
+  stage: string;
+  auto: boolean;
+  elapsed: number;
+  total: number;
+  erase: boolean;
+  ending: string;
+  /** Blocks this one has changed (Stop puts them back). */
+  changes: number;
+  /** At its end, waiting for another's end to finish first. */
+  waiting?: boolean;
 }
 
 /**
@@ -134,9 +151,12 @@ export interface HauntStatus {
  * end begins), restart (an automatic haunting from its beginning), appear
  * (the chosen character, near you, briefly: a test), talk (say `text` to the
  * chosen character without any haunting: a test of its voice).
+ * V7.1: several at once, one of each character: start, stop, skip, finale
+ * and finale_in are about the chosen character's; start_all starts every
+ * character not haunting yet; stop_all ends them all.
  */
-export type HauntOp = 'status' | 'start' | 'stop' | 'skip' | 'finale' | 'finale_in' | 'restart' | 'appear' | 'talk';
-export const HAUNT_OPS: readonly HauntOp[] = ['status', 'start', 'stop', 'skip', 'finale', 'finale_in', 'restart', 'appear', 'talk'];
+export type HauntOp = 'status' | 'start' | 'start_all' | 'stop' | 'stop_all' | 'skip' | 'finale' | 'finale_in' | 'restart' | 'appear' | 'talk';
+export const HAUNT_OPS: readonly HauntOp[] = ['status', 'start', 'start_all', 'stop', 'stop_all', 'skip', 'finale', 'finale_in', 'restart', 'appear', 'talk'];
 
 /** V7 phase 4: who can haunt a world (Herobrine by himself; the others only from the Admin Panel). */
 export type HauntCharacter = 'herobrine' | 'null' | 'green_steve' | 'cave_dweller';

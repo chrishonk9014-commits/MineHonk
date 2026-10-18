@@ -7,6 +7,7 @@
  * shocked, SERVER MEMORY CORRUPTED), with Stop undoing it all.
  */
 import { describe, it, expect } from 'vitest';
+import { hauntOf } from '../helpers/haunt';
 import { makeServer, join, tick, type FakeConn } from '../helpers/testServer';
 import type { GameServer } from '../../src/server/GameServer';
 import type { ServerPlayer } from '../../src/server/player/ServerPlayer';
@@ -211,7 +212,7 @@ describe('the Haunting: the lair ending', () => {
     // Straight back to the title, the world deleted by its owner
     expect(conn.last('kick')).toMatchObject({ reason: 'SERVER MEMORY CORRUPTED', corrupted: true, erase: true });
     expect(conn.last('kick')!.ban).toBeUndefined();
-    expect(server.level.flags.haunt).toBeUndefined();
+    expect(hauntOf(server)).toBeUndefined();
   }, 300000);
 
   it('one time in four when left to chance; Stop in the middle of it brings everyone back', async () => {

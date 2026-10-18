@@ -8,6 +8,7 @@
  * the Admin Panel's view of it, and the flag for having been through one.
  */
 import { describe, it, expect, afterEach, vi } from 'vitest';
+import { hauntOf } from '../helpers/haunt';
 import { makeServer, join, tick, type FakeConn } from '../helpers/testServer';
 import type { GameServer } from '../../src/server/GameServer';
 import { MemoryStorage } from '../../src/server/storage/Storage';
@@ -27,7 +28,7 @@ function admin(server: GameServer, conn: FakeConn, action: Record<string, unknow
 }
 
 type St = { t: number; total: number; auto?: boolean; erase: boolean; ending?: string; final?: string; touched?: boolean };
-const haunt = (server: GameServer): St | undefined => server.level.flags.haunt as St | undefined;
+const haunt = (server: GameServer): St | undefined => hauntOf<St>(server);
 const roll = (server: GameServer): AutoHauntRoll => server.level.flags.autoHaunt as AutoHauntRoll;
 const flush = async (): Promise<void> => {
   for (let i = 0; i < 3; i++) await new Promise((r) => setTimeout(r, 0));
@@ -153,7 +154,7 @@ describe('the automatic haunting: how it goes', () => {
     expect(admin(s2, j.conn, { a: 'haunt', op: 'start', minutes: 10, erase: false }).data).toMatchObject({ active: true, auto: false, autoState: 'over', character: 'herobrine' });
   }, 300000);
 
-  it('waits behind a haunting started from the panel, and there is only ever one at a time', async () => {
+  it('waits behind Herobrine started from the panel (there is only ever one Herobrine); the others may haunt alongside', async () => {
     const { server } = await makeServer({ seed: 'auto-one', cheats: true });
     const { conn } = await join(server, 'Steve', 'uuid-steve', 3);
     rolled(server, 50);
@@ -161,10 +162,15 @@ describe('the automatic haunting: how it goes', () => {
     tick(server, 100);
     expect(haunt(server)!.auto).toBeUndefined();
     expect(roll(server).begun).toBeUndefined();
-    expect(admin(server, conn, { a: 'haunt', op: 'start', minutes: 5, erase: false, character: 'null' }).ok).toBe(false);
+    // V7.1: another character alongside; Herobrine twice, never
+    expect(admin(server, conn, { a: 'haunt', op: 'start', minutes: 5, erase: false, character: 'null' }).ok).toBe(true);
+    expect(admin(server, conn, { a: 'haunt', op: 'start', minutes: 5, erase: false }).ok).toBe(false);
+    expect(server.haunting!.states.map((s) => s.char)).toEqual(['herobrine', 'null']);
     admin(server, conn, { a: 'haunt', op: 'stop' });
     tick(server, 2);
-    expect(haunt(server)!.auto).toBe(true);
+    // Herobrine's own haunting comes now, with Null still there
+    expect(hauntOf<{ auto?: boolean }>(server, 'herobrine')!.auto).toBe(true);
+    expect(hauntOf(server, 'null')).toBeDefined();
   }, 120000);
 
   it('keeps its place through a reload; a reload in its end goes back to the start of the end, with the ending kept', async () => {
@@ -290,7 +296,7 @@ describe('the automatic haunting: he notices', () => {
     const { server: s2 } = await makeServer({ seed: 'auto-notice-2', cheats: true });
     const j = await join(s2, 'Alex', 'uuid-alex', 3);
     admin(s2, j.conn, { a: 'haunt', op: 'start', minutes: 30, erase: false });
-    (s2.level.flags.haunt as St).t = 900 * 20;
+    hauntOf<St>(s2)!.t = 900 * 20;
     const m0 = j.conn.of('chat').length;
     const d2 = j.player.dim;
     for (let i = 0; i < 14; i++) {

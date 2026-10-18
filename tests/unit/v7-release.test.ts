@@ -6,6 +6,7 @@
  * the voices' limits.
  */
 import { describe, it, expect } from 'vitest';
+import { hauntOf } from '../helpers/haunt';
 import { makeServer } from '../helpers/testServer';
 import { trickWorld, atDoor, dress, knock, admin, adminAsync, loadArea, join, tick, idOf, BEFORE, AFTER, SEED, VILLAGE } from '../helpers/halloween';
 import type { GameServer } from '../../src/server/GameServer';
@@ -51,8 +52,8 @@ const findBlocks = (p: ServerPlayer, ids: readonly string[], r = 8): [number, nu
 
 /** Plays a haunting through to its end (everyone is shown out), then brings the players back in. */
 async function seeItThrough(server: GameServer, names: [string, string][]): Promise<{ conn: import('../helpers/testServer').FakeConn; player: ServerPlayer }[]> {
-  for (let i = 0; i < 6000 && server.level.flags.haunt; i++) tick(server, 1);
-  expect(server.level.flags.haunt).toBeUndefined();
+  for (let i = 0; i < 6000 && hauntOf(server); i++) tick(server, 1);
+  expect(hauntOf(server)).toBeUndefined();
   for (let i = 0; i < 3; i++) await new Promise((r) => setTimeout(r, 0));
   const back = [];
   for (const [name, uuid] of names) back.push(await join(server, name, uuid));
@@ -168,6 +169,11 @@ describe('the Admin Panel: every V7 action is cheat-made and counts for nothing'
     expect(act(op, { a: 'haunt', op: 'status' }).ok).toBe(true);
     expect(act(op, { a: 'haunt', op: 'start', minutes: 5, erase: false }).ok).toBe(true);
     expect(act(op, { a: 'haunt', op: 'stop' }).ok).toBe(true);
+    // V7.1: all four at once, and all ended together
+    expect(act(op, { a: 'haunt', op: 'start_all', minutes: 5 }).ok).toBe(true);
+    tick(server, 200);
+    expect(server.haunting!.states).toHaveLength(4);
+    expect(act(op, { a: 'haunt', op: 'stop_all' }).ok).toBe(true);
     let back: Awaited<ReturnType<typeof seeItThrough>> = [op, pal];
     const names: [string, string][] = [
       ['Op', 'uuid-op'],
@@ -184,7 +190,7 @@ describe('the Admin Panel: every V7 action is cheat-made and counts for nothing'
     }
     server.level.flags.autoHaunt = { haunted: true, after: 999999, played: 0, at: Date.now() } satisfies AutoHauntRoll;
     expect(act(back[0]!, { a: 'haunt', op: 'restart' }).ok).toBe(true);
-    expect((server.level.flags.haunt as { auto?: boolean; touched?: boolean }).touched).toBe(true);
+    expect(hauntOf<{ auto?: boolean; touched?: boolean }>(server)!.touched).toBe(true);
     act(back[0]!, { a: 'haunt', op: 'finale' });
     back = await seeItThrough(server, names);
     // Every action of both tabs was used
@@ -498,10 +504,10 @@ describe('the Halloween advancements', () => {
     const { player } = await join(server, 'Steve', 'uuid-steve');
     server.level.flags.autoHaunt = { haunted: true, after: 0, played: 0, at: Date.now() } satisfies AutoHauntRoll;
     tick(server, 2);
-    const st = server.level.flags.haunt as { t: number; total: number; ending?: string };
+    const st = hauntOf<{ t: number; total: number; ending?: string }>(server)!;
     st.ending = 'ban';
     st.t = Math.ceil(st.total * 0.965);
-    for (let i = 0; i < 1500 && server.level.flags.haunt; i++) tick(server, 1);
+    for (let i = 0; i < 1500 && hauntOf(server); i++) tick(server, 1);
     expect(player.statistics['haunting.experienced']).toBe(1);
     expect(player.achievements.has('experience_haunting')).toBe(true);
     // The phase 4 flag alone (from before the advancement): given when the player loads
@@ -643,7 +649,7 @@ describe('a modified client', () => {
         const r = admin(server, guest.conn, action);
         expect(r.ok, JSON.stringify(action)).toBe(false);
       }
-      expect(server.level.flags.haunt).toBeUndefined();
+      expect(hauntOf(server)).toBeUndefined();
       expect(server.halloween!.tests).toEqual({ content: 'real', date: 'real' });
       // There is no message for the world's Halloween setting, the automatic haunting, or the season
       for (const t of ['halloween', 'haunt', 'season', 'auto_haunt', 'world_info']) expect(validateC2S({ t, setting: 'always' })).toBeNull();
@@ -706,7 +712,7 @@ describe('saved hauntings and villages, read back safely', () => {
     expect(sanitizeHauntState({ t: 5, total: 0 })).toBeNull();
     expect(sanitizeHauntState('nonsense')).toBeNull();
     // A character from nowhere (not even the prototype's names) is Herobrine
-    for (const char of ['constructor', 'toString', '__proto__', 'entity_303']) expect(sanitizeHauntState({ t: 1, total: 10, char })!.char).toBeUndefined();
+    for (const char of ['constructor', 'toString', '__proto__', 'entity_303']) expect(sanitizeHauntState({ t: 1, total: 10, char })!.char).toBe('herobrine');
     expect(sanitizeHauntState({ t: 1, total: 10, char: 'null' })!.char).toBe('null');
     const st = sanitizeHauntState({ t: 1e12, total: 600, done: 'all', deaths: 7, sky: { dayTime: 'noon' }, ending: 'deleted', auto: true, erase: true, said: -4 })!;
     expect(st).toMatchObject({ t: 600, total: 600, done: [], auto: true, erase: false });
@@ -738,7 +744,7 @@ describe('saved hauntings and villages, read back safely', () => {
     await join(server, 'Steve', 'uuid-steve');
     expect(server.haunting!.character).toBe('herobrine');
     tick(server, 300);
-    expect((server.level.flags.haunt as { t: number }).t).toBeGreaterThan(5);
+    expect(hauntOf<{ t: number }>(server)!.t).toBeGreaterThan(5);
     await server.stop();
   }, 120000);
 
@@ -812,7 +818,7 @@ describe('after the season: what is not seasonal stays', () => {
     const { player } = await join(server, 'Steve', 'uuid-steve');
     server.level.flags.autoHaunt = { haunted: true, after: 0, played: 0, at: Date.now() } satisfies AutoHauntRoll;
     tick(server, 3);
-    expect((server.level.flags.haunt as { auto?: boolean } | undefined)?.auto).toBe(true);
+    expect(hauntOf<{ auto?: boolean }>(server)?.auto).toBe(true);
     void player;
     await server.stop();
   }, 240000);

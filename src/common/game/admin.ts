@@ -416,7 +416,16 @@ export function validateAdmin(raw: unknown): AdminAction | null {
           return { a: 'haunt', op: 'start', minutes: m.minutes, erase: m.erase, ...(m.ending !== undefined ? { ending: m.ending as string } : {}), ...who };
         case 'finale_in':
           if (!isInt(m.minutes) || m.minutes < 0 || m.minutes > HAUNT_MAX_MINUTES) return null;
-          return { a: 'haunt', op: 'finale_in', minutes: m.minutes };
+          return { a: 'haunt', op: 'finale_in', minutes: m.minutes, ...who };
+        case 'start_all':
+          // Each its own length, unless one is given for all of them
+          if (m.minutes !== undefined && (!isInt(m.minutes) || m.minutes < HAUNT_MIN_MINUTES || m.minutes > HAUNT_MAX_MINUTES)) return null;
+          return { a: 'haunt', op: 'start_all', ...(m.minutes !== undefined ? { minutes: m.minutes } : {}) };
+        case 'stop':
+        case 'skip':
+        case 'finale':
+          // About the chosen character's haunting (several may be running)
+          return { a: 'haunt', op: m.op, ...who };
         case 'appear':
           return { a: 'haunt', op: 'appear', ...who };
         case 'talk': {

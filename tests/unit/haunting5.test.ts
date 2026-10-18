@@ -7,6 +7,7 @@
  * anything; nothing private is sent; and a long haunting leaks nothing.
  */
 import { describe, it, expect } from 'vitest';
+import { hauntOf } from '../helpers/haunt';
 import { makeServer, join, tick, type FakeConn } from '../helpers/testServer';
 import type { GameServer } from '../../src/server/GameServer';
 import type { ServerPlayer } from '../../src/server/player/ServerPlayer';
@@ -60,7 +61,7 @@ async function runThrough(c: HauntCharacter, ending: string, seed: string): Prom
   for (let t = 0; t < 1200 + 1500 && !conn.closed; t++) {
     if (t % 15 === 0) player.yaw = (player.yaw + 0.9) % (Math.PI * 2);
     tick(server, 1);
-    const st = server.level.flags.haunt as { t: number; total: number } | undefined;
+    const st = hauntOf<{ t: number; total: number }>(server);
     if (st) {
       const id = HAUNT_CAST[c].stages.filter((s) => st.t / st.total >= s.at).pop()!.id;
       if (stages[stages.length - 1] !== id) stages.push(id);
@@ -104,7 +105,7 @@ describe('Null', () => {
       if (d !== 'overworld') continue;
       expect(dim.getState(+x!, +y!, +z!), k).toBe(prev);
     }
-    expect(server.level.flags.haunt).toBeUndefined();
+    expect(hauntOf(server)).toBeUndefined();
     expect(hauntThings(server)).toEqual([]);
   }, 300000);
 
@@ -112,7 +113,7 @@ describe('Null', () => {
     const { server } = await makeServer({ seed: 'null-takes', cheats: true });
     const { conn, player } = await join(server, 'Steve', 'uuid-steve', 3);
     admin(server, conn, { a: 'haunt', op: 'start', minutes: 20, erase: false, character: 'null' });
-    const st = server.level.flags.haunt as { t: number; total: number };
+    const st = hauntOf<{ t: number; total: number }>(server)!;
     st.t = Math.ceil(st.total * 0.55);
     const dim = player.dim;
     const placed: [number, number, number][] = [];
@@ -172,7 +173,7 @@ describe('Green Steve', () => {
     const { server } = await makeServer({ seed: 'green-house', cheats: true });
     const { conn, player } = await join(server, 'Steve', 'uuid-steve', 4);
     admin(server, conn, { a: 'haunt', op: 'start', minutes: 20, erase: false, character: 'green_steve' });
-    const st = server.level.flags.haunt as { t: number; total: number };
+    const st = hauntOf<{ t: number; total: number }>(server)!;
     st.t = Math.ceil(st.total * 0.25);
     const part = server.haunting!.parts.green_steve as unknown as { event(k: string, p: ServerPlayer, st: unknown, stage: string, f: number): void; traps: { x: number; y: number; z: number; out: [number, number, number] }[] };
     for (let i = 0; i < 30 && !part.traps.length; i++) {
@@ -249,7 +250,7 @@ describe('the other characters, from the Admin Panel', () => {
       for (const [, x, y, z, prev] of changes) if (!firstPrev.has(`${x},${y},${z}`)) firstPrev.set(`${x},${y},${z}`, [x, y, z, prev]);
       const dim = server.dim('overworld');
       for (const [x, y, z, prev] of firstPrev.values()) expect(dim.getState(x, y, z), `${c} ${x},${y},${z}`).toBe(prev);
-      expect(server.level.flags.haunt).toBeUndefined();
+      expect(hauntOf(server)).toBeUndefined();
       expect(hauntThings(server), c).toEqual([]);
       expect(server.haunting!.holds(player)).toBe(false);
       expect(Math.abs(server.level.dayTime - dayBefore)).toBeLessThan(3000);
@@ -267,7 +268,7 @@ describe('the other characters, from the Admin Panel', () => {
       tick(server, 300);
       expect(figuresOf(server, HAUNT_CAST[c].mob).length, c).toBe(0);
     }
-    expect(server.level.flags.haunt).toBeUndefined();
+    expect(hauntOf(server)).toBeUndefined();
     // The voice answers...
     const asked: VoiceRequest[] = [];
     server.herobrineVoice = async (q) => {
@@ -322,7 +323,7 @@ describe('their voices in the game', () => {
       await flush();
       tick(server, 70);
       expect(asked.length).toBe(0);
-      const st = server.level.flags.haunt as { t: number; total: number };
+      const st = hauntOf<{ t: number; total: number }>(server)!;
       st.t = Math.ceil(st.total * HAUNT_CAST[c].talkAt) + 5;
       const ops = [...server.level.operators];
       const mode = player.gamemode;
@@ -339,7 +340,7 @@ describe('their voices in the game', () => {
       expect(server.level.operators).toEqual(ops);
       expect(player.gamemode).toBe(mode);
       expect(player.inventory.slots.filter(Boolean).length).toBe(inv);
-      expect(server.level.flags.haunt).toBeTruthy();
+      expect(hauntOf(server)).toBeTruthy();
       // Only things in the game: names in the game, the stage, what is around them; nothing about the person
       const q = asked[0]!;
       expect(Object.keys(q).sort()).toEqual(['character', 'facts', 'history', 'message', 'player']);
@@ -361,7 +362,7 @@ describe('a long haunting', () => {
       const { server } = await makeServer({ seed: `long-${c}`, cheats: true });
       const { conn, player } = await join(server, 'Steve', 'uuid-steve', 3);
       admin(server, conn, { a: 'haunt', op: 'start', minutes: 10, erase: false, ...(c !== 'herobrine' ? { character: c } : {}) });
-      const st = server.level.flags.haunt as { t: number; total: number };
+      const st = hauntOf<{ t: number; total: number }>(server)!;
       st.t = Math.ceil(st.total * 0.5);
       let maxThings = 0;
       const times: number[] = [];

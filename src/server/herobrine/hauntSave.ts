@@ -36,7 +36,8 @@ export function sanitizeHauntState(raw: unknown): HauntState | null {
     done: Array.isArray(raw.done) ? [...new Set(raw.done.filter((d): d is string => typeof d === 'string' && d.length <= 96))].slice(0, 512) : [],
   };
   const c = typeof raw.char === 'string' && (HAUNT_CHARACTERS as readonly string[]).includes(raw.char) ? (raw.char as HauntCharacter) : 'herobrine';
-  if (c !== 'herobrine') st.char = c;
+  // (V7.1: always named, several may be running)
+  st.char = c;
   if (typeof raw.ending === 'string' && castEnding(c, raw.ending)) st.ending = raw.ending;
   if (typeof raw.final === 'string' && castEnding(c, raw.final)) st.final = raw.final;
   if (finite(raw.said)) st.said = Math.max(0, Math.min(1e6, Math.floor(raw.said)));
@@ -62,20 +63,24 @@ export function sanitizeHauntState(raw: unknown): HauntState | null {
   return st;
 }
 
-/** The recorded block changes ([dim, x, y, z, before, after]): valid ones only, at most HAUNT_MAX_CHANGES. */
-export function sanitizeHauntBlocks(raw: unknown): [string, number, number, number, number, number][] {
+/** A recorded block change: dimension, position, before, after, and (V7.1) whose haunting made it. */
+export type HauntChange = [string, number, number, number, number, number, HauntCharacter?];
+
+/** The recorded block changes ([dim, x, y, z, before, after, who?]): valid ones only, at most HAUNT_MAX_CHANGES. */
+export function sanitizeHauntBlocks(raw: unknown): HauntChange[] {
   if (!Array.isArray(raw)) return [];
   const states = STATE_BLOCK.length;
-  const out: [string, number, number, number, number, number][] = [];
+  const out: HauntChange[] = [];
   for (const e of raw) {
     if (out.length >= HAUNT_MAX_CHANGES) break;
-    if (!Array.isArray(e) || e.length !== 6) continue;
-    const [dim, x, y, z, prev, now] = e as unknown[];
+    if (!Array.isArray(e) || (e.length !== 6 && e.length !== 7)) continue;
+    const [dim, x, y, z, prev, now, who] = e as unknown[];
+    if (e.length === 7 && !(typeof who === 'string' && (HAUNT_CHARACTERS as readonly string[]).includes(who))) continue;
     if (typeof dim !== 'string' || !DIMS.includes(dim)) continue;
     if (![x, y, z, prev, now].every((v) => Number.isInteger(v))) continue;
     if ((y as number) < 0 || (y as number) > 255 || Math.abs(x as number) > 3e7 || Math.abs(z as number) > 3e7) continue;
     if ((prev as number) < 0 || (prev as number) >= states || (now as number) < 0 || (now as number) >= states) continue;
-    out.push([dim, x as number, y as number, z as number, prev as number, now as number]);
+    out.push(e.length === 7 ? [dim, x as number, y as number, z as number, prev as number, now as number, who as HauntCharacter] : [dim, x as number, y as number, z as number, prev as number, now as number]);
   }
   return out;
 }
@@ -96,12 +101,28 @@ export function sanitizeAutoHaunt(raw: unknown): AutoHauntRoll | null {
 
 /** Cleans a world's haunting flags in place (sanitizeLevelData). */
 export function sanitizeHauntFlags(flags: Record<string, unknown>): void {
+  if ('hauntBlocks' in flags) flags.hauntBlocks = sanitizeHauntBlocks(flags.hauntBlocks);
+  // V7.1: the hauntings running (one of each character at most); a world from before kept one, as `haunt`
+  const list: HauntState[] = [];
+  const add = (st: HauntState | null, first = false): void => {
+    if (!st || list.some((x) => x.char === st.char)) return;
+    if (first) list.unshift(st);
+    else list.push(st);
+  };
+  if ('haunts' in flags) {
+    if (Array.isArray(flags.haunts)) for (const e of flags.haunts.slice(0, HAUNT_CHARACTERS.length * 2)) add(sanitizeHauntState(e));
+    delete flags.haunts;
+  }
   if ('haunt' in flags) {
     const st = sanitizeHauntState(flags.haunt);
-    if (st) flags.haunt = st;
-    else delete flags.haunt;
+    delete flags.haunt;
+    if (st && !list.some((x) => x.char === st.char)) {
+      add(st, true);
+      // What it changed, as its own
+      if (Array.isArray(flags.hauntBlocks)) for (const ch of flags.hauntBlocks as HauntChange[]) if (ch.length === 6) ch.push(st.char!);
+    }
   }
-  if ('hauntBlocks' in flags) flags.hauntBlocks = sanitizeHauntBlocks(flags.hauntBlocks);
+  if (list.length) flags.haunts = list;
   // V7 phase 5: changes still to be put back when their chunks load
   if ('hauntRestore' in flags) {
     const later = sanitizeHauntBlocks(flags.hauntRestore);

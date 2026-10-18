@@ -7,6 +7,7 @@
  * keep in IndexedDB) and through the dedicated server's file storage.
  */
 import { describe, it, expect } from 'vitest';
+import { hauntOf } from '../helpers/haunt';
 import { readFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
@@ -102,7 +103,9 @@ async function checkAll(server: GameServer, fx: Fixture): Promise<void> {
   else expect(lv.flags.autoHaunt).toBeUndefined();
   // The haunting that was running goes on (Herobrine for one from before the characters)
   if (e.haunt) {
-    const st = lv.flags.haunt as { t: number; total: number; char?: string };
+    // (V7.1: kept in the list of hauntings running, as the first)
+    expect(lv.flags.haunt).toBeUndefined();
+    const st = hauntOf<{ t: number; total: number; char?: string }>(server)!;
     expect(st.total).toBe(e.haunt.total);
     expect(st.t).toBeGreaterThanOrEqual(e.haunt.t);
     expect(st.char ?? 'herobrine').toBe(e.haunt.char);
@@ -160,9 +163,9 @@ describe('saves from V6.5 and every V7 phase', () => {
       const server = await open(storage);
       await checkAll(server, fx);
       // It runs (the haunting going on, the season, villages, quests): nothing in the old save stops the tick
-      const t0 = (server.level.flags.haunt as { t: number } | undefined)?.t ?? 0;
+      const t0 = hauntOf<{ t: number }>(server)?.t ?? 0;
       tick(server, 200);
-      if (fx.expect.haunt) expect((server.level.flags.haunt as { t: number }).t).toBeGreaterThan(t0);
+      if (fx.expect.haunt) expect(hauntOf<{ t: number }>(server)!.t).toBeGreaterThan(t0);
       await server.stop();
       // Saved by this version and loaded again: the same
       const again = await open(storage);

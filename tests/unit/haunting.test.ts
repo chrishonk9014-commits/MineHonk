@@ -6,6 +6,7 @@
  * the timeline surviving a restart and waiting while nobody is there.
  */
 import { describe, it, expect } from 'vitest';
+import { hauntOf } from '../helpers/haunt';
 import { makeServer, join, tick, type FakeConn } from '../helpers/testServer';
 import type { GameServer } from '../../src/server/GameServer';
 import { MemoryStorage } from '../../src/server/storage/Storage';
@@ -77,7 +78,7 @@ describe('the Haunting', () => {
     expect(iScare).toBeGreaterThan(-1);
     expect(iScare).toBeLessThan(iKick);
     // Nothing of him is left
-    expect(server.level.flags.haunt).toBeUndefined();
+    expect(hauntOf(server)).toBeUndefined();
     expect(figures(server)).toEqual([]);
   }, 300000);
 
@@ -105,9 +106,9 @@ describe('the Haunting', () => {
     // A builder gets nothing at all
     const builder = await join(server, 'Bob', 'uuid-bob');
     expect(admin(server, builder.conn, { a: 'haunt', op: 'stop' }).ok).toBe(false);
-    expect(server.level.flags.haunt).toBeTruthy();
+    expect(hauntOf(server)).toBeTruthy();
     // When the end comes, only the owner's client is told to delete the world
-    const st = server.level.flags.haunt as { total: number };
+    const st = hauntOf<{ total: number }>(server)!;
     server.level.flags.haunt = { ...st, erase: true, ending: 'ban', t: Math.ceil(st.total * 0.965) };
     for (let i = 0; i < 900 && !owner.conn.closed; i++) {
       tick(server, 1);
@@ -145,7 +146,7 @@ describe('the Haunting', () => {
     const firstPrev = new Map<string, [number, number, number, number]>();
     for (const [, x, y, z, prev] of changes) if (!firstPrev.has(`${x},${y},${z}`)) firstPrev.set(`${x},${y},${z}`, [x, y, z, prev]);
     for (const [x, y, z, prev] of firstPrev.values()) expect(dim.getState(x, y, z), `${x},${y},${z}`).toBe(prev);
-    expect(server.level.flags.haunt).toBeUndefined();
+    expect(hauntOf(server)).toBeUndefined();
     expect(figures(server)).toEqual([]);
     expect(conn.last('fx')).toMatchObject({ kind: 'haunt', strength: 0 });
   }, 300000);
@@ -156,18 +157,18 @@ describe('the Haunting', () => {
     const { conn } = await join(server, 'Steve', 'uuid-steve');
     admin(server, conn, { a: 'haunt', op: 'start', minutes: 5, erase: false });
     tick(server, 200);
-    const t = (server.level.flags.haunt as { t: number }).t;
+    const t = hauntOf<{ t: number }>(server)!.t;
     expect(t).toBeGreaterThan(190);
     await server.disconnect(conn);
     tick(server, 300);
-    expect((server.level.flags.haunt as { t: number }).t).toBe(t);
+    expect(hauntOf<{ t: number }>(server)!.t).toBe(t);
     await server.stop();
     const { server: s2 } = await makeServer({}, storage);
-    expect((s2.level.flags.haunt as { t: number; total: number }).t).toBe(t);
-    expect((s2.level.flags.haunt as { total: number }).total).toBe(6000);
+    expect(hauntOf<{ t: number; total: number }>(s2)!.t).toBe(t);
+    expect(hauntOf<{ total: number }>(s2)!.total).toBe(6000);
     const j = await join(s2, 'Steve', 'uuid-steve');
     tick(s2, 20);
-    expect((s2.level.flags.haunt as { t: number }).t).toBeGreaterThan(t);
+    expect(hauntOf<{ t: number }>(s2)!.t).toBeGreaterThan(t);
     expect(admin(s2, j.conn, { a: 'haunt', op: 'status' }).data).toMatchObject({ active: true, stage: 'watching' });
   }, 300000);
 });

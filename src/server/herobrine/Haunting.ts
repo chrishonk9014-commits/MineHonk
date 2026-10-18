@@ -7,9 +7,13 @@
  * (haunts/*.ts) decides what happens on it:
  *
  *  - the timeline: it only moves while someone is in the world, and it is
- *    saved (level.flags.haunt), so a reload carries on where it was; a reload
+ *    saved (level.flags.haunts), so a reload carries on where it was; a reload
  *    during the end goes back to the start of the end (never into the middle
  *    of a cutscene);
+ *  - V7.1: several at once, one of each character (all four, if the panel
+ *    starts them all), each on its own timeline; their ends take turns: while
+ *    one plays its end, the others wait, and the next carries on when
+ *    everyone is back;
  *  - the stages, and each stage's budget of random events per player (more
  *    and more as it goes on), rolled every 10 ticks;
  *  - the character's lines in chat and its fake joins, each once;
@@ -56,8 +60,14 @@ import { HAUNT_MAX_CHANGES } from './hauntSave';
 
 export type { HauntState } from './haunts/types';
 
-/** A block it changed: dimension, position, what was there, what it put. */
-type Change = [string, number, number, number, number, number];
+/** A block it changed: dimension, position, what was there, what it put, and (V7.1) whose haunting changed it. */
+type Change = [string, number, number, number, number, number, HauntCharacter?];
+/** Whose haunting changed a block (Herobrine's, for one recorded before V7.1 without a name). */
+const changeOf = (c: Change): HauntCharacter => (c[6] && HAUNT_CHARACTERS.includes(c[6]) ? c[6] : 'herobrine');
+/** A saved haunting that can run. */
+const valid = (st: HauntState | undefined | null): st is HauntState => !!st && typeof st.t === 'number' && typeof st.total === 'number' && st.total > 0;
+/** Who a haunting is (Herobrine for one from before V7 phase 4). */
+export const charOf = (st: HauntState | null | undefined): HauntCharacter => (st?.char && HAUNT_CHARACTERS.includes(st.char) ? st.char : 'herobrine');
 /** Its random block-changing events stop here (an ending can go on to HAUNT_MAX_CHANGES). */
 const MAX_CHANGES = 4000;
 
@@ -81,6 +91,13 @@ interface Doings {
 const DOINGS_WINDOW = 3 * 60 * 20;
 /** Its remarks on what players do (the automatic haunting): at most one this often (ticks). */
 const REMARK_EVERY = 60 * 20;
+/** How a player names each character in chat (V7.1: with several haunting, the one named answers). */
+const NAMED: Record<HauntCharacter, RegExp> = {
+  herobrine: /\b(herobrine|hero|hb)\b/i,
+  null: /\bnull\b/i,
+  green_steve: /\b(green|steve)\b/i,
+  cave_dweller: /\b(dweller|cave)\b/i,
+};
 
 export class HauntingSystem {
   readonly figures: Figure[] = [];
@@ -100,6 +117,10 @@ export class HauntingSystem {
   private lastRemark = -1e9;
   /** A reload during the end goes back to its start (checked once, on the first tick). */
   private resumed = false;
+  /** The haunting being run right now (its part's calls on the core are about it). */
+  private cur: HauntState | null = null;
+  /** This tick's darkness for each player, while several hauntings each ask for theirs (the darkest wins). */
+  private darkWant: Map<string, number> | null = null;
   /** The characters' parts. */
   readonly parts: Readonly<Record<HauntCharacter, HauntPart>>;
 
@@ -107,25 +128,71 @@ export class HauntingSystem {
     this.parts = { herobrine: new HerobrineHaunt(this), null: new NullHaunt(this), green_steve: new GreenSteveHaunt(this), cave_dweller: new CaveDwellerHaunt(this) };
   }
 
+  /**
+   * Every haunting running now (level.flags.haunts), at most one of each
+   * character. A world from before V7.1 kept one, as level.flags.haunt: it
+   * becomes the first (and the blocks it changed are marked as its).
+   */
+  get states(): HauntState[] {
+    const f = this.server.level.flags;
+    if (f.haunt !== undefined) {
+      const old = f.haunt as HauntState | undefined;
+      delete f.haunt;
+      if (valid(old)) {
+        const c = charOf(old);
+        for (const ch of this.changes) if (!ch[6]) ch[6] = c;
+        const rest = Array.isArray(f.haunts) ? (f.haunts as HauntState[]).filter((x) => charOf(x) !== c) : [];
+        f.haunts = [{ ...old, char: c }, ...rest];
+      }
+    }
+    return Array.isArray(f.haunts) ? (f.haunts as HauntState[]).filter(valid) : [];
+  }
+
+  private setStates(list: HauntState[]): void {
+    const f = this.server.level.flags;
+    if (list.length) f.haunts = list;
+    else delete f.haunts;
+  }
+
+  /** A character's haunting, if it is running. */
+  stateOf(c: HauntCharacter): HauntState | null {
+    return this.states.find((st) => charOf(st) === c) ?? null;
+  }
+
+  /** The haunting being run right now, or the first of those running (or null). */
   get state(): HauntState | null {
-    const st = this.server.level.flags.haunt as HauntState | undefined;
-    return st && typeof st.t === 'number' && typeof st.total === 'number' && st.total > 0 ? st : null;
+    return this.cur ?? this.states[0] ?? null;
   }
 
   /** A haunting is running. */
   get active(): boolean {
-    return !!this.state;
+    return this.states.length > 0;
   }
 
-  /** Who is haunting (Herobrine when nobody is, or for a haunting from before V7 phase 4). */
+  /** Who is haunting (the one being run right now, or the first; Herobrine when nobody is). */
   get character(): HauntCharacter {
-    const c = this.state?.char;
-    return c && HAUNT_CHARACTERS.includes(c) ? c : 'herobrine';
+    return charOf(this.state);
   }
 
   /** The part of whoever is haunting. */
   get part(): HauntPart {
     return this.parts[this.character];
+  }
+
+  /** Runs `fn` as `st`'s haunting (what its part asks of the core is about it). */
+  private as<T>(st: HauntState, fn: () => T): T {
+    const prev = this.cur;
+    this.cur = st;
+    try {
+      return fn();
+    } finally {
+      this.cur = prev;
+    }
+  }
+
+  /** A haunting is playing its end. */
+  private inEnd(st: HauntState): boolean {
+    return st.t / st.total >= HAUNT_CAST[charOf(st)].finaleAt;
   }
 
   get herobrine(): HerobrineHaunt {
@@ -194,46 +261,75 @@ export class HauntingSystem {
       case 'status':
         return reply(true, '');
       case 'start': {
-        if (this.state) return reply(false, 'A haunting is already running. Stop it first.');
+        // V7.1: one of each character at a time (several characters at once)
+        if (this.stateOf(character)) return reply(false, `${cast.name} is already haunting this world.`);
         if (erase && this.server.roleOf(p) !== 'owner') return reply(false, "Only the world's owner can choose to have the world deleted at the end.");
         const end = ending ?? defaultEnding(character);
         if (!castEnding(character, end)) return reply(false, `${cast.name} has no such ending.`);
         const mins = minutes ?? cast.defaultMinutes;
-        this.server.level.flags.haunt = { t: 0, total: Math.round(mins * 60 * 20), erase: !!erase, by: p.uuid, done: [], ending: end, ...(character !== 'herobrine' ? { char: character } : {}) } satisfies HauntState;
-        this.history.length = 0;
+        this.begin(this.newState(character, mins, !!erase, end, p.uuid));
         const endName = cast.endings.find((e) => e.id === end)!.name;
-        return reply(true, `The haunting has begun${character === 'herobrine' ? '' : ` (${cast.name})`}. It ends in ${mins} minute${mins === 1 ? '' : 's'} (${endName.toLowerCase()})${erase ? ', and then the world is deleted' : ', and the world is kept'}.`);
+        const others = this.states.length - 1;
+        return reply(true, `The haunting has begun${character === 'herobrine' ? '' : ` (${cast.name})`}. It ends in ${mins} minute${mins === 1 ? '' : 's'} (${endName.toLowerCase()})${erase ? ', and then the world is deleted' : ', and the world is kept'}.${others ? ` ${others + 1} hauntings are running now; their ends take turns.` : ''}`);
+      }
+      case 'start_all': {
+        // Every character not haunting yet, each its own length (or the one given) and its usual ending
+        const started: HauntCharacter[] = [];
+        for (const c of HAUNT_CHARACTERS) {
+          if (this.stateOf(c)) continue;
+          this.begin(this.newState(c, minutes ?? HAUNT_CAST[c].defaultMinutes, false, defaultEnding(c), p.uuid));
+          started.push(c);
+        }
+        if (!started.length) return reply(false, 'All four are already haunting this world.');
+        return reply(true, `${started.map((c) => HAUNT_CAST[c].name).join(', ')} ${started.length === 1 ? 'is' : 'are'} haunting the world now (${this.states.length} at once). Their ends take turns, and the world is kept.`);
       }
       case 'stop': {
-        const st = this.state;
-        if (!st && !this.changes.length && !this.anyHeld()) return reply(false, 'No haunting is running.');
-        if (st?.auto) this.autoOver();
+        // The chosen one; from an older panel that names nobody, the only one running
+        const sts = this.states;
+        const st = this.stateOf(character) ?? (sts.length === 1 ? sts[0]! : null);
+        if (!st) {
+          if (sts.length) return reply(false, `${cast.name} is not haunting this world.`);
+          if (!this.changes.length && !this.anyHeld()) return reply(false, 'No haunting is running.');
+          const n = this.stop();
+          return reply(true, `Put back ${n} block${n === 1 ? '' : 's'} a haunting had changed.`);
+        }
+        const c = charOf(st);
+        if (st.auto) this.autoOver();
+        const n = this.stopOne(c);
+        const left = this.states.length;
+        return reply(true, `${c === 'herobrine' ? 'The haunting' : `${HAUNT_CAST[c].name}'s haunting`} is over.${n ? ` Put back ${n} block${n === 1 ? '' : 's'} it changed.` : ''}${left ? ` ${left} still haunting.` : ''}`);
+      }
+      case 'stop_all': {
+        const sts = this.states;
+        if (!sts.length && !this.changes.length && !this.anyHeld()) return reply(false, 'No haunting is running.');
+        if (sts.some((x) => x.auto)) this.autoOver();
         const n = this.stop();
-        return reply(true, `The haunting is over.${n ? ` Put back ${n} block${n === 1 ? '' : 's'} it changed.` : ''}`);
+        return reply(true, `${sts.length > 1 ? `All ${sts.length} hauntings are` : 'The haunting is'} over.${n ? ` Put back ${n} block${n === 1 ? '' : 's'} they changed.` : ''}`);
       }
       case 'skip': {
-        const st = this.state;
+        const st = this.target(character);
         if (!st) return reply(false, 'No haunting is running.');
         st.touched = true;
-        const c = HAUNT_CAST[this.character];
+        const c = HAUNT_CAST[charOf(st)];
         const f = st.t / st.total;
         const next = c.stages.find((s) => s.at > f + 1e-9);
-        const to = next ? (next.id === 'finale' ? Math.max(next.at, this.skipToEnd()) : next.at) : 1;
+        const to = next ? (next.id === 'finale' ? Math.max(next.at, this.skipToEnd(charOf(st))) : next.at) : 1;
         this.moveTo(st, to);
         return reply(true, next ? `Skipped to: ${next.name}.` : 'Skipped to the end.');
       }
       case 'finale': {
-        const st = this.state;
+        const st = this.target(character);
         if (!st) return reply(false, 'No haunting is running.');
         st.touched = true;
-        const c = HAUNT_CAST[this.character];
-        if (st.t / st.total < c.finaleAt) this.moveTo(st, Math.max(c.finaleAt, this.skipToEnd()));
-        return reply(true, `Straight to the end: ${c.stages.find((s) => s.id === 'finale')!.name}.`);
+        const c = HAUNT_CAST[charOf(st)];
+        if (st.t / st.total < c.finaleAt) this.moveTo(st, Math.max(c.finaleAt, this.skipToEnd(charOf(st))));
+        const waits = this.states.some((o) => o !== st && this.inEnd(o));
+        return reply(true, `Straight to the end: ${c.stages.find((s) => s.id === 'finale')!.name}.${waits ? ' (Another end is playing: this one comes next.)' : ''}`);
       }
       case 'finale_in': {
-        const st = this.state;
+        const st = this.target(character);
         if (!st) return reply(false, 'No haunting is running.');
-        const c = HAUNT_CAST[this.character];
+        const c = HAUNT_CAST[charOf(st)];
         const m = Math.max(0, Math.min(HAUNT_MAX_MINUTES, minutes ?? 0));
         if (st.t / st.total >= c.finaleAt) return reply(false, 'The end has already begun.');
         st.touched = true;
@@ -243,11 +339,11 @@ export class HauntingSystem {
         return reply(true, m === 0 ? 'The end begins now.' : `The end begins in ${m} minute${m === 1 ? '' : 's'}.`);
       }
       case 'restart': {
-        const st = this.state;
         const roll = this.autoRoll;
         if (!roll?.haunted) return reply(false, 'This world has no automatic haunting.');
-        if (st && !st.auto) return reply(false, 'Another haunting is running. Stop it first.');
-        this.stop();
+        const hb = this.stateOf('herobrine');
+        if (hb && !hb.auto) return reply(false, "Herobrine is already haunting this world from the panel. Stop that first.");
+        this.stopOne('herobrine');
         this.beginAuto(roll, true);
         return reply(true, 'The automatic haunting starts again from the beginning (put back what it had changed).');
       }
@@ -267,27 +363,65 @@ export class HauntingSystem {
     }
   }
 
+  /** The haunting the panel means: the chosen character's, or (from an older panel naming nobody) the only one. */
+  private target(c: HauntCharacter): HauntState | null {
+    const sts = this.states;
+    return this.stateOf(c) ?? (sts.length === 1 ? sts[0]! : null);
+  }
+
+  /** A new haunting's saved state. */
+  private newState(c: HauntCharacter, minutes: number, erase: boolean, ending: string, by: string): HauntState {
+    return { t: 0, total: Math.round(minutes * 60 * 20), erase, by, done: [], ending, char: c };
+  }
+
+  /** A haunting begins (alongside any others running). */
+  private begin(st: HauntState): void {
+    const sts = this.states;
+    if (!sts.length) this.history.length = 0;
+    this.setStates([...sts.filter((x) => charOf(x) !== charOf(st)), st]);
+  }
+
   /** Where a skip to the end lands (Herobrine: just before his chase). */
-  private skipToEnd(): number {
-    return this.character === 'herobrine' ? HAUNT_CHASE_AT - 0.01 : HAUNT_CAST[this.character].finaleAt;
+  private skipToEnd(c: HauntCharacter): number {
+    return c === 'herobrine' ? HAUNT_CHASE_AT - 0.01 : HAUNT_CAST[c].finaleAt;
   }
 
   /** Moves a haunting along to share `to`; what was skipped is not played all at once. */
   private moveTo(st: HauntState, to: number): void {
     st.t = Math.ceil(to * st.total);
-    const c = HAUNT_CAST[this.character];
+    const ch = charOf(st);
+    const c = HAUNT_CAST[ch];
     for (const l of c.lines) if (l.at < to - 1e-9 && !st.done.includes(`line:${l.at}`)) st.done.push(`line:${l.at}`);
-    for (const j of this.joinsOf(this.character)) if (j < to - 1e-9 && !st.done.includes(`join:${j}`)) st.done.push(`join:${j}`, `left:${j}`);
+    for (const j of this.joinsOf(ch)) if (j < to - 1e-9 && !st.done.includes(`join:${j}`)) st.done.push(`join:${j}`, `left:${j}`);
   }
 
   status(p: ServerPlayer): HauntStatus {
-    const st = this.state;
+    const sts = this.states;
+    const st = sts[0] ?? null;
+    const c0 = charOf(st);
     const roll = this.autoRoll;
+    const changes = this.changes;
+    const ending = sts.find((x) => this.inEnd(x)) ?? null;
     return {
       active: !!st,
-      stage: st ? castStage(this.character, st.t / st.total).id : null,
-      character: this.character,
+      stage: st ? castStage(c0, st.t / st.total).id : null,
+      character: c0,
       auto: !!st?.auto,
+      // V7.1: every one running (the fields around describe the first)
+      hauntings: sts.map((x) => {
+        const c = charOf(x);
+        return {
+          character: c,
+          stage: castStage(c, x.t / x.total).id,
+          auto: !!x.auto,
+          elapsed: Math.floor(x.t / 20),
+          total: Math.floor(x.total / 20),
+          erase: !!x.erase,
+          ending: x.ending ?? defaultEnding(c),
+          changes: changes.filter((ch) => changeOf(ch) === c).length,
+          ...(ending && ending !== x && x.t / x.total >= HAUNT_CAST[c].finaleAt - 0.002 ? { waiting: true } : {}),
+        };
+      }),
       ...(roll?.haunted && !roll.begun && !roll.over ? { autoIn: Math.max(0, Math.floor((roll.after - roll.played) / 20)) } : {}),
       autoState: !roll?.haunted ? 'none' : roll.over ? 'over' : st?.auto ? 'running' : roll.begun ? 'over' : 'waiting',
       elapsed: st ? Math.floor(st.t / 20) : 0,
@@ -295,7 +429,7 @@ export class HauntingSystem {
       erase: !!st?.erase,
       changes: this.changes.length,
       canErase: this.server.roleOf(p) === 'owner',
-      ending: st?.ending ?? defaultEnding(this.character),
+      ending: st?.ending ?? defaultEnding(c0),
     };
   }
 
@@ -303,13 +437,16 @@ export class HauntingSystem {
     return [...this.server.players.values()].some((p) => this.holds(p));
   }
 
-  /** Ends the haunting and puts back every block it changed (and its monsters, the time, the weather). Returns how many blocks. */
+  /** Ends every haunting and puts back every block they changed (and their monsters, the time, the weather). Returns how many blocks. */
   stop(): number {
     const s = this.server;
-    const st = this.state;
-    if (st) this.restoreSky(st);
+    const sts = this.states;
+    // The sky as it was before the first of them touched it
+    const sky = sts.find((x) => x.sky)?.sky;
+    for (const st of sts) st.sky = undefined;
+    if (sky) this.setSky(sky);
     for (const part of Object.values(this.parts)) part.reset('stop');
-    this.server.level.flags.haunt = undefined;
+    this.setStates([]);
     this.clearFigures();
     this.clearMobs();
     this.glitchedNames.clear();
@@ -320,17 +457,44 @@ export class HauntingSystem {
   }
 
   /**
+   * Ends one character's haunting (V7.1: the others carry on) and puts back
+   * what it changed: its blocks, its figures and monsters, anyone it holds;
+   * the time and weather only once no other haunting is keeping them.
+   */
+  stopOne(c: HauntCharacter): number {
+    const s = this.server;
+    const st = this.stateOf(c);
+    if (st) this.restoreSky(st);
+    this.parts[c].reset('stop');
+    this.setStates(this.states.filter((x) => charOf(x) !== c));
+    this.clearFigures(c);
+    this.clearMobs(c);
+    if (c === 'herobrine') this.glitchedNames.clear();
+    const n = this.putBack(c);
+    // The dark lifted; any others still darkening send theirs again within a second
+    for (const p of s.players.values()) this.calm(p);
+    this.dark.clear();
+    return n;
+  }
+
+  /**
    * Every block it changed put back, if nobody changed it since. Those in
    * chunks not loaded now are put back when their chunk is next loaded (the
    * list is saved with the world: level.flags.hauntRestore).
    */
-  putBack(): number {
+  putBack(who?: HauntCharacter): number {
     const s = this.server;
     let n = 0;
     const list = this.changes;
     const later = this.pendingRestore;
+    const keep: Change[] = [];
     for (let i = list.length - 1; i >= 0; i--) {
       const c = list[i]!;
+      // (V7.1: only one character's, when only it stops)
+      if (who && changeOf(c) !== who) {
+        keep.unshift(c);
+        continue;
+      }
       const dim = s.dims.get(c[0] as never);
       if (dim && !dim.isLoaded(c[1], c[3])) {
         if (later.length < HAUNT_MAX_CHANGES) later.push(c);
@@ -338,7 +502,7 @@ export class HauntingSystem {
       }
       if (dim && this.restoreOne(dim, c)) n++;
     }
-    s.level.flags.hauntBlocks = [];
+    s.level.flags.hauntBlocks = keep;
     return n;
   }
 
@@ -392,8 +556,16 @@ export class HauntingSystem {
     p.send({ t: 'fx', kind: 'haunt', strength: 0 });
   }
 
-  /** Sends a player the dark (0..1), when it changed. */
+  /** Sends a player the dark (0..1), when it changed (V7.1: with several hauntings darkening, the darkest). */
   sendDark(p: ServerPlayer, dark: number, every = 200): void {
+    if (this.darkWant) {
+      this.darkWant.set(p.uuid, Math.max(this.darkWant.get(p.uuid) ?? -1, dark));
+      return;
+    }
+    this.sendDarkNow(p, dark, every);
+  }
+
+  private sendDarkNow(p: ServerPlayer, dark: number, every = 200): void {
     const s = this.server;
     const last = this.dark.get(p.uuid) ?? -1;
     if (Math.abs(last - dark) >= 0.02 || (s.tickNo % every === 0 && dark > 0)) {
@@ -410,26 +582,57 @@ export class HauntingSystem {
     this.restorePending();
     if (!this.resumed) {
       this.resumed = true;
-      // A world loaded in the middle of the end: back to its start (the ending already decided is kept)
-      const st = this.state;
-      const at = HAUNT_CAST[this.character].finaleAt;
-      if (st && st.t / st.total > at + 1e-9) st.t = Math.ceil(at * st.total);
+      // A world loaded in the middle of an end: back to its start (the ending already decided is kept)
+      for (const st of this.states) {
+        const at = HAUNT_CAST[charOf(st)].finaleAt;
+        if (st.t / st.total > at + 1e-9) st.t = Math.ceil(at * st.total);
+      }
     }
     this.stepFigures();
     this.autoTick(players);
-    const st = this.state;
-    if (!st) {
-      for (const part of Object.values(this.parts)) part.reset('stop');
-      return;
+    const sts = this.states;
+    const running = new Set(sts.map(charOf));
+    for (const part of Object.values(this.parts)) if (!running.has(part.id)) part.reset('stop');
+    // The timelines only move while someone is here
+    if (!sts.length || !players.length) return;
+    const seen = this.watchPlayers(players);
+    // One end at a time: while one plays its end, the others wait for their turn
+    const ending = sts.find((st) => this.inEnd(st));
+    this.darkWant = new Map();
+    try {
+      for (const st of ending ? [ending] : sts) {
+        this.as(st, () => this.tickOne(st, players, seen));
+        // Its end threw everyone out: the rest carry on when they are back
+        if (!this.states.includes(st) || !s.players.size) break;
+      }
+    } finally {
+      const want = this.darkWant;
+      this.darkWant = null;
+      for (const p of players) {
+        const d = want.get(p.uuid);
+        if (d !== undefined && s.players.has(p.conn.id)) this.sendDarkNow(p, d);
+      }
     }
-    // The timeline only moves while someone is here
-    if (!players.length) return;
-    const part = this.part;
-    const cast = HAUNT_CAST[this.character];
+  }
+
+  /** One haunting's tick (V7.1: each runs on its own timeline). */
+  private tickOne(st: HauntState, players: ServerPlayer[], seen: [ServerPlayer, HauntNotice][]): void {
+    const s = this.server;
+    const c = charOf(st);
+    const part = this.parts[c];
+    const cast = HAUNT_CAST[c];
+    // Its end waits while another one's is playing
+    if (!this.inEnd(st) && (st.t + 1) / st.total >= cast.finaleAt && this.states.some((o) => o !== st && this.inEnd(o))) return;
     st.t++;
     const f = Math.min(1, st.t / st.total);
-    const stage = castStage(this.character, f).id;
-    this.watchPlayers(st, players, stage, f);
+    const stage = castStage(c, f).id;
+    for (const [p, what] of seen) {
+      if (what === 'death') {
+        st.deaths ??= {};
+        st.deaths[p.uuid] = (st.deaths[p.uuid] ?? 0) + 1;
+      }
+      this.noticeNow(p, what, st, stage, f);
+    }
     this.oneOffs(st, f, players);
     if (stage === 'finale') {
       part.finale(st, f, players);
@@ -453,16 +656,19 @@ export class HauntingSystem {
     part.everyTick?.(st, f, players);
   }
 
-  /** Where everyone has been (the fake lag), who has died since it began, and what they have been doing. */
-  private watchPlayers(st: HauntState, players: ServerPlayer[], stage: string, f: number): void {
+  /**
+   * Where everyone has been (the fake lag) and what they have been doing;
+   * what is worth noticing this tick (a death, running, being underground or
+   * asleep a while), for each haunting to count or remark on.
+   */
+  private watchPlayers(players: ServerPlayer[]): [ServerPlayer, HauntNotice][] {
     const s = this.server;
+    const out: [ServerPlayer, HauntNotice][] = [];
     for (const p of players) {
       if (p.dead) {
         if (!this.deadNow.has(p.uuid)) {
           this.deadNow.add(p.uuid);
-          st.deaths ??= {};
-          st.deaths[p.uuid] = (st.deaths[p.uuid] ?? 0) + 1;
-          this.noticeNow(p, 'death', st, stage, f);
+          out.push([p, 'death']);
         }
         continue;
       }
@@ -481,13 +687,14 @@ export class HauntingSystem {
       const below = p.dim.id === 'overworld' && p.dim.getHeight(Math.floor(p.x), Math.floor(p.z)) > p.y + 6;
       d.belowSince = below ? (d.belowSince < 0 ? now : d.belowSince) : -1;
       d.sleepSince = p.sleepingTicks > 0 ? (d.sleepSince < 0 ? now : d.sleepSince) : -1;
-      if (d.runSince >= 0 && now - d.runSince > 8 * 20) this.noticeNow(p, 'run', st, stage, f);
-      if (d.belowSince >= 0 && now - d.belowSince > 90 * 20) this.noticeNow(p, 'underground', st, stage, f);
+      if (d.runSince >= 0 && now - d.runSince > 8 * 20) out.push([p, 'run']);
+      if (d.belowSince >= 0 && now - d.belowSince > 90 * 20) out.push([p, 'underground']);
       if (d.sleepSince >= 0 && now - d.sleepSince > 2 * 20) {
         d.slept = true;
-        this.noticeNow(p, 'sleep', st, stage, f);
+        out.push([p, 'sleep']);
       }
     }
+    return out;
   }
 
   // ------------------------------------------------------------------ what players do
@@ -503,24 +710,26 @@ export class HauntingSystem {
   /** A player broke or placed a block (Mining, Interaction): remembered while the world is haunted. */
   onBlock(p: ServerPlayer, what: 'break' | 'place', blockId: string, x: number, y: number, z: number): void {
     this.forget(p.dim.id, x, y, z);
-    const st = this.state;
-    if (!st) return;
+    const sts = this.states;
+    if (!sts.length) return;
     const d = this.doingsOf(p);
     const now = this.server.tickNo;
-    const f = st.t / st.total;
-    const stage = castStage(this.character, f).id;
-    if (what === 'break') {
-      d.broken.push(now);
-      this.part.notice?.(p, 'break', st, stage, f, [x, y, z]);
-      if (d.broken.filter((t) => t > now - 60 * 20).length >= 12) this.noticeNow(p, 'break', st, stage, f, [x, y, z]);
-      return;
+    const torch = what === 'place' && (blockId === 'torch' || blockId === 'wall_torch');
+    if (what === 'break') d.broken.push(now);
+    else {
+      d.placed.push(now);
+      if (torch) d.torches.push(now);
     }
-    d.placed.push(now);
-    const torch = blockId === 'torch' || blockId === 'wall_torch';
-    if (torch) d.torches.push(now);
-    this.part.notice?.(p, torch ? 'torch' : 'build', st, stage, f, [x, y, z]);
-    if (torch) this.noticeNow(p, 'torch', st, stage, f, [x, y, z]);
-    else if (d.placed.filter((t) => t > now - 60 * 20).length >= 20) this.noticeNow(p, 'build', st, stage, f, [x, y, z]);
+    const kind: HauntNotice = what === 'break' ? 'break' : torch ? 'torch' : 'build';
+    const remark = what === 'break' ? d.broken.filter((t) => t > now - 60 * 20).length >= 12 : torch || d.placed.filter((t) => t > now - 60 * 20).length >= 20;
+    // Each haunting running sees it
+    for (const st of sts)
+      this.as(st, () => {
+        const f = st.t / st.total;
+        const stage = castStage(charOf(st), f).id;
+        this.parts[charOf(st)].notice?.(p, kind, st, stage, f, [x, y, z]);
+        if (remark) this.noticeNow(p, kind, st, stage, f, [x, y, z]);
+      });
   }
 
   /**
@@ -550,7 +759,8 @@ export class HauntingSystem {
     const roll = this.autoRoll;
     if (!roll?.haunted || roll.begun || roll.over || !players.length) return;
     roll.played = (roll.played ?? 0) + 1;
-    if (roll.played < roll.after || this.state) return;
+    // (V7.1: others may be haunting the world; Herobrine himself may not be already)
+    if (roll.played < roll.after || this.stateOf('herobrine')) return;
     this.beginAuto(roll, false);
   }
 
@@ -558,9 +768,8 @@ export class HauntingSystem {
   private beginAuto(roll: AutoHauntRoll, touched: boolean): void {
     roll.begun = true;
     roll.over = false;
-    this.server.level.flags.haunt = { t: 0, total: AUTO_HAUNT_MINUTES * 60 * 20, erase: false, by: 'auto', done: [], ending: AUTO_HAUNT_ENDING, auto: true, ...(touched ? { touched: true } : {}) } satisfies HauntState;
-    this.history.length = 0;
-    this.doings.clear();
+    this.begin({ t: 0, total: AUTO_HAUNT_MINUTES * 60 * 20, erase: false, by: 'auto', done: [], ending: AUTO_HAUNT_ENDING, auto: true, char: 'herobrine', ...(touched ? { touched: true } : {}) } satisfies HauntState);
+    if (this.states.length === 1) this.doings.clear();
     this.server.log('[haunting] the automatic haunting has begun');
   }
 
@@ -580,7 +789,7 @@ export class HauntingSystem {
   /** Its lines in chat and its fake joins, each once, at its moment; then the part's own. */
   private oneOffs(st: HauntState, f: number, players: ServerPlayer[]): void {
     const s = this.server;
-    const c = this.character;
+    const c = charOf(st);
     const cast = HAUNT_CAST[c];
     const once = (key: string, at: number): boolean => {
       if (f < at || st.done.includes(key)) return false;
@@ -597,7 +806,7 @@ export class HauntingSystem {
       for (const p of players) this.say(p, l.text.replace('{name}', this.nameFor(c, p.name)), l.loud);
       this.remember(cast.speaker, l.text.replace('{name}', c === 'herobrine' ? 'YOU' : 'you'));
     }
-    this.part.oneOffs(st, f, players, once);
+    this.parts[c].oneOffs(st, f, players, once);
   }
 
   /** A player's name the way a character writes it. */
@@ -668,10 +877,14 @@ export class HauntingSystem {
     }
   }
 
-  /** Its figures gone (a stage that clears them, Stop, the end). */
-  clearFigures(): void {
-    for (const f of this.figures) if (!f.m.removed) f.m.remove();
-    this.figures.length = 0;
+  /** Its figures gone (a stage that clears them, Stop, the end); `c`: only that character's. */
+  clearFigures(c?: HauntCharacter): void {
+    for (let i = this.figures.length - 1; i >= 0; i--) {
+      const f = this.figures[i]!;
+      if (c && f.owner !== c) continue;
+      if (!f.m.removed) f.m.remove();
+      this.figures.splice(i, 1);
+    }
   }
 
   /** Walks (or runs) a figure towards a player, along the ground, through anything in the way. */
@@ -692,7 +905,7 @@ export class HauntingSystem {
   chatName(p: ServerPlayer): string | null {
     const until = this.glitchedNames.get(p.uuid);
     if (until === undefined) return null;
-    if (this.server.tickNo > until || !this.state) {
+    if (this.server.tickNo > until || !this.stateOf('herobrine')) {
       this.glitchedNames.delete(p.uuid);
       return null;
     }
@@ -701,26 +914,35 @@ export class HauntingSystem {
 
   /** What a player said, as everyone sees it (a character may change it: Null erases words). */
   chatText(p: ServerPlayer, text: string): string {
-    if (!this.state) return text;
-    return this.part.chatText?.(p, text) ?? text;
+    let out = text;
+    for (const st of this.states) out = this.as(st, () => this.parts[charOf(st)].chatText?.(p, out) ?? out);
+    return out;
   }
 
   // ------------------------------------------------------------------ the sky, monsters
 
+  /** The time and weather before it first touches them (V7.1: before any haunting running touched them). */
   rememberSky(st: HauntState): void {
     const l = this.server.level;
-    st.sky ??= { dayTime: l.dayTime, raining: l.raining, thundering: l.thundering, rainTime: l.rainTime, thunderTime: l.thunderTime };
+    st.sky ??= this.states.find((o) => o !== st && o.sky)?.sky ?? { dayTime: l.dayTime, raining: l.raining, thundering: l.thundering, rainTime: l.rainTime, thunderTime: l.thunderTime };
   }
 
+  /** The time and weather put back, unless another haunting still has them (it puts them back when it ends). */
   restoreSky(st: HauntState): void {
     if (!st.sky) return;
-    const l = this.server.level;
-    l.dayTime = st.sky.dayTime;
-    l.raining = st.sky.raining;
-    l.thundering = st.sky.thundering;
-    l.rainTime = st.sky.rainTime;
-    l.thunderTime = st.sky.thunderTime;
+    const sky = st.sky;
     st.sky = undefined;
+    if (this.states.some((o) => o !== st && o.sky)) return;
+    this.setSky(sky);
+  }
+
+  private setSky(sky: NonNullable<HauntState['sky']>): void {
+    const l = this.server.level;
+    l.dayTime = sky.dayTime;
+    l.raining = sky.raining;
+    l.thundering = sky.thundering;
+    l.rainTime = sky.rainTime;
+    l.thunderTime = sky.thunderTime;
     this.server.sendTime();
   }
 
@@ -728,15 +950,17 @@ export class HauntingSystem {
   markMob(m: Mob, target: ServerPlayer | null): void {
     m.admin = true;
     m.persistent = false;
-    m.data.hauntMob = true;
+    // (whose: V7.1, so that one haunting stopping takes only its own)
+    m.data.hauntMob = this.character;
     if (target) m.target = target;
   }
 
-  /** Its monsters gone (Stop, the end). */
-  clearMobs(): void {
+  /** Its monsters gone (Stop, the end); `c`: only that character's. */
+  clearMobs(c?: HauntCharacter): void {
     for (const d of this.server.dims.values())
       for (const e of [...d.entities.values()]) {
         if (!(e instanceof Mob) || !e.data.hauntMob || e.removed) continue;
+        if (c && e.data.hauntMob !== c && !(c === 'herobrine' && e.data.hauntMob === true)) continue;
         this.server.particles(d, 'glitch', e.x, e.y + 1, e.z, 10, 0.5);
         e.remove();
       }
@@ -747,30 +971,43 @@ export class HauntingSystem {
   /** Somebody said something in chat: from its "Talks back" moment on, it may answer. */
   onChat(p: ServerPlayer, text: string): void {
     const s = this.server;
-    const st = this.state;
-    if (!st) return;
+    const sts = this.states;
+    if (!sts.length) return;
     this.remember(p.name, text);
-    const c = this.character;
-    const cast = HAUNT_CAST[c];
-    const f = st.t / st.total;
-    if (f < cast.talkAt || this.talking || this.part.silent?.(false)) return;
-    if (c !== 'herobrine' && f >= cast.finaleAt) return;
-    if ((st.said ?? 0) >= HAUNT_MAX_ANSWERS) return;
-    if (s.tickNo - (this.lastAnswer.get(p.uuid) ?? -1e9) < 100) return;
+    if (this.talking || s.tickNo - (this.lastAnswer.get(p.uuid) ?? -1e9) < 100) return;
+    // Who may answer: those past their "talks back" moment (and, but for Herobrine, not in their end)
+    const can = sts.filter((st) => {
+      const c = charOf(st);
+      const cast = HAUNT_CAST[c];
+      const f = st.t / st.total;
+      if (f < cast.talkAt || this.parts[c].silent?.(false)) return false;
+      if (c !== 'herobrine' && f >= cast.finaleAt) return false;
+      return (st.said ?? 0) < HAUNT_MAX_ANSWERS;
+    });
+    if (!can.length) return;
     // Talking to it nearly always gets an answer; talking about anything else, sometimes
     const addressed = /\b(herobrine|hero|hb|null|green|steve|dweller|cave|you|u|ur|your|yours)\b|\?/i.test(text);
     if (this.rng.next() > (addressed ? 0.9 : 0.35)) return;
+    // V7.1, with several haunting at once: the one named answers, otherwise one of them
+    const named = can.find((st) => NAMED[charOf(st)].test(text));
+    const st = named ?? can[this.rng.int(can.length)]!;
+    const c = charOf(st);
+    const cast = HAUNT_CAST[c];
+    const f = st.t / st.total;
     this.talking = true;
     this.lastAnswer.set(p.uuid, s.tickNo);
     st.said = (st.said ?? 0) + 1;
-    const req = this.voiceRequest(p, text, c, castStage(c, f).name);
+    const req = this.as(st, () => this.voiceRequest(p, text, c, castStage(c, f).name));
     const started = s.tickNo;
     void this.answer(req).then(({ line }) => {
       // A moment to "type", however fast the answer came
       s.later(Math.max(1, 30 + this.rng.int(30) - (s.tickNo - started)), () => {
         this.talking = false;
-        if (!this.state || this.character !== c || this.part.silent?.(true)) return;
-        for (const o of s.players.values()) this.say(o, line, true, false);
+        const now = this.stateOf(c);
+        if (!now || this.parts[c].silent?.(true)) return;
+        this.as(now, () => {
+          for (const o of s.players.values()) this.say(o, line, true, false, c);
+        });
         if (s.players.has(p.conn.id)) p.send({ t: 'fx', kind: c === 'herobrine' ? 'glitch' : c === 'null' ? 'drain' : 'shake', strength: 0.4, ticks: 12 });
         this.remember(cast.speaker, line);
       });
@@ -863,10 +1100,12 @@ export class HauntingSystem {
    */
   finish(st: HauntState, end: HauntFinish): void {
     const s = this.server;
+    const c = charOf(st);
     const erase = st.erase && !st.auto;
     this.restoreSky(st);
-    // Nobody stays wherever its end took them: a kept world finds them where they were
-    for (const part of Object.values(this.parts)) part.reset('end');
+    // Nobody stays wherever its end took them: a kept world finds them where they were (V7.1: any
+    // others haunting wait, and carry on when everyone is back)
+    this.parts[c].reset('end');
     if (st.auto) {
       this.autoOver();
       // The advancement (hidden until earned) comes with the flag, before everyone is shown out
@@ -877,10 +1116,10 @@ export class HauntingSystem {
             s.interaction.grant(p, 'experience_haunting');
           }
     }
-    s.level.flags.haunt = undefined;
-    // What Null took is given back; the others' marks are left in the world
-    if (this.character === 'null' || st.char === 'null') this.putBack();
-    s.level.flags.hauntBlocks = [];
+    this.setStates(this.states.filter((x) => charOf(x) !== c));
+    // What Null took is given back; the others' marks are left in the world (and forgotten)
+    if (c === 'null') this.putBack('null');
+    s.level.flags.hauntBlocks = this.changes.filter((ch) => changeOf(ch) !== c);
     this.clearFigures();
     this.dark.clear();
     this.clearMobs();
@@ -903,7 +1142,7 @@ export class HauntingSystem {
     if (prev === state || !dim.isLoaded(x, z) || dim.getBlockEntity(x, y, z) || this.changes.length >= HAUNT_MAX_CHANGES) return false;
     const old = dim.setBlock(x, y, z, state);
     if (old < 0) return false;
-    this.changes.push([dim.id, x, y, z, old, state]);
+    this.changes.push([dim.id, x, y, z, old, state, this.character]);
     if (state !== 0) this.server.admin.setBlockMark(dim, x, y, z, true);
     return true;
   }

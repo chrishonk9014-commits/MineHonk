@@ -400,12 +400,10 @@ await closePanel();
       await page.waitForTimeout(300);
       await page.screenshot({ path: `${OUT}/haunting4-green-flash.png` });
     }
-    // Halfway through, along to the copies
-    if (Date.now() - t0 > 30000 && !shots.has('skipped')) {
+    // His house seen (his Gifts, where most of them are), along to the copies; skipping Gifts left a house to chance
+    if (shots.has('house') && !shots.has('skipped') && Date.now() - t0 < 70000) {
       shots.add('skipped');
       await openHauntTab();
-      await page.locator('.haunt-skip').click();
-      await page.waitForTimeout(300);
       await page.locator('.haunt-skip').click();
       await page.waitForTimeout(300);
       await closePanel();

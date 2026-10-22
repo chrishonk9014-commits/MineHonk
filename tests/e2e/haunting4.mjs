@@ -594,7 +594,8 @@ const worldsIn = () =>
 const rolledWorld = (await worldsIn()).find((w) => w.name === 'Rolled');
 check(`a world made by someone who beat him gets the roll (${JSON.stringify(rolledWorld?.roll)})`, rolledWorld?.roll && typeof rolledWorld.roll.haunted === 'boolean' && rolledWorld.roll.played === 0);
 check('worlds made before (by someone who had not) have none', (await worldsIn()).filter((w) => w.name !== 'Rolled').every((w) => !w.roll));
-// One whose roll came up, Herobrine due after a few seconds of play
+// One whose roll came up, Herobrine due after a few seconds of play (the shortest wait there is, nearly all
+// played: a save cannot make the wait itself shorter than that, since 7.0.0)
 await page.evaluate(
   (id) =>
     new Promise((res) => {
@@ -605,7 +606,7 @@ await page.evaluate(
         const q = s.get(id);
         q.onsuccess = () => {
           const w = q.result;
-          w.flags = { ...(w.flags ?? {}), autoHaunt: { haunted: true, after: 20 * 20, played: 0, at: Date.now() } };
+          w.flags = { ...(w.flags ?? {}), autoHaunt: { haunted: true, after: 20 * 60 * 20, played: 20 * 60 * 20 - 20 * 20, at: Date.now() } };
           s.put(w, id);
         };
         tx.oncomplete = () => res(true);

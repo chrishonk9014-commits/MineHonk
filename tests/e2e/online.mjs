@@ -5,7 +5,8 @@
  * back, the host leaving, friends (JOIN, private worlds, invites), the
  * public list over the relay only, the relay fallback, forged tickets, bans,
  * the Admin Panel's rules with cheats and operators, a phone-sized player,
- * and the host's upload with four players.
+ * the host's upload with four players, and (V7.1.1) one listing per world:
+ * put online again it is the same one, and deleted, its listing goes too.
  *
  *   node tests/e2e/online.mjs        (builds dist-online first if needed)
  */
@@ -813,6 +814,45 @@ if (section('modes')) {
 }
 
 // ------------------------------------------------------------------ Open to Multiplayer, then the host leaves (relay and direct)
+// ------------------------------------------------------------------ V7.1.1: one listing per world
+if (section('reuse')) {
+  if (hostOf.page.isClosed() || (await hostOf.page.evaluate(() => !!window.minehonk.game))) await openPage(hostOf);
+  if (!hostOf.uuid) await signUp(hostOf);
+  await hostOf.page.evaluate(() => window.minehonk.startWorld('wreuse', { id: 'wreuse', name: 'Same Place', seed: 'same', mode: 'survival', difficulty: 'normal', godHearts: 10, cheats: false, owner: null }));
+  await inGame(hostOf);
+  const goOnline = async () => {
+    await hostOf.page.evaluate(() => window.minehonk.openPause());
+    await click(hostOf, 'Open to Multiplayer');
+    await top(hostOf).locator('input[placeholder="World name"]').waitFor({ timeout: 15000 });
+    await fillHostForm(top(hostOf), { visibility: 'Private (code only)' });
+    await click(hostOf, 'Start Hosting');
+    await top(hostOf).locator('.join-code').waitFor({ timeout: 30000 });
+    const id = await hostOf.page.evaluate(() => window.minehonk.hostSession?.details?.id);
+    await closeMenus(hostOf);
+    return id;
+  };
+  const mine = () => hostOf.page.evaluate(async () => (await window.minehonk.cloudApi.worlds()).mine.map((w) => w.id));
+  const first = await goOnline();
+  const listed = (await mine()).length;
+  // Stopped and put online again in the same session: the same world, not a new listing
+  await openPanel(hostOf);
+  await click(hostOf, 'Stop Hosting');
+  await click(hostOf, 'Stop Hosting');
+  await hostOf.page.waitForFunction(() => !window.minehonk.hostSession, null, { timeout: 10000 });
+  const second = await goOnline();
+  check(`online, stopped, online again: the same world online (${first})`, !!first && second === first, `${first} then ${second}`);
+  check('and no new listing', (await mine()).length === listed, `${listed} then ${(await mine()).length}`);
+  // Deleted from the Singleplayer list: its listing online goes too
+  await leaveToTitle(hostOf);
+  await hostOf.page.getByText('Singleplayer').click();
+  await top(hostOf).locator('.list-item', { hasText: 'Same Place' }).first().click();
+  await click(hostOf, 'Delete');
+  await click(hostOf, 'Delete');
+  const gone = await until(async () => !(await mine()).includes(first), 10000);
+  check('deleting the world removes its listing online', gone);
+  await closeMenus(hostOf);
+}
+
 if (section('open') && hostOf.uuid) {
   if (hostOf.page.isClosed() || (await hostOf.page.evaluate(() => !!window.minehonk.game))) {
     await openPage(hostOf);

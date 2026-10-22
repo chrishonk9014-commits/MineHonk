@@ -172,6 +172,14 @@ each moment's traffic into as few frames as possible (at most 256 KiB each).
   messages 240 per player.
 - At most 16 players per world (default 8); the host's tab accepts at most 32
   connections in flight.
+- At most 10 worlds listed per account (`MAX_WORLDS_PER_USER`). Since
+  7.1.1 that never keeps a world from going online: at the limit, the
+  account's listing put online longest ago (`hostedAt`, else `createdAt`)
+  and not online now makes way. The world itself is in its host's browser
+  and loses nothing; it is listed again, with a new join code, the next time
+  it goes online. A world keeps its one listing when it is put online again
+  in the same session (before 7.1.1 each time made a new one), and deleting
+  it from the Singleplayer list removes its listing too.
 
 ## Free plan limits
 

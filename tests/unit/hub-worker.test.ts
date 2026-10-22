@@ -150,6 +150,46 @@ describe('cloud hub (local Wrangler)', () => {
     sl.ws.close();
   });
 
+  it('V7.1.1: a world always goes online: at the limit, the one put online longest ago (and offline) makes way', async () => {
+    const host = await new HubClient(hub.base, 'Manyw').signUp();
+    const ids: string[] = [];
+    for (let i = 0; i < 10; i++) {
+      const r = await host.call<{ id: string }>('POST', '/host', { name: `World ${i}`, visibility: 'private' });
+      expect(r.status, `world ${i}`).toBe(200);
+      ids.push(r.data.id);
+      await new Promise((res) => setTimeout(res, 5));
+    }
+    // World 0 is put online again (so it is not the stalest), and world 1 is online now
+    expect((await host.call('POST', '/host', { id: ids[0] })).data).toMatchObject({ id: ids[0] });
+    const hl = await host.lobby();
+    await hl.next((m) => m.t === 'welcome');
+    hl.ws.send(JSON.stringify({ t: 'host', world: hostedWorld(ids[1]!, { name: 'World 1', visibility: 'private' }) }));
+    await hl.next((m) => m.t === 'hosting' && m.online);
+    // An eleventh goes online (it used to be refused: "You can own up to 10 worlds")
+    const r = await host.call<{ id: string; joinCode: string }>('POST', '/host', { name: 'World 10', visibility: 'private' });
+    expect(r.status, JSON.stringify(r.data)).toBe(200);
+    expect(r.data.joinCode).toMatch(/^[A-Z2-9]{4}-[A-Z2-9]{4}$/);
+    // World 2, put online longest ago and offline, made way; the others are all there
+    const mine = (await host.call<{ mine: { id: string }[] }>('GET', '/worlds')).data.mine.map((w) => w.id);
+    expect(mine).toHaveLength(10);
+    expect(mine).not.toContain(ids[2]);
+    for (const id of [ids[0], ids[1], ...ids.slice(3), r.data.id]) expect(mine).toContain(id);
+    // Put online again, world 2 is listed anew (a new id, the next stalest making way); then it keeps that one
+    const again = await host.call<{ id: string }>('POST', '/host', { id: ids[2], name: 'World 2', visibility: 'private' });
+    expect(again.status).toBe(200);
+    expect(again.data.id).not.toBe(ids[2]);
+    for (let i = 0; i < 2; i++) expect((await host.call('POST', '/host', { id: again.data.id })).data).toMatchObject({ id: again.data.id });
+    const now = (await host.call<{ mine: { id: string }[] }>('GET', '/worlds')).data.mine.map((w) => w.id);
+    expect(now).toHaveLength(10);
+    expect(now).toContain(again.data.id);
+    expect(now).not.toContain(ids[3]);
+    // Deleting one frees its place
+    const del = await host.call('DELETE', `/worlds/${ids[4]}`);
+    expect(del.status, JSON.stringify(del.data)).toBe(200);
+    expect((await host.call<{ mine: unknown[] }>('GET', '/worlds')).data.mine).toHaveLength(9);
+    hl.ws.close();
+  });
+
   it('forwards signaling between joiners and hosts, delivers invites, and relays game traffic', async () => {
     const host = await new HubClient(hub.base, 'Rhost').signUp();
     const joiner = await new HubClient(hub.base, 'Rjoin').signUp();

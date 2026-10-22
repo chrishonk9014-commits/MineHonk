@@ -11,7 +11,7 @@ import type { Env } from './env';
 import { SqlHubStore, type SqlDb } from '../../src/hub/sqlStore';
 import { AccountsCore, AccountError, deviceStretchedHasher } from '../../src/hub/accounts';
 import { FriendsCore, FriendError } from '../../src/hub/friends';
-import { WorldsCore, WorldError, isMember } from '../../src/hub/worlds';
+import { WorldsCore, WorldError, isMember, MAX_WORLDS_PER_USER } from '../../src/hub/worlds';
 import type { WorldEntry } from '../../src/hub/store';
 import { RateLimiter } from '../../src/hub/rateLimiter';
 import { randomBytes } from '../../src/hub/crypto';
@@ -243,12 +243,33 @@ function uuidList(v: unknown, max = 500): string[] | null {
   return [...new Set(v.filter((u): u is string => typeof u === 'string' && UUID_RE.test(u)))].slice(0, max);
 }
 
+/**
+ * V7.1.1: an account at its limit of registered worlds is never kept from
+ * putting one online: the one put online longest ago (and not online now)
+ * makes way. A browser-hosted world lives in its host's browser, with its
+ * own settings and members; only its listing here goes, and it is listed
+ * again (with a new join code) the next time it goes online. Registrations
+ * used to pile up: every world ever put online stayed, deleted or not.
+ */
+async function makeRoom(hub: Hub, owner: string): Promise<void> {
+  const n = await hub.store.countOwned(owner);
+  if (n < MAX_WORLDS_PER_USER) return;
+  const online = await hub.loadHosted();
+  const spare = (await hub.store.candidates(owner)).filter((w) => w.owner === owner && !online.has(w.id));
+  spare.sort((a, b) => (a.hostedAt ?? a.createdAt) - (b.hostedAt ?? b.createdAt));
+  for (const w of spare.slice(0, n - MAX_WORLDS_PER_USER + 1)) await hub.store.deleteWorld(w.id);
+}
+
 /** Registers a host's world, or updates it from the host's own settings (the host is authoritative). */
 async function hostWorld(hub: Hub, account: AccountInfo, b: Record<string, unknown>): Promise<unknown> {
   const existing = typeof b.id === 'string' ? await hub.store.world(b.id) : null;
   let e: WorldEntry;
   if (existing && existing.owner === account.uuid) e = existing;
-  else e = await hub.worlds.newEntry(account, { name: b.name, mode: b.mode, visibility: b.visibility, cheats: b.cheats, pvp: b.pvp, defaultRole: b.defaultRole, maxPlayers: b.maxPlayers }, GAME_MODES);
+  else {
+    await makeRoom(hub, account.uuid);
+    e = await hub.worlds.newEntry(account, { name: b.name, mode: b.mode, visibility: b.visibility, cheats: b.cheats, pvp: b.pvp, defaultRole: b.defaultRole, maxPlayers: b.maxPlayers }, GAME_MODES);
+  }
+  e.hostedAt = Date.now();
   if (typeof b.name === 'string' && b.name.trim()) e.name = hub.worlds.checkName(b.name);
   if (b.visibility === 'private' || b.visibility === 'friends' || b.visibility === 'public') e.visibility = b.visibility;
   if (typeof b.mode === 'string' && b.mode.length <= 16) e.mode = b.mode;

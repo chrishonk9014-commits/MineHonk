@@ -75,6 +75,8 @@ export interface WorldEntry {
   cheats?: boolean;
   /** Admin actions announced in chat (default on). */
   announceAdmin?: boolean;
+  /** V7.1.1, the cloud hub: when its host last put it online (the stalest makes way at the limit). */
+  hostedAt?: number;
 }
 
 export interface WorldStore {

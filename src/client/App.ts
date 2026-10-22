@@ -439,6 +439,18 @@ export class App implements GameHost, S.ScreenHost {
     });
   }
 
+  /**
+   * Deletes a world from this browser; V7.1.1: and its listing online, if
+   * it was ever put online (those used to pile up until no world could go
+   * online). Only the owner's account can remove it there.
+   */
+  private async removeWorld(id: string, hubId: string | undefined): Promise<void> {
+    await deleteWorld(id);
+    if (!hubId) return;
+    const api = this.cloud();
+    if (api.account || (await api.resume().catch(() => null))) void api.deleteWorld(hubId).catch(() => {});
+  }
+
   /** Puts the running single player world online (the integrated server keeps running). */
   private async beginHosting(options: HostOptions): Promise<void> {
     const conn = this.conn;
@@ -451,6 +463,8 @@ export class App implements GameHost, S.ScreenHost {
     try {
       const session = await HostSession.start(api, this.ensureLobby(), conn, { ...options, hubId: conn.level?.hosting?.hubId, hostUuid: this.profile.uuid });
       this.hostSession = session;
+      // V7.1.1: put online again in this session (after stopping), it is the same world online, never a new one
+      conn.level = { ...(conn.level ?? {}), hosting: { hubId: session.details.id, maxPlayers: options.maxPlayers } };
       session.onError = (m) => this.game?.chatMessage(m, 'error');
       session.onThrottled = () => {
         if (document.visibilityState === 'visible') ON.notice(this.ui, 'Keep this tab open to keep your world online.');
@@ -565,8 +579,15 @@ export class App implements GameHost, S.ScreenHost {
 
   private async showWorlds(): Promise<void> {
     let worlds: S.WorldSummary[] = [];
+    /** Each world's listing online, if it was ever put online from here. */
+    const hubIds = new Map<string, string>();
     try {
-      worlds = (await listWorlds())
+      const saved = await listWorlds();
+      for (const w of saved) {
+        const h = (w.hosting as { hubId?: unknown } | undefined)?.hubId;
+        if (typeof h === 'string' && /^[0-9a-f]{16}$/.test(h)) hubIds.set(String(w.id), h);
+      }
+      worlds = saved
         .map((w) => ({
           id: String(w.id),
           name: String(w.name ?? 'World'),
@@ -586,7 +607,7 @@ export class App implements GameHost, S.ScreenHost {
     const screen = S.worldListScreen(this, worlds, {
       play: (id) => void this.startWorld(id, null),
       create: () => this.push(S.createWorldScreen(this, (o) => void this.createWorld(o))),
-      remove: (id) => deleteWorld(id),
+      remove: (id) => this.removeWorld(id, hubIds.get(id)),
       rename: (id, name) => updateWorld(id, { name }),
       exportWorld: (id) => this.exportWorld(id),
       importWorld: (f) => this.importWorld(f),

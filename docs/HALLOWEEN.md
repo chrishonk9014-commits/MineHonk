@@ -1119,6 +1119,19 @@ still only come from the panel.
   what it keeps, the validation) and
   `tests/e2e/haunting71.mjs` (the tab, screenshots `haunting71-*.png`).
 
+## 7.1.1: worlds can always go online
+
+Not Halloween, but released with it: going online failed with "You can own
+up to 10 worlds" once an account had 10 listings on the hub, and listings
+piled up. Putting a world online, stopping and putting it online again in
+the same session made a new listing each time (the game remembered the
+world's settings from when it opened, before it had a listing), and
+deleting a world from the Singleplayer list left its listing behind. Now
+the world keeps its listing, deleting it removes the listing, and at the
+limit the oldest offline listing makes way (docs/MULTIPLAYER.md, *Moderation
+and limits*). Tests: `tests/unit/hub-worker.test.ts` and the `reuse` part
+of `tests/e2e/online.mjs`.
+
 ## Protocol
 
 `PROTOCOL_VERSION` 10 (phase 5; 9 was phase 4, 8 phase 3, 7 phase 2, 6 phase 1).
